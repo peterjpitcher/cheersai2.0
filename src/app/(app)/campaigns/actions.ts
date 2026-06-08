@@ -1,10 +1,14 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { z } from 'zod';
 
 import { requireAuthContext } from '@/lib/auth/server';
 import { publishCampaign } from '@/app/(app)/campaigns/[id]/actions';
+import { featureFlags } from '@/env';
 import { MEDIA_BUCKET } from '@/lib/constants';
+import { calculateFoodBookingPhases } from '@/lib/campaigns/food-booking-phases';
+import type { CampaignPhase } from '@/lib/campaigns/phases';
 import { buildCampaignDashboard, type CampaignDashboardModel } from '@/lib/campaigns/dashboard';
 import {
   EMPTY_EVENT_BOOKING_INSIGHTS,
@@ -80,6 +84,10 @@ import type {
   AudienceMode,
   ResolvedMetaInterest,
   OptimisationActionSummary,
+  FoodAdWindow,
+  FoodBookingBrief,
+  FoodServiceHours,
+  RunDay,
 } from '@/types/campaigns';
 
 // ---------------------------------------------------------------------------
@@ -899,6 +907,285 @@ export async function saveAndPublishCampaign(
   await publishCampaign(campaignId);
 
   return { campaignId };
+}
+
+// ---------------------------------------------------------------------------
+// createFoodBookingCampaign
+// ---------------------------------------------------------------------------
+
+const HHMM_REGEX = /^([01]\d|2[0-3]):[0-5]\d$/;
+const RUN_DAYS: readonly RunDay[] = [
+  'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday',
+];
+
+const foodServiceHoursSchema = z.object({
+  serviceKey: z.enum(['weekday_dinner', 'saturday_food', 'sunday_roast']),
+  enabled: z.boolean(),
+  days: z.array(z.enum(RUN_DAYS as [RunDay, ...RunDay[]])),
+  startLocal: z.string().regex(HHMM_REGEX, 'Service start must be HH:MM.'),
+  endLocal: z.string().regex(HHMM_REGEX, 'Service end must be HH:MM.'),
+  lastOrdersLocal: z.string().regex(HHMM_REGEX, 'Last orders must be HH:MM.').optional(),
+}) satisfies z.ZodType<FoodServiceHours>;
+
+const foodBookingBriefSchema = z.object({
+  services: z.array(foodServiceHoursSchema).min(1, 'Add at least one food service.'),
+  bookingUrl: z.string().url('Enter a valid booking URL.'),
+  foodHooks: z.array(z.string()),
+  weeks: z.union([z.literal(1), z.literal(2), z.literal(4)]),
+  dayWeighting: z.enum(['even', 'boost_quiet', 'manual']),
+  manualDayWeights: z.record(z.enum(RUN_DAYS as [RunDay, ...RunDay[]]), z.number()).optional(),
+}) satisfies z.ZodType<FoodBookingBrief>;
+
+interface CreateFoodBookingCampaignInput {
+  promotionName: string;
+  problemBrief: string;
+  brief: FoodBookingBrief;
+  budgetAmount: number;
+  budgetType: BudgetType;
+  geoRadiusMiles: GeoRadiusMiles;
+  audienceMode: AudienceMode;
+  startDate: string;
+}
+
+/** Map a scheduled food window to the CampaignPhase shape generateCampaign expects. */
+function foodWindowToPhase(window: FoodAdWindow): CampaignPhase {
+  return {
+    phaseType: 'booking-push',
+    phaseLabel: window.windowKey,
+    phaseStart: window.runDate,
+    phaseEnd: null,
+    adsStopTime: window.endsAtLocal,
+  };
+}
+
+/**
+ * Creates a food_booking DRAFT campaign from a FoodBookingBrief: derive the London-local
+ * ad windows, generate per-window booking copy, and persist one ad set per ENABLED window
+ * with its intra-day start/stop, service metadata, and a stable utm_content key (the window
+ * key) for Phase-2 attribution. Budget lives on the campaign (CBO) and is applied at publish.
+ */
+export async function createFoodBookingCampaign(
+  input: CreateFoodBookingCampaignInput,
+): Promise<{ campaignId: string } | { error: string }> {
+  if (!featureFlags.foodBooking) {
+    return { error: 'Food booking campaigns are not enabled.' };
+  }
+
+  const { accountId } = await requireAuthContext();
+  const supabase = createServiceSupabaseClient();
+
+  try {
+    const brief = foodBookingBriefSchema.parse(input.brief);
+    validateGeoRadiusMiles(input.geoRadiusMiles);
+    const audienceMode = validateAudienceMode(input.audienceMode);
+    if (input.budgetAmount <= 0) {
+      throw new Error('Budget must be greater than 0.');
+    }
+
+    const destinationUrl = validateDestinationUrl(brief.bookingUrl);
+
+    // 1. Verify Meta Ads account is connected and conversion tracking is ready.
+    const { data: adAccount } = await supabase
+      .from('meta_ad_accounts')
+      .select('setup_complete, meta_account_id, meta_pixel_id, conversion_event_name, conversion_optimisation_enabled')
+      .eq('account_id', accountId)
+      .maybeSingle<{
+        setup_complete: boolean;
+        meta_account_id: string;
+        meta_pixel_id?: string | null;
+        conversion_event_name?: string | null;
+        conversion_optimisation_enabled?: boolean | null;
+      }>();
+
+    if (!adAccount?.setup_complete) {
+      return {
+        error:
+          'Meta Ads account not connected. Please complete the Meta Ads setup in Connections before creating a campaign.',
+      };
+    }
+
+    // 2. Venue context for AI copy.
+    const { data: accountRow } = await supabase
+      .from('accounts')
+      .select('display_name')
+      .eq('id', accountId)
+      .single<{ display_name: string | null }>();
+    const { data: postingDefaults } = await supabase
+      .from('posting_defaults')
+      .select('venue_location')
+      .eq('account_id', accountId)
+      .maybeSingle<{ venue_location: string | null }>();
+    const venueName = accountRow?.display_name?.trim() || 'our venue';
+    const venueLocation = postingDefaults?.venue_location?.trim() || 'Configured local venue';
+
+    // 3. Derive windows and keep only the enabled ones (one Meta ad set per window).
+    const allWindows = calculateFoodBookingPhases(brief, input.startDate);
+    const enabledWindows = allWindows.filter((window) => window.enabled);
+    if (enabledWindows.length === 0) {
+      return { error: 'No ad windows are enabled for the selected services and dates.' };
+    }
+
+    const lastWindow = enabledWindows[enabledWindows.length - 1]!;
+    const endDate = lastWindow.runDate;
+    const phases = enabledWindows.map(foodWindowToPhase);
+    const foodHooks = brief.foodHooks.map((hook) => hook.trim()).filter(Boolean);
+
+    // 4. Generate per-window booking copy (forces BOOK_NOW + validates per window).
+    const rawPayload = await generateCampaign({
+      campaignKind: 'food_booking',
+      promotionName: input.promotionName,
+      problemBrief: input.problemBrief,
+      destinationUrl,
+      sourceSnapshot: { campaignKind: 'food_booking', bookingUrl: brief.bookingUrl },
+      venueName,
+      venueLocation,
+      budgetAmount: input.budgetAmount,
+      budgetType: input.budgetType,
+      phases,
+      foodWindows: enabledWindows,
+      foodHooks,
+    });
+
+    // Ad sets are parallel to enabled windows. Attach each window's stable key to its ads
+    // as the utm_content key so Phase-2 attribution segments cleanly per window.
+    const payload = applyCampaignEffectivenessMetadata(applyDeterministicCampaignNames(rawPayload, {
+      audienceMode,
+      geoRadiusMiles: input.geoRadiusMiles,
+      resolvedInterests: [],
+    }));
+
+    const conversionConfig = await getConversionOptimisationConfig(supabase, accountId);
+    const sourceSnapshot: Record<string, unknown> = {
+      campaignKind: 'food_booking',
+      bookingUrl: brief.bookingUrl,
+      bookingConversionOptimised: true,
+      bookingConversionReady: conversionConfig.ready,
+      bookingConversionIssues: conversionConfig.issues,
+      conversionEventName: conversionConfig.eventName,
+      metaPixelId: conversionConfig.pixelId,
+      foodSchedule: enabledWindows,
+      geoRadiusMiles: input.geoRadiusMiles,
+      audienceMode,
+    };
+
+    const qualitySnapshot = buildCampaignQualitySnapshot({
+      campaignKind: 'food_booking',
+      destinationUrl,
+      budgetAmount: input.budgetAmount,
+      budgetType: input.budgetType,
+      audienceMode,
+      conversionReady: conversionConfig.ready,
+      capiReady: conversionConfig.capiReady,
+      adSets: payload.ad_sets,
+    });
+    const audienceStrategy = buildAudienceStrategy({
+      audienceMode,
+      geoRadiusMiles: input.geoRadiusMiles,
+      resolvedInterestCount: 0,
+      campaignKind: 'food_booking',
+      phases: payload.ad_sets,
+    });
+
+    // 5. Persist campaign.
+    const { data: campaignRow, error: campaignError } = await supabase
+      .from('meta_campaigns')
+      .insert({
+        account_id: accountId,
+        name: payload.campaign_name,
+        objective: payload.objective,
+        problem_brief: input.problemBrief,
+        ai_rationale: payload.rationale,
+        budget_type: input.budgetType,
+        budget_amount: input.budgetAmount,
+        geo_radius_miles: input.geoRadiusMiles,
+        audience_mode: audienceMode,
+        audience_interest_keywords: [],
+        resolved_interests: [],
+        start_date: input.startDate,
+        end_date: endDate,
+        status: 'DRAFT',
+        special_ad_category: payload.special_ad_category,
+        campaign_kind: 'food_booking',
+        source_type: 'food_booking',
+        source_id: null,
+        destination_url: destinationUrl,
+        quality_score: qualitySnapshot.score,
+        quality_status: qualitySnapshot.status,
+        quality_issues: qualitySnapshot.issues,
+        audience_strategy: audienceStrategy,
+        source_snapshot: sourceSnapshot,
+      })
+      .select('id')
+      .single<{ id: string }>();
+
+    if (campaignError) return { error: campaignError.message };
+    if (!campaignRow) return { error: 'Campaign insert returned no data' };
+
+    const campaignId = campaignRow.id;
+
+    // 6. Persist one ad set per enabled window, mapping food fields and the window key.
+    for (let index = 0; index < enabledWindows.length; index++) {
+      const window = enabledWindows[index]!;
+      const adSetInput = payload.ad_sets[index]!;
+
+      const { data: adSetRow, error: adSetError } = await supabase
+        .from('ad_sets')
+        .insert({
+          campaign_id: campaignId,
+          name: adSetInput.name,
+          phase_start: window.runDate,
+          phase_end: window.runDate,
+          ads_start_time: window.startsAtLocal,
+          ads_stop_time: window.endsAtLocal,
+          service_key: window.serviceKey,
+          decision_stage: window.decisionStage,
+          budget_weight: window.budgetWeight,
+          targeting: adSetInput.targeting,
+          placements: adSetInput.placements,
+          optimisation_goal: adSetInput.optimisation_goal,
+          bid_strategy: adSetInput.bid_strategy,
+          status: 'DRAFT',
+        })
+        .select('id')
+        .single<{ id: string }>();
+
+      if (adSetError) return { error: adSetError.message };
+      if (!adSetRow) return { error: 'Ad set insert returned no data' };
+
+      const adSetId = adSetRow.id;
+
+      for (const adInput of adSetInput.ads) {
+        const { error: adError } = await supabase.from('ads').insert({
+          adset_id: adSetId,
+          name: adInput.name,
+          headline: adInput.headline,
+          primary_text: adInput.primary_text,
+          description: adInput.description,
+          cta: adInput.cta,
+          creative_brief: adInput.creative_brief,
+          angle: adInput.angle ?? null,
+          creative_format: adInput.creative_format ?? null,
+          creative_variant_key: adInput.creative_variant_key ?? null,
+          // Phase-2 attribution: the window key is the stable utm_content for every ad
+          // in this window so booking conversions can be traced back to the window.
+          utm_content_key: window.windowKey,
+          media_asset_id: adInput.media_asset_id ?? null,
+          status: 'DRAFT',
+        });
+
+        if (adError) return { error: adError.message };
+      }
+    }
+
+    revalidatePath('/campaigns');
+    return { campaignId };
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      return { error: err.issues[0]?.message ?? 'Invalid food booking brief.' };
+    }
+    const message = err instanceof Error ? err.message : 'Failed to create food booking campaign.';
+    return { error: message };
+  }
 }
 
 // ---------------------------------------------------------------------------
