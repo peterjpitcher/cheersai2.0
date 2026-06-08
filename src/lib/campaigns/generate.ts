@@ -1,7 +1,15 @@
 import OpenAI from 'openai';
 
 import { env } from '@/env';
-import type { AdTargeting, AiCampaignPayload, BudgetType, PaidCampaignKind, PaidMediaPlan } from '@/types/campaigns';
+import type {
+  AdTargeting,
+  AiCampaignPayload,
+  BudgetType,
+  FoodDecisionStage,
+  FoodServiceKey,
+  PaidCampaignKind,
+  PaidMediaPlan,
+} from '@/types/campaigns';
 import { normaliseAudienceKeywords } from '@/lib/campaigns/interest-targeting';
 import {
   buildCreativeVariantKey,
@@ -41,7 +49,10 @@ export interface AdCopyValidationIssue {
     | 'date_mismatch'
     | 'walk_in_language'
     | 'cta_mismatch'
-    | 'missing_payment_reassurance';
+    | 'missing_payment_reassurance'
+    | 'food_tonight'
+    | 'food_last_orders'
+    | 'food_wrong_service';
   message: string;
   adSetName?: string;
   adName?: string;
@@ -60,6 +71,13 @@ const GENERIC_PHRASES = [
   'amazing',
   'hurry',
 ];
+// food_booking copy rules (§10): timing/service-mismatch language that misleads diners.
+const FOOD_TONIGHT_PATTERN = /\btonight\b/i;
+const FOOD_LAST_ORDERS_PATTERN = /\blast orders?\b/i;
+const FOOD_SUNDAY_ROAST_PATTERN = /\bsunday roast\b/i;
+// Sunday roast windows that legitimately run on the day the roast is served.
+const SUNDAY_ROAST_DAY_OF_STAGES = new Set<FoodDecisionStage>(['morning_commit', 'last_tables']);
+
 const TRACKABLE_BOOKING_HOSTS = new Set(['the-anchor.pub', 'www.the-anchor.pub']);
 const TRACKABLE_SHORT_LINK_HOSTS = new Set(['l.the-anchor.pub', 'vip-club.uk', 'www.vip-club.uk']);
 
@@ -180,6 +198,9 @@ export function validateCampaignCopy(
     eventDate?: string | null;
     requireBookNow?: boolean;
     cashOnArrival?: boolean;
+    campaignKind?: PaidCampaignKind;
+    serviceKey?: FoodServiceKey | null;
+    decisionStage?: FoodDecisionStage | null;
   },
 ): AdCopyValidationIssue[] {
   const issues: AdCopyValidationIssue[] = [];
@@ -206,7 +227,13 @@ export function validateCampaignCopy(
           adName: ad.name,
         });
       }
-      if (options?.requireBookingIntent && !BOOKING_INTENT_PATTERN.test(text)) {
+      // Non-food kinds accept booking intent anywhere (incl. the CTA token); food_booking
+      // requires it in the copy itself (handled in the food branch below).
+      if (
+        options?.requireBookingIntent
+        && options.campaignKind !== 'food_booking'
+        && !BOOKING_INTENT_PATTERN.test(text)
+      ) {
         issues.push({
           code: 'missing_booking_intent',
           message: 'Booking campaigns need explicit booking, reservation, ticket, table, seat, or spot language.',
@@ -245,6 +272,49 @@ export function validateCampaignCopy(
           adSetName: adSet.name,
           adName: ad.name,
         });
+      }
+      if (options?.campaignKind === 'food_booking') {
+        const isSundayRoast = options.serviceKey === 'sunday_roast';
+        // Booking intent must be present in the copy itself, not just satisfied by the
+        // BOOK_NOW button token (which would otherwise mask empty copy). Reuses the
+        // existing event booking-intent word set.
+        const copyText = `${ad.headline} ${ad.primary_text} ${ad.description}`;
+        if (options.requireBookingIntent && !BOOKING_INTENT_PATTERN.test(copyText)) {
+          issues.push({
+            code: 'missing_booking_intent',
+            message: 'Booking campaigns need explicit booking, reservation, ticket, table, seat, or spot language.',
+            adSetName: adSet.name,
+            adName: ad.name,
+          });
+        }
+        // Sunday roast is a lunchtime service: "tonight" framing misleads diners.
+        if (isSundayRoast && FOOD_TONIGHT_PATTERN.test(text)) {
+          issues.push({
+            code: 'food_tonight',
+            message: 'Sunday roast ads must not say "tonight" — the roast is a lunchtime/afternoon service.',
+            adSetName: adSet.name,
+            adName: ad.name,
+          });
+        }
+        // "Last orders" only applies on the day the roast is served (morning_commit / last_tables).
+        const lastOrdersAllowed = isSundayRoast && SUNDAY_ROAST_DAY_OF_STAGES.has(options.decisionStage ?? 'planning');
+        if (!lastOrdersAllowed && FOOD_LAST_ORDERS_PATTERN.test(text)) {
+          issues.push({
+            code: 'food_last_orders',
+            message: 'Only Sunday roast day-of ads may mention "last orders".',
+            adSetName: adSet.name,
+            adName: ad.name,
+          });
+        }
+        // Non-roast services must not advertise the Sunday roast.
+        if (!isSundayRoast && FOOD_SUNDAY_ROAST_PATTERN.test(text)) {
+          issues.push({
+            code: 'food_wrong_service',
+            message: 'Weekday/Saturday food ads must not mention the Sunday roast.',
+            adSetName: adSet.name,
+            adName: ad.name,
+          });
+        }
       }
       if (ad.headline.length > 40 || ad.primary_text.length > 300 || ad.description.length > 25) {
         issues.push({
