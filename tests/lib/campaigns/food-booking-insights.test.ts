@@ -265,6 +265,50 @@ describe('food booking insights', () => {
     ]);
   });
 
+  it('separates 30-day from 90-day totals', () => {
+    const insights = buildFoodBookingInsights(
+      [
+        row({ booking_id: 'recent', value: 30, occurred_at: '2026-06-10T12:00:00.000Z' }),
+        row({ booking_id: 'mid-window', value: 20, occurred_at: '2026-04-20T12:00:00.000Z' }),
+        row({ booking_id: 'too-old', value: 99, occurred_at: '2026-01-01T12:00:00.000Z' }),
+      ],
+      [],
+      new Date('2026-06-15T12:00:00.000Z'),
+    );
+
+    // 'recent' is within 30d; 'mid-window' is within 90d but outside 30d; 'too-old' is excluded.
+    expect(insights.totalBookings30d).toBe(1);
+    expect(insights.totalBookings90d).toBe(2);
+    expect(insights.totalValue90d).toBe(50);
+  });
+
+  it('returns null cost per table booking when there are bookings but no food spend', () => {
+    const sundayAdKey = 'sunday_roast_morning-2026-06-14-venue-1';
+    const insights = buildFoodBookingInsights(
+      [row({ booking_id: 'sunday-1', utm_content: sundayAdKey, value: 60 })],
+      [
+        campaign([
+          adSet({
+            id: 'sunday-adset',
+            serviceKey: 'sunday_roast',
+            decisionStage: 'morning_commit',
+            performance: { ...EMPTY_PERFORMANCE, spend: 0 },
+            ads: [ad({ id: 'sunday-ad', adsetId: 'sunday-adset', utmContentKey: sundayAdKey })],
+          }),
+        ]),
+      ],
+      new Date('2026-06-15T12:00:00.000Z'),
+    );
+
+    expect(insights.totalBookings90d).toBe(1);
+    expect(insights.costPerTableBooking).toBeNull();
+    expect(insights.topServices90d).toContainEqual(expect.objectContaining({
+      key: 'sunday_roast',
+      bookings: 1,
+      costPerBooking: null,
+    }));
+  });
+
   it('returns empty insight totals when there are no table bookings', () => {
     const insights = buildFoodBookingInsights([], [], new Date('2026-06-15T12:00:00.000Z'));
 
