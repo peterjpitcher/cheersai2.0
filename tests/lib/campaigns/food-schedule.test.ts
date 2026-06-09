@@ -10,10 +10,12 @@ describe('food-schedule defaults', () => {
   it('provides the three default services with doc hours', () => {
     expect(DEFAULT_FOOD_SERVICE_HOURS.weekday_dinner.startLocal).toBe('16:00');
     expect(DEFAULT_FOOD_SERVICE_HOURS.weekday_dinner.endLocal).toBe('21:00');
+    expect(DEFAULT_FOOD_SERVICE_HOURS.weekday_dinner.lastOrdersLocal).toBe('20:30');
     expect(DEFAULT_FOOD_SERVICE_HOURS.weekday_dinner.days).toEqual(
       ['tuesday', 'wednesday', 'thursday', 'friday'],
     );
     expect(DEFAULT_FOOD_SERVICE_HOURS.saturday_food.endLocal).toBe('19:00');
+    expect(DEFAULT_FOOD_SERVICE_HOURS.saturday_food.lastOrdersLocal).toBe('18:30');
     expect(DEFAULT_FOOD_SERVICE_HOURS.sunday_roast.lastOrdersLocal).toBe('17:30');
   });
 

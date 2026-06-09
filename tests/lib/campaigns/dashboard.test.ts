@@ -155,6 +155,39 @@ describe('campaign dashboard status alignment', () => {
     expect(dashboard.attentionItems.map((item) => item.id)).not.toContain('campaign-with-bookings:no-bookings');
   });
 
+  it('passes food booking insights through to the dashboard model', () => {
+    const foodBookingInsights = {
+      totalBookings30d: 2,
+      totalBookings90d: 4,
+      totalValue90d: 160,
+      costPerTableBooking: 5,
+      sundayRoastBookings90d: 3,
+      sundayRoastValue90d: 120,
+      topServices90d: [
+        {
+          key: 'sunday_roast',
+          name: 'Sunday roast',
+          bookings: 3,
+          value: 120,
+          costPerBooking: 4,
+        },
+      ],
+      topDecisionStages90d: [],
+      topWindows90d: [],
+    };
+
+    const dashboard = buildCampaignDashboard(
+      [campaign({ id: 'food', campaignKind: 'food_booking' })],
+      [],
+      undefined,
+      {
+        foodBookingInsights,
+      },
+    );
+
+    expect(dashboard.foodBookingInsights).toBe(foodBookingInsights);
+  });
+
   it('removes optimisation recommendations for finished campaigns', () => {
     const dashboard = buildCampaignDashboard(
       [

@@ -151,6 +151,37 @@ function stringValue(value: unknown): string | null {
   return typeof value === 'string' && value.trim() ? value.trim() : null;
 }
 
+function serviceBookingUrlsFromSnapshot(
+  sourceSnapshot: Record<string, unknown> | null,
+): Record<string, string> {
+  const value = sourceSnapshot?.serviceBookingUrls;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+
+  return Object.entries(value as Record<string, unknown>).reduce<Record<string, string>>(
+    (acc, [key, rawValue]) => {
+      const url = stringValue(rawValue);
+      if (url) acc[key] = url;
+      return acc;
+    },
+    {},
+  );
+}
+
+function resolveFoodBookingLinkUrl(
+  campaign: CampaignRow,
+  adSet: AdSetRow,
+  utmContentKey: string,
+) {
+  if (!isFoodBookingCampaign(campaign) || !adSet.service_key) {
+    return null;
+  }
+
+  const serviceUrl = serviceBookingUrlsFromSnapshot(campaign.source_snapshot)[adSet.service_key];
+  if (!serviceUrl) return null;
+
+  return applyAdUtmContent(serviceUrl, utmContentKey);
+}
+
 function isTrustedShortLink(parsed: URL): boolean {
   return TRACKABLE_SHORT_LINK_HOSTS.has(parsed.hostname.toLowerCase());
 }
@@ -947,6 +978,7 @@ export async function publishCampaign(
             name: ad.name,
             pageId,
             linkUrl:
+              resolveFoodBookingLinkUrl(campaign, adSet, fallbackUtmContentKey) ??
               resolveManagementMetaAdVariantShortUrl(campaign.source_snapshot, fallbackUtmContentKey) ??
               applyAdUtmContent(baseLinkUrl, fallbackUtmContentKey),
             imageHash,

@@ -49,6 +49,7 @@ export interface FoodAdWindow {
 export interface FoodBookingBrief {
   services: FoodServiceHours[];
   bookingUrl: string;
+  serviceBookingUrls?: Partial<Record<FoodServiceKey, string>>;
   foodHooks: string[];
   weeks: 1 | 2 | 4;
   dayWeighting: 'even' | 'boost_quiet' | 'manual';

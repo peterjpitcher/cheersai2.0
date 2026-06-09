@@ -308,6 +308,29 @@ describe('publishCampaign — food_booking', () => {
     }));
   });
 
+  it('uses a Sunday roast booking URL override for Sunday roast ad sets', async () => {
+    queueFoodPublishLookups({
+      campaign: {
+        source_snapshot: {
+          campaignKind: 'food_booking',
+          bookingConversionOptimised: true,
+          serviceBookingUrls: {
+            sunday_roast: 'https://www.the-anchor.pub/book-table?service=sunday-roast',
+          },
+        },
+      },
+      adSets: [foodAdSetRow({ utm_content_key: 'sunday_roast_morning-2026-06-14-venue-1' })],
+    });
+    stubMetaCreateSuccess();
+
+    const result = await publishCampaign('campaign-123');
+
+    expect(result.success).toBe(true);
+    expect(marketing.createMetaAdCreative).toHaveBeenCalledWith(expect.objectContaining({
+      linkUrl: 'https://www.the-anchor.pub/book-table?service=sunday-roast&utm_content=sunday_roast_morning-2026-06-14-venue-1',
+    }));
+  });
+
   it('logs publish_attempt then publish_success on a successful publish', async () => {
     queueFoodPublishLookups({ adSets: [foodAdSetRow()] });
     stubMetaCreateSuccess();

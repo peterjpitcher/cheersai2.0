@@ -15,6 +15,10 @@ import {
   fetchEventBookingInsights,
   formatEventBookingInsightsForCampaignPrompt,
 } from '@/lib/campaigns/event-booking-insights';
+import {
+  EMPTY_FOOD_BOOKING_INSIGHTS,
+  fetchFoodBookingInsights,
+} from '@/lib/campaigns/food-booking-insights';
 import { generateCampaign } from '@/lib/campaigns/generate';
 import { applyDeterministicCampaignNames } from '@/lib/campaigns/naming';
 import {
@@ -88,6 +92,7 @@ import type {
   FoodAdWindow,
   FoodBookingBrief,
   FoodServiceHours,
+  FoodServiceKey,
   RunDay,
 } from '@/types/campaigns';
 
@@ -957,6 +962,11 @@ const foodServiceHoursSchema = z.object({
 const foodBookingBriefSchema = z.object({
   services: z.array(foodServiceHoursSchema).min(1, 'Add at least one food service.'),
   bookingUrl: z.string().url('Enter a valid booking URL.'),
+  serviceBookingUrls: z.object({
+    weekday_dinner: z.string().url('Enter a valid weekday dinner booking URL.').optional(),
+    saturday_food: z.string().url('Enter a valid Saturday food booking URL.').optional(),
+    sunday_roast: z.string().url('Enter a valid Sunday roast booking URL.').optional(),
+  }).optional(),
   foodHooks: z.array(z.string()),
   weeks: z.union([z.literal(1), z.literal(2), z.literal(4)]),
   dayWeighting: z.enum(['even', 'boost_quiet', 'manual']),
@@ -989,11 +999,56 @@ function foodWindowToPhase(window: FoodAdWindow): CampaignPhase {
   };
 }
 
+function buildFoodWindowAdUtmContentKey(
+  window: FoodAdWindow,
+  adInput: AiCampaignPayload['ad_sets'][number]['ads'][number],
+  index: number,
+) {
+  const suffix = slugFoodUtmPart(
+    adInput.creative_variant_key
+    ?? adInput.creative_format
+    ?? adInput.angle
+    ?? adInput.name
+    ?? `ad-${index + 1}`,
+  );
+
+  return `${window.windowKey}-${window.runDate}-${suffix || `ad-${index + 1}`}-${index + 1}`
+    .slice(0, 160)
+    .replace(/[-_]+$/g, '');
+}
+
+function slugFoodUtmPart(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/&/g, ' and ')
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 48);
+}
+
+function normaliseServiceBookingUrls(
+  urls: FoodBookingBrief['serviceBookingUrls'],
+  defaultBookingUrl: string,
+): Partial<Record<FoodServiceKey, string>> {
+  const output: Partial<Record<FoodServiceKey, string>> = {};
+  if (!urls) return output;
+
+  for (const serviceKey of ['weekday_dinner', 'saturday_food', 'sunday_roast'] as FoodServiceKey[]) {
+    const value = urls[serviceKey]?.trim();
+    if (!value || value === defaultBookingUrl) continue;
+    output[serviceKey] = validateDestinationUrl(value);
+  }
+
+  return output;
+}
+
 /**
  * Creates a food_booking DRAFT campaign from a FoodBookingBrief: derive the London-local
  * ad windows, generate per-window booking copy, and persist one ad set per ENABLED window
- * with its intra-day start/stop, service metadata, and a stable utm_content key (the window
- * key) for Phase-2 attribution. Budget lives on the campaign (CBO) and is applied at publish.
+ * with its intra-day start/stop, service metadata, and ad-level utm_content keys prefixed
+ * by the food window for Phase-2 attribution. Budget lives on the campaign (CBO) and is
+ * applied at publish.
  */
 export async function createFoodBookingCampaign(
   input: CreateFoodBookingCampaignInput,
@@ -1014,6 +1069,7 @@ export async function createFoodBookingCampaign(
     }
 
     const destinationUrl = validateDestinationUrl(brief.bookingUrl);
+    const serviceBookingUrls = normaliseServiceBookingUrls(brief.serviceBookingUrls, destinationUrl);
 
     // 1. Verify Meta Ads account is connected and conversion tracking is ready.
     const { data: adAccount } = await supabase
@@ -1070,7 +1126,11 @@ export async function createFoodBookingCampaign(
       promotionName: input.promotionName,
       problemBrief: input.problemBrief,
       destinationUrl,
-      sourceSnapshot: { campaignKind: 'food_booking', bookingUrl: brief.bookingUrl },
+      sourceSnapshot: {
+        campaignKind: 'food_booking',
+        bookingUrl: brief.bookingUrl,
+        serviceBookingUrls,
+      },
       venueName,
       venueLocation,
       budgetAmount: input.budgetAmount,
@@ -1095,6 +1155,7 @@ export async function createFoodBookingCampaign(
     const sourceSnapshot: Record<string, unknown> = {
       campaignKind: 'food_booking',
       bookingUrl: brief.bookingUrl,
+      serviceBookingUrls,
       bookingConversionOptimised: true,
       bookingConversionReady: conversionConfig.ready,
       bookingConversionIssues: conversionConfig.issues,
@@ -1201,7 +1262,8 @@ export async function createFoodBookingCampaign(
 
       const adSetId = adSetRow.id;
 
-      for (const adInput of adSetInput.ads) {
+      for (let adIndex = 0; adIndex < adSetInput.ads.length; adIndex++) {
+        const adInput = adSetInput.ads[adIndex]!;
         const { error: adError } = await supabase.from('ads').insert({
           adset_id: adSetId,
           name: adInput.name,
@@ -1213,11 +1275,9 @@ export async function createFoodBookingCampaign(
           angle: adInput.angle ?? null,
           creative_format: adInput.creative_format ?? null,
           creative_variant_key: adInput.creative_variant_key ?? null,
-          // Phase-2 attribution: utm_content must be unique per ad campaign-wide (publish
-          // preflight rejects duplicates). The same windowKey repeats across run-dates, so
-          // we key by window + run-date. service_key/decision_stage stay on the ad set for
-          // Phase-2 segmentation (utm_content → ad-set join).
-          utm_content_key: `${window.windowKey}-${window.runDate}`,
+          // Keep the window/date prefix for service attribution, then add an ad suffix so
+          // publish preflight and ad-level booking attribution still see unique keys.
+          utm_content_key: buildFoodWindowAdUtmContentKey(window, adInput, adIndex),
           media_asset_id: adInput.media_asset_id ?? null,
           status: 'DRAFT',
         });
@@ -1332,9 +1392,18 @@ export async function getCampaignDashboard(): Promise<CampaignDashboardModel> {
   if (campaignsError) throw campaignsError;
 
   const campaigns = (campaignsData ?? []).map((row) => dbRowToCampaignWithTree(row as CampaignDbRowWithTree));
-  const firstPartyBookingStats = await loadDashboardFirstPartyBookingStats(supabase, accountId, campaigns);
+  const [firstPartyBookingStats, foodBookingInsights] = await Promise.all([
+    loadDashboardFirstPartyBookingStats(supabase, accountId, campaigns),
+    fetchFoodBookingInsights(accountId, campaigns, { supabase }).catch((error) => {
+      console.error('[campaigns] Failed to load food booking insights', error);
+      return EMPTY_FOOD_BOOKING_INSIGHTS;
+    }),
+  ]);
 
-  return buildCampaignDashboard(campaigns, actions, eventBookingInsights, { firstPartyBookingStats });
+  return buildCampaignDashboard(campaigns, actions, eventBookingInsights, {
+    firstPartyBookingStats,
+    foodBookingInsights,
+  });
 }
 
 async function loadDashboardFirstPartyBookingStats(
@@ -1948,6 +2017,10 @@ interface AdSetDbRow {
   adset_media_asset_id: string | null;
   adset_image_url: string | null;
   ads_stop_time: string | null;
+  ads_start_time: string | null;
+  service_key: string | null;
+  decision_stage: string | null;
+  budget_weight: number | string | null;
   meta_status: string | null;
   metrics_spend: number | string | null;
   metrics_impressions: number | null;
@@ -2039,6 +2112,12 @@ function dbRowToAdSet(row: AdSetDbRow): AdSet {
     adsetMediaAssetId: row.adset_media_asset_id ?? null,
     adsetImageUrl: row.adset_image_url ?? null,
     adsStopTime: row.ads_stop_time ?? null,
+    adsStartTime: row.ads_start_time ?? null,
+    serviceKey: row.service_key ? row.service_key as AdSet['serviceKey'] : null,
+    decisionStage: row.decision_stage ? row.decision_stage as AdSet['decisionStage'] : null,
+    budgetWeight: row.budget_weight === null || row.budget_weight === undefined
+      ? null
+      : Number(row.budget_weight),
     metaStatus: row.meta_status,
     performance: dbRowToPerformance(row),
     lastSyncedAt: row.last_synced_at ? new Date(row.last_synced_at) : null,

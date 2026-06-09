@@ -81,8 +81,15 @@ describe('CampaignBriefForm — food booking', () => {
     expect(screen.getByRole('checkbox', { name: /enable sunday roast/i })).toBeChecked();
     // Prefilled service hours (weekday dinner default start 16:00).
     expect((screen.getByLabelText(/weekday dinner start/i) as HTMLInputElement).value).toBe('16:00');
-    // Booking URL field.
-    expect(screen.getByLabelText(/booking url/i)).toBeInTheDocument();
+    expect((screen.getByLabelText(/weekday dinner last orders/i) as HTMLInputElement).value).toBe('20:30');
+    expect((screen.getByLabelText(/saturday food last orders/i) as HTMLInputElement).value).toBe('18:30');
+    // Booking URL fields default to the live Anchor table booking route.
+    expect((screen.getByLabelText(/default booking url/i) as HTMLInputElement).value)
+      .toBe('https://www.the-anchor.pub/book-table');
+    expect((screen.getByLabelText(/sunday roast booking url/i) as HTMLInputElement).value)
+      .toBe('https://www.the-anchor.pub/book-table');
+    expect((screen.getByLabelText(/^budget$/i) as HTMLInputElement).value).toBe('300');
+    expect(screen.getByDisplayValue(/stone-baked 12-inch pizzas from £12/i)).toBeInTheDocument();
     // Weeks defaults to 2.
     const weeks = screen.getByLabelText(/weeks/i) as HTMLSelectElement;
     expect(weeks.value).toBe('2');
@@ -109,8 +116,11 @@ describe('CampaignBriefForm — food booking', () => {
     fireEvent.change(screen.getByLabelText(/campaign brief/i), {
       target: { value: 'Fill tables for Sunday roast and weekday dinner.' },
     });
-    fireEvent.change(screen.getByLabelText(/booking url/i), {
+    fireEvent.change(screen.getByLabelText(/default booking url/i), {
       target: { value: 'https://book.example.com' },
+    });
+    fireEvent.change(screen.getByLabelText(/sunday roast booking url/i), {
+      target: { value: 'https://book.example.com/sunday-roast' },
     });
     fireEvent.change(screen.getByLabelText(/^budget$/i), { target: { value: '40' } });
     fireEvent.change(screen.getByLabelText(/start date/i), { target: { value: '2026-06-09' } });
@@ -128,7 +138,11 @@ describe('CampaignBriefForm — food booking', () => {
     expect(input.promotionName).toBe('Roast push');
     expect(input.problemBrief).toContain('Sunday roast');
     expect(input.brief.bookingUrl).toBe('https://book.example.com');
+    expect(input.brief.serviceBookingUrls).toMatchObject({
+      sunday_roast: 'https://book.example.com/sunday-roast',
+    });
     expect(input.brief.weeks).toBe(2);
+    expect(input.brief.foodHooks).toContain('Stone-baked 12-inch pizzas from £12');
     expect(input.brief.services.length).toBeGreaterThan(0);
     expect(input.budgetAmount).toBe(40);
     expect(input.startDate).toBe('2026-06-09');
@@ -144,6 +158,8 @@ describe('CampaignBriefForm — food booking', () => {
 
     fireEvent.change(screen.getByLabelText(/campaign name/i), { target: { value: 'Roast push' } });
     fireEvent.change(screen.getByLabelText(/campaign brief/i), { target: { value: 'Fill tables.' } });
+    fireEvent.change(screen.getByLabelText(/default booking url/i), { target: { value: '' } });
+    fireEvent.change(screen.getByLabelText(/sunday roast booking url/i), { target: { value: '' } });
     fireEvent.change(screen.getByLabelText(/start date/i), { target: { value: '2026-06-09' } });
 
     const submit = screen.getByRole('button', { name: /create campaign/i });

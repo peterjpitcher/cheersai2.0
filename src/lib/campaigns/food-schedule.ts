@@ -4,11 +4,11 @@ export const DEFAULT_FOOD_SERVICE_HOURS: Record<FoodServiceKey, FoodServiceHours
   weekday_dinner: {
     serviceKey: 'weekday_dinner', enabled: true,
     days: ['tuesday', 'wednesday', 'thursday', 'friday'],
-    startLocal: '16:00', endLocal: '21:00',
+    startLocal: '16:00', endLocal: '21:00', lastOrdersLocal: '20:30',
   },
   saturday_food: {
     serviceKey: 'saturday_food', enabled: true,
-    days: ['saturday'], startLocal: '12:00', endLocal: '19:00',
+    days: ['saturday'], startLocal: '12:00', endLocal: '19:00', lastOrdersLocal: '18:30',
   },
   sunday_roast: {
     serviceKey: 'sunday_roast', enabled: true,

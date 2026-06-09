@@ -15,9 +15,11 @@ import {
   RefreshCw,
   Target,
   Trophy,
+  Utensils,
   WandSparkles,
 } from 'lucide-react';
 
+import { featureFlags } from '@/env';
 import {
   applyOptimisationRecommendationFormAction,
   runOptimiserFormAction,
@@ -137,9 +139,13 @@ export function CampaignDashboard({ dashboard }: CampaignDashboardProps) {
         <PerformanceFocus dashboard={dashboard} />
       </section>
 
-      <section className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(360px,480px)]">
+      <section className={featureFlags.foodBooking
+        ? 'grid gap-5 xl:grid-cols-3'
+        : 'grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(360px,480px)]'}
+      >
         <RecommendationsPanel actions={dashboard.optimisationActions} />
         <EventBookingInsightsPanel dashboard={dashboard} />
+        {featureFlags.foodBooking ? <FoodBookingInsightsPanel dashboard={dashboard} /> : null}
       </section>
 
       <AdvancedPerformanceDetails dashboard={dashboard} />
@@ -769,12 +775,63 @@ function EventBookingInsightsPanel({ dashboard }: { dashboard: CampaignDashboard
   );
 }
 
+function FoodBookingInsightsPanel({ dashboard }: { dashboard: CampaignDashboardModel }) {
+  const insights = dashboard.foodBookingInsights;
+
+  return (
+    <section
+      style={{
+        borderRadius: 'var(--r-lg)',
+        border: '1px solid var(--c-line)',
+        backgroundColor: 'var(--c-card)',
+      }}
+    >
+      <SectionHeader
+        title="Food booking insight"
+        detail="Table bookings by service, decision stage, and ad window."
+        icon={<Utensils className="h-4 w-4" />}
+      />
+
+      {insights.totalBookings90d === 0 ? (
+        <p className="px-4 py-6 text-sm" style={{ color: 'var(--c-ink-3)' }}>
+          No first-party table booking conversions have been captured yet.
+        </p>
+      ) : (
+        <div className="space-y-4 p-4">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <MiniStat label="Tables" value={formatNumber(insights.totalBookings90d)} />
+            <MiniStat label="Value" value={formatCurrency(insights.totalValue90d)} />
+            <MiniStat
+              label="Cost/table"
+              value={insights.costPerTableBooking === null
+                ? 'No spend yet'
+                : formatCurrency(insights.costPerTableBooking)}
+            />
+            <MiniStat label="Sunday roast" value={formatNumber(insights.sundayRoastBookings90d)} />
+          </div>
+          <InsightList title="Top services" items={insights.topServices90d} />
+          <InsightList title="Decision stages" items={insights.topDecisionStages90d} />
+          <InsightList title="Ad windows" items={insights.topWindows90d} />
+        </div>
+      )}
+    </section>
+  );
+}
+
+type InsightListItem = {
+  key: string;
+  name: string;
+  bookings: number;
+  tickets?: number | null;
+  costPerBooking?: number | null;
+};
+
 function InsightList({
   title,
   items,
 }: {
   title: string;
-  items: CampaignDashboardModel['eventBookingInsights']['topEvents90d'];
+  items: InsightListItem[];
 }) {
   return (
     <div>
@@ -788,7 +845,7 @@ function InsightList({
               {item.name}
             </p>
             <p className="shrink-0 text-xs tabular-nums" style={{ color: 'var(--c-ink-3)' }}>
-              {formatNumber(item.bookings)} / {formatNumber(item.tickets)} seats
+              {formatInsightListMetric(item)}
             </p>
           </div>
         ))}
@@ -800,6 +857,16 @@ function InsightList({
       </div>
     </div>
   );
+}
+
+function formatInsightListMetric(item: InsightListItem) {
+  if (typeof item.tickets === 'number') {
+    return `${formatNumber(item.bookings)} / ${formatNumber(item.tickets)} seats`;
+  }
+  if (typeof item.costPerBooking === 'number') {
+    return `${formatNumber(item.bookings)} / ${formatCurrency(item.costPerBooking)}`;
+  }
+  return `${formatNumber(item.bookings)} bookings`;
 }
 
 function AdvancedPerformanceDetails({ dashboard }: { dashboard: CampaignDashboardModel }) {

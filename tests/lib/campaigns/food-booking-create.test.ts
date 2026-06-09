@@ -78,6 +78,10 @@ let currentTable = '';
 // When set, the next `ads` insert resolves with this error so we can exercise the
 // cleanup-on-failure path.
 let adInsertError: { message: string } | null = null;
+
+function keyMatchesOccurrence(key: string, occurrenceKey: string) {
+  return key === occurrenceKey || key.startsWith(`${occurrenceKey}-`);
+}
 // Tracks whether the immediately-preceding builder call was .delete(), so the following
 // .eq() can be recorded as a delete filter.
 let lastOpWasDelete = false;
@@ -117,7 +121,10 @@ const mockSupabase = {
 function brief(over: Partial<FoodBookingBrief> = {}): FoodBookingBrief {
   return {
     services: [DEFAULT_FOOD_SERVICE_HOURS.sunday_roast],
-    bookingUrl: 'https://www.the-anchor.pub/book?utm_source=facebook&utm_medium=paid_social&utm_campaign=sunday-roast',
+    bookingUrl: 'https://www.the-anchor.pub/book-table',
+    serviceBookingUrls: {
+      sunday_roast: 'https://www.the-anchor.pub/book-table?service=sunday-roast',
+    },
     foodHooks: ['Hand-carved roast', 'Cauliflower cheese'],
     weeks: 1,
     dayWeighting: 'even',
@@ -258,12 +265,16 @@ describe('createFoodBookingCampaign', () => {
       budget_weight: firstWindow.budgetWeight,
     });
 
-    // Each ad carries a per-occurrence utm_content key: windowKey + runDate.
+    // Each ad carries a per-ad utm_content key prefixed by windowKey + runDate.
     const adInserts = insertCalls.filter((c) => c.table === 'ads');
     expect(adInserts.length).toBeGreaterThan(0);
     const occurrenceKeys = new Set(enabled.map((w) => `${w.windowKey}-${w.runDate}`));
     for (const ad of adInserts) {
-      expect(occurrenceKeys.has(ad.payload.utm_content_key as string)).toBe(true);
+      expect(
+        Array.from(occurrenceKeys).some((occurrenceKey) => (
+          keyMatchesOccurrence(ad.payload.utm_content_key as string, occurrenceKey)
+        )),
+      ).toBe(true);
     }
   });
 
@@ -285,10 +296,12 @@ describe('createFoodBookingCampaign', () => {
     expect(adKeys.length).toBeGreaterThan(0);
     // Every ad's utm_content is unique across the whole campaign.
     expect(new Set(adKeys).size).toBe(adKeys.length);
-    // And each key is the windowKey + runDate composite.
+    // And each key preserves the windowKey + runDate composite as its attribution prefix.
     const occurrenceKeys = new Set(enabled.map((w) => `${w.windowKey}-${w.runDate}`));
     for (const key of adKeys) {
-      expect(occurrenceKeys.has(key)).toBe(true);
+      expect(Array.from(occurrenceKeys).some((occurrenceKey) => (
+        keyMatchesOccurrence(key, occurrenceKey)
+      ))).toBe(true);
     }
   });
 
@@ -302,6 +315,9 @@ describe('createFoodBookingCampaign', () => {
     expect(campaignInsert).toBeDefined();
     const snapshot = campaignInsert!.payload.source_snapshot as Record<string, unknown>;
     expect(snapshot.bookingUrl).toBe(brief().bookingUrl);
+    expect(snapshot.serviceBookingUrls).toMatchObject({
+      sunday_roast: 'https://www.the-anchor.pub/book-table?service=sunday-roast',
+    });
     expect(snapshot.bookingConversionOptimised).toBe(true);
     expect(Array.isArray(snapshot.foodSchedule)).toBe(true);
     expect((snapshot.foodSchedule as unknown[]).length).toBeGreaterThan(0);
@@ -377,7 +393,10 @@ describe('createFoodBookingCampaign', () => {
     const adInserts = insertCalls.filter((c) => c.table === 'ads');
     expect(
       adInserts.some(
-        (c) => c.payload.utm_content_key === `weekday_last_minute-${lastMinuteWindow.runDate}`,
+        (c) => keyMatchesOccurrence(
+          c.payload.utm_content_key as string,
+          `weekday_last_minute-${lastMinuteWindow.runDate}`,
+        ),
       ),
     ).toBe(true);
   });

@@ -58,6 +58,15 @@ const KIND_LABELS: Record<PaidCampaignKind, string> = {
 };
 
 const FOOD_SERVICE_ORDER: FoodServiceKey[] = ['weekday_dinner', 'saturday_food', 'sunday_roast'];
+const DEFAULT_FOOD_BOOKING_URL = 'https://www.the-anchor.pub/book-table';
+const DEFAULT_FOOD_BUDGET_AMOUNT = 300;
+const DEFAULT_FOOD_HOOKS = [
+  'Stone-baked 12-inch pizzas from £12',
+  'Beer-battered fish and chips with chunky chips, mushy peas, tartare sauce and lemon',
+  'Golden pastry pies including beef and ale, chicken and wild mushroom, and vegetarian butternut squash',
+  'Classic beef burger with chips from £11',
+  'Sunday roast with beef topside, pork leg, turkey, pies, vegan wellington, herb-and-garlic roast potatoes and signature gravy',
+].join('\n');
 const FOOD_SERVICE_LABELS: Record<FoodServiceKey, string> = {
   weekday_dinner: 'Weekday dinner',
   saturday_food: 'Saturday food',
@@ -82,6 +91,7 @@ function validateFoodBriefForm(args: {
   promotionName: string;
   problemBrief: string;
   bookingUrl: string;
+  serviceBookingUrls?: Partial<Record<FoodServiceKey, string>>;
   budgetAmount: number;
   startDate: string;
   services: FoodServiceHours[];
@@ -94,6 +104,14 @@ function validateFoodBriefForm(args: {
   } catch {
     return 'Enter a valid booking URL.';
   }
+  for (const [serviceKey, url] of Object.entries(args.serviceBookingUrls ?? {})) {
+    if (!url?.trim()) continue;
+    try {
+      new URL(url.trim());
+    } catch {
+      return `Enter a valid booking URL for ${FOOD_SERVICE_LABELS[serviceKey as FoodServiceKey]}.`;
+    }
+  }
   if (args.budgetAmount <= 0) return 'Budget must be greater than 0.';
   if (!args.startDate) return 'Set a campaign start date.';
 
@@ -105,6 +123,15 @@ function validateFoodBriefForm(args: {
     }
     if (service.endLocal <= service.startLocal) {
       return `${FOOD_SERVICE_LABELS[service.serviceKey]} must end after it starts.`;
+    }
+    if (service.lastOrdersLocal && !FOOD_HHMM_REGEX.test(service.lastOrdersLocal)) {
+      return `Set valid last orders (HH:MM) for ${FOOD_SERVICE_LABELS[service.serviceKey]}.`;
+    }
+    if (service.lastOrdersLocal && (
+      service.lastOrdersLocal < service.startLocal ||
+      service.lastOrdersLocal > service.endLocal
+    )) {
+      return `${FOOD_SERVICE_LABELS[service.serviceKey]} last orders must be within service hours.`;
     }
   }
   return null;
@@ -171,8 +198,9 @@ export function CampaignBriefForm({ mediaLibrary }: CampaignBriefFormProps) {
 
   // Food booking sub-form state.
   const [foodServices, setFoodServices] = useState<FoodServiceHours[]>(buildInitialFoodServices);
-  const [bookingUrl, setBookingUrl] = useState('');
-  const [foodHooksText, setFoodHooksText] = useState('');
+  const [bookingUrl, setBookingUrl] = useState(DEFAULT_FOOD_BOOKING_URL);
+  const [sundayRoastBookingUrl, setSundayRoastBookingUrl] = useState(DEFAULT_FOOD_BOOKING_URL);
+  const [foodHooksText, setFoodHooksText] = useState(DEFAULT_FOOD_HOOKS);
   const [foodWeeks, setFoodWeeks] = useState<1 | 2 | 4>(2);
   const [foodDayWeighting, setFoodDayWeighting] = useState<FoodBookingBrief['dayWeighting']>('even');
   const [windowOverrides, setWindowOverrides] = useState<Record<string, boolean>>({});
@@ -210,13 +238,16 @@ export function CampaignBriefForm({ mediaLibrary }: CampaignBriefFormProps) {
   const foodBrief = useMemo<FoodBookingBrief>(() => ({
     services: foodServices,
     bookingUrl: bookingUrl.trim(),
+    serviceBookingUrls: {
+      sunday_roast: sundayRoastBookingUrl.trim() || bookingUrl.trim(),
+    },
     foodHooks: foodHooksText
       .split('\n')
       .map((hook) => hook.trim())
       .filter(Boolean),
     weeks: foodWeeks,
     dayWeighting: foodDayWeighting,
-  }), [foodServices, bookingUrl, foodHooksText, foodWeeks, foodDayWeighting]);
+  }), [foodServices, bookingUrl, sundayRoastBookingUrl, foodHooksText, foodWeeks, foodDayWeighting]);
 
   // Live preview windows derived from the brief + start date. Toggle state is layered on top
   // via windowOverrides (keyed by windowKey) so the parent owns the per-window enabled flag.
@@ -238,12 +269,23 @@ export function CampaignBriefForm({ mediaLibrary }: CampaignBriefFormProps) {
         promotionName,
         problemBrief,
         bookingUrl,
+        serviceBookingUrls: {
+          sunday_roast: sundayRoastBookingUrl,
+        },
         budgetAmount,
         startDate,
         services: foodServices,
       }),
-    [promotionName, problemBrief, bookingUrl, budgetAmount, startDate, foodServices],
+    [promotionName, problemBrief, bookingUrl, sundayRoastBookingUrl, budgetAmount, startDate, foodServices],
   );
+
+  function handleFoodBookingUrlChange(next: string) {
+    setBookingUrl(next);
+    setSundayRoastBookingUrl((current) => {
+      if (!current.trim() || current.trim() === bookingUrl.trim()) return next;
+      return current;
+    });
+  }
 
   function toggleFoodWindow(windowKey: string, next: boolean) {
     setWindowOverrides((prev) => ({ ...prev, [windowKey]: next }));
@@ -558,6 +600,11 @@ export function CampaignBriefForm({ mediaLibrary }: CampaignBriefFormProps) {
                   }
                   if (kind === 'food_booking') {
                     setWindowOverrides({});
+                    setBookingUrl((current) => current.trim() || DEFAULT_FOOD_BOOKING_URL);
+                    setSundayRoastBookingUrl((current) => current.trim() || DEFAULT_FOOD_BOOKING_URL);
+                    setFoodHooksText((current) => current.trim() ? current : DEFAULT_FOOD_HOOKS);
+                    setBudgetAmount(DEFAULT_FOOD_BUDGET_AMOUNT);
+                    setBudgetType('LIFETIME');
                   }
                 }}
                 className="px-3 py-2 text-sm font-semibold transition-colors"
@@ -754,7 +801,9 @@ export function CampaignBriefForm({ mediaLibrary }: CampaignBriefFormProps) {
             services={foodServices}
             onServiceChange={updateFoodService}
             bookingUrl={bookingUrl}
-            onBookingUrlChange={setBookingUrl}
+            onBookingUrlChange={handleFoodBookingUrlChange}
+            sundayRoastBookingUrl={sundayRoastBookingUrl}
+            onSundayRoastBookingUrlChange={setSundayRoastBookingUrl}
             foodHooksText={foodHooksText}
             onFoodHooksChange={setFoodHooksText}
             weeks={foodWeeks}
@@ -1090,6 +1139,8 @@ interface FoodBookingSubFormProps {
   onServiceChange: (serviceKey: FoodServiceKey, patch: Partial<FoodServiceHours>) => void;
   bookingUrl: string;
   onBookingUrlChange: (value: string) => void;
+  sundayRoastBookingUrl: string;
+  onSundayRoastBookingUrlChange: (value: string) => void;
   foodHooksText: string;
   onFoodHooksChange: (value: string) => void;
   weeks: 1 | 2 | 4;
@@ -1103,6 +1154,8 @@ function FoodBookingSubForm({
   onServiceChange,
   bookingUrl,
   onBookingUrlChange,
+  sundayRoastBookingUrl,
+  onSundayRoastBookingUrlChange,
   foodHooksText,
   onFoodHooksChange,
   weeks,
@@ -1128,7 +1181,7 @@ function FoodBookingSubForm({
           return (
             <div
               key={service.serviceKey}
-              className="grid gap-3 sm:grid-cols-[auto_1fr_1fr] sm:items-end"
+              className="grid gap-3 sm:grid-cols-[auto_1fr_1fr_1fr] sm:items-end"
               style={{
                 borderRadius: 'var(--r-md)',
                 border: '1px solid var(--c-line)',
@@ -1175,7 +1228,7 @@ function FoodBookingSubForm({
                   style={{ color: 'var(--c-ink-2)' }}
                   htmlFor={`service-end-${service.serviceKey}`}
                 >
-                  {label} last orders
+                  {label} service end
                 </label>
                 <input
                   id={`service-end-${service.serviceKey}`}
@@ -1189,6 +1242,30 @@ function FoodBookingSubForm({
                   onBlur={handleInputBlur}
                 />
               </div>
+
+              <div>
+                <label
+                  className="block text-xs font-medium mb-1"
+                  style={{ color: 'var(--c-ink-2)' }}
+                  htmlFor={`service-last-orders-${service.serviceKey}`}
+                >
+                  {label} last orders
+                </label>
+                <input
+                  id={`service-last-orders-${service.serviceKey}`}
+                  type="time"
+                  value={service.lastOrdersLocal ?? ''}
+                  disabled={!service.enabled}
+                  onChange={(e) => onServiceChange(
+                    service.serviceKey,
+                    { lastOrdersLocal: e.target.value || undefined },
+                  )}
+                  className="w-full px-3 py-2 text-sm transition-all disabled:opacity-50"
+                  style={inputStyle}
+                  onFocus={handleInputFocus}
+                  onBlur={handleInputBlur}
+                />
+              </div>
             </div>
           );
         })}
@@ -1196,19 +1273,39 @@ function FoodBookingSubForm({
 
       <div>
         <label className="block text-sm font-semibold mb-1.5" style={{ color: 'var(--c-ink)' }} htmlFor="food-booking-url">
-          Booking URL
+          Default booking URL
         </label>
         <input
           id="food-booking-url"
           type="url"
           value={bookingUrl}
           onChange={(e) => onBookingUrlChange(e.target.value)}
-          placeholder="https://book.example.com"
+          placeholder={DEFAULT_FOOD_BOOKING_URL}
           className="w-full px-3 py-2 text-sm transition-all"
           style={inputStyle}
           onFocus={handleInputFocus}
           onBlur={handleInputBlur}
         />
+      </div>
+
+      <div>
+        <label className="block text-sm font-semibold mb-1.5" style={{ color: 'var(--c-ink)' }} htmlFor="food-sunday-booking-url">
+          Sunday roast booking URL
+        </label>
+        <input
+          id="food-sunday-booking-url"
+          type="url"
+          value={sundayRoastBookingUrl}
+          onChange={(e) => onSundayRoastBookingUrlChange(e.target.value)}
+          placeholder={bookingUrl || DEFAULT_FOOD_BOOKING_URL}
+          className="w-full px-3 py-2 text-sm transition-all"
+          style={inputStyle}
+          onFocus={handleInputFocus}
+          onBlur={handleInputBlur}
+        />
+        <p className="mt-1 text-xs" style={{ color: 'var(--c-ink-3)' }}>
+          Leave this matching the default unless Sunday roast needs a different booking page.
+        </p>
       </div>
 
       <div>
@@ -1219,14 +1316,16 @@ function FoodBookingSubForm({
           id="food-hooks"
           value={foodHooksText}
           onChange={(e) => onFoodHooksChange(e.target.value)}
-          placeholder={'One hook per line, e.g.\nHand-carved roast\nGravy made fresh daily'}
-          rows={3}
+          placeholder={'One hook per line, e.g.\nStone-baked pizzas from £12\nBeer-battered fish and chips'}
+          rows={5}
           className="w-full px-3 py-2 text-sm transition-all resize-none"
           style={inputStyle}
           onFocus={handleInputFocus}
           onBlur={handleInputBlur}
         />
-        <p className="mt-1 text-xs" style={{ color: 'var(--c-ink-3)' }}>One hook per line. The AI weaves these into the ad copy.</p>
+        <p className="mt-1 text-xs" style={{ color: 'var(--c-ink-3)' }}>
+          One hook per line. These are editable menu proof points for the AI to use in ad copy.
+        </p>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
