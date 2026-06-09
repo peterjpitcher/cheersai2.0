@@ -242,6 +242,90 @@ describe('createMetaAdSet', () => {
       custom_event_type: 'PURCHASE',
     }));
   });
+
+  it('emits min_budget/max_budget in minor units only when the parent campaign uses CBO', async () => {
+    vi.mocked(global.fetch).mockResolvedValue({
+      ok: true,
+      json: async () => ({ id: 'adset_caps' }),
+    } as Response);
+
+    await createMetaAdSet({
+      accessToken: 'test-token',
+      adAccountId: 'act_123',
+      campaignId: 'campaign_123',
+      name: 'Food window',
+      targeting: { geo_locations: { countries: ['GB'] } },
+      optimisationGoal: 'OFFSITE_CONVERSIONS',
+      bidStrategy: 'LOWEST_COST_WITHOUT_CAP',
+      startTime: '2026-06-10T11:00:00Z',
+      status: 'PAUSED',
+      parentUsesCampaignBudgetOptimization: true,
+      minBudget: 5,
+      maxBudget: 15,
+    });
+
+    const [, init] = vi.mocked(global.fetch).mock.calls[0];
+    const body = new URLSearchParams(init?.body as string);
+    expect(body.get('min_budget')).toBe('500');
+    expect(body.get('max_budget')).toBe('1500');
+    // CBO ad sets must not carry their own daily/lifetime budget.
+    expect(body.has('daily_budget')).toBe(false);
+    expect(body.has('lifetime_budget')).toBe(false);
+  });
+
+  it('does not emit min_budget/max_budget when the parent campaign does not use CBO', async () => {
+    vi.mocked(global.fetch).mockResolvedValue({
+      ok: true,
+      json: async () => ({ id: 'adset_no_caps' }),
+    } as Response);
+
+    await createMetaAdSet({
+      accessToken: 'test-token',
+      adAccountId: 'act_123',
+      campaignId: 'campaign_123',
+      name: 'Standard ad set',
+      targeting: { geo_locations: { countries: ['GB'] } },
+      optimisationGoal: 'LEAD_GENERATION',
+      bidStrategy: 'LOWEST_COST_WITHOUT_CAP',
+      dailyBudget: 10,
+      startTime: '2026-06-10T11:00:00Z',
+      status: 'PAUSED',
+      // Caps supplied but parent is not CBO => they must be ignored.
+      minBudget: 5,
+      maxBudget: 15,
+    });
+
+    const [, init] = vi.mocked(global.fetch).mock.calls[0];
+    const body = new URLSearchParams(init?.body as string);
+    expect(body.has('min_budget')).toBe(false);
+    expect(body.has('max_budget')).toBe(false);
+    expect(body.get('daily_budget')).toBe('1000');
+  });
+
+  it('does not emit caps under CBO when minBudget/maxBudget are absent', async () => {
+    vi.mocked(global.fetch).mockResolvedValue({
+      ok: true,
+      json: async () => ({ id: 'adset_cbo_no_caps' }),
+    } as Response);
+
+    await createMetaAdSet({
+      accessToken: 'test-token',
+      adAccountId: 'act_123',
+      campaignId: 'campaign_123',
+      name: 'Food window no caps',
+      targeting: { geo_locations: { countries: ['GB'] } },
+      optimisationGoal: 'OFFSITE_CONVERSIONS',
+      bidStrategy: 'LOWEST_COST_WITHOUT_CAP',
+      startTime: '2026-06-10T11:00:00Z',
+      status: 'PAUSED',
+      parentUsesCampaignBudgetOptimization: true,
+    });
+
+    const [, init] = vi.mocked(global.fetch).mock.calls[0];
+    const body = new URLSearchParams(init?.body as string);
+    expect(body.has('min_budget')).toBe(false);
+    expect(body.has('max_budget')).toBe(false);
+  });
 });
 
 describe('searchMetaInterests', () => {

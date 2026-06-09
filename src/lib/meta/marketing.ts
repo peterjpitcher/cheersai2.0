@@ -49,6 +49,15 @@ export interface CreateAdSetParams {
   endTime?: string;
   status: 'ACTIVE' | 'PAUSED';
   promotedObject?: Record<string, unknown>;
+  // Hybrid CBO per-ad-set spend caps (Phase 3 / P3-3). Under campaign budget optimization
+  // the budget lives on the campaign, but Meta lets each ad set declare a floor/ceiling on
+  // its share. These are only valid — and only emitted — when the PARENT campaign has CBO
+  // enabled; set `parentUsesCampaignBudgetOptimization` so we never send caps to a non-CBO
+  // ad set (Meta would reject them). Caps are in major units (pounds) and converted to
+  // minor units (pence) on send. When either bound is absent, no cap is emitted.
+  parentUsesCampaignBudgetOptimization?: boolean;
+  minBudget?: number;
+  maxBudget?: number;
 }
 
 export interface CreateAdCreativeParams {
@@ -341,6 +350,9 @@ export async function createMetaAdSet(
     endTime,
     status,
     promotedObject,
+    parentUsesCampaignBudgetOptimization,
+    minBudget,
+    maxBudget,
   } = params;
 
   const body: Record<string, unknown> = {
@@ -372,6 +384,18 @@ export async function createMetaAdSet(
   }
   if (promotedObject !== undefined) {
     body.promoted_object = promotedObject;
+  }
+
+  // Hybrid CBO spend caps: only valid when the parent campaign owns the budget (CBO). For
+  // non-CBO ad sets Meta rejects min_budget/max_budget, so we ignore any caps passed in that
+  // case. Each bound is sent independently in minor units (pence).
+  if (parentUsesCampaignBudgetOptimization) {
+    if (minBudget !== undefined) {
+      body.min_budget = Math.round(minBudget * 100);
+    }
+    if (maxBudget !== undefined) {
+      body.max_budget = Math.round(maxBudget * 100);
+    }
   }
 
   return metaPost<{ id: string }>(`/${adAccountId}/adsets`, accessToken, body);
