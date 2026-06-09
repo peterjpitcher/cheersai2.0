@@ -1,6 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import type { FoodAdWindow, FoodServiceKey } from '@/types/campaigns';
-import { computeFoodWindowWeights } from '@/lib/campaigns/food-budget-weighting';
+import {
+  computeFoodWindowWeights,
+  computeAdSetSpendCaps,
+  META_MIN_AD_SET_BUDGET_GBP,
+} from '@/lib/campaigns/food-budget-weighting';
 import { SERVICE_BUDGET_GUIDANCE, DECISION_STAGE_TEMPLATES } from '@/lib/campaigns/food-schedule';
 
 /**
@@ -253,5 +257,87 @@ describe('computeFoodWindowWeights', () => {
     const b = computeFoodWindowWeights({ windows, dayWeighting: 'boost_quiet' });
     expect(a).toEqual(b);
     expect(a).toHaveLength(windows.length);
+  });
+});
+
+describe('computeAdSetSpendCaps', () => {
+  it('derives min = target*0.5 and max = target*1.5 from each weight', () => {
+    // Two ad sets, 60/40 split of a £100 budget => targets £60 and £40.
+    const { caps, error } = computeAdSetSpendCaps({
+      adSets: [
+        { ref: 'a', budgetWeight: 60 },
+        { ref: 'b', budgetWeight: 40 },
+      ],
+      campaignBudget: 100,
+    });
+
+    expect(error).toBeUndefined();
+    expect(caps).toEqual([
+      { adSetRef: 'a', minBudget: 30, maxBudget: 90 },
+      { adSetRef: 'b', minBudget: 20, maxBudget: 60 },
+    ]);
+  });
+
+  it('floors min at the Meta minimum when target*0.5 is below it', () => {
+    // Tiny weight => target £4, target*0.5 = £2 which is below the £1 floor here it is
+    // above, so use an even smaller share to force the floor: weight 1% of £100 => £1
+    // target, *0.5 = £0.50 < floor.
+    const { caps, error } = computeAdSetSpendCaps({
+      adSets: [
+        { ref: 'small', budgetWeight: 1 },
+        { ref: 'big', budgetWeight: 99 },
+      ],
+      campaignBudget: 100,
+    });
+
+    expect(error).toBeUndefined();
+    const small = caps.find((c) => c.adSetRef === 'small');
+    expect(small?.minBudget).toBe(META_MIN_AD_SET_BUDGET_GBP);
+    // max is still derived from the raw target (£1 * 1.5).
+    expect(small?.maxBudget).toBeCloseTo(1.5, 5);
+  });
+
+  it('rejects when sum of min budgets exceeds the campaign budget', () => {
+    // Many small ad sets: each floored to the Meta minimum, their sum exceeds the budget.
+    const adSets = Array.from({ length: 5 }, (_, i) => ({ ref: `w${i}`, budgetWeight: 20 }));
+    const { caps, error } = computeAdSetSpendCaps({
+      adSets,
+      campaignBudget: 3, // floor £1 * 5 = £5 > £3
+    });
+
+    expect(caps).toEqual([]);
+    expect(error).toBeTruthy();
+    expect(error).toContain('minimum');
+  });
+
+  it('honours a custom metaMinBudget over the default', () => {
+    const { caps, error } = computeAdSetSpendCaps({
+      adSets: [{ ref: 'a', budgetWeight: 100 }],
+      campaignBudget: 50,
+      metaMinBudget: 10,
+    });
+
+    expect(error).toBeUndefined();
+    // target £50, *0.5 = £25 which is above the £10 custom floor.
+    expect(caps[0]).toEqual({ adSetRef: 'a', minBudget: 25, maxBudget: 75 });
+  });
+
+  it('returns an empty cap list for no ad sets', () => {
+    const { caps, error } = computeAdSetSpendCaps({ adSets: [], campaignBudget: 100 });
+    expect(caps).toEqual([]);
+    expect(error).toBeUndefined();
+  });
+
+  it('rejects a non-positive campaign budget', () => {
+    const { caps, error } = computeAdSetSpendCaps({
+      adSets: [{ ref: 'a', budgetWeight: 100 }],
+      campaignBudget: 0,
+    });
+    expect(caps).toEqual([]);
+    expect(error).toBeTruthy();
+  });
+
+  it('exposes a positive default Meta minimum constant', () => {
+    expect(META_MIN_AD_SET_BUDGET_GBP).toBeGreaterThan(0);
   });
 });

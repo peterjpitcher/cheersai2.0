@@ -114,3 +114,94 @@ export function computeFoodWindowWeights(input: FoodWeightInput): FoodWeightResu
     weight: total > 0 ? (raw[i] / total) * 100 : evenShare,
   }));
 }
+
+/**
+ * Phase 3 (3b) — hybrid CBO per-ad-set spend caps.
+ *
+ * Under campaign budget optimization the campaign owns one budget; Meta still lets each ad
+ * set declare a floor (`min_budget`) and ceiling (`max_budget`) on its share of that budget.
+ * This derives those caps from each ad set's normalised `budget_weight` so demand-heavy
+ * windows are guaranteed a slice while no single window can monopolise the budget.
+ *
+ * For each ad set: `target = (weight / 100) × campaignBudget`,
+ *   `minBudget = max(metaMinBudget, target × CAP_MIN_FACTOR)`,
+ *   `maxBudget = target × CAP_MAX_FACTOR`.
+ *
+ * Preflight (never silently clamp into an invalid state): if the sum of the floored minimums
+ * exceeds the campaign budget, Meta would reject the configuration — we return an explanatory
+ * error and an empty cap list so the caller can fail the publish cleanly.
+ *
+ * Pure + deterministic. See spec §5 (3b), P3-3.
+ */
+
+/** Floor/ceiling multipliers applied to each ad set's target spend. Tunable. */
+const CAP_MIN_FACTOR = 0.5;
+const CAP_MAX_FACTOR = 1.5;
+
+/**
+ * Conservative default per-ad-set minimum daily budget, in GBP. Meta enforces its own
+ * minimums server-side and they vary by currency, billing event and account; this is a
+ * documented floor used for local preflight only.
+ *
+ * TODO: verify against Meta's current live ad-set minimums (they are not static) and, if a
+ * tighter/looser value is confirmed, pass it through `metaMinBudget` rather than editing this
+ * default. Do not treat this as authoritative — Meta is the source of truth at create time.
+ */
+export const META_MIN_AD_SET_BUDGET_GBP = 1.0;
+
+export interface AdSetSpendCap {
+  adSetRef: string;
+  minBudget: number;
+  maxBudget: number;
+}
+
+export interface AdSetSpendCapInput {
+  /** Ad sets to cap. `ref` is an opaque identifier (ad set id or windowKey) echoed back. */
+  adSets: { ref: string; budgetWeight: number }[];
+  /** The single campaign-level budget, in GBP (pounds). */
+  campaignBudget: number;
+  /** Documented per-ad-set minimum, in GBP. Defaults to {@link META_MIN_AD_SET_BUDGET_GBP}. */
+  metaMinBudget?: number;
+}
+
+/**
+ * Compute per-ad-set spend caps from budget weights, with a preflight that refuses to emit
+ * an invalid set. Returns `{ caps }` on success, or `{ caps: [], error }` when the caps
+ * cannot satisfy the campaign budget (so the caller can surface the message and abort).
+ */
+export function computeAdSetSpendCaps(input: AdSetSpendCapInput): {
+  caps: AdSetSpendCap[];
+  error?: string;
+} {
+  const { adSets, campaignBudget } = input;
+  const metaMinBudget = input.metaMinBudget ?? META_MIN_AD_SET_BUDGET_GBP;
+
+  if (adSets.length === 0) return { caps: [] };
+
+  if (!Number.isFinite(campaignBudget) || campaignBudget <= 0) {
+    return { caps: [], error: 'Campaign budget must be greater than zero to compute spend caps.' };
+  }
+
+  const caps: AdSetSpendCap[] = adSets.map((adSet) => {
+    const weight = Number.isFinite(adSet.budgetWeight) ? Math.max(0, adSet.budgetWeight) : 0;
+    const target = (weight / 100) * campaignBudget;
+    const minBudget = Math.max(metaMinBudget, target * CAP_MIN_FACTOR);
+    const maxBudget = target * CAP_MAX_FACTOR;
+    return { adSetRef: adSet.ref, minBudget, maxBudget };
+  });
+
+  // Preflight: the floored minimums must collectively fit inside the campaign budget, or Meta
+  // rejects the configuration. Surface a clear error instead of clamping into an invalid state.
+  const minSum = caps.reduce((acc, cap) => acc + cap.minBudget, 0);
+  if (minSum > campaignBudget) {
+    return {
+      caps: [],
+      error:
+        `Per-ad-set minimum spend caps total £${minSum.toFixed(2)}, which exceeds the campaign ` +
+        `budget of £${campaignBudget.toFixed(2)}. Increase the campaign budget or reduce the ` +
+        `number of ad windows so each can meet Meta's £${metaMinBudget.toFixed(2)} minimum.`,
+    };
+  }
+
+  return { caps };
+}
