@@ -49,7 +49,18 @@ vi.mock('@/lib/publishing/audit', () => ({
   logPublishAuditEvent: vi.fn().mockResolvedValue(undefined),
 }));
 
+// Mutable featureFlags so individual tests can toggle the Phase 3 food optimisation flag.
+// foodBooking stays true so the publish path treats the fixtures as food campaigns.
+vi.mock('@/env', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/env')>();
+  return {
+    ...actual,
+    featureFlags: { ...actual.featureFlags, foodBooking: true, foodOptimisation: false },
+  };
+});
+
 import { createServiceSupabaseClient } from '@/lib/supabase/service';
+import { featureFlags } from '@/env';
 import * as marketing from '@/lib/meta/marketing';
 import { createManagementMetaAdsLink } from '@/lib/management-app/client';
 import { getManagementConnectionConfig } from '@/lib/management-app/data';
@@ -90,6 +101,7 @@ interface FoodAdSetRowOverrides {
   service_key?: string | null;
   decision_stage?: string | null;
   budget_amount?: number | null;
+  budget_weight?: number | null;
   utm_content_key?: string | null;
 }
 
@@ -102,6 +114,7 @@ function foodAdSetRow(over: FoodAdSetRowOverrides = {}) {
     optimisation_goal: 'OFFSITE_CONVERSIONS',
     bid_strategy: 'LOWEST_COST_WITHOUT_CAP',
     budget_amount: over.budget_amount ?? null,
+    budget_weight: over.budget_weight ?? null,
     phase_start: over.phase_start ?? '2026-06-14',
     phase_end: over.phase_end ?? '2026-06-14',
     ads_start_time: over.ads_start_time ?? '08:30',
@@ -194,6 +207,9 @@ function stubMetaCreateSuccess() {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // Phase 3 optimisation flag defaults off; individual tests opt in. Reset so the ON tests
+  // never leak their toggle into the (default-off) byte-for-byte-unchanged assertions.
+  featureFlags.foodOptimisation = false;
   // clearAllMocks does not flush queued mockResolvedValueOnce entries; reset them so a
   // test that errors early cannot leak leftover queue items into the next test.
   mockSingle.mockReset();
@@ -398,6 +414,82 @@ describe('publishCampaign — food_booking', () => {
 
     expect(revalidatePath).toHaveBeenCalledWith('/campaigns');
     expect(revalidatePath).toHaveBeenCalledWith('/campaigns/campaign-123');
+  });
+});
+
+describe('publishCampaign — food_booking Phase 3 spend caps (3b)', () => {
+  it('passes NO spend cap fields when the food optimisation flag is off (unchanged)', async () => {
+    // Flag is off by default (reset in beforeEach). Even with weights present, no caps emit.
+    queueFoodPublishLookups({
+      adSets: [
+        foodAdSetRow({ id: 'adset-1', budget_weight: 60 }),
+        foodAdSetRow({ id: 'adset-2', budget_weight: 40, utm_content_key: 'sunday_roast_last_tables' }),
+      ],
+    });
+    stubMetaCreateSuccess();
+
+    const result = await publishCampaign('campaign-123');
+
+    expect(result.success).toBe(true);
+    for (const call of vi.mocked(marketing.createMetaAdSet).mock.calls) {
+      expect(call[0].minBudget).toBeUndefined();
+      expect(call[0].maxBudget).toBeUndefined();
+      expect(call[0].parentUsesCampaignBudgetOptimization).toBeUndefined();
+    }
+  });
+
+  it('derives per-ad-set min/max caps from budget_weight when the flag is on', async () => {
+    featureFlags.foodOptimisation = true;
+    // £200 lifetime budget, weights 60/40 => targets £120 and £80.
+    // min = max(£1, target*0.5), max = target*1.5.
+    queueFoodPublishLookups({
+      adSets: [
+        foodAdSetRow({ id: 'adset-1', budget_weight: 60 }),
+        foodAdSetRow({ id: 'adset-2', budget_weight: 40, utm_content_key: 'sunday_roast_last_tables' }),
+      ],
+    });
+    stubMetaCreateSuccess();
+
+    const result = await publishCampaign('campaign-123');
+
+    expect(result.success).toBe(true);
+    const calls = vi.mocked(marketing.createMetaAdSet).mock.calls;
+    // Each ad set carries CBO caps in pounds; the Meta client converts to minor units.
+    for (const call of calls) {
+      expect(call[0].parentUsesCampaignBudgetOptimization).toBe(true);
+      expect(typeof call[0].minBudget).toBe('number');
+      expect(typeof call[0].maxBudget).toBe('number');
+    }
+    const minMax = calls.map((c) => ({ min: c[0].minBudget, max: c[0].maxBudget }));
+    expect(minMax).toEqual(
+      expect.arrayContaining([
+        { min: 60, max: 180 },
+        { min: 40, max: 120 },
+      ]),
+    );
+    // Budget still lives on the campaign — caps never replace the CBO budget skip.
+    for (const call of calls) {
+      expect(call[0].dailyBudget).toBeUndefined();
+      expect(call[0].lifetimeBudget).toBeUndefined();
+    }
+  });
+
+  it('fails publish (preflight) when min caps cannot fit the campaign budget', async () => {
+    featureFlags.foodOptimisation = true;
+    // Five even windows on a tiny £3 budget: each floors to the £1 Meta minimum => £5 > £3.
+    const adSets = Array.from({ length: 5 }, (_, i) =>
+      foodAdSetRow({ id: `adset-${i}`, budget_weight: 20, utm_content_key: `sunday_roast_${i}` }),
+    );
+    queueFoodPublishLookups({ campaign: { budget_amount: 3 }, adSets });
+    stubMetaCreateSuccess();
+
+    const result = await publishCampaign('campaign-123');
+
+    expect(result.error).toBeTruthy();
+    expect(result.error).toContain('minimum');
+    // Preflight fails before any Meta object is created.
+    expect(marketing.createMetaCampaign).not.toHaveBeenCalled();
+    expect(marketing.createMetaAdSet).not.toHaveBeenCalled();
   });
 });
 

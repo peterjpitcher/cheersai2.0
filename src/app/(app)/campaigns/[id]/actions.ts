@@ -3,7 +3,9 @@
 import { revalidatePath } from 'next/cache';
 
 import { requireAuthContext } from '@/lib/auth/server';
+import { featureFlags } from '@/env';
 import { MEDIA_BUCKET } from '@/lib/constants';
+import { computeAdSetSpendCaps } from '@/lib/campaigns/food-budget-weighting';
 import { toLondonDateTime, toMidnightLondon, toNextMidnightLondon } from '@/lib/campaigns/time-utils';
 import {
   applyInterestTargeting,
@@ -808,6 +810,30 @@ export async function publishCampaign(
     const metaAdSetIdsToActivate = new Set<string>();
     const metaAdIdsToActivate = new Set<string>();
 
+    // Phase 3 (3b): under the food optimisation flag, derive per-ad-set min/max spend caps
+    // from each ad set's stored budget_weight so demand-heavy windows are guaranteed a slice
+    // of the shared CBO budget. Computed BEFORE any Meta object is created so its preflight
+    // (the floored minimums must fit the campaign budget) fails the whole publish cleanly,
+    // leaving nothing to clean up. When the flag is off — or the campaign is not food_booking
+    // (CBO) — this Map stays empty and ad-set creation is byte-for-byte unchanged.
+    const adSetSpendCaps = new Map<string, { minBudget: number; maxBudget: number }>();
+    if (isFoodBookingCampaign(campaign) && featureFlags.foodOptimisation) {
+      const capResult = computeAdSetSpendCaps({
+        adSets: adSets.map((adSet) => ({
+          ref: adSet.id,
+          budgetWeight: typeof adSet.budget_weight === 'number' ? adSet.budget_weight : 0,
+        })),
+        campaignBudget: Number(campaign.budget_amount),
+      });
+      if (capResult.error) {
+        await setPublishError(capResult.error);
+        return { error: capResult.error };
+      }
+      for (const cap of capResult.caps) {
+        adSetSpendCaps.set(cap.adSetRef, { minBudget: cap.minBudget, maxBudget: cap.maxBudget });
+      }
+    }
+
     // ── 6. Create Meta campaign (or resume if already created) ────────────────
 
     let metaCampaignId: string;
@@ -874,6 +900,11 @@ export async function publishCampaign(
 
       let metaAdSetId: string;
 
+      // Phase 3 (3b): caps for this ad set, present only when the food optimisation flag
+      // computed them. When undefined, no cap fields are passed and the ad set is created
+      // exactly as before (flag-off path is unchanged).
+      const adSetCap = adSetSpendCaps.get(adSet.id);
+
       if (adSet.meta_adset_id) {
         // Already published — skip creation, reuse existing ID.
         metaAdSetId = adSet.meta_adset_id;
@@ -891,6 +922,12 @@ export async function publishCampaign(
           // send no budget; other campaigns keep their per-ad-set daily/lifetime budget.
           dailyBudget: usesCampaignBudget ? undefined : isDaily ? budgetAmount : undefined,
           lifetimeBudget: usesCampaignBudget ? undefined : !isDaily ? budgetAmount : undefined,
+          // Phase 3 (3b): per-ad-set CBO spend caps, only when the flag computed them for
+          // this ad set. The Meta client only emits caps when parentUsesCampaignBudgetOptimization
+          // is set; we pass the whole trio together so the flag-off path sends nothing new.
+          parentUsesCampaignBudgetOptimization: adSetCap ? usesCampaignBudget : undefined,
+          minBudget: adSetCap?.minBudget,
+          maxBudget: adSetCap?.maxBudget,
           startTime: resolveAdSetStartTime(adSet, campaign),
           endTime: resolveAdSetEndTime(adSet, campaign),
           status: 'PAUSED',
