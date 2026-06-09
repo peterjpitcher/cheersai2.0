@@ -11,6 +11,7 @@ import {
   BarChart3,
   CheckCircle2,
   Clock3,
+  Lightbulb,
   MousePointerClick,
   RefreshCw,
   Target,
@@ -32,6 +33,7 @@ import type {
   CampaignDashboardModel,
   DashboardAttentionSeverity,
 } from '@/lib/campaigns/dashboard';
+import type { CutoffRecommendation } from '@/lib/campaigns/food-cutoff-tuning';
 import {
   getPerformanceTone,
   sortAdsByPerformance,
@@ -812,9 +814,39 @@ function FoodBookingInsightsPanel({ dashboard }: { dashboard: CampaignDashboardM
           <InsightList title="Top services" items={insights.topServices90d} />
           <InsightList title="Decision stages" items={insights.topDecisionStages90d} />
           <InsightList title="Ad windows" items={insights.topWindows90d} />
+          <CutoffAdvisoryList recommendations={insights.cutoffRecommendations} />
         </div>
       )}
     </section>
+  );
+}
+
+function CutoffAdvisoryList({ recommendations }: { recommendations: CutoffRecommendation[] }) {
+  if (recommendations.length === 0) return null;
+
+  return (
+    <div>
+      <p className="mb-2 text-[11px] font-semibold uppercase" style={{ color: 'var(--c-ink-3)' }}>
+        Cutoff advice
+      </p>
+      <ul className="space-y-2">
+        {recommendations.map((recommendation) => (
+          <li
+            key={`${recommendation.serviceKey}-${recommendation.decisionStage}`}
+            className="flex items-start gap-2 rounded-md border border-[var(--c-line)] px-3 py-2"
+          >
+            <Lightbulb
+              className="mt-0.5 h-4 w-4 shrink-0"
+              style={{ color: 'var(--c-ink-3)' }}
+              aria-hidden="true"
+            />
+            <p className="text-sm" style={{ color: 'var(--c-ink-2)' }}>
+              {recommendation.message}
+            </p>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 

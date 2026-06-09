@@ -319,6 +319,48 @@ describe('food booking insights', () => {
       costPerTableBooking: null,
       sundayRoastBookings90d: 0,
       topServices90d: [],
+      cutoffRecommendations: [],
     });
+  });
+
+  it('surfaces advisory cutoff recommendations for late, low-share windows', () => {
+    const morningKey = 'sunday_roast_morning-2026-06-14-venue-1';
+    const lastTablesKey = 'sunday_roast_last_tables-2026-06-14-venue-1';
+    const sundayCampaign = campaign([
+      adSet({
+        id: 'sunday-morning',
+        serviceKey: 'sunday_roast',
+        decisionStage: 'morning_commit',
+        ads: [ad({ id: 'sunday-morning-ad', adsetId: 'sunday-morning', utmContentKey: morningKey })],
+      }),
+      adSet({
+        id: 'sunday-last-tables',
+        serviceKey: 'sunday_roast',
+        decisionStage: 'last_tables',
+        ads: [ad({ id: 'sunday-last-ad', adsetId: 'sunday-last-tables', utmContentKey: lastTablesKey })],
+      }),
+    ]);
+
+    // 24 morning bookings + 1 last_tables booking = 25 total; last_tables = 4% (< 5% threshold)
+    // on a credible (>= 20) sample, so it must be flagged.
+    const morningRows = Array.from({ length: 24 }, (_, index) =>
+      row({ booking_id: `morning-${index}`, utm_content: morningKey, occurred_at: '2026-06-14T09:00:00.000Z' }),
+    );
+    const insights = buildFoodBookingInsights(
+      [
+        ...morningRows,
+        row({ booking_id: 'last-tables-1', utm_content: lastTablesKey, occurred_at: '2026-06-14T15:00:00.000Z' }),
+      ],
+      [sundayCampaign],
+      new Date('2026-06-15T12:00:00.000Z'),
+    );
+
+    expect(insights.cutoffRecommendations).toHaveLength(1);
+    expect(insights.cutoffRecommendations[0]).toMatchObject({
+      serviceKey: 'sunday_roast',
+      decisionStage: 'last_tables',
+      severity: 'info',
+    });
+    expect(insights.cutoffRecommendations[0].message).toMatch(/last tables/i);
   });
 });

@@ -1,6 +1,11 @@
 import { DateTime } from 'luxon';
 
 import { normaliseUtmContentKey } from '@/lib/campaigns/ad-attribution';
+import {
+  buildCutoffRecommendations,
+  type CutoffRecommendation,
+  type FoodCutoffStageBookings,
+} from '@/lib/campaigns/food-cutoff-tuning';
 import { DECISION_STAGE_TEMPLATES } from '@/lib/campaigns/food-schedule';
 import { createServiceSupabaseClient } from '@/lib/supabase/service';
 import type {
@@ -39,6 +44,7 @@ export interface FoodBookingInsights {
   topServices90d: FoodBookingInsightItem[];
   topDecisionStages90d: FoodBookingInsightItem[];
   topWindows90d: FoodBookingInsightItem[];
+  cutoffRecommendations: CutoffRecommendation[];
 }
 
 interface FoodAdAttribution {
@@ -89,6 +95,7 @@ export const EMPTY_FOOD_BOOKING_INSIGHTS: FoodBookingInsights = {
   topServices90d: [],
   topDecisionStages90d: [],
   topWindows90d: [],
+  cutoffRecommendations: [],
 };
 
 export async function fetchFoodBookingInsights(
@@ -170,7 +177,44 @@ export function buildFoodBookingInsights(
       key: item.windowKey,
       name: formatWindowKey(item.windowKey),
     })),
+    cutoffRecommendations: buildCutoffRecommendations(
+      buildCutoffTuningInput(resolvedRows),
+    ),
   };
+}
+
+/**
+ * Reshape already-resolved bookings into the per-stage aggregation the advisory
+ * cutoff-tuning module expects. Only fully attributed rows (real service + decision
+ * stage) feed the analysis; unattributed bookings carry no window to advise on.
+ */
+function buildCutoffTuningInput(resolvedRows: ResolvedFoodBooking[]) {
+  const byStage = new Map<string, FoodCutoffStageBookings>();
+  const totalsByService: Partial<Record<FoodServiceKey, number>> = {};
+
+  for (const item of resolvedRows) {
+    if (item.serviceKey === UNATTRIBUTED_KEY) continue;
+    if (item.decisionStage === UNATTRIBUTED_KEY) continue;
+
+    const serviceKey = item.serviceKey;
+    const decisionStage = item.decisionStage;
+    totalsByService[serviceKey] = (totalsByService[serviceKey] ?? 0) + 1;
+
+    const stageKey = `${serviceKey}::${decisionStage}::${item.windowKey}`;
+    const existing = byStage.get(stageKey);
+    if (existing) {
+      existing.bookings += 1;
+    } else {
+      byStage.set(stageKey, {
+        serviceKey,
+        decisionStage,
+        windowKey: item.windowKey,
+        bookings: 1,
+      });
+    }
+  }
+
+  return { byStage: Array.from(byStage.values()), totalsByService };
 }
 
 function buildFoodAdAttributionMap(campaigns: Campaign[]) {

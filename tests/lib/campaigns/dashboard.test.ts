@@ -174,6 +174,7 @@ describe('campaign dashboard status alignment', () => {
       ],
       topDecisionStages90d: [],
       topWindows90d: [],
+      cutoffRecommendations: [],
     };
 
     const dashboard = buildCampaignDashboard(
