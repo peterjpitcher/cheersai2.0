@@ -1,11 +1,17 @@
 import { createServiceSupabaseClient } from '@/lib/supabase/service';
 import { utmContentMatchesAd } from '@/lib/campaigns/ad-attribution';
+import { detectCreativeFatigue, type AdMetricsHistoryRow } from '@/lib/campaigns/creative-fatigue';
 
 type SupabaseClientLike = ReturnType<typeof createServiceSupabaseClient>;
 
 export type MetaOptimisationMode = 'apply' | 'dry_run' | 'recommend';
 export type MetaOptimisationActionStatus = 'planned' | 'applied' | 'skipped' | 'failed';
-export type MetaOptimisationActionType = 'pause_ad' | 'tracking_issue' | 'copy_rewrite';
+export type MetaOptimisationActionType =
+  | 'pause_ad'
+  | 'tracking_issue'
+  | 'copy_rewrite'
+  | 'creative_fatigue'
+  | 'budget_adjust';
 export type MetaOptimisationSeverity = 'info' | 'warning' | 'critical';
 
 const TRACKABLE_BOOKING_HOSTS = new Set(['the-anchor.pub', 'www.the-anchor.pub']);
@@ -223,9 +229,11 @@ export async function runMetaCampaignOptimisation({
     const allCampaigns = Array.isArray(campaigns) ? (campaigns as unknown as OptimisationCampaignRow[]) : [];
     const openCampaigns = allCampaigns.filter((campaign) => !hasCampaignFinished(campaign));
     const bookingSignals = await loadBlendedBookingSignals(supabase, accountId, openCampaigns);
+    const fatigueHistory = await loadAdMetricsHistory(supabase, accountId, openCampaigns);
     const { decisions: rawDecisions, evaluatedAdSets } = evaluateCampaignOptimisation(openCampaigns, {
       bookingSignals,
       adAccount,
+      fatigueHistory,
     });
     const existingKeys = await loadRecentOptimisationActionKeys(supabase, accountId);
     const decisions = rawDecisions.filter((decision) => !existingKeys.has(decisionKey(decision)));
@@ -290,6 +298,7 @@ export function evaluateCampaignOptimisation(
   options?: {
     bookingSignals?: Map<string, BlendedBookingSignal>;
     adAccount?: Pick<OptimisationAdAccountRow, 'meta_pixel_id' | 'conversion_event_name' | 'conversion_optimisation_enabled' | 'conversions_api_access_token'> | null;
+    fatigueHistory?: Map<string, AdMetricsHistoryRow[]>;
   },
 ): {
   decisions: OptimisationDecision[];
@@ -312,6 +321,11 @@ export function evaluateCampaignOptimisation(
       const activeAds = (Array.isArray(adSet.ads) ? adSet.ads : [])
         .filter((ad) => isActiveObject(ad) && Boolean(ad.meta_ad_id) && Boolean(ad.last_synced_at));
 
+      // Creative fatigue is per-ad and independent of the sibling-count pause rule.
+      if (options?.fatigueHistory) {
+        decisions.push(...evaluateCreativeFatigue(campaign, adSet, activeAds, options.fatigueHistory));
+      }
+
       if (activeAds.length < 2) continue;
       evaluatedAdSets++;
 
@@ -328,6 +342,37 @@ export function evaluateCampaignOptimisation(
   }
 
   return { decisions: dedupeDecisions(decisions), evaluatedAdSets };
+}
+
+/**
+ * Per-ad creative-fatigue pass. Emits a `creative_fatigue` warning when the ad's
+ * `ad_metrics_history` shows over-serving or CTR decay. This is advisory only —
+ * it never produces a pause action.
+ */
+export function evaluateCreativeFatigue(
+  campaign: Pick<OptimisationCampaignRow, 'id' | 'name'>,
+  adSet: Pick<OptimisationAdSetRow, 'id' | 'name'>,
+  activeAds: OptimisationAdRow[],
+  fatigueHistory: Map<string, AdMetricsHistoryRow[]>,
+): OptimisationDecision[] {
+  const decisions: OptimisationDecision[] = [];
+
+  for (const ad of activeAds) {
+    const history = fatigueHistory.get(ad.id);
+    if (!history || history.length === 0) continue;
+
+    const result = detectCreativeFatigue(history);
+    if (!result.fatigued) continue;
+
+    decisions.push(buildCreativeFatigueDecision({
+      campaign,
+      adSet,
+      ad,
+      reason: result.reason ?? 'Creative fatigue detected from recent delivery history.',
+    }));
+  }
+
+  return decisions;
 }
 
 export function evaluateAdSetOptimisation(
@@ -626,6 +671,27 @@ function buildPauseDecision(args: {
   };
 }
 
+function buildCreativeFatigueDecision(args: {
+  campaign: Pick<OptimisationCampaignRow, 'id' | 'name'>;
+  adSet: Pick<OptimisationAdSetRow, 'id' | 'name'>;
+  ad: OptimisationAdRow;
+  reason: string;
+}): OptimisationDecision {
+  return {
+    campaignId: args.campaign.id,
+    adSetId: args.adSet.id,
+    adId: args.ad.id,
+    metaObjectId: args.ad.meta_ad_id ?? null,
+    actionType: 'creative_fatigue',
+    severity: 'warning',
+    reason: args.reason,
+    metricsSnapshot: buildAdMetricsSnapshot(args.campaign, args.adSet, args.ad),
+    recommendationPayload: {
+      recommendation: 'Refresh this ad’s creative or copy; it is being over-served or losing relevance. This is a warning only and does not pause the ad.',
+    },
+  };
+}
+
 function buildTrackingIssueDecision(args: {
   campaign: OptimisationCampaignRow;
   severity: MetaOptimisationSeverity;
@@ -778,6 +844,72 @@ async function loadBlendedBookingSignals(
 
   const managementEvents = await loadManagementBookingConversionEvents(supabase, accountId, campaigns);
   return buildBlendedBookingSignals(campaigns, [...firstPartyEvents, ...managementEvents]);
+}
+
+/** Days of ad_metrics_history to load: two 7-day windows plus a small margin. */
+const FATIGUE_HISTORY_LOOKBACK_DAYS = 16;
+
+async function loadAdMetricsHistory(
+  supabase: SupabaseClientLike,
+  accountId: string,
+  campaigns: OptimisationCampaignRow[],
+): Promise<Map<string, AdMetricsHistoryRow[]>> {
+  const history = new Map<string, AdMetricsHistoryRow[]>();
+
+  const adIds = Array.from(new Set(
+    campaigns.flatMap((campaign) =>
+      (campaign.ad_sets ?? []).flatMap((adSet) =>
+        (adSet.ads ?? [])
+          .filter((ad) => isActiveObject(ad) && Boolean(ad.last_synced_at))
+          .map((ad) => ad.id),
+      ),
+    ),
+  ));
+
+  if (adIds.length === 0) return history;
+
+  const since = dateOnly(new Date(Date.now() - FATIGUE_HISTORY_LOOKBACK_DAYS * 24 * 60 * 60 * 1000));
+  const { data, error } = await supabase
+    .from('ad_metrics_history')
+    .select('ad_id, captured_on, impressions, clicks, ctr, frequency, spend')
+    .eq('account_id', accountId)
+    .in('ad_id', adIds)
+    .gte('captured_on', since);
+
+  if (error) {
+    console.error('[optimisation] failed to load ad metrics history', error);
+    return history;
+  }
+
+  for (const row of (data ?? []) as AdMetricsHistoryDbRow[]) {
+    const adId = stringValue(row.ad_id);
+    const capturedOn = stringValue(row.captured_on);
+    if (!adId || !capturedOn) continue;
+
+    const rows = history.get(adId) ?? [];
+    rows.push({
+      adId,
+      capturedOn,
+      impressions: nullableMetric(row.impressions),
+      clicks: nullableMetric(row.clicks),
+      ctr: nullableMetric(row.ctr),
+      frequency: nullableMetric(row.frequency),
+      spend: nullableMetric(row.spend),
+    });
+    history.set(adId, rows);
+  }
+
+  return history;
+}
+
+interface AdMetricsHistoryDbRow {
+  ad_id?: unknown;
+  captured_on?: unknown;
+  impressions?: number | string | null;
+  clicks?: number | string | null;
+  ctr?: number | string | null;
+  frequency?: number | string | null;
+  spend?: number | string | null;
 }
 
 async function loadManagementBookingConversionEvents(
@@ -1333,4 +1465,14 @@ function metric(value: number | string | null | undefined): number {
     return Number.isFinite(parsed) ? parsed : 0;
   }
   return 0;
+}
+
+/** Like {@link metric} but preserves null/absent values (history rows can be sparse). */
+function nullableMetric(value: number | string | null | undefined): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
 }

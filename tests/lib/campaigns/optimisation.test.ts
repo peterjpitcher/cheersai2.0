@@ -9,6 +9,7 @@ import {
   type OptimisationAdSetRow,
   type OptimisationCampaignRow,
 } from '@/lib/campaigns/optimisation';
+import type { AdMetricsHistoryRow } from '@/lib/campaigns/creative-fatigue';
 
 const syncedAt = new Date().toISOString();
 
@@ -196,6 +197,79 @@ describe('campaign optimisation rules', () => {
     ]);
 
     expect(decisions).toEqual([]);
+  });
+});
+
+describe('creative fatigue', () => {
+  function fatigueRows(adId: string, recentFrequency: number): AdMetricsHistoryRow[] {
+    const rows: AdMetricsHistoryRow[] = [];
+    const end = new Date('2026-06-08T00:00:00.000Z');
+    for (let i = 13; i >= 0; i--) {
+      const day = new Date(end);
+      day.setUTCDate(end.getUTCDate() - i);
+      const isRecent = i < 7;
+      rows.push({
+        adId,
+        capturedOn: day.toISOString().slice(0, 10),
+        impressions: 1500,
+        clicks: 30,
+        ctr: 2,
+        frequency: isRecent ? recentFrequency : 1.2,
+        spend: 5,
+      });
+    }
+    return rows;
+  }
+
+  it('records a creative_fatigue warning and never a pause for an over-served ad', () => {
+    const { decisions } = evaluateCampaignOptimisation(
+      [
+        campaign({
+          ad_sets: [
+            adSet({
+              ads: [
+                ad({ id: 'tired', meta_ad_id: 'meta-tired' }),
+                ad({ id: 'fresh', meta_ad_id: 'meta-fresh' }),
+              ],
+            }),
+          ],
+        }),
+      ],
+      { fatigueHistory: new Map([['tired', fatigueRows('tired', 3.5)]]) },
+    );
+
+    const fatigue = decisions.filter((decision) => decision.actionType === 'creative_fatigue');
+    expect(fatigue).toHaveLength(1);
+    expect(fatigue[0]).toMatchObject({
+      adId: 'tired',
+      metaObjectId: 'meta-tired',
+      severity: 'warning',
+    });
+    expect(fatigue[0]?.reason).toMatch(/frequency/i);
+    expect(decisions.some((decision) => decision.actionType === 'pause_ad' && decision.adId === 'tired')).toBe(false);
+  });
+
+  it('does not record fatigue for a healthy ad', () => {
+    const { decisions } = evaluateCampaignOptimisation(
+      [
+        campaign({
+          ad_sets: [adSet({ ads: [ad({ id: 'healthy', meta_ad_id: 'meta-healthy' })] })],
+        }),
+      ],
+      { fatigueHistory: new Map([['healthy', fatigueRows('healthy', 1.3)]]) },
+    );
+
+    expect(decisions.some((decision) => decision.actionType === 'creative_fatigue')).toBe(false);
+  });
+
+  it('abstains when there is no history for the ad', () => {
+    const { decisions } = evaluateCampaignOptimisation([
+      campaign({
+        ad_sets: [adSet({ ads: [ad({ id: 'unknown', meta_ad_id: 'meta-unknown' })] })],
+      }),
+    ]);
+
+    expect(decisions.some((decision) => decision.actionType === 'creative_fatigue')).toBe(false);
   });
 });
 
