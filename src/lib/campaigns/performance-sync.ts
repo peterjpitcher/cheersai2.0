@@ -1,5 +1,8 @@
+import { DateTime } from 'luxon';
+
 import { fetchMetaObjectInsights, type CampaignInsights } from '@/lib/meta/marketing';
 import { createServiceSupabaseClient } from '@/lib/supabase/service';
+import { DEFAULT_TIMEZONE } from '@/lib/constants';
 
 type SupabaseClientLike = ReturnType<typeof createServiceSupabaseClient>;
 
@@ -81,6 +84,8 @@ export async function syncMetaCampaignPerformance(
 
   const dateRange = buildInsightsDateRange(campaign.start_date, campaign.end_date);
   const syncedAt = new Date().toISOString();
+  // Europe/London calendar day this sync is captured for; one history row per ad per day.
+  const capturedOn = DateTime.now().setZone(DEFAULT_TIMEZONE).toISODate() ?? syncedAt.slice(0, 10);
   const campaignInsights = await fetchMetaObjectInsights(campaign.meta_campaign_id, adAccount.access_token, dateRange);
 
   await updatePerformanceMetrics(supabase, 'meta_campaigns', campaign.id, campaignInsights, syncedAt);
@@ -101,6 +106,7 @@ export async function syncMetaCampaignPerformance(
       if (!ad.meta_ad_id) continue;
       const adInsights = await fetchMetaObjectInsights(ad.meta_ad_id, adAccount.access_token, dateRange);
       await updatePerformanceMetrics(supabase, 'ads', ad.id, adInsights, syncedAt);
+      await appendAdMetricsHistory(supabase, campaign.account_id, ad.id, adInsights, capturedOn);
       adsSynced++;
     }
   }
@@ -123,6 +129,40 @@ async function updatePerformanceMetrics(
     .from(table)
     .update(buildMetricsUpdate(insights, syncedAt))
     .eq('id', id);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+}
+
+/**
+ * Append (idempotently per ad/day) today's delivery snapshot to the
+ * `ad_metrics_history` time-series that powers creative-fatigue detection.
+ * Re-running a sync on the same London day overwrites that day's row rather
+ * than duplicating it.
+ */
+async function appendAdMetricsHistory(
+  supabase: SupabaseClientLike,
+  accountId: string,
+  adId: string,
+  insights: CampaignInsights,
+  capturedOn: string,
+) {
+  const { error } = await supabase
+    .from('ad_metrics_history')
+    .upsert(
+      {
+        account_id: accountId,
+        ad_id: adId,
+        captured_on: capturedOn,
+        impressions: insights.impressions,
+        clicks: insights.clicks,
+        ctr: insights.ctr,
+        frequency: insights.reach > 0 ? insights.impressions / insights.reach : null,
+        spend: insights.spend,
+      },
+      { onConflict: 'ad_id,captured_on' },
+    );
 
   if (error) {
     throw new Error(error.message);
