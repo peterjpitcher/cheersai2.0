@@ -66,6 +66,9 @@ const serverEnv = {
   SUPABASE_SERVICE_ROLE_KEY: readOptionalEnv("SUPABASE_SERVICE_ROLE_KEY"),
   META_GRAPH_VERSION: readOptionalEnv("META_GRAPH_VERSION", DEFAULT_META_GRAPH_VERSION),
   ENABLE_CONNECTION_DIAGNOSTICS: process.env.ENABLE_CONNECTION_DIAGNOSTICS ?? undefined,
+  // Phase 3 food optimisation (per-ad-set CBO spend caps). Server-only, default off so the
+  // publish path is byte-for-byte unchanged until explicitly enabled per environment.
+  FOOD_OPTIMISATION_ENABLED: readOptionalEnv("FOOD_OPTIMISATION_ENABLED"),
   // Token vault (AES-256-GCM encryption key -- 64 hex chars = 32 bytes)
   TOKEN_VAULT_KEY: readOptionalEnv("TOKEN_VAULT_KEY"),
   TOKEN_VAULT_KEY_VERSION: readOptionalEnv("TOKEN_VAULT_KEY_VERSION", "1"),
@@ -171,6 +174,15 @@ export const featureFlags = {
   /** Food booking paid campaign type. Ships dark; enabled per-environment. */
   foodBooking: (() => {
     const flag = clientEnv.NEXT_PUBLIC_ENABLE_FOOD_BOOKING;
+    if (!flag) return false;
+    return flag === "true" || flag === "1";
+  })(),
+  /**
+   * Phase 3 food optimisation: applies per-ad-set CBO spend caps (min/max budget) at publish.
+   * Server-only and default off — when off, the food publish path is unchanged.
+   */
+  foodOptimisation: (() => {
+    const flag = serverEnv.FOOD_OPTIMISATION_ENABLED;
     if (!flag) return false;
     return flag === "true" || flag === "1";
   })(),
