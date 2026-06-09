@@ -69,6 +69,10 @@ const serverEnv = {
   // Phase 3 food optimisation (per-ad-set CBO spend caps). Server-only, default off so the
   // publish path is byte-for-byte unchanged until explicitly enabled per environment.
   FOOD_OPTIMISATION_ENABLED: readOptionalEnv("FOOD_OPTIMISATION_ENABLED"),
+  // Phase 3 weekly food-window materialisation (PR10). Server-only, default off. Gates the
+  // materialisation cron's *writes*: when off the cron is a pure no-op (no QStash dispatch,
+  // no Meta calls). Flip on per-environment once a few dry-run summaries have been reviewed.
+  FOOD_AUTO_MATERIALISE_ENABLED: readOptionalEnv("FOOD_AUTO_MATERIALISE_ENABLED"),
   // Token vault (AES-256-GCM encryption key -- 64 hex chars = 32 bytes)
   TOKEN_VAULT_KEY: readOptionalEnv("TOKEN_VAULT_KEY"),
   TOKEN_VAULT_KEY_VERSION: readOptionalEnv("TOKEN_VAULT_KEY_VERSION", "1"),
@@ -183,6 +187,15 @@ export const featureFlags = {
    */
   foodOptimisation: (() => {
     const flag = serverEnv.FOOD_OPTIMISATION_ENABLED;
+    if (!flag) return false;
+    return flag === "true" || flag === "1";
+  })(),
+  /**
+   * Phase 3 weekly food-window materialisation (PR10): gates the materialisation cron's writes.
+   * Server-only and default off — when off, the cron is a pure no-op (no dispatch, no Meta).
+   */
+  foodAutoMaterialise: (() => {
+    const flag = serverEnv.FOOD_AUTO_MATERIALISE_ENABLED;
     if (!flag) return false;
     return flag === "true" || flag === "1";
   })(),
