@@ -340,4 +340,37 @@ describe('computeAdSetSpendCaps', () => {
   it('exposes a positive default Meta minimum constant', () => {
     expect(META_MIN_AD_SET_BUDGET_GBP).toBeGreaterThan(0);
   });
+
+  describe('F9 max >= min invariant', () => {
+    it('clamps max up to the floored min for a tiny-weight ad set (max === min, no error)', () => {
+      // Tiny weight on a healthy budget: target £0.20 => raw max £0.30 sits BELOW the £1
+      // floored min. Meta rejects max < min, so the max must be lifted to the min.
+      const { caps, error } = computeAdSetSpendCaps({
+        adSets: [
+          { ref: 'tiny', budgetWeight: 0.1 },
+          { ref: 'rest', budgetWeight: 99.9 },
+        ],
+        campaignBudget: 200,
+      });
+
+      expect(error).toBeUndefined();
+      const tiny = caps.find((c) => c.adSetRef === 'tiny');
+      expect(tiny?.minBudget).toBe(META_MIN_AD_SET_BUDGET_GBP);
+      expect(tiny?.maxBudget).toBe(tiny?.minBudget);
+    });
+
+    it('never emits max < min across every cap returned', () => {
+      const { caps } = computeAdSetSpendCaps({
+        adSets: [
+          { ref: 'a', budgetWeight: 0.5 },
+          { ref: 'b', budgetWeight: 1 },
+          { ref: 'c', budgetWeight: 98.5 },
+        ],
+        campaignBudget: 150,
+      });
+      for (const cap of caps) {
+        expect(cap.maxBudget).toBeGreaterThanOrEqual(cap.minBudget);
+      }
+    });
+  });
 });

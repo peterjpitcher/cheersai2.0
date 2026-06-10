@@ -186,7 +186,10 @@ export function computeAdSetSpendCaps(input: AdSetSpendCapInput): {
     const weight = Number.isFinite(adSet.budgetWeight) ? Math.max(0, adSet.budgetWeight) : 0;
     const target = (weight / 100) * campaignBudget;
     const minBudget = Math.max(metaMinBudget, target * CAP_MIN_FACTOR);
-    const maxBudget = target * CAP_MAX_FACTOR;
+    // F9: a tiny weight can floor minBudget above the raw target×CAP_MAX_FACTOR ceiling, and
+    // Meta rejects max < min. Clamp the ceiling up to the floor — the upward clamp is valid
+    // because the sum-of-mins preflight below still guards the aggregate.
+    const maxBudget = Math.max(target * CAP_MAX_FACTOR, minBudget);
     return { adSetRef: adSet.ref, minBudget, maxBudget };
   });
 
