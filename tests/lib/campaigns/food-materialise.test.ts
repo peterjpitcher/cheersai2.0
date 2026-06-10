@@ -636,6 +636,48 @@ describe('materialiseFoodWindowsForCampaign', () => {
     );
   });
 
+  describe('F4 conversion-gate re-check', () => {
+    it('refuses to materialise anything when conversion readiness has lapsed (throw => worker 500)', async () => {
+      const store = seededAdSets();
+      const fake = makeFakeSupabase({ campaign: campaignRow(), adSetStore: store, conversionReady: false });
+      vi.mocked(createServiceSupabaseClient).mockReturnValue(fake as never);
+
+      await expect(
+        materialiseFoodWindowsForCampaign({ campaignId: 'campaign-123', referenceIso: REFERENCE_ISO }),
+      ).rejects.toThrow(/conversion tracking/i);
+
+      // NOTHING was created — no Meta objects, no local rows.
+      expect(marketing.createMetaAdSet).not.toHaveBeenCalled();
+      expect(store).toHaveLength(2);
+      // The block is audit-logged with the reason.
+      expect(logPublishAuditEvent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          operationType: 'publish_failure',
+          resourceId: 'campaign-123',
+          details: expect.objectContaining({
+            action: 'materialise_food_windows_blocked',
+            reason: 'conversion_not_ready',
+          }),
+        }),
+      );
+    });
+
+    it('never falls back to the template optimisation goal even when the template carries one', async () => {
+      // Template rows store LINK_CLICKS; readiness is fine — the worker must still send
+      // OFFSITE_CONVERSIONS for every new ad set (no template fallback path exists).
+      const store = seededAdSets().map((row) => ({ ...row, optimisation_goal: 'LINK_CLICKS' }));
+      const fake = makeFakeSupabase({ campaign: campaignRow(), adSetStore: store });
+      vi.mocked(createServiceSupabaseClient).mockReturnValue(fake as never);
+
+      const result = await materialiseFoodWindowsForCampaign({ campaignId: 'campaign-123', referenceIso: REFERENCE_ISO });
+
+      expect(result.created).toBe(4);
+      for (const call of vi.mocked(marketing.createMetaAdSet).mock.calls) {
+        expect(call[0].optimisationGoal).toBe('OFFSITE_CONVERSIONS');
+      }
+    });
+  });
+
   it('sends NO per-ad-set budget (campaign-level CBO) and no caps when the flag is off', async () => {
     const fake = makeFakeSupabase({ campaign: campaignRow(), adSetStore: seededAdSets() });
     vi.mocked(createServiceSupabaseClient).mockReturnValue(fake as never);

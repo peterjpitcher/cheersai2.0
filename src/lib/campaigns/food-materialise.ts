@@ -12,7 +12,10 @@ import { calculateFoodBookingPhases } from '@/lib/campaigns/food-booking-phases'
 import { toLondonDateTime } from '@/lib/campaigns/time-utils';
 import { createServiceSupabaseClient } from '@/lib/supabase/service';
 import { logPublishAuditEvent } from '@/lib/publishing/audit';
-import { buildConversionReadiness } from '@/lib/campaigns/conversion-readiness';
+import {
+  buildConversionReadiness,
+  type ConversionReadiness,
+} from '@/lib/campaigns/conversion-readiness';
 import { featureFlags } from '@/env';
 import { MEDIA_BUCKET } from '@/lib/constants';
 import { applyAdUtmContent } from '@/lib/campaigns/ad-attribution';
@@ -319,6 +322,38 @@ export async function materialiseFoodWindowsForCampaign(
   // Fetch the Meta credentials + page once for the whole batch.
   const credentials = await loadMetaCredentials(supabase, campaign.account_id);
 
+  // F4: food ads REQUIRE booking-conversion readiness (pixel + Purchase event), exactly as the
+  // publish gate enforces. If it has lapsed since publish, refuse to create ANYTHING — never
+  // fall back to a weaker optimisation goal. The throw surfaces as a worker 500, so the run is
+  // retried by QStash and lands in the DLQ if readiness stays broken, instead of silently
+  // degrading live spend.
+  if (!credentials.readiness.ready || !credentials.readiness.pixelId) {
+    logger.error('Booking conversion readiness lost; refusing to materialise food windows', undefined, {
+      campaignId: campaign.id,
+      issues: credentials.readiness.issues,
+    });
+    await logPublishAuditEvent({
+      accountId: campaign.account_id,
+      operationType: 'publish_failure',
+      resourceType: 'content_item',
+      resourceId: campaign.id,
+      details: {
+        action: 'materialise_food_windows_blocked',
+        reason: 'conversion_not_ready',
+        issues: credentials.readiness.issues,
+        isoWeek: isoWeekLabel(options.referenceIso),
+      },
+    });
+    throw new Error(
+      'Booking conversion tracking is no longer ready for this account; food windows were not materialised.',
+    );
+  }
+
+  const promotedObject: Record<string, unknown> = {
+    pixel_id: credentials.readiness.pixelId,
+    custom_event_type: 'PURCHASE',
+  };
+
   // Phase 3 (3b): derive per-ad-set CBO spend caps from each window's weight, when the food
   // optimisation flag is on. Computed up-front so its preflight (floored minimums must fit the
   // campaign budget) aborts before any Meta object is created.
@@ -348,6 +383,7 @@ export async function materialiseFoodWindowsForCampaign(
       window,
       template,
       credentials,
+      promotedObject,
       cap: spendCaps.byWindowKey.get(window.windowKey),
     });
     if (metaAdSetId) {
@@ -382,8 +418,8 @@ interface MetaCredentials {
   accessToken: string;
   adAccountId: string;
   pageId: string;
-  /** OFFSITE_CONVERSIONS promoted_object (pixel + Purchase) when conversion tracking is ready. */
-  promotedObject?: Record<string, unknown>;
+  /** F4: conversion readiness re-checked at materialise time. The caller gates on `.ready`. */
+  readiness: ConversionReadiness;
 }
 
 async function loadMetaCredentials(
@@ -422,19 +458,16 @@ async function loadMetaCredentials(
   const pageId = fbConnection?.metadata?.pageId;
   if (!pageId) throw new Error('Facebook Page not connected.');
 
-  // food_booking ad sets run on OFFSITE_CONVERSIONS, which Meta requires a promoted_object for.
-  // Booking conversion setup is enforced at publish; if it has since lapsed we still create the
-  // ad set without the promoted object rather than block the rolling extension.
+  // F4: food_booking ad sets REQUIRE OFFSITE_CONVERSIONS with a pixel promoted_object — the
+  // same gate publishCampaign enforces. Readiness is re-checked here and the caller refuses to
+  // materialise when it has lapsed; there is deliberately NO fallback optimisation goal.
   const readiness = buildConversionReadiness(adAccount);
-  const promotedObject = readiness.ready && readiness.pixelId
-    ? { pixel_id: readiness.pixelId, custom_event_type: 'PURCHASE' as const }
-    : undefined;
 
   return {
     accessToken: adAccount.access_token,
     adAccountId: adAccount.meta_account_id,
     pageId,
-    promotedObject,
+    readiness,
   };
 }
 
@@ -586,6 +619,8 @@ interface MaterialiseSingleWindowArgs {
   window: FoodAdWindow;
   template: MaterialiseAdSetRow | null;
   credentials: MetaCredentials;
+  /** F4: pixel promoted_object — always present because the caller gates on readiness. */
+  promotedObject: Record<string, unknown>;
   cap?: { minBudget: number; maxBudget: number };
 }
 
@@ -594,7 +629,7 @@ interface MaterialiseSingleWindowArgs {
  * the created Meta ad-set id, or null if there was nothing to create (no template to clone).
  */
 async function materialiseSingleWindow(args: MaterialiseSingleWindowArgs): Promise<string | null> {
-  const { supabase, campaign, window, template, credentials, cap } = args;
+  const { supabase, campaign, window, template, credentials, promotedObject, cap } = args;
   if (!template) return null;
 
   const adSetName = `${campaign.name} — ${window.windowKey} — ${window.runDate}`;
@@ -626,21 +661,21 @@ async function materialiseSingleWindow(args: MaterialiseSingleWindowArgs): Promi
   if (!adSetRow) throw new Error('Ad set insert returned no data.');
 
   // 2. Create the Meta ad set (PAUSED). food_booking uses campaign-level CBO, so no per-ad-set
-  //    budget is sent; PR9 caps (when present) ride along under the CBO flag. When conversion
-  //    tracking is ready, force OFFSITE_CONVERSIONS + the pixel promoted object (matching
-  //    publishCampaign); otherwise fall back to the template's stored optimisation goal.
+  //    budget is sent; PR9 caps (when present) ride along under the CBO flag. F4: always
+  //    OFFSITE_CONVERSIONS + the pixel promoted object (matching publishCampaign) — the caller
+  //    refuses to materialise at all when readiness has lapsed, so no fallback goal exists.
   const metaAdSet = await createMetaAdSet({
     accessToken: credentials.accessToken,
     adAccountId: credentials.adAccountId,
     campaignId: campaign.meta_campaign_id!,
     name: adSetName,
     targeting: template.targeting,
-    optimisationGoal: credentials.promotedObject ? 'OFFSITE_CONVERSIONS' : template.optimisation_goal,
+    optimisationGoal: 'OFFSITE_CONVERSIONS',
     bidStrategy: template.bid_strategy,
     startTime: toLondonDateTime(window.runDate, window.startsAtLocal),
     endTime: toLondonDateTime(window.runDate, window.endsAtLocal),
     status: 'PAUSED',
-    promotedObject: credentials.promotedObject,
+    promotedObject,
     parentUsesCampaignBudgetOptimization: cap ? true : undefined,
     minBudget: cap?.minBudget,
     maxBudget: cap?.maxBudget,
