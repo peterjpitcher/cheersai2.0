@@ -66,6 +66,13 @@ const serverEnv = {
   SUPABASE_SERVICE_ROLE_KEY: readOptionalEnv("SUPABASE_SERVICE_ROLE_KEY"),
   META_GRAPH_VERSION: readOptionalEnv("META_GRAPH_VERSION", DEFAULT_META_GRAPH_VERSION),
   ENABLE_CONNECTION_DIAGNOSTICS: process.env.ENABLE_CONNECTION_DIAGNOSTICS ?? undefined,
+  // Phase 3 food optimisation (per-ad-set CBO spend caps). Server-only, default off so the
+  // publish path is byte-for-byte unchanged until explicitly enabled per environment.
+  FOOD_OPTIMISATION_ENABLED: readOptionalEnv("FOOD_OPTIMISATION_ENABLED"),
+  // Phase 3 weekly food-window materialisation (PR10). Server-only, default off. Gates the
+  // materialisation cron's *writes*: when off the cron is a pure no-op (no QStash dispatch,
+  // no Meta calls). Flip on per-environment once a few dry-run summaries have been reviewed.
+  FOOD_AUTO_MATERIALISE_ENABLED: readOptionalEnv("FOOD_AUTO_MATERIALISE_ENABLED"),
   // Token vault (AES-256-GCM encryption key -- 64 hex chars = 32 bytes)
   TOKEN_VAULT_KEY: readOptionalEnv("TOKEN_VAULT_KEY"),
   TOKEN_VAULT_KEY_VERSION: readOptionalEnv("TOKEN_VAULT_KEY_VERSION", "1"),
@@ -90,6 +97,7 @@ const clientEnv = {
     "NEXT_PUBLIC_META_GRAPH_VERSION",
     DEFAULT_META_GRAPH_VERSION,
   ),
+  NEXT_PUBLIC_ENABLE_FOOD_BOOKING: readOptionalEnv("NEXT_PUBLIC_ENABLE_FOOD_BOOKING"),
 } as const;
 
 export const env = {
@@ -166,5 +174,29 @@ export const featureFlags = {
     const flag = process.env.ENABLE_MEDIA_ATTACHMENTS_TABLE;
     if (!flag) return false;
     return flag.toLowerCase() === "true";
+  })(),
+  /** Food booking paid campaign type. Ships dark; enabled per-environment. */
+  foodBooking: (() => {
+    const flag = clientEnv.NEXT_PUBLIC_ENABLE_FOOD_BOOKING;
+    if (!flag) return false;
+    return flag === "true" || flag === "1";
+  })(),
+  /**
+   * Phase 3 food optimisation: applies per-ad-set CBO spend caps (min/max budget) at publish.
+   * Server-only and default off — when off, the food publish path is unchanged.
+   */
+  foodOptimisation: (() => {
+    const flag = serverEnv.FOOD_OPTIMISATION_ENABLED;
+    if (!flag) return false;
+    return flag === "true" || flag === "1";
+  })(),
+  /**
+   * Phase 3 weekly food-window materialisation (PR10): gates the materialisation cron's writes.
+   * Server-only and default off — when off, the cron is a pure no-op (no dispatch, no Meta).
+   */
+  foodAutoMaterialise: (() => {
+    const flag = serverEnv.FOOD_AUTO_MATERIALISE_ENABLED;
+    if (!flag) return false;
+    return flag === "true" || flag === "1";
   })(),
 };

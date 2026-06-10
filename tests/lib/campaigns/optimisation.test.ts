@@ -1,14 +1,16 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
   buildBlendedBookingSignals,
   evaluateAdSetOptimisation,
   evaluateCampaignOptimisation,
+  runMetaCampaignOptimisation,
   type BookingConversionEventForOptimisation,
   type OptimisationAdRow,
   type OptimisationAdSetRow,
   type OptimisationCampaignRow,
 } from '@/lib/campaigns/optimisation';
+import type { AdMetricsHistoryRow } from '@/lib/campaigns/creative-fatigue';
 
 const syncedAt = new Date().toISOString();
 
@@ -196,6 +198,84 @@ describe('campaign optimisation rules', () => {
     ]);
 
     expect(decisions).toEqual([]);
+  });
+});
+
+describe('creative fatigue', () => {
+  /** 15 CUMULATIVE daily snapshots (lifetime totals, as performance-sync stores them). */
+  function fatigueRows(adId: string, latestFrequency: number): AdMetricsHistoryRow[] {
+    const rows: AdMetricsHistoryRow[] = [];
+    const end = new Date('2026-06-08T00:00:00.000Z');
+    let impressions = 0;
+    let clicks = 0;
+    for (let i = 14; i >= 0; i--) {
+      const day = new Date(end);
+      day.setUTCDate(end.getUTCDate() - i);
+      impressions += 1500;
+      clicks += 30;
+      rows.push({
+        adId,
+        capturedOn: day.toISOString().slice(0, 10),
+        impressions,
+        clicks,
+        ctr: (clicks / impressions) * 100,
+        // Lifetime frequency drifts up to the latest reported value.
+        frequency: i === 0 ? latestFrequency : 1.2,
+        spend: 5,
+      });
+    }
+    return rows;
+  }
+
+  it('records a creative_fatigue warning and never a pause for an over-served ad', () => {
+    const { decisions } = evaluateCampaignOptimisation(
+      [
+        campaign({
+          ad_sets: [
+            adSet({
+              ads: [
+                ad({ id: 'tired', meta_ad_id: 'meta-tired' }),
+                ad({ id: 'fresh', meta_ad_id: 'meta-fresh' }),
+              ],
+            }),
+          ],
+        }),
+      ],
+      { fatigueHistory: new Map([['tired', fatigueRows('tired', 3.5)]]) },
+    );
+
+    const fatigue = decisions.filter((decision) => decision.actionType === 'creative_fatigue');
+    expect(fatigue).toHaveLength(1);
+    expect(fatigue[0]).toMatchObject({
+      adId: 'tired',
+      metaObjectId: 'meta-tired',
+      severity: 'warning',
+    });
+    expect(fatigue[0]?.reason).toMatch(/frequency/i);
+    expect(decisions.some((decision) => decision.actionType === 'pause_ad' && decision.adId === 'tired')).toBe(false);
+  });
+
+  it('does not record fatigue for a healthy ad', () => {
+    const { decisions } = evaluateCampaignOptimisation(
+      [
+        campaign({
+          ad_sets: [adSet({ ads: [ad({ id: 'healthy', meta_ad_id: 'meta-healthy' })] })],
+        }),
+      ],
+      { fatigueHistory: new Map([['healthy', fatigueRows('healthy', 1.3)]]) },
+    );
+
+    expect(decisions.some((decision) => decision.actionType === 'creative_fatigue')).toBe(false);
+  });
+
+  it('abstains when there is no history for the ad', () => {
+    const { decisions } = evaluateCampaignOptimisation([
+      campaign({
+        ad_sets: [adSet({ ads: [ad({ id: 'unknown', meta_ad_id: 'meta-unknown' })] })],
+      }),
+    ]);
+
+    expect(decisions.some((decision) => decision.actionType === 'creative_fatigue')).toBe(false);
   });
 });
 
@@ -529,5 +609,189 @@ describe('copy recommendations', () => {
         recommendationPayload: expect.objectContaining({ category: 'untrackable_destination' }),
       }),
     ]));
+  });
+});
+
+describe('runMetaCampaignOptimisation action recording', () => {
+  interface MockResult {
+    data: unknown;
+    error: { message: string } | null;
+  }
+
+  /** Chainable, awaitable Supabase query stub: filters return the chain, awaiting resolves `result`. */
+  function thenableChain(result: MockResult) {
+    const chain: Record<string, unknown> = {};
+    for (const method of ['select', 'eq', 'gte', 'in', 'not', 'order']) {
+      chain[method] = vi.fn(() => chain);
+    }
+    chain.single = vi.fn(async () => result);
+    chain.maybeSingle = vi.fn(async () => result);
+    chain.then = (
+      resolve: (value: MockResult) => unknown,
+      reject?: (reason: unknown) => unknown,
+    ) => Promise.resolve(result).then(resolve, reject);
+    return chain;
+  }
+
+  function optimisationRunHarness(args: {
+    campaigns: OptimisationCampaignRow[];
+    historyRows?: Array<Record<string, unknown>>;
+    recentActionRows?: Array<Record<string, unknown>>;
+    actionInsertError?: { message: string } | null;
+  }) {
+    const actionInserts: Array<Record<string, unknown>> = [];
+    const runUpdates: Array<Record<string, unknown>> = [];
+
+    const from = vi.fn((table: string) => {
+      switch (table) {
+        case 'meta_optimisation_runs':
+          return {
+            insert: vi.fn(() => ({
+              select: vi.fn(() => ({
+                single: vi.fn(async () => ({ data: { id: 'run-1' }, error: null })),
+              })),
+            })),
+            update: vi.fn((payload: Record<string, unknown>) => {
+              runUpdates.push(payload);
+              return { eq: vi.fn(async () => ({ error: null })) };
+            }),
+          };
+        case 'meta_ad_accounts':
+          return thenableChain({
+            data: {
+              access_token: 'token',
+              token_expires_at: '2999-01-01T00:00:00.000Z',
+              meta_pixel_id: '123456789012345',
+              conversion_event_name: 'Purchase',
+              conversion_optimisation_enabled: true,
+              conversions_api_access_token: 'capi-token',
+            },
+            error: null,
+          });
+        case 'meta_campaigns':
+          return thenableChain({ data: args.campaigns, error: null });
+        case 'booking_conversion_events':
+          return thenableChain({ data: [], error: null });
+        case 'management_app_connections':
+          return thenableChain({ data: null, error: null });
+        case 'ad_metrics_history':
+          return thenableChain({ data: args.historyRows ?? [], error: null });
+        case 'meta_optimisation_actions':
+          return {
+            select: vi.fn(() => thenableChain({ data: args.recentActionRows ?? [], error: null })),
+            insert: vi.fn((payload: Record<string, unknown>) => {
+              actionInserts.push(payload);
+              return Promise.resolve({ error: args.actionInsertError ?? null });
+            }),
+          };
+        default:
+          throw new Error(`Unexpected table in optimisation run test: ${table}`);
+      }
+    });
+
+    return { supabase: { from } as never, actionInserts, runUpdates };
+  }
+
+  /** CUMULATIVE snapshots whose latest lifetime frequency trips the fatigue threshold. */
+  function fatiguedHistoryDbRows(adId: string): Array<Record<string, unknown>> {
+    const rows: Array<Record<string, unknown>> = [];
+    const end = new Date('2026-06-08T00:00:00.000Z');
+    let impressions = 0;
+    let clicks = 0;
+    for (let i = 14; i >= 0; i--) {
+      const day = new Date(end);
+      day.setUTCDate(end.getUTCDate() - i);
+      impressions += 1500;
+      clicks += 30;
+      rows.push({
+        ad_id: adId,
+        captured_on: day.toISOString().slice(0, 10),
+        impressions,
+        clicks,
+        ctr: (clicks / impressions) * 100,
+        frequency: i === 0 ? 3.5 : 1.2,
+        spend: 5,
+      });
+    }
+    return rows;
+  }
+
+  function fatiguedCampaignFixture(): OptimisationCampaignRow[] {
+    return [
+      campaign({
+        ad_sets: [adSet({ ads: [ad({ id: 'ad-1', meta_ad_id: 'meta-ad-1' })] })],
+      }),
+    ];
+  }
+
+  it('records a planned creative_fatigue action on the first run', async () => {
+    const harness = optimisationRunHarness({
+      campaigns: fatiguedCampaignFixture(),
+      historyRows: fatiguedHistoryDbRows('ad-1'),
+    });
+
+    const result = await runMetaCampaignOptimisation({
+      accountId: 'account-1',
+      supabase: harness.supabase,
+    });
+
+    expect(result.plannedActions).toBe(1);
+    expect(result.failedActionInserts).toBe(0);
+    expect(harness.actionInserts).toHaveLength(1);
+    expect(harness.actionInserts[0]).toMatchObject({
+      action_type: 'creative_fatigue',
+      ad_id: 'ad-1',
+      status: 'planned',
+    });
+  });
+
+  it('WF-3: does not re-record a creative_fatigue action when the reason text has drifted', async () => {
+    const harness = optimisationRunHarness({
+      campaigns: fatiguedCampaignFixture(),
+      historyRows: fatiguedHistoryDbRows('ad-1'),
+      // Same ad + action type recorded within the 7-day lookback, but the metrics in the
+      // reason have drifted since (3.2 then vs 3.5 now). Identity must dedupe regardless.
+      recentActionRows: [{
+        campaign_id: 'campaign-1',
+        ad_id: 'ad-1',
+        action_type: 'creative_fatigue',
+        reason: 'Creative fatigue: lifetime frequency reached 3.2 (threshold 3), so the same people are seeing this ad repeatedly.',
+      }],
+    });
+
+    const result = await runMetaCampaignOptimisation({
+      accountId: 'account-1',
+      supabase: harness.supabase,
+    });
+
+    expect(result.plannedActions).toBe(0);
+    expect(harness.actionInserts).toHaveLength(0);
+  });
+
+  it('WF-4: counts failed action inserts in the run summary instead of silently succeeding', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const harness = optimisationRunHarness({
+      campaigns: fatiguedCampaignFixture(),
+      historyRows: fatiguedHistoryDbRows('ad-1'),
+      actionInsertError: { message: 'violates check constraint "meta_optimisation_actions_action_type_check"' },
+    });
+
+    try {
+      const result = await runMetaCampaignOptimisation({
+        accountId: 'account-1',
+        supabase: harness.supabase,
+      });
+
+      expect(result.plannedActions).toBe(1);
+      expect(result.failedActionInserts).toBe(1);
+      expect(consoleError).toHaveBeenCalledTimes(1);
+
+      // The failure count is persisted in the completed run's summary.
+      const completion = harness.runUpdates.find((update) => update.status === 'completed');
+      expect(completion).toBeDefined();
+      expect(completion?.summary).toMatchObject({ failedActionInserts: 1 });
+    } finally {
+      consoleError.mockRestore();
+    }
   });
 });

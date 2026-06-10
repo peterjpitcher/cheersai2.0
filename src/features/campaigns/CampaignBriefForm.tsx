@@ -6,25 +6,36 @@ import { useRouter } from 'next/navigation';
 
 import { Btn } from '@/components/ui/button';
 import { useToast } from '@/components/providers/toast-provider';
+import { featureFlags } from '@/env';
 import type {
   AiCampaignPayload,
   AudienceMode,
   BudgetType,
+  FoodBookingBrief,
+  FoodServiceHours,
+  FoodServiceKey,
   GeoRadiusMiles,
   PaidCampaignKind,
   PaidMediaPlan,
   ResolvedMetaInterest,
 } from '@/types/campaigns';
 import type { MediaAssetSummary } from '@/lib/library/data';
-import { generateCampaignAction, saveAndPublishCampaign } from '@/app/(app)/campaigns/actions';
+import {
+  createFoodBookingCampaign,
+  generateCampaignAction,
+  saveAndPublishCampaign,
+} from '@/app/(app)/campaigns/actions';
 import {
   listManagementEventOptions,
   getManagementEventPrefill,
   type ManagementActionError,
 } from '@/app/(app)/create/actions';
 import { calculateInclusiveDurationDays } from '@/lib/campaigns/phases';
+import { calculateFoodBookingPhases } from '@/lib/campaigns/food-booking-phases';
+import { DEFAULT_FOOD_SERVICE_HOURS } from '@/lib/campaigns/food-schedule';
 import { buildBriefFromEvent, deriveStartDate } from './event-import-utils';
 import { CampaignTree } from './CampaignTree';
+import { FoodBookingSchedulePreview } from './FoodBookingSchedulePreview';
 
 type FormState = 'brief' | 'generating' | 'review';
 
@@ -39,6 +50,92 @@ const AUDIENCE_MODE_OPTIONS: Array<{ value: AudienceMode; label: string }> = [
   { value: 'local_only', label: 'Local only' },
   { value: 'local_interests', label: 'Local + interests' },
 ];
+
+const KIND_LABELS: Record<PaidCampaignKind, string> = {
+  event: 'Event',
+  evergreen: 'Evergreen',
+  food_booking: 'Food Booking',
+};
+
+const FOOD_SERVICE_ORDER: FoodServiceKey[] = ['weekday_dinner', 'saturday_food', 'sunday_roast'];
+const DEFAULT_FOOD_BOOKING_URL = 'https://www.the-anchor.pub/book-table';
+const DEFAULT_FOOD_BUDGET_AMOUNT = 300;
+const DEFAULT_FOOD_HOOKS = [
+  'Stone-baked 12-inch pizzas from £12',
+  'Beer-battered fish and chips with chunky chips, mushy peas, tartare sauce and lemon',
+  'Golden pastry pies including beef and ale, chicken and wild mushroom, and vegetarian butternut squash',
+  'Classic beef burger with chips from £11',
+  'Sunday roast with beef topside, pork leg, turkey, pies, vegan wellington, herb-and-garlic roast potatoes and signature gravy',
+].join('\n');
+const FOOD_SERVICE_LABELS: Record<FoodServiceKey, string> = {
+  weekday_dinner: 'Weekday dinner',
+  saturday_food: 'Saturday food',
+  sunday_roast: 'Sunday roast',
+};
+const FOOD_WEEKS_OPTIONS: Array<1 | 2 | 4> = [1, 2, 4];
+const FOOD_DAY_WEIGHTING_OPTIONS: Array<{ value: FoodBookingBrief['dayWeighting']; label: string }> = [
+  { value: 'even', label: 'Even across days' },
+  { value: 'boost_quiet', label: 'Boost quiet days' },
+  { value: 'manual', label: 'Manual' },
+];
+
+/** Initial editable copy of the default service hours, in display order. */
+function buildInitialFoodServices(): FoodServiceHours[] {
+  return FOOD_SERVICE_ORDER.map((key) => ({ ...DEFAULT_FOOD_SERVICE_HOURS[key] }));
+}
+
+const FOOD_HHMM_REGEX = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+/** Validate the food brief on the client before calling the server action. Mirrors the server schema. */
+function validateFoodBriefForm(args: {
+  promotionName: string;
+  problemBrief: string;
+  bookingUrl: string;
+  serviceBookingUrls?: Partial<Record<FoodServiceKey, string>>;
+  budgetAmount: number;
+  startDate: string;
+  services: FoodServiceHours[];
+}): string | null {
+  if (!args.promotionName.trim()) return 'Enter a campaign name.';
+  if (!args.problemBrief.trim()) return 'Enter a campaign brief.';
+  if (!args.bookingUrl.trim()) return 'Enter a booking URL.';
+  try {
+    new URL(args.bookingUrl.trim());
+  } catch {
+    return 'Enter a valid booking URL.';
+  }
+  for (const [serviceKey, url] of Object.entries(args.serviceBookingUrls ?? {})) {
+    if (!url?.trim()) continue;
+    try {
+      new URL(url.trim());
+    } catch {
+      return `Enter a valid booking URL for ${FOOD_SERVICE_LABELS[serviceKey as FoodServiceKey]}.`;
+    }
+  }
+  if (args.budgetAmount <= 0) return 'Budget must be greater than 0.';
+  if (!args.startDate) return 'Set a campaign start date.';
+
+  const enabledServices = args.services.filter((service) => service.enabled);
+  if (enabledServices.length === 0) return 'Enable at least one food service.';
+  for (const service of enabledServices) {
+    if (!FOOD_HHMM_REGEX.test(service.startLocal) || !FOOD_HHMM_REGEX.test(service.endLocal)) {
+      return `Set valid service hours (HH:MM) for ${FOOD_SERVICE_LABELS[service.serviceKey]}.`;
+    }
+    if (service.endLocal <= service.startLocal) {
+      return `${FOOD_SERVICE_LABELS[service.serviceKey]} must end after it starts.`;
+    }
+    if (service.lastOrdersLocal && !FOOD_HHMM_REGEX.test(service.lastOrdersLocal)) {
+      return `Set valid last orders (HH:MM) for ${FOOD_SERVICE_LABELS[service.serviceKey]}.`;
+    }
+    if (service.lastOrdersLocal && (
+      service.lastOrdersLocal < service.startLocal ||
+      service.lastOrdersLocal > service.endLocal
+    )) {
+      return `${FOOD_SERVICE_LABELS[service.serviceKey]} last orders must be within service hours.`;
+    }
+  }
+  return null;
+}
 
 interface ImportEventOption {
   id: string;
@@ -74,6 +171,10 @@ export function CampaignBriefForm({ mediaLibrary }: CampaignBriefFormProps) {
   const router = useRouter();
   const toast = useToast();
 
+  const kindOptions: PaidCampaignKind[] = featureFlags.foodBooking
+    ? ['event', 'evergreen', 'food_booking']
+    : ['event', 'evergreen'];
+
   const [formState, setFormState] = useState<FormState>('brief');
   const [campaignKind, setCampaignKind] = useState<PaidCampaignKind>('event');
   const [promotionName, setPromotionName] = useState('');
@@ -94,6 +195,15 @@ export function CampaignBriefForm({ mediaLibrary }: CampaignBriefFormProps) {
   const [resolvedInterests, setResolvedInterests] = useState<ResolvedMetaInterest[]>([]);
   const [interestResolutionWarning, setInterestResolutionWarning] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Food booking sub-form state.
+  const [foodServices, setFoodServices] = useState<FoodServiceHours[]>(buildInitialFoodServices);
+  const [bookingUrl, setBookingUrl] = useState(DEFAULT_FOOD_BOOKING_URL);
+  const [sundayRoastBookingUrl, setSundayRoastBookingUrl] = useState(DEFAULT_FOOD_BOOKING_URL);
+  const [foodHooksText, setFoodHooksText] = useState(DEFAULT_FOOD_HOOKS);
+  const [foodWeeks, setFoodWeeks] = useState<1 | 2 | 4>(2);
+  const [foodDayWeighting, setFoodDayWeighting] = useState<FoodBookingBrief['dayWeighting']>('even');
+  const [windowOverrides, setWindowOverrides] = useState<Record<string, boolean>>({});
 
   const [generatingMessage, setGeneratingMessage] = useState(GENERATING_MESSAGES[0]);
   const messageIndexRef = useRef(0);
@@ -124,6 +234,98 @@ export function CampaignBriefForm({ mediaLibrary }: CampaignBriefFormProps) {
       return count + adSet.ads.filter((ad) => !ad.media_asset_id && !adSet.adset_media_asset_id).length;
     }, 0);
   }, [aiPayload]);
+
+  const foodBrief = useMemo<FoodBookingBrief>(() => ({
+    services: foodServices,
+    bookingUrl: bookingUrl.trim(),
+    serviceBookingUrls: {
+      sunday_roast: sundayRoastBookingUrl.trim() || bookingUrl.trim(),
+    },
+    foodHooks: foodHooksText
+      .split('\n')
+      .map((hook) => hook.trim())
+      .filter(Boolean),
+    weeks: foodWeeks,
+    dayWeighting: foodDayWeighting,
+  }), [foodServices, bookingUrl, sundayRoastBookingUrl, foodHooksText, foodWeeks, foodDayWeighting]);
+
+  // Live preview windows derived from the brief + start date. Toggle state is layered on top
+  // via windowOverrides (keyed by windowKey) so the parent owns the per-window enabled flag.
+  const foodWindows = useMemo(() => {
+    if (campaignKind !== 'food_booking' || !startDate) return [];
+    try {
+      return calculateFoodBookingPhases(foodBrief, startDate).map((window) => ({
+        ...window,
+        enabled: windowOverrides[window.windowKey] ?? window.enabled,
+      }));
+    } catch {
+      return [];
+    }
+  }, [campaignKind, startDate, foodBrief, windowOverrides]);
+
+  const foodValidationError = useMemo(
+    () =>
+      validateFoodBriefForm({
+        promotionName,
+        problemBrief,
+        bookingUrl,
+        serviceBookingUrls: {
+          sunday_roast: sundayRoastBookingUrl,
+        },
+        budgetAmount,
+        startDate,
+        services: foodServices,
+      }),
+    [promotionName, problemBrief, bookingUrl, sundayRoastBookingUrl, budgetAmount, startDate, foodServices],
+  );
+
+  function handleFoodBookingUrlChange(next: string) {
+    setBookingUrl(next);
+    setSundayRoastBookingUrl((current) => {
+      if (!current.trim() || current.trim() === bookingUrl.trim()) return next;
+      return current;
+    });
+  }
+
+  function toggleFoodWindow(windowKey: string, next: boolean) {
+    setWindowOverrides((prev) => ({ ...prev, [windowKey]: next }));
+  }
+
+  function updateFoodService(serviceKey: FoodServiceKey, patch: Partial<FoodServiceHours>) {
+    setFoodServices((prev) =>
+      prev.map((service) => (service.serviceKey === serviceKey ? { ...service, ...patch } : service)),
+    );
+    // Hours/enablement changes invalidate prior per-window toggles.
+    setWindowOverrides({});
+  }
+
+  async function handleCreateFoodBooking() {
+    if (foodValidationError) {
+      toast.error(foodValidationError);
+      return;
+    }
+
+    setIsSubmitting(true);
+    const result = await createFoodBookingCampaign({
+      promotionName: promotionName.trim(),
+      problemBrief: problemBrief.trim(),
+      brief: foodBrief,
+      budgetAmount,
+      budgetType,
+      geoRadiusMiles,
+      audienceMode,
+      startDate,
+      windowOverrides: Object.keys(windowOverrides).length > 0 ? windowOverrides : undefined,
+    });
+
+    if ('error' in result) {
+      toast.error(result.error);
+      setIsSubmitting(false);
+      return;
+    }
+
+    router.push(`/campaigns/${result.campaignId}`);
+  }
 
   useEffect(() => {
     if (formState !== 'generating') return;
@@ -379,21 +581,30 @@ export function CampaignBriefForm({ mediaLibrary }: CampaignBriefFormProps) {
         <div className="space-y-2">
           <p className="text-sm font-semibold" style={{ color: 'var(--c-ink)' }}>Campaign type</p>
           <div
-            className="grid grid-cols-2 gap-2 p-1"
+            className={`grid gap-2 p-1 ${kindOptions.length > 2 ? 'grid-cols-3' : 'grid-cols-2'}`}
             style={{ borderRadius: 'var(--r-lg)', border: '1px solid var(--c-line)', backgroundColor: 'var(--c-paper)' }}
           >
-            {(['event', 'evergreen'] as PaidCampaignKind[]).map((kind) => (
+            {kindOptions.map((kind) => (
               <button
                 key={kind}
                 type="button"
+                aria-pressed={campaignKind === kind}
                 onClick={() => {
                   setCampaignKind(kind);
                   setAudienceMode(defaultAudienceMode(kind));
                   resetGeneratedState();
-                  if (kind === 'evergreen') {
+                  if (kind !== 'event') {
                     setSourceId(null);
                     setSourceSnapshot(null);
                     setAdsStopTime('');
+                  }
+                  if (kind === 'food_booking') {
+                    setWindowOverrides({});
+                    setBookingUrl((current) => current.trim() || DEFAULT_FOOD_BOOKING_URL);
+                    setSundayRoastBookingUrl((current) => current.trim() || DEFAULT_FOOD_BOOKING_URL);
+                    setFoodHooksText((current) => current.trim() ? current : DEFAULT_FOOD_HOOKS);
+                    setBudgetAmount(DEFAULT_FOOD_BUDGET_AMOUNT);
+                    setBudgetType('LIFETIME');
                   }
                 }}
                 className="px-3 py-2 text-sm font-semibold transition-colors"
@@ -403,7 +614,7 @@ export function CampaignBriefForm({ mediaLibrary }: CampaignBriefFormProps) {
                   color: campaignKind === kind ? 'white' : 'var(--c-ink-3)',
                 }}
               >
-                {kind === 'event' ? 'Event' : 'Evergreen'}
+                {KIND_LABELS[kind]}
               </button>
             ))}
           </div>
@@ -561,27 +772,46 @@ export function CampaignBriefForm({ mediaLibrary }: CampaignBriefFormProps) {
           />
         </div>
 
-        <div>
-          <label className="block text-sm font-semibold mb-1.5" style={{ color: 'var(--c-ink)' }} htmlFor="destination-url">
-            Paid CTA URL
-          </label>
-          <input
-            id="destination-url"
-            type="url"
-            value={destinationUrl}
-            onChange={(e) => setDestinationUrl(e.target.value)}
-            placeholder="https://..."
-            className="w-full px-3 py-2 text-sm transition-all"
-            style={inputStyle}
-            onFocus={handleInputFocus}
-            onBlur={handleInputBlur}
+        {campaignKind !== 'food_booking' && (
+          <div>
+            <label className="block text-sm font-semibold mb-1.5" style={{ color: 'var(--c-ink)' }} htmlFor="destination-url">
+              Paid CTA URL
+            </label>
+            <input
+              id="destination-url"
+              type="url"
+              value={destinationUrl}
+              onChange={(e) => setDestinationUrl(e.target.value)}
+              placeholder="https://..."
+              className="w-full px-3 py-2 text-sm transition-all"
+              style={inputStyle}
+              onFocus={handleInputFocus}
+              onBlur={handleInputBlur}
+            />
+            {campaignKind === 'evergreen' && (
+              <p className="mt-1 text-xs" style={{ color: 'var(--c-ink-3)' }}>
+                This will be converted into a Meta Ads short link before generation.
+              </p>
+            )}
+          </div>
+        )}
+
+        {campaignKind === 'food_booking' && (
+          <FoodBookingSubForm
+            services={foodServices}
+            onServiceChange={updateFoodService}
+            bookingUrl={bookingUrl}
+            onBookingUrlChange={handleFoodBookingUrlChange}
+            sundayRoastBookingUrl={sundayRoastBookingUrl}
+            onSundayRoastBookingUrlChange={setSundayRoastBookingUrl}
+            foodHooksText={foodHooksText}
+            onFoodHooksChange={setFoodHooksText}
+            weeks={foodWeeks}
+            onWeeksChange={setFoodWeeks}
+            dayWeighting={foodDayWeighting}
+            onDayWeightingChange={setFoodDayWeighting}
           />
-          {campaignKind === 'evergreen' && (
-            <p className="mt-1 text-xs" style={{ color: 'var(--c-ink-3)' }}>
-              This will be converted into a Meta Ads short link before generation.
-            </p>
-          )}
-        </div>
+        )}
 
         <div>
           <p className="block text-sm font-semibold mb-1.5" style={{ color: 'var(--c-ink)' }}>Local radius</p>
@@ -705,26 +935,34 @@ export function CampaignBriefForm({ mediaLibrary }: CampaignBriefFormProps) {
             />
           </div>
 
-          <div>
-            <label className="block text-sm font-semibold mb-1.5" style={{ color: 'var(--c-ink)' }} htmlFor="end-date">
-              {campaignKind === 'event' ? 'Event date' : 'End date'}
-            </label>
-            <input
-              id="end-date"
-              type="date"
-              value={endDate}
-              onChange={(e) => setEndDate(e.target.value)}
-              className="w-full px-3 py-2 text-sm transition-all"
-              style={inputStyle}
-              onFocus={handleInputFocus}
-              onBlur={handleInputBlur}
-            />
-            {campaignKind === 'evergreen' && (
-              <p className="mt-1 text-xs" style={{ color: durationDays && durationDays > 30 ? 'var(--c-claret)' : 'var(--c-ink-3)' }}>
-                {durationDays ? `${durationDays} day${durationDays === 1 ? '' : 's'} selected. Maximum 30.` : 'Maximum 30 days.'}
+          {campaignKind === 'food_booking' ? (
+            <div className="flex items-end">
+              <p className="text-xs" style={{ color: 'var(--c-ink-3)' }}>
+                The end date is set automatically from the last scheduled ad window.
               </p>
-            )}
-          </div>
+            </div>
+          ) : (
+            <div>
+              <label className="block text-sm font-semibold mb-1.5" style={{ color: 'var(--c-ink)' }} htmlFor="end-date">
+                {campaignKind === 'event' ? 'Event date' : 'End date'}
+              </label>
+              <input
+                id="end-date"
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                className="w-full px-3 py-2 text-sm transition-all"
+                style={inputStyle}
+                onFocus={handleInputFocus}
+                onBlur={handleInputBlur}
+              />
+              {campaignKind === 'evergreen' && (
+                <p className="mt-1 text-xs" style={{ color: durationDays && durationDays > 30 ? 'var(--c-claret)' : 'var(--c-ink-3)' }}>
+                  {durationDays ? `${durationDays} day${durationDays === 1 ? '' : 's'} selected. Maximum 30.` : 'Maximum 30 days.'}
+                </p>
+              )}
+            </div>
+          )}
         </div>
 
         {campaignKind === 'event' && (
@@ -746,10 +984,32 @@ export function CampaignBriefForm({ mediaLibrary }: CampaignBriefFormProps) {
           </div>
         )}
 
+        {campaignKind === 'food_booking' && (
+          <div className="space-y-2">
+            <p className="text-sm font-semibold" style={{ color: 'var(--c-ink)' }}>Schedule preview</p>
+            <FoodBookingSchedulePreview
+              windows={foodWindows}
+              services={foodServices}
+              onToggle={toggleFoodWindow}
+              budgetAmount={budgetAmount}
+              budgetType={budgetType}
+            />
+          </div>
+        )}
+
         <div className="pt-2">
-          <Btn onClick={handleGenerate} disabled={Boolean(validateBriefForm())}>
-            Generate Campaign
-          </Btn>
+          {campaignKind === 'food_booking' ? (
+            <Btn
+              onClick={handleCreateFoodBooking}
+              disabled={isSubmitting || Boolean(foodValidationError)}
+            >
+              {isSubmitting ? 'Creating campaign...' : 'Create Campaign'}
+            </Btn>
+          ) : (
+            <Btn onClick={handleGenerate} disabled={Boolean(validateBriefForm())}>
+              Generate Campaign
+            </Btn>
+          )}
         </div>
       </div>
     );
@@ -870,7 +1130,249 @@ function isImportFixable(code: ManagementActionError['code']): boolean {
 }
 
 function defaultAudienceMode(kind: PaidCampaignKind): AudienceMode {
-  return kind === 'event' ? 'local_only' : 'local_interests';
+  // Event + food booking are local-first; only evergreen layers interests by default.
+  return kind === 'evergreen' ? 'local_interests' : 'local_only';
+}
+
+interface FoodBookingSubFormProps {
+  services: FoodServiceHours[];
+  onServiceChange: (serviceKey: FoodServiceKey, patch: Partial<FoodServiceHours>) => void;
+  bookingUrl: string;
+  onBookingUrlChange: (value: string) => void;
+  sundayRoastBookingUrl: string;
+  onSundayRoastBookingUrlChange: (value: string) => void;
+  foodHooksText: string;
+  onFoodHooksChange: (value: string) => void;
+  weeks: 1 | 2 | 4;
+  onWeeksChange: (value: 1 | 2 | 4) => void;
+  dayWeighting: FoodBookingBrief['dayWeighting'];
+  onDayWeightingChange: (value: FoodBookingBrief['dayWeighting']) => void;
+}
+
+function FoodBookingSubForm({
+  services,
+  onServiceChange,
+  bookingUrl,
+  onBookingUrlChange,
+  sundayRoastBookingUrl,
+  onSundayRoastBookingUrlChange,
+  foodHooksText,
+  onFoodHooksChange,
+  weeks,
+  onWeeksChange,
+  dayWeighting,
+  onDayWeightingChange,
+}: FoodBookingSubFormProps) {
+  return (
+    <div
+      className="space-y-4 p-4"
+      style={{ borderRadius: 'var(--r-xl)', border: '1px solid var(--c-line)', backgroundColor: 'var(--c-paper)' }}
+    >
+      <div className="space-y-1">
+        <p className="text-sm font-semibold" style={{ color: 'var(--c-ink)' }}>Food services</p>
+        <p className="text-xs" style={{ color: 'var(--c-ink-3)' }}>
+          Turn services on or off and adjust hours. Defaults match a typical pub schedule.
+        </p>
+      </div>
+
+      <div className="space-y-3">
+        {services.map((service) => {
+          const label = FOOD_SERVICE_LABELS[service.serviceKey];
+          return (
+            <div
+              key={service.serviceKey}
+              className="grid gap-3 sm:grid-cols-[auto_1fr_1fr_1fr] sm:items-end"
+              style={{
+                borderRadius: 'var(--r-md)',
+                border: '1px solid var(--c-line)',
+                padding: '0.75rem',
+                backgroundColor: 'var(--c-card)',
+              }}
+            >
+              <label className="flex items-center gap-2 text-sm font-medium" style={{ color: 'var(--c-ink)' }}>
+                <input
+                  type="checkbox"
+                  checked={service.enabled}
+                  onChange={(e) => onServiceChange(service.serviceKey, { enabled: e.target.checked })}
+                  aria-label={`Enable ${label}`}
+                  className="h-4 w-4"
+                  style={{ accentColor: 'var(--c-orange)' }}
+                />
+                {label}
+              </label>
+
+              <div>
+                <label
+                  className="block text-xs font-medium mb-1"
+                  style={{ color: 'var(--c-ink-2)' }}
+                  htmlFor={`service-start-${service.serviceKey}`}
+                >
+                  {label} start
+                </label>
+                <input
+                  id={`service-start-${service.serviceKey}`}
+                  type="time"
+                  value={service.startLocal}
+                  disabled={!service.enabled}
+                  onChange={(e) => onServiceChange(service.serviceKey, { startLocal: e.target.value })}
+                  className="w-full px-3 py-2 text-sm transition-all disabled:opacity-50"
+                  style={inputStyle}
+                  onFocus={handleInputFocus}
+                  onBlur={handleInputBlur}
+                />
+              </div>
+
+              <div>
+                <label
+                  className="block text-xs font-medium mb-1"
+                  style={{ color: 'var(--c-ink-2)' }}
+                  htmlFor={`service-end-${service.serviceKey}`}
+                >
+                  {label} service end
+                </label>
+                <input
+                  id={`service-end-${service.serviceKey}`}
+                  type="time"
+                  value={service.endLocal}
+                  disabled={!service.enabled}
+                  onChange={(e) => onServiceChange(service.serviceKey, { endLocal: e.target.value })}
+                  className="w-full px-3 py-2 text-sm transition-all disabled:opacity-50"
+                  style={inputStyle}
+                  onFocus={handleInputFocus}
+                  onBlur={handleInputBlur}
+                />
+              </div>
+
+              <div>
+                <label
+                  className="block text-xs font-medium mb-1"
+                  style={{ color: 'var(--c-ink-2)' }}
+                  htmlFor={`service-last-orders-${service.serviceKey}`}
+                >
+                  {label} last orders
+                </label>
+                <input
+                  id={`service-last-orders-${service.serviceKey}`}
+                  type="time"
+                  value={service.lastOrdersLocal ?? ''}
+                  disabled={!service.enabled}
+                  onChange={(e) => onServiceChange(
+                    service.serviceKey,
+                    { lastOrdersLocal: e.target.value || undefined },
+                  )}
+                  className="w-full px-3 py-2 text-sm transition-all disabled:opacity-50"
+                  style={inputStyle}
+                  onFocus={handleInputFocus}
+                  onBlur={handleInputBlur}
+                />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div>
+        <label className="block text-sm font-semibold mb-1.5" style={{ color: 'var(--c-ink)' }} htmlFor="food-booking-url">
+          Default booking URL
+        </label>
+        <input
+          id="food-booking-url"
+          type="url"
+          value={bookingUrl}
+          onChange={(e) => onBookingUrlChange(e.target.value)}
+          placeholder={DEFAULT_FOOD_BOOKING_URL}
+          className="w-full px-3 py-2 text-sm transition-all"
+          style={inputStyle}
+          onFocus={handleInputFocus}
+          onBlur={handleInputBlur}
+        />
+      </div>
+
+      <div>
+        <label className="block text-sm font-semibold mb-1.5" style={{ color: 'var(--c-ink)' }} htmlFor="food-sunday-booking-url">
+          Sunday roast booking URL
+        </label>
+        <input
+          id="food-sunday-booking-url"
+          type="url"
+          value={sundayRoastBookingUrl}
+          onChange={(e) => onSundayRoastBookingUrlChange(e.target.value)}
+          placeholder={bookingUrl || DEFAULT_FOOD_BOOKING_URL}
+          className="w-full px-3 py-2 text-sm transition-all"
+          style={inputStyle}
+          onFocus={handleInputFocus}
+          onBlur={handleInputBlur}
+        />
+        <p className="mt-1 text-xs" style={{ color: 'var(--c-ink-3)' }}>
+          Leave this matching the default unless Sunday roast needs a different booking page.
+        </p>
+      </div>
+
+      <div>
+        <label className="block text-sm font-semibold mb-1.5" style={{ color: 'var(--c-ink)' }} htmlFor="food-hooks">
+          Food hooks
+        </label>
+        <textarea
+          id="food-hooks"
+          value={foodHooksText}
+          onChange={(e) => onFoodHooksChange(e.target.value)}
+          placeholder={'One hook per line, e.g.\nStone-baked pizzas from £12\nBeer-battered fish and chips'}
+          rows={5}
+          className="w-full px-3 py-2 text-sm transition-all resize-none"
+          style={inputStyle}
+          onFocus={handleInputFocus}
+          onBlur={handleInputBlur}
+        />
+        <p className="mt-1 text-xs" style={{ color: 'var(--c-ink-3)' }}>
+          One hook per line. These are editable menu proof points for the AI to use in ad copy.
+        </p>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div>
+          <label className="block text-sm font-semibold mb-1.5" style={{ color: 'var(--c-ink)' }} htmlFor="food-weeks">
+            Weeks to run
+          </label>
+          <select
+            id="food-weeks"
+            value={String(weeks)}
+            onChange={(e) => onWeeksChange(Number(e.target.value) as 1 | 2 | 4)}
+            className="w-full px-3 py-2 text-sm transition-all"
+            style={inputStyle}
+            onFocus={handleInputFocus}
+            onBlur={handleInputBlur}
+          >
+            {FOOD_WEEKS_OPTIONS.map((option) => (
+              <option key={option} value={option}>
+                {option} week{option === 1 ? '' : 's'}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label className="block text-sm font-semibold mb-1.5" style={{ color: 'var(--c-ink)' }} htmlFor="food-day-weighting">
+            Day weighting
+          </label>
+          <select
+            id="food-day-weighting"
+            value={dayWeighting}
+            onChange={(e) => onDayWeightingChange(e.target.value as FoodBookingBrief['dayWeighting'])}
+            className="w-full px-3 py-2 text-sm transition-all"
+            style={inputStyle}
+            onFocus={handleInputFocus}
+            onBlur={handleInputBlur}
+          >
+            {FOOD_DAY_WEIGHTING_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function formatMediaPlanSummary(mediaPlan: PaidMediaPlan): string {

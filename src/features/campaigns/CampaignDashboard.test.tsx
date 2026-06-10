@@ -5,8 +5,20 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { buildCampaignDashboard } from '@/lib/campaigns/dashboard';
+import { EMPTY_FOOD_BOOKING_INSIGHTS, type FoodBookingInsights } from '@/lib/campaigns/food-booking-insights';
 import type { Campaign, CampaignPerformanceMetrics } from '@/types/campaigns';
 import { CampaignDashboard } from './CampaignDashboard';
+
+const { foodBookingFlag } = vi.hoisted(() => ({ foodBookingFlag: { value: true } }));
+
+vi.mock('@/env', () => ({
+  env: { server: {}, client: {} },
+  featureFlags: {
+    get foodBooking() {
+      return foodBookingFlag.value;
+    },
+  },
+}));
 
 vi.mock('@/app/(app)/campaigns/actions', () => ({
   applyOptimisationRecommendationFormAction: vi.fn(),
@@ -104,5 +116,51 @@ describe('CampaignDashboard', () => {
 
     expect(screen.getAllByText('Finished campaign').length).toBeGreaterThan(0);
     expect(screen.getByRole('button', { name: 'Hide finished' })).toBeTruthy();
+  });
+
+  it('renders advisory cutoff recommendations in the food booking panel', () => {
+    const foodBookingInsights: FoodBookingInsights = {
+      ...EMPTY_FOOD_BOOKING_INSIGHTS,
+      totalBookings90d: 100,
+      cutoffRecommendations: [
+        {
+          serviceKey: 'sunday_roast',
+          decisionStage: 'last_tables',
+          severity: 'info',
+          message: 'Sunday roast “last tables” converts 2% of its bookings — consider dropping this window.',
+        },
+      ],
+    };
+    const dashboard = buildCampaignDashboard(
+      [campaign({ id: 'food', name: 'Food campaign', campaignKind: 'food_booking' })],
+      [],
+      undefined,
+      { now: new Date('2026-05-23T12:00:00Z'), foodBookingInsights },
+    );
+
+    render(<CampaignDashboard dashboard={dashboard} />);
+
+    expect(screen.getByText('Cutoff advice')).toBeTruthy();
+    expect(
+      screen.getByText(/Sunday roast “last tables” converts 2% of its bookings/),
+    ).toBeTruthy();
+  });
+
+  it('renders no cutoff advice when there are no recommendations', () => {
+    const foodBookingInsights: FoodBookingInsights = {
+      ...EMPTY_FOOD_BOOKING_INSIGHTS,
+      totalBookings90d: 100,
+      cutoffRecommendations: [],
+    };
+    const dashboard = buildCampaignDashboard(
+      [campaign({ id: 'food', name: 'Food campaign', campaignKind: 'food_booking' })],
+      [],
+      undefined,
+      { now: new Date('2026-05-23T12:00:00Z'), foodBookingInsights },
+    );
+
+    render(<CampaignDashboard dashboard={dashboard} />);
+
+    expect(screen.queryByText('Cutoff advice')).toBeNull();
   });
 });

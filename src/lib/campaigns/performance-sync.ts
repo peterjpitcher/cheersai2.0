@@ -1,5 +1,9 @@
+import { DateTime } from 'luxon';
+
 import { fetchMetaObjectInsights, type CampaignInsights } from '@/lib/meta/marketing';
 import { createServiceSupabaseClient } from '@/lib/supabase/service';
+import { isSchemaMissingErrorWithWarning } from '@/lib/supabase/errors';
+import { DEFAULT_TIMEZONE } from '@/lib/constants';
 
 type SupabaseClientLike = ReturnType<typeof createServiceSupabaseClient>;
 
@@ -81,12 +85,17 @@ export async function syncMetaCampaignPerformance(
 
   const dateRange = buildInsightsDateRange(campaign.start_date, campaign.end_date);
   const syncedAt = new Date().toISOString();
+  // Europe/London calendar day this sync is captured for; one history row per ad per day.
+  const capturedOn = DateTime.now().setZone(DEFAULT_TIMEZONE).toISODate() ?? syncedAt.slice(0, 10);
   const campaignInsights = await fetchMetaObjectInsights(campaign.meta_campaign_id, adAccount.access_token, dateRange);
 
   await updatePerformanceMetrics(supabase, 'meta_campaigns', campaign.id, campaignInsights, syncedAt);
 
   let adSetsSynced = 0;
   let adsSynced = 0;
+  // WF-2: the history table is advisory (fatigue detection); one failed append must
+  // never abort the rest of the nightly sync. Log the first failure only.
+  let historyAppendFailureLogged = false;
   const adSets = Array.isArray(campaign.ad_sets) ? campaign.ad_sets : [];
 
   for (const adSet of adSets) {
@@ -101,6 +110,13 @@ export async function syncMetaCampaignPerformance(
       if (!ad.meta_ad_id) continue;
       const adInsights = await fetchMetaObjectInsights(ad.meta_ad_id, adAccount.access_token, dateRange);
       await updatePerformanceMetrics(supabase, 'ads', ad.id, adInsights, syncedAt);
+      const historyError = await appendAdMetricsHistory(supabase, campaign.account_id, ad.id, adInsights, capturedOn);
+      if (historyError && !historyAppendFailureLogged) {
+        historyAppendFailureLogged = true;
+        if (!isSchemaMissingErrorWithWarning(historyError, 'performance-sync ad_metrics_history append')) {
+          console.error('[performance-sync] failed to append ad metrics history; sync continues', historyError);
+        }
+      }
       adsSynced++;
     }
   }
@@ -126,6 +142,45 @@ async function updatePerformanceMetrics(
 
   if (error) {
     throw new Error(error.message);
+  }
+}
+
+/**
+ * Append (idempotently per ad/day) today's delivery snapshot to the
+ * `ad_metrics_history` time-series that powers creative-fatigue detection.
+ * Re-running a sync on the same London day overwrites that day's row rather
+ * than duplicating it.
+ *
+ * Best-effort (WF-2): returns the error instead of throwing so the caller can
+ * log once and keep syncing the remaining ads.
+ */
+async function appendAdMetricsHistory(
+  supabase: SupabaseClientLike,
+  accountId: string,
+  adId: string,
+  insights: CampaignInsights,
+  capturedOn: string,
+): Promise<unknown | null> {
+  try {
+    const { error } = await supabase
+      .from('ad_metrics_history')
+      .upsert(
+        {
+          account_id: accountId,
+          ad_id: adId,
+          captured_on: capturedOn,
+          impressions: insights.impressions,
+          clicks: insights.clicks,
+          ctr: insights.ctr,
+          frequency: insights.reach > 0 ? insights.impressions / insights.reach : null,
+          spend: insights.spend,
+        },
+        { onConflict: 'ad_id,captured_on' },
+      );
+
+    return error ?? null;
+  } catch (error) {
+    return error;
   }
 }
 

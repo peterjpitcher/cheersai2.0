@@ -560,6 +560,7 @@ describe('runCampaignDashboardOptimisation', () => {
         plannedActions: 3,
         appliedActions: 0,
         failedActions: 0,
+        failedActionInserts: 0,
       };
     });
 
@@ -697,5 +698,94 @@ describe('saveCampaignDraft', () => {
     });
 
     expect(result).toHaveProperty('campaignId', 'mock-id');
+  });
+
+  it('deletes the created campaign (cascade) when an ad insert fails', async () => {
+    // Table-aware mock: campaign + ad_set inserts resolve via .select().single();
+    // the ads insert is awaited directly and resolves with an error.
+    // getConversionOptimisationConfig reads via maybeSingle before the campaign insert.
+    mockMaybeSingle.mockResolvedValue({ data: null, error: null });
+    let table = '';
+    const deleteEqCalls: Array<{ table: string; column: string; value: unknown }> = [];
+    let pendingDelete = false;
+
+    mockSupabase.from.mockImplementation((t: string) => {
+      table = t;
+      return mockSupabase;
+    });
+    mockSupabase.delete.mockImplementation(() => {
+      pendingDelete = true;
+      return mockSupabase;
+    });
+    mockSupabase.eq.mockImplementation((column: string, value: unknown) => {
+      if (pendingDelete) {
+        deleteEqCalls.push({ table, column, value });
+        pendingDelete = false;
+      }
+      return mockSupabase;
+    });
+    mockSupabase.insert.mockImplementation(() =>
+      table === 'ads' ? { error: { message: 'ad insert boom' } } : mockSupabase,
+    );
+    // Campaign insert row id (via .select().single()); ad_set insert row id next.
+    mockSingle
+      .mockResolvedValueOnce({ data: { id: 'mock-id' }, error: null })
+      .mockResolvedValueOnce({ data: { id: 'adset-1' }, error: null });
+
+    const payload = {
+      objective: 'OUTCOME_LEADS' as const,
+      rationale: 'Test rationale',
+      campaign_name: 'Test Campaign',
+      special_ad_category: 'NONE' as const,
+      ad_sets: [
+        {
+          name: 'Phase 1',
+          phase_label: 'Phase 1',
+          phase_start: '2026-04-01',
+          phase_end: null,
+          audience_description: 'Local adults',
+          targeting: { age_min: 18, age_max: 65, geo_locations: { countries: ['GB'] } },
+          placements: 'AUTO' as const,
+          optimisation_goal: 'OFFSITE_CONVERSIONS',
+          bid_strategy: 'LOWEST_COST_WITHOUT_CAP',
+          ads: [
+            {
+              name: 'Ad 1',
+              headline: 'Book your seats',
+              primary_text: 'Book your seats for this local event tonight.',
+              description: 'Book now',
+              cta: 'BOOK_NOW' as const,
+              creative_brief: 'Venue event photo',
+              angle: 'Booking angle',
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = await saveCampaignDraft(payload, {
+      budgetAmount: 500,
+      budgetType: 'DAILY' as const,
+      geoRadiusMiles: 3,
+      audienceMode: 'local_only',
+      startDate: '2026-04-01',
+      endDate: '2026-04-07',
+      adsStopTime: '23:00',
+      problemBrief: 'We are dead on Tuesday nights',
+      campaignKind: 'event',
+      promotionName: 'Test Campaign',
+      destinationUrl: 'https://vip-club.uk/ma123',
+    });
+
+    expect(result).toEqual({ error: 'ad insert boom' });
+    // The partial draft is cleaned up via cascade delete of the campaign row.
+    expect(deleteEqCalls).toContainEqual({ table: 'meta_campaigns', column: 'id', value: 'mock-id' });
+
+    // Restore the shared chainable mock implementations (clearAllMocks does not reset
+    // implementations) so this test cannot leak into any later-added sibling test.
+    mockSupabase.from.mockReturnThis();
+    mockSupabase.insert.mockReturnThis();
+    mockSupabase.delete.mockReturnThis();
+    mockSupabase.eq.mockReturnThis();
   });
 });

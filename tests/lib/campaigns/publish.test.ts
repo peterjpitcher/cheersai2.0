@@ -38,6 +38,10 @@ vi.mock('next/cache', () => ({
   revalidatePath: vi.fn(),
 }));
 
+vi.mock('@/lib/publishing/audit', () => ({
+  logPublishAuditEvent: vi.fn().mockResolvedValue(undefined),
+}));
+
 import { createServiceSupabaseClient } from '@/lib/supabase/service';
 import * as marketing from '@/lib/meta/marketing';
 import { createManagementMetaAdsLink } from '@/lib/management-app/client';

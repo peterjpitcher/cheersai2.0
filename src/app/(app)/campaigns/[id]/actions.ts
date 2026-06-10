@@ -3,7 +3,9 @@
 import { revalidatePath } from 'next/cache';
 
 import { requireAuthContext } from '@/lib/auth/server';
+import { featureFlags } from '@/env';
 import { MEDIA_BUCKET } from '@/lib/constants';
+import { computeAdSetSpendCaps } from '@/lib/campaigns/food-budget-weighting';
 import { toLondonDateTime, toMidnightLondon, toNextMidnightLondon } from '@/lib/campaigns/time-utils';
 import {
   applyInterestTargeting,
@@ -19,9 +21,11 @@ import {
   searchMetaGeoLocations,
   setMetaObjectStatus,
   uploadMetaImage,
+  type CreateCampaignParams,
   type MetaGeoLocation,
 } from '@/lib/meta/marketing';
 import { createServiceSupabaseClient } from '@/lib/supabase/service';
+import { logPublishAuditEvent } from '@/lib/publishing/audit';
 import { syncMetaCampaignPerformance } from '@/lib/campaigns/performance-sync';
 import { buildConversionReadiness } from '@/lib/campaigns/conversion-readiness';
 import {
@@ -87,6 +91,10 @@ interface AdSetRow {
   phase_end: string | null;
   adset_media_asset_id: string | null;
   ads_stop_time?: string | null;
+  ads_start_time?: string | null;
+  service_key?: string | null;
+  decision_stage?: string | null;
+  budget_weight?: number | null;
   ads: AdRow[];
 }
 
@@ -129,8 +137,51 @@ function isEventCampaign(campaign: CampaignRow): boolean {
   return campaign.campaign_kind === 'event';
 }
 
+function isFoodBookingCampaign(campaign: CampaignRow): boolean {
+  return campaign.campaign_kind === 'food_booking';
+}
+
+/**
+ * Both event and food_booking campaigns force the BOOK_NOW call-to-action on their
+ * creatives regardless of the stored ad CTA — they are inherently booking flows.
+ */
+function forcesBookNowCta(campaign: CampaignRow): boolean {
+  return isEventCampaign(campaign) || isFoodBookingCampaign(campaign);
+}
+
 function stringValue(value: unknown): string | null {
   return typeof value === 'string' && value.trim() ? value.trim() : null;
+}
+
+function serviceBookingUrlsFromSnapshot(
+  sourceSnapshot: Record<string, unknown> | null,
+): Record<string, string> {
+  const value = sourceSnapshot?.serviceBookingUrls;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+
+  return Object.entries(value as Record<string, unknown>).reduce<Record<string, string>>(
+    (acc, [key, rawValue]) => {
+      const url = stringValue(rawValue);
+      if (url) acc[key] = url;
+      return acc;
+    },
+    {},
+  );
+}
+
+function resolveFoodBookingLinkUrl(
+  campaign: CampaignRow,
+  adSet: AdSetRow,
+  utmContentKey: string,
+) {
+  if (!isFoodBookingCampaign(campaign) || !adSet.service_key) {
+    return null;
+  }
+
+  const serviceUrl = serviceBookingUrlsFromSnapshot(campaign.source_snapshot)[adSet.service_key];
+  if (!serviceUrl) return null;
+
+  return applyAdUtmContent(serviceUrl, utmContentKey);
 }
 
 function isTrustedShortLink(parsed: URL): boolean {
@@ -206,6 +257,7 @@ function buildPublishConversionSetup(
 
 function shouldRequireBookingConversionSetup(campaign: CampaignRow): boolean {
   if (isEventCampaign(campaign)) return true;
+  if (isFoodBookingCampaign(campaign)) return true;
   if (campaign.objective === 'OUTCOME_SALES') return true;
   if (campaign.source_snapshot?.bookingConversionOptimised === true) return true;
   return false;
@@ -506,6 +558,36 @@ function allocateAdSetBudgets(campaign: CampaignRow, adSets: AdSetRow[]): Map<st
   return budgets;
 }
 
+/**
+ * Resolve an ad set's Meta `start_time`. food_booking ad sets carry an intra-day
+ * `ads_start_time` (HH:MM London-local) so the window opens mid-day; everything else
+ * starts at London midnight on the phase/campaign start date (unchanged behaviour).
+ */
+function resolveAdSetStartTime(adSet: AdSetRow, campaign: CampaignRow): string {
+  const phaseStart = adSet.phase_start ?? campaign.start_date;
+  return adSet.ads_start_time
+    ? toLondonDateTime(phaseStart, adSet.ads_start_time)
+    : toMidnightLondon(phaseStart);
+}
+
+/**
+ * Resolve the campaign-level flight end for a CBO lifetime budget: the latest ad set's
+ * end calendar date (phase_end, falling back to phase_start) plus one day, as London
+ * midnight in UTC. Meta requires this `end_time` whenever a campaign lifetime budget is
+ * set. Returns undefined when no ad set date is available (caller then falls back to the
+ * campaign end_date if present).
+ */
+function resolveCampaignFlightEndTime(campaign: CampaignRow, adSets: AdSetRow[]): string | undefined {
+  const latestDate = adSets
+    .map((adSet) => adSet.phase_end ?? adSet.phase_start)
+    .filter((date): date is string => Boolean(date))
+    .sort((a, b) => a.localeCompare(b))
+    .at(-1);
+
+  const flightEndDate = latestDate ?? campaign.end_date ?? undefined;
+  return flightEndDate ? toNextMidnightLondon(flightEndDate) : undefined;
+}
+
 function resolveAdSetEndTime(adSet: AdSetRow, campaign: CampaignRow): string | undefined {
   const phaseStart = adSet.phase_start ?? campaign.start_date;
 
@@ -663,7 +745,7 @@ export async function publishCampaign(
   const adSetsResult = await supabase
     .from('ad_sets')
     .select(
-      'id, meta_adset_id, name, targeting, optimisation_goal, bid_strategy, budget_amount, phase_start, phase_end, adset_media_asset_id, ads_stop_time, ads(id, meta_ad_id, name, headline, primary_text, description, cta, media_asset_id, angle, creative_format, creative_variant_key, utm_content_key)',
+      'id, meta_adset_id, name, targeting, optimisation_goal, bid_strategy, budget_amount, phase_start, phase_end, adset_media_asset_id, ads_stop_time, ads_start_time, service_key, decision_stage, budget_weight, ads(id, meta_ad_id, name, headline, primary_text, description, cta, media_asset_id, angle, creative_format, creative_variant_key, utm_content_key)',
     )
     .eq('campaign_id', campaignId);
 
@@ -705,6 +787,16 @@ export async function publishCampaign(
   const baseLinkUrl = campaign.destination_url as string;
 
   try {
+    // Audit: a genuine publish attempt begins here (after all pre-publish validation has
+    // passed and before any Meta object is created). Applies to every campaign kind.
+    await logPublishAuditEvent({
+      accountId,
+      operationType: 'publish_attempt',
+      resourceType: 'content_item',
+      resourceId: campaignId,
+      details: { campaignKind: campaign.campaign_kind, resuming: Boolean(campaign.meta_campaign_id) },
+    });
+
     const localTargeting = await resolveLocalMetaTargeting(
       accessToken,
       postingDefaults,
@@ -718,6 +810,35 @@ export async function publishCampaign(
     const metaAdSetIdsToActivate = new Set<string>();
     const metaAdIdsToActivate = new Set<string>();
 
+    // food_booking budgets live on the campaign (CBO); event/evergreen keep per-ad-set
+    // budgets. This single flag drives BOTH the campaign-level CBO params and the Phase 3
+    // spend caps below, so caps can never be computed for a non-CBO publish path (F10).
+    const usesCampaignBudget = isFoodBookingCampaign(campaign);
+
+    // Phase 3 (3b): under the food optimisation flag, derive per-ad-set min/max spend caps
+    // from each ad set's stored budget_weight so demand-heavy windows are guaranteed a slice
+    // of the shared CBO budget. Computed BEFORE any Meta object is created so its preflight
+    // (the floored minimums must fit the campaign budget) fails the whole publish cleanly,
+    // leaving nothing to clean up. When the flag is off — or the campaign does not use
+    // campaign-level CBO — this Map stays empty and ad-set creation is byte-for-byte unchanged.
+    const adSetSpendCaps = new Map<string, { minBudget: number; maxBudget: number }>();
+    if (usesCampaignBudget && featureFlags.foodOptimisation) {
+      const capResult = computeAdSetSpendCaps({
+        adSets: adSets.map((adSet) => ({
+          ref: adSet.id,
+          budgetWeight: typeof adSet.budget_weight === 'number' ? adSet.budget_weight : 0,
+        })),
+        campaignBudget: Number(campaign.budget_amount),
+      });
+      if (capResult.error) {
+        await setPublishError(capResult.error);
+        return { error: capResult.error };
+      }
+      for (const cap of capResult.caps) {
+        adSetSpendCaps.set(cap.adSetRef, { minBudget: cap.minBudget, maxBudget: cap.maxBudget });
+      }
+    }
+
     // ── 6. Create Meta campaign (or resume if already created) ────────────────
 
     let metaCampaignId: string;
@@ -726,6 +847,20 @@ export async function publishCampaign(
       // Resuming after partial failure — reuse existing Meta campaign.
       metaCampaignId = campaign.meta_campaign_id;
     } else {
+      // food_booking uses campaign-level CBO: the campaign owns one budget and Meta shares
+      // it across the many short, overlapping ad-set windows. The campaign budget field must
+      // match budget_type (DAILY→daily_budget, LIFETIME→lifetime_budget); a lifetime budget
+      // additionally requires a campaign end_time (the flight end). Event/evergreen keep
+      // per-ad-set budgets (CBO flag omitted), so behaviour is unchanged for them.
+      const cboParams: Partial<CreateCampaignParams> = usesCampaignBudget
+        ? campaign.budget_type === 'DAILY'
+          ? { useCampaignBudgetOptimization: true, dailyBudget: Number(campaign.budget_amount) }
+          : {
+              useCampaignBudgetOptimization: true,
+              lifetimeBudget: Number(campaign.budget_amount),
+              endTime: resolveCampaignFlightEndTime(campaign, adSets),
+            }
+        : {};
       const metaCampaign = await createMetaCampaign({
         accessToken,
         adAccountId,
@@ -733,6 +868,7 @@ export async function publishCampaign(
         objective: publishObjective,
         specialAdCategory: campaign.special_ad_category,
         status: 'PAUSED',
+        ...cboParams,
       });
 
       metaCampaignId = metaCampaign.id;
@@ -748,7 +884,11 @@ export async function publishCampaign(
     // ── 7. Process each ad set ────────────────────────────────────────────────
 
     let successfulAdSets = 0; // Fix D5: track how many ad sets were successfully created
-    const adSetBudgets = allocateAdSetBudgets(campaign, adSets);
+    // CBO campaigns skip per-ad-set allocation entirely and send no daily/lifetime budget
+    // on each ad set (usesCampaignBudget is hoisted above the spend-cap computation).
+    const adSetBudgets = usesCampaignBudget
+      ? new Map<string, number>()
+      : allocateAdSetBudgets(campaign, adSets);
 
     for (const adSet of adSets) {
       const budgetAmount = adSetBudgets.get(adSet.id) ?? Number(campaign.budget_amount);
@@ -763,6 +903,11 @@ export async function publishCampaign(
 
       let metaAdSetId: string;
 
+      // Phase 3 (3b): caps for this ad set, present only when the food optimisation flag
+      // computed them. When undefined, no cap fields are passed and the ad set is created
+      // exactly as before (flag-off path is unchanged).
+      const adSetCap = adSetSpendCaps.get(adSet.id);
+
       if (adSet.meta_adset_id) {
         // Already published — skip creation, reuse existing ID.
         metaAdSetId = adSet.meta_adset_id;
@@ -776,9 +921,19 @@ export async function publishCampaign(
           targeting: publishTargeting,
           optimisationGoal,
           bidStrategy: adSet.bid_strategy,
-          dailyBudget: isDaily ? budgetAmount : undefined,
-          lifetimeBudget: !isDaily ? budgetAmount : undefined,
-          startTime: toMidnightLondon(adSet.phase_start ?? campaign.start_date),
+          // CBO campaigns (food_booking) carry the budget on the campaign, so ad sets
+          // send no budget; other campaigns keep their per-ad-set daily/lifetime budget.
+          dailyBudget: usesCampaignBudget ? undefined : isDaily ? budgetAmount : undefined,
+          lifetimeBudget: usesCampaignBudget ? undefined : !isDaily ? budgetAmount : undefined,
+          // Phase 3 (3b): per-ad-set CBO spend caps, only when the flag computed them for
+          // this ad set. Caps are only ever computed under usesCampaignBudget (F10), so a
+          // present cap implies the parent campaign owns the budget. The Meta client only
+          // emits caps when parentUsesCampaignBudgetOptimization is set; we pass the whole
+          // trio together so the flag-off path sends nothing new.
+          parentUsesCampaignBudgetOptimization: adSetCap ? true : undefined,
+          minBudget: adSetCap?.minBudget,
+          maxBudget: adSetCap?.maxBudget,
+          startTime: resolveAdSetStartTime(adSet, campaign),
           endTime: resolveAdSetEndTime(adSet, campaign),
           status: 'PAUSED',
           promotedObject,
@@ -795,7 +950,8 @@ export async function publishCampaign(
             status: 'ACTIVE',
             meta_status: 'ACTIVE',
             targeting: publishTargeting,
-            budget_amount: budgetAmount,
+            // CBO campaigns keep ad-set budget null (budget lives on the campaign).
+            budget_amount: usesCampaignBudget ? null : budgetAmount,
             optimisation_goal: optimisationGoal,
           })
           .eq('id', adSet.id);
@@ -864,13 +1020,14 @@ export async function publishCampaign(
             name: ad.name,
             pageId,
             linkUrl:
+              resolveFoodBookingLinkUrl(campaign, adSet, fallbackUtmContentKey) ??
               resolveManagementMetaAdVariantShortUrl(campaign.source_snapshot, fallbackUtmContentKey) ??
               applyAdUtmContent(baseLinkUrl, fallbackUtmContentKey),
             imageHash,
             message: ad.primary_text,
             headline: ad.headline,
             description: ad.description,
-            callToActionType: isEventCampaign(campaign) ? 'BOOK_NOW' : ad.cta,
+            callToActionType: forcesBookNowCta(campaign) ? 'BOOK_NOW' : ad.cta,
           });
 
           createdMetaObjects.push(creative.id);
@@ -940,6 +1097,14 @@ export async function publishCampaign(
       .update({ status: 'ACTIVE', meta_status: 'ACTIVE', publish_error: null })
       .eq('id', campaignId);
 
+    await logPublishAuditEvent({
+      accountId,
+      operationType: 'publish_success',
+      resourceType: 'content_item',
+      resourceId: campaignId,
+      details: { campaignKind: campaign.campaign_kind, metaCampaignId },
+    });
+
     revalidatePath('/campaigns');
     revalidatePath(`/campaigns/${campaignId}`);
 
@@ -947,6 +1112,19 @@ export async function publishCampaign(
   } catch (err) {
     console.error('[publishCampaign] Publish failed:', getRawErrorMessage(err));
     const message = mapMetaErrorToUserMessage(err); // Fix D7: map to user-friendly text
+
+    // Audit the failure (best-effort — never let an audit insert mask the original error).
+    try {
+      await logPublishAuditEvent({
+        accountId,
+        operationType: 'publish_failure',
+        resourceType: 'content_item',
+        resourceId: campaignId,
+        details: { campaignKind: campaign.campaign_kind, error: message },
+      });
+    } catch (auditErr) {
+      console.error('[publishCampaign] Failed to write publish_failure audit event:', auditErr);
+    }
 
     // Write the error to DB so the detail page can surface it.
     await setPublishError(message);

@@ -24,6 +24,15 @@ export interface CreateCampaignParams {
   objective: string;
   specialAdCategory: string;
   status: 'ACTIVE' | 'PAUSED';
+  // Campaign Budget Optimization (CBO): when `useCampaignBudgetOptimization` is true the
+  // budget is set on the campaign and Meta shares it across ad sets. Used by food_booking,
+  // which schedules many short overlapping ad-set windows that must compete for one budget.
+  useCampaignBudgetOptimization?: boolean;
+  dailyBudget?: number;
+  lifetimeBudget?: number;
+  // Campaign-level flight end (UTC ISO). Required by Meta when a campaign-level lifetime
+  // budget is set; ignored for daily budgets. Used by food_booking under lifetime CBO.
+  endTime?: string;
 }
 
 export interface CreateAdSetParams {
@@ -40,6 +49,15 @@ export interface CreateAdSetParams {
   endTime?: string;
   status: 'ACTIVE' | 'PAUSED';
   promotedObject?: Record<string, unknown>;
+  // Hybrid CBO per-ad-set spend caps (Phase 3 / P3-3). Under campaign budget optimization
+  // the budget lives on the campaign, but Meta lets each ad set declare a floor/ceiling on
+  // its share. These are only valid — and only emitted — when the PARENT campaign has CBO
+  // enabled; set `parentUsesCampaignBudgetOptimization` so we never send caps to a non-CBO
+  // ad set (Meta would reject them). Caps are in major units (pounds) and converted to
+  // minor units (pence) on send. When either bound is absent, no cap is emitted.
+  parentUsesCampaignBudgetOptimization?: boolean;
+  minBudget?: number;
+  maxBudget?: number;
 }
 
 export interface CreateAdCreativeParams {
@@ -190,7 +208,18 @@ async function metaGet<T>(
 export async function createMetaCampaign(
   params: CreateCampaignParams,
 ): Promise<{ id: string }> {
-  const { accessToken, adAccountId, name, objective, specialAdCategory, status } = params;
+  const {
+    accessToken,
+    adAccountId,
+    name,
+    objective,
+    specialAdCategory,
+    status,
+    useCampaignBudgetOptimization,
+    dailyBudget,
+    lifetimeBudget,
+    endTime,
+  } = params;
 
   const specialAdCategories = specialAdCategory === 'NONE' ? [] : [specialAdCategory];
   const body: Record<string, unknown> = {
@@ -200,6 +229,27 @@ export async function createMetaCampaign(
     special_ad_categories: specialAdCategories,
     is_adset_budget_sharing_enabled: false,
   };
+
+  // CBO: only when explicitly requested do we move the budget onto the campaign and let
+  // Meta share it across ad sets. Without the flag, behaviour is unchanged (no campaign
+  // budget; ad sets carry their own). Budgets are minor units (pence).
+  if (useCampaignBudgetOptimization) {
+    body.is_adset_budget_sharing_enabled = true;
+    if (lifetimeBudget !== undefined) {
+      // Meta requires a campaign end_time whenever a lifetime budget is set; fail fast
+      // (mirroring createMetaAdSet) rather than sending a request Meta will reject.
+      if (!endTime) {
+        throw new MetaApiError(
+          'Lifetime budget campaigns require an end date. Set an end date on the campaign before publishing.',
+          100,
+        );
+      }
+      body.lifetime_budget = Math.round(lifetimeBudget * 100);
+      body.end_time = endTime;
+    } else if (dailyBudget !== undefined) {
+      body.daily_budget = Math.round(dailyBudget * 100);
+    }
+  }
 
   return metaPost<{ id: string }>(
     `/${adAccountId}/campaigns`,
@@ -300,6 +350,9 @@ export async function createMetaAdSet(
     endTime,
     status,
     promotedObject,
+    parentUsesCampaignBudgetOptimization,
+    minBudget,
+    maxBudget,
   } = params;
 
   const body: Record<string, unknown> = {
@@ -331,6 +384,18 @@ export async function createMetaAdSet(
   }
   if (promotedObject !== undefined) {
     body.promoted_object = promotedObject;
+  }
+
+  // Hybrid CBO spend caps: only valid when the parent campaign owns the budget (CBO). For
+  // non-CBO ad sets Meta rejects min_budget/max_budget, so we ignore any caps passed in that
+  // case. Each bound is sent independently in minor units (pence).
+  if (parentUsesCampaignBudgetOptimization) {
+    if (minBudget !== undefined) {
+      body.min_budget = Math.round(minBudget * 100);
+    }
+    if (maxBudget !== undefined) {
+      body.max_budget = Math.round(maxBudget * 100);
+    }
   }
 
   return metaPost<{ id: string }>(`/${adAccountId}/adsets`, accessToken, body);

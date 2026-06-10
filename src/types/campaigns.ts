@@ -11,7 +11,50 @@ export type AdStatus = 'DRAFT' | 'ACTIVE' | 'PAUSED';
 export type BudgetType = 'DAILY' | 'LIFETIME';
 export type SpecialAdCategory = 'NONE' | 'HOUSING' | 'EMPLOYMENT' | 'CREDIT' | 'ISSUES_ELECTIONS_POLITICS';
 export type CtaType = 'LEARN_MORE' | 'SIGN_UP' | 'GET_QUOTE' | 'BOOK_NOW' | 'CONTACT_US' | 'SUBSCRIBE';
-export type PaidCampaignKind = 'event' | 'evergreen';
+export type PaidCampaignKind = 'event' | 'evergreen' | 'food_booking';
+
+export type FoodServiceKey = 'weekday_dinner' | 'saturday_food' | 'sunday_roast';
+
+export type FoodDecisionStage =
+  | 'planning' | 'lunch_decision' | 'afternoon_commit'
+  | 'tomorrow' | 'morning_commit' | 'last_tables' | 'last_minute';
+
+export type RunDay =
+  | 'monday' | 'tuesday' | 'wednesday' | 'thursday' | 'friday' | 'saturday' | 'sunday';
+
+export interface FoodServiceHours {
+  serviceKey: FoodServiceKey;
+  enabled: boolean;
+  days: RunDay[];
+  startLocal: string;        // 'HH:MM'
+  endLocal: string;          // 'HH:MM'
+  lastOrdersLocal?: string;  // defaults to endLocal − 30min
+}
+
+export interface FoodAdWindow {
+  serviceKey: FoodServiceKey;
+  decisionStage: FoodDecisionStage;
+  runDay: RunDay;
+  runDate: string;                // 'YYYY-MM-DD' London-local
+  startsAtLocal: string;          // 'HH:MM'
+  endsAtLocal: string;            // 'HH:MM'
+  serviceDate: string;            // 'YYYY-MM-DD'
+  serviceDateOffsetDays: number;  // serviceDate − runDate, in days
+  budgetWeight: number;
+  copyIntent: string;
+  windowKey: string;              // stable utm_content key, e.g. 'sun_roast_morning'
+  enabled: boolean;
+}
+
+export interface FoodBookingBrief {
+  services: FoodServiceHours[];
+  bookingUrl: string;
+  serviceBookingUrls?: Partial<Record<FoodServiceKey, string>>;
+  foodHooks: string[];
+  weeks: 1 | 2 | 4;
+  dayWeighting: 'even' | 'boost_quiet' | 'manual';
+  manualDayWeights?: Partial<Record<RunDay, number>>;
+}
 export type CampaignPhaseType = 'run-up' | 'day-before' | 'day-of' | 'evergreen' | 'booking-push' | 'closeout';
 export type PaidExecutionMode = 'single_push' | 'two_phase' | 'three_phase';
 export type GeoRadiusMiles = 1 | 3 | 5 | 10;
@@ -210,6 +253,10 @@ export interface AdSet {
   adsetMediaAssetId: string | null;
   adsetImageUrl: string | null;
   adsStopTime: string | null;
+  adsStartTime?: string | null;
+  serviceKey?: FoodServiceKey | null;
+  decisionStage?: FoodDecisionStage | null;
+  budgetWeight?: number | null;
   metaStatus: string | null;
   performance: CampaignPerformanceMetrics;
   lastSyncedAt: Date | null;

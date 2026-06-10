@@ -3,6 +3,10 @@ import {
   type EventBookingInsights,
 } from '@/lib/campaigns/event-booking-insights';
 import {
+  EMPTY_FOOD_BOOKING_INSIGHTS,
+  type FoodBookingInsights,
+} from '@/lib/campaigns/food-booking-insights';
+import {
   sortAdSetsByStartDate,
   sortAdsByPerformance,
 } from '@/lib/campaigns/performance-matrix';
@@ -74,6 +78,7 @@ export interface CampaignDashboardModel {
   bestAds: CampaignDashboardAdSummary[];
   optimisationActions: OptimisationActionSummary[];
   eventBookingInsights: EventBookingInsights;
+  foodBookingInsights: FoodBookingInsights;
 }
 
 const EMPTY_PERFORMANCE: CampaignPerformanceMetrics = {
@@ -101,6 +106,7 @@ export function buildCampaignDashboard(
     now?: Date;
     firstPartyBookingCounts?: Map<string, number>;
     firstPartyBookingStats?: Map<string, { bookings: number; value: number }>;
+    foodBookingInsights?: FoodBookingInsights;
   } = {},
 ): CampaignDashboardModel {
   const now = options.now ?? new Date();
@@ -145,6 +151,7 @@ export function buildCampaignDashboard(
     bestAds,
     optimisationActions: openOptimisationActions,
     eventBookingInsights,
+    foodBookingInsights: options.foodBookingInsights ?? EMPTY_FOOD_BOOKING_INSIGHTS,
   };
 }
 

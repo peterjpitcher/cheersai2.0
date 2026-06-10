@@ -18,6 +18,10 @@
       "schedule": "30 6 * * *"
     },
     {
+      "path": "/api/cron/materialise-food-windows",
+      "schedule": "0 1 * * 0"
+    },
+    {
       "path": "/api/cron/sync-gbp-reviews",
       "schedule": "0 * * * *"
     },
