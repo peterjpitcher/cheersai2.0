@@ -118,12 +118,17 @@ const mockSupabase = {
   },
 };
 
+// Service overrides become paid ad destinations at publish, so (SEC-1) they must pass
+// the paid-destination guard: a trusted Anchor host carrying campaign attribution.
+const SUNDAY_ROAST_SERVICE_URL =
+  'https://www.the-anchor.pub/book-table?service=sunday-roast&utm_campaign=sunday-roast-bookings';
+
 function brief(over: Partial<FoodBookingBrief> = {}): FoodBookingBrief {
   return {
     services: [DEFAULT_FOOD_SERVICE_HOURS.sunday_roast],
     bookingUrl: 'https://www.the-anchor.pub/book-table',
     serviceBookingUrls: {
-      sunday_roast: 'https://www.the-anchor.pub/book-table?service=sunday-roast',
+      sunday_roast: SUNDAY_ROAST_SERVICE_URL,
     },
     foodHooks: ['Hand-carved roast', 'Cauliflower cheese'],
     weeks: 1,
@@ -316,7 +321,7 @@ describe('createFoodBookingCampaign', () => {
     const snapshot = campaignInsert!.payload.source_snapshot as Record<string, unknown>;
     expect(snapshot.bookingUrl).toBe(brief().bookingUrl);
     expect(snapshot.serviceBookingUrls).toMatchObject({
-      sunday_roast: 'https://www.the-anchor.pub/book-table?service=sunday-roast',
+      sunday_roast: SUNDAY_ROAST_SERVICE_URL,
     });
     expect(snapshot.bookingConversionOptimised).toBe(true);
     expect(Array.isArray(snapshot.foodSchedule)).toBe(true);
@@ -369,6 +374,62 @@ describe('createFoodBookingCampaign', () => {
 
     expect(result).toHaveProperty('error');
     expect(generateCampaign).not.toHaveBeenCalled();
+  });
+
+  it('SEC-1: rejects a service booking URL on an untrusted host, naming the service', async () => {
+    queuePrerequisites();
+    mockGenerateEchoesPhases();
+
+    const result = await createFoodBookingCampaign(baseInput({
+      brief: brief({
+        serviceBookingUrls: {
+          // Valid URL with attribution params, but the host is not a trusted paid destination.
+          sunday_roast: 'https://evil.example.org/book?utm_campaign=sunday-roast',
+        },
+      }),
+    }));
+
+    expect(result).toHaveProperty('error');
+    expect((result as { error: string }).error).toMatch(/sunday roast/i);
+    expect(generateCampaign).not.toHaveBeenCalled();
+    expect(insertCalls).toHaveLength(0);
+  });
+
+  it('SEC-1: rejects an Anchor-host service booking URL that carries no campaign attribution', async () => {
+    queuePrerequisites();
+    mockGenerateEchoesPhases();
+
+    const result = await createFoodBookingCampaign(baseInput({
+      brief: brief({
+        serviceBookingUrls: {
+          sunday_roast: 'https://www.the-anchor.pub/book-table?service=sunday-roast',
+        },
+      }),
+    }));
+
+    expect(result).toHaveProperty('error');
+    expect((result as { error: string }).error).toMatch(/sunday roast/i);
+    expect(generateCampaign).not.toHaveBeenCalled();
+  });
+
+  it('SEC-1: accepts a trusted short-link service booking URL', async () => {
+    queuePrerequisites();
+    mockGenerateEchoesPhases();
+
+    const result = await createFoodBookingCampaign(baseInput({
+      brief: brief({
+        serviceBookingUrls: {
+          sunday_roast: 'https://vip-club.uk/roast',
+        },
+      }),
+    }));
+
+    expect(result).toHaveProperty('campaignId', 'campaign-1');
+    const campaignInsert = insertCalls.find((c) => c.table === 'meta_campaigns');
+    const snapshot = campaignInsert!.payload.source_snapshot as Record<string, unknown>;
+    expect(snapshot.serviceBookingUrls).toMatchObject({
+      sunday_roast: 'https://vip-club.uk/roast',
+    });
   });
 
   it('switches a default-off rescue window ON via windowOverrides', async () => {

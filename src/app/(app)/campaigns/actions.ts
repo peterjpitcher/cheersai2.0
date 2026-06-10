@@ -1027,6 +1027,12 @@ function slugFoodUtmPart(value: string) {
     .slice(0, 48);
 }
 
+const FOOD_SERVICE_URL_LABELS: Record<FoodServiceKey, string> = {
+  weekday_dinner: 'Weekday dinner',
+  saturday_food: 'Saturday food',
+  sunday_roast: 'Sunday roast',
+};
+
 function normaliseServiceBookingUrls(
   urls: FoodBookingBrief['serviceBookingUrls'],
   defaultBookingUrl: string,
@@ -1037,7 +1043,19 @@ function normaliseServiceBookingUrls(
   for (const serviceKey of ['weekday_dinner', 'saturday_food', 'sunday_roast'] as FoodServiceKey[]) {
     const value = urls[serviceKey]?.trim();
     if (!value || value === defaultBookingUrl) continue;
-    output[serviceKey] = validateDestinationUrl(value);
+    const validated = validateDestinationUrl(value);
+
+    // SEC-1: per-service URLs replace the campaign destination for their windows at
+    // publish, so they must pass the same paid-destination guard as the campaign URL —
+    // a trusted short link or an Anchor URL carrying campaign attribution.
+    try {
+      validatePaidDestinationAttribution(validated);
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : 'Invalid booking URL.';
+      throw new Error(`${FOOD_SERVICE_URL_LABELS[serviceKey]} booking URL: ${detail}`);
+    }
+
+    output[serviceKey] = validated;
   }
 
   return output;
