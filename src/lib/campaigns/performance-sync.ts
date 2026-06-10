@@ -2,6 +2,7 @@ import { DateTime } from 'luxon';
 
 import { fetchMetaObjectInsights, type CampaignInsights } from '@/lib/meta/marketing';
 import { createServiceSupabaseClient } from '@/lib/supabase/service';
+import { isSchemaMissingErrorWithWarning } from '@/lib/supabase/errors';
 import { DEFAULT_TIMEZONE } from '@/lib/constants';
 
 type SupabaseClientLike = ReturnType<typeof createServiceSupabaseClient>;
@@ -92,6 +93,9 @@ export async function syncMetaCampaignPerformance(
 
   let adSetsSynced = 0;
   let adsSynced = 0;
+  // WF-2: the history table is advisory (fatigue detection); one failed append must
+  // never abort the rest of the nightly sync. Log the first failure only.
+  let historyAppendFailureLogged = false;
   const adSets = Array.isArray(campaign.ad_sets) ? campaign.ad_sets : [];
 
   for (const adSet of adSets) {
@@ -106,7 +110,13 @@ export async function syncMetaCampaignPerformance(
       if (!ad.meta_ad_id) continue;
       const adInsights = await fetchMetaObjectInsights(ad.meta_ad_id, adAccount.access_token, dateRange);
       await updatePerformanceMetrics(supabase, 'ads', ad.id, adInsights, syncedAt);
-      await appendAdMetricsHistory(supabase, campaign.account_id, ad.id, adInsights, capturedOn);
+      const historyError = await appendAdMetricsHistory(supabase, campaign.account_id, ad.id, adInsights, capturedOn);
+      if (historyError && !historyAppendFailureLogged) {
+        historyAppendFailureLogged = true;
+        if (!isSchemaMissingErrorWithWarning(historyError, 'performance-sync ad_metrics_history append')) {
+          console.error('[performance-sync] failed to append ad metrics history; sync continues', historyError);
+        }
+      }
       adsSynced++;
     }
   }
@@ -140,6 +150,9 @@ async function updatePerformanceMetrics(
  * `ad_metrics_history` time-series that powers creative-fatigue detection.
  * Re-running a sync on the same London day overwrites that day's row rather
  * than duplicating it.
+ *
+ * Best-effort (WF-2): returns the error instead of throwing so the caller can
+ * log once and keep syncing the remaining ads.
  */
 async function appendAdMetricsHistory(
   supabase: SupabaseClientLike,
@@ -147,25 +160,27 @@ async function appendAdMetricsHistory(
   adId: string,
   insights: CampaignInsights,
   capturedOn: string,
-) {
-  const { error } = await supabase
-    .from('ad_metrics_history')
-    .upsert(
-      {
-        account_id: accountId,
-        ad_id: adId,
-        captured_on: capturedOn,
-        impressions: insights.impressions,
-        clicks: insights.clicks,
-        ctr: insights.ctr,
-        frequency: insights.reach > 0 ? insights.impressions / insights.reach : null,
-        spend: insights.spend,
-      },
-      { onConflict: 'ad_id,captured_on' },
-    );
+): Promise<unknown | null> {
+  try {
+    const { error } = await supabase
+      .from('ad_metrics_history')
+      .upsert(
+        {
+          account_id: accountId,
+          ad_id: adId,
+          captured_on: capturedOn,
+          impressions: insights.impressions,
+          clicks: insights.clicks,
+          ctr: insights.ctr,
+          frequency: insights.reach > 0 ? insights.impressions / insights.reach : null,
+          spend: insights.spend,
+        },
+        { onConflict: 'ad_id,captured_on' },
+      );
 
-  if (error) {
-    throw new Error(error.message);
+    return error ?? null;
+  } catch (error) {
+    return error;
   }
 }
 

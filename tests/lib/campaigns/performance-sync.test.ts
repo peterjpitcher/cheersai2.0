@@ -26,11 +26,15 @@ function updateBuilder(table: string, updates: Array<{ table: string; payload: R
   };
 }
 
-function upsertBuilder(table: string, upserts: Array<{ table: string; payload: Record<string, unknown> }>) {
+function upsertBuilder(
+  table: string,
+  upserts: Array<{ table: string; payload: Record<string, unknown> }>,
+  error: { message: string; code?: string } | null = null,
+) {
   return {
     upsert: vi.fn(async (payload: Record<string, unknown>) => {
       upserts.push({ table, payload });
-      return { error: null };
+      return { error };
     }),
   };
 }
@@ -160,6 +164,65 @@ describe('syncMetaCampaignPerformance', () => {
 
     expect(upserts).toHaveLength(1);
     expect(upserts[0].payload.frequency).toBeNull();
+  });
+
+  it('WF-2: keeps syncing the remaining ads when a history append fails', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const updates: Array<{ table: string; payload: Record<string, unknown> }> = [];
+    const upserts: Array<{ table: string; payload: Record<string, unknown> }> = [];
+    const queues: Record<string, unknown[]> = {
+      meta_campaigns: [
+        selectBuilder({
+          id: 'campaign-1',
+          account_id: 'account-1',
+          meta_campaign_id: 'meta-campaign-1',
+          start_date: '2026-04-01',
+          end_date: '2026-04-10',
+          ad_sets: [{
+            id: 'adset-1',
+            meta_adset_id: 'meta-adset-1',
+            ads: [
+              { id: 'ad-1', meta_ad_id: 'meta-ad-1' },
+              { id: 'ad-2', meta_ad_id: 'meta-ad-2' },
+            ],
+          }],
+        }),
+        updateBuilder('meta_campaigns', updates),
+      ],
+      meta_ad_accounts: [
+        selectBuilder({ access_token: 'token', token_expires_at: '2999-01-01T00:00:00.000Z' }),
+      ],
+      ad_sets: [updateBuilder('ad_sets', updates)],
+      ads: [updateBuilder('ads', updates), updateBuilder('ads', updates)],
+      ad_metrics_history: [
+        // First ad's history append fails (e.g. table missing or transient error)…
+        upsertBuilder('ad_metrics_history', upserts, { message: 'history append boom' }),
+        // …the second ad's append still runs and succeeds.
+        upsertBuilder('ad_metrics_history', upserts),
+      ],
+    };
+    const supabase = { from: vi.fn((table: string) => queues[table]?.shift()) };
+
+    const insights = { spend: 4, impressions: 400, reach: 300, clicks: 20, ctr: 5, cpc: 0.2, conversions: 1, costPerConversion: 4, conversionRate: 5, status: 'ACTIVE' };
+    vi.mocked(fetchMetaObjectInsights).mockResolvedValue(insights);
+
+    try {
+      // Must not throw: the history table is advisory, the nightly sync is not.
+      const result = await syncMetaCampaignPerformance('campaign-1', {
+        accountId: 'account-1',
+        supabase: supabase as never,
+      });
+
+      expect(result).toEqual({ campaignSynced: true, adSetsSynced: 1, adsSynced: 2 });
+      // Both ads still had their snapshot metrics updated…
+      expect(updates.filter((update) => update.table === 'ads')).toHaveLength(2);
+      // …and both history appends were attempted (the second succeeded).
+      expect(upserts).toHaveLength(2);
+      // The failure is logged once, not once per ad.
+      expect(consoleError).toHaveBeenCalledTimes(1);
+    } finally {
+      consoleError.mockRestore();
+    }
   });
 
   it('blocks unpublished campaigns', async () => {
