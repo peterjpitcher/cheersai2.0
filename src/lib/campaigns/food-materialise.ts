@@ -185,10 +185,15 @@ interface MaterialiseAdSetRow {
 }
 
 export interface MaterialiseResult {
-  /** Number of ad sets created on Meta this run (0 when nothing new / nothing to do). */
+  /** Number of ad sets fully created AND activated this run (0 when nothing new to do). */
   created: number;
   /** `service_date`s that were materialised this run (for logging). */
   serviceDates: string[];
+  /**
+   * F5: windowKeys whose ad set was created but left PAUSED (local + Meta) because the
+   * template had no usable media — a live empty ad set must never be activated.
+   */
+  skippedNoMedia: string[];
 }
 
 export interface MaterialiseOptions {
@@ -266,7 +271,7 @@ export async function materialiseFoodWindowsForCampaign(
   options: MaterialiseOptions,
 ): Promise<MaterialiseResult> {
   const supabase = options.supabase ?? createServiceSupabaseClient();
-  const empty: MaterialiseResult = { created: 0, serviceDates: [] };
+  const empty: MaterialiseResult = { created: 0, serviceDates: [], skippedNoMedia: [] };
 
   const { data: campaign, error: campaignError } = await supabase
     .from('meta_campaigns')
@@ -361,6 +366,7 @@ export async function materialiseFoodWindowsForCampaign(
   if (spendCaps.error) throw new Error(spendCaps.error);
 
   const createdServiceDates: string[] = [];
+  const skippedNoMedia: string[] = [];
   let created = 0;
 
   for (const window of newWindows) {
@@ -377,7 +383,7 @@ export async function materialiseFoodWindowsForCampaign(
 
     // Clone only from COMPLETE ad sets — an incomplete remnant has no ads to copy.
     const template = pickTemplateAdSet(completeAdSets, window);
-    const metaAdSetId = await materialiseSingleWindow({
+    const outcome = await materialiseSingleWindow({
       supabase,
       campaign,
       window,
@@ -386,13 +392,15 @@ export async function materialiseFoodWindowsForCampaign(
       promotedObject,
       cap: spendCaps.byWindowKey.get(window.windowKey),
     });
-    if (metaAdSetId) {
+    if (outcome.status === 'created') {
       created += 1;
       createdServiceDates.push(window.serviceDate);
+    } else if (outcome.status === 'skipped_no_media') {
+      skippedNoMedia.push(window.windowKey);
     }
   }
 
-  if (created > 0) {
+  if (created > 0 || skippedNoMedia.length > 0) {
     await logPublishAuditEvent({
       accountId: campaign.account_id,
       operationType: 'state_transition',
@@ -403,11 +411,12 @@ export async function materialiseFoodWindowsForCampaign(
         isoWeek: isoWeekLabel(options.referenceIso),
         created,
         serviceDates: createdServiceDates,
+        skippedNoMedia,
       },
     });
   }
 
-  return { created, serviceDates: createdServiceDates };
+  return { created, serviceDates: createdServiceDates, skippedNoMedia };
 }
 
 // ---------------------------------------------------------------------------
@@ -624,13 +633,24 @@ interface MaterialiseSingleWindowArgs {
   cap?: { minBudget: number; maxBudget: number };
 }
 
+/** What happened to one window this run. */
+type WindowOutcome =
+  | { status: 'created'; metaAdSetId: string }
+  | { status: 'skipped_no_media' }
+  | { status: 'skipped_no_template' };
+
 /**
- * Create one ad set (+ its ads) on Meta for a single new window and persist the rows. Returns
- * the created Meta ad-set id, or null if there was nothing to create (no template to clone).
+ * Create one ad set (+ its ads) on Meta for a single new window and persist the rows.
+ *
+ * F3: every DB write that records a Meta object id (or flips status) is error-checked — a
+ * silent write failure would orphan live Meta objects from the local state. Throwing makes the
+ * worker 500 so QStash retries; the F2 completeness rule makes that retry safe.
+ *
+ * F5: the ad set is created PAUSED and only activated once ≥1 ad was created under it.
  */
-async function materialiseSingleWindow(args: MaterialiseSingleWindowArgs): Promise<string | null> {
+async function materialiseSingleWindow(args: MaterialiseSingleWindowArgs): Promise<WindowOutcome> {
   const { supabase, campaign, window, template, credentials, promotedObject, cap } = args;
-  if (!template) return null;
+  if (!template) return { status: 'skipped_no_template' };
 
   const adSetName = `${campaign.name} — ${window.windowKey} — ${window.runDate}`;
 
@@ -681,14 +701,14 @@ async function materialiseSingleWindow(args: MaterialiseSingleWindowArgs): Promi
     maxBudget: cap?.maxBudget,
   });
 
-  await supabase
+  // Persist the Meta id immediately so a later failure leaves a traceable row; the status
+  // stays DRAFT until the window is complete (F5 flips it at the end). F3: checked — losing
+  // this write would orphan the Meta ad set invisibly.
+  const { error: metaIdError } = await supabase
     .from('ad_sets')
-    .update({
-      meta_adset_id: metaAdSet.id,
-      status: 'ACTIVE',
-      meta_status: 'ACTIVE',
-    })
+    .update({ meta_adset_id: metaAdSet.id })
     .eq('id', adSetRow.id);
+  if (metaIdError) throw new Error(metaIdError.message);
 
   const metaAdIds: string[] = [];
 
@@ -763,7 +783,12 @@ async function materialiseSingleWindow(args: MaterialiseSingleWindowArgs): Promi
       callToActionType: 'BOOK_NOW',
     });
 
-    await supabase.from('ads').update({ meta_creative_id: creative.id }).eq('id', adRow.id);
+    // F3: checked — the creative id ties the local ad to its Meta creative.
+    const { error: creativeUpdateError } = await supabase
+      .from('ads')
+      .update({ meta_creative_id: creative.id })
+      .eq('id', adRow.id);
+    if (creativeUpdateError) throw new Error(creativeUpdateError.message);
 
     const metaAd = await createMetaAd({
       accessToken: credentials.accessToken,
@@ -774,19 +799,46 @@ async function materialiseSingleWindow(args: MaterialiseSingleWindowArgs): Promi
       status: 'ACTIVE',
     });
 
-    await supabase
+    // F3: checked — without meta_ad_id the ad row is incomplete and untraceable.
+    const { error: adUpdateError } = await supabase
       .from('ads')
       .update({ meta_ad_id: metaAd.id, status: 'ACTIVE', meta_status: 'ACTIVE' })
       .eq('id', adRow.id);
+    if (adUpdateError) throw new Error(adUpdateError.message);
 
     metaAdIds.push(metaAd.id);
   }
 
-  // 4. Activate the ads then the ad set (created PAUSED while the tree was incomplete).
+  // F5: never activate an ad set that received no ads (no usable media on the template) — a
+  // live empty ad set would burn budget delivering nothing. Leave it PAUSED on Meta (it was
+  // created PAUSED) and record the same state locally.
+  if (metaAdIds.length === 0) {
+    const { error: pauseError } = await supabase
+      .from('ad_sets')
+      .update({ status: 'PAUSED', meta_status: 'PAUSED' })
+      .eq('id', adSetRow.id);
+    if (pauseError) throw new Error(pauseError.message);
+    logger.warn('No usable media for window; ad set left PAUSED', {
+      campaignId: campaign.id,
+      adSetId: adSetRow.id,
+      windowKey: window.windowKey,
+      runDate: window.runDate,
+    });
+    return { status: 'skipped_no_media' };
+  }
+
+  // 4. Activate the ads then the ad set (created PAUSED while the tree was incomplete), then
+  //    record the final state locally (F3: checked).
   for (const metaAdId of metaAdIds) {
     await setMetaObjectStatus(metaAdId, credentials.accessToken, 'ACTIVE');
   }
   await setMetaObjectStatus(metaAdSet.id, credentials.accessToken, 'ACTIVE');
 
-  return metaAdSet.id;
+  const { error: activateError } = await supabase
+    .from('ad_sets')
+    .update({ status: 'ACTIVE', meta_status: 'ACTIVE' })
+    .eq('id', adSetRow.id);
+  if (activateError) throw new Error(activateError.message);
+
+  return { status: 'created', metaAdSetId: metaAdSet.id };
 }

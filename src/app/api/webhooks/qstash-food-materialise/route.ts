@@ -74,6 +74,7 @@ export async function POST(request: Request): Promise<NextResponse> {
         campaignId,
         created: result.created,
         serviceDates: result.serviceDates,
+        skippedNoMedia: result.skippedNoMedia,
         durationMs,
       });
       return NextResponse.json({ created: result.created, serviceDates: result.serviceDates });

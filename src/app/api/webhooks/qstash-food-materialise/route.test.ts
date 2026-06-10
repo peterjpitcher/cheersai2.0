@@ -94,6 +94,7 @@ describe('qstash-food-materialise worker route', () => {
     vi.mocked(materialiseFoodWindowsForCampaign).mockResolvedValue({
       created: 4,
       serviceDates: ['2026-06-28'],
+      skippedNoMedia: [],
     });
 
     const res = await POST(makeRequest({ campaignId: 'c-1', referenceIso: REFERENCE_ISO }));
@@ -112,7 +113,11 @@ describe('qstash-food-materialise worker route', () => {
   it('is idempotent: a re-delivered message creates nothing and skips cache revalidation', async () => {
     vi.mocked(verifyQStashSignature).mockResolvedValue(true);
     // Helper enforces idempotency internally; the worker reports created: 0 and does not bust caches.
-    vi.mocked(materialiseFoodWindowsForCampaign).mockResolvedValue({ created: 0, serviceDates: [] });
+    vi.mocked(materialiseFoodWindowsForCampaign).mockResolvedValue({
+      created: 0,
+      serviceDates: [],
+      skippedNoMedia: [],
+    });
 
     const res = await POST(makeRequest({ campaignId: 'c-1', referenceIso: REFERENCE_ISO }));
     const body = await res.json();

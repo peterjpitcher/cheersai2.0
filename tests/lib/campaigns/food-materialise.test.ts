@@ -580,6 +580,51 @@ describe('materialiseFoodWindowsForCampaign', () => {
     });
   });
 
+  describe('F3 silent DB errors after Meta calls', () => {
+    it.each([
+      ['adSetMetaIdUpdate'],
+      ['adCreativeUpdate'],
+      ['adMetaIdUpdate'],
+      ['adSetActivate'],
+    ] as const)('throws when the %s write fails, so the worker 500s and QStash retries', async (failOn) => {
+      const fake = makeFakeSupabase({ campaign: campaignRow(), adSetStore: seededAdSets(), failOn });
+      vi.mocked(createServiceSupabaseClient).mockReturnValue(fake as never);
+
+      await expect(
+        materialiseFoodWindowsForCampaign({ campaignId: 'campaign-123', referenceIso: REFERENCE_ISO }),
+      ).rejects.toThrow(/injected/);
+    });
+  });
+
+  it('F5: leaves an ad set PAUSED (never activated) when the template has no usable media', async () => {
+    // No ad-level asset and no ad-set shared asset: every cloned ad is skipped.
+    const store = seededAdSets().map((row) => ({
+      ...row,
+      adset_media_asset_id: null,
+      ads: row.ads.map((ad) => ({ ...ad, media_asset_id: null })),
+    }));
+    const fake = makeFakeSupabase({ campaign: campaignRow(), adSetStore: store });
+    vi.mocked(createServiceSupabaseClient).mockReturnValue(fake as never);
+
+    const result = await materialiseFoodWindowsForCampaign({ campaignId: 'campaign-123', referenceIso: REFERENCE_ISO });
+
+    // Nothing activated, everything reported: 4 windows, all skipped for missing media.
+    expect(result.created).toBe(0);
+    expect(result.skippedNoMedia).toHaveLength(4);
+    expect(result.skippedNoMedia).toContain('sunday_roast_planning');
+    expect(marketing.createMetaAd).not.toHaveBeenCalled();
+    // The ad sets were created PAUSED on Meta and never flipped ACTIVE.
+    expect(marketing.setMetaObjectStatus).not.toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      'ACTIVE',
+    );
+    // Local rows mirror the paused state.
+    const newRows = store.filter((row) => row.id.startsWith('new-adset-'));
+    expect(newRows).toHaveLength(4);
+    expect(newRows.every((row) => row.status === 'PAUSED' && row.meta_status === 'PAUSED')).toBe(true);
+  });
+
   it('F6: skips a target week whose rows lie far beyond the old reconstruction horizon', async () => {
     // The campaign anchor is 2026-06-09 with a 2-week brief. By late August the rolling
     // campaign has rows ~14 weeks past the anchor — beyond the old min(8, weeks+4)-week
