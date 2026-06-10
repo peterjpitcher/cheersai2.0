@@ -300,7 +300,9 @@ function serviceKeyFromFoodIntent(value: string | null | undefined): FoodService
   if (normalised === 'sunday_roast') return 'sunday_roast';
   if (normalised.includes('sunday') || normalised.includes('roast')) return 'sunday_roast';
   if (normalised.includes('saturday')) return 'saturday_food';
-  if (normalised.includes('weekday') || normalised.includes('dinner')) return 'weekday_dinner';
+  // A bare "dinner" with no day marker is NOT assumed to be weekday — guessing here
+  // silently distorts weekday reporting; unattributed is visible and honest instead.
+  if (normalised.includes('weekday')) return 'weekday_dinner';
   return null;
 }
 

@@ -266,6 +266,26 @@ describe('food booking insights', () => {
     ]);
   });
 
+  it('CDX-2: does not guess weekday_dinner from a bare "dinner" intent without a day marker', () => {
+    const insights = buildFoodBookingInsights(
+      [
+        row({ booking_id: 'bare-dinner', food_intent: 'dinner', value: 25 }),
+        row({ booking_id: 'marked-weekday', food_intent: 'weekday dinner special', value: 30 }),
+      ],
+      [],
+      new Date('2026-06-15T12:00:00.000Z'),
+    );
+
+    expect(insights.topServices90d).toContainEqual(expect.objectContaining({
+      key: 'unattributed',
+      bookings: 1,
+    }));
+    expect(insights.topServices90d).toContainEqual(expect.objectContaining({
+      key: 'weekday_dinner',
+      bookings: 1,
+    }));
+  });
+
   it('separates 30-day from 90-day totals', () => {
     const insights = buildFoodBookingInsights(
       [
