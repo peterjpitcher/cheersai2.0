@@ -82,6 +82,7 @@ async function handle(request: Request): Promise<NextResponse> {
 
   let dispatched = 0;
   const failed: string[] = [];
+  let firstFailureMessage: string | null = null;
 
   for (const campaign of rows) {
     if (!campaign.id) continue;
@@ -96,13 +97,27 @@ async function handle(request: Request): Promise<NextResponse> {
       });
       dispatched += 1;
     } catch (err) {
+      const error = err instanceof Error ? err : new Error(String(err));
       failed.push(campaign.id);
-      logger.error(
-        'Failed to enqueue materialisation job',
-        err instanceof Error ? err : new Error(String(err)),
-        { campaignId: campaign.id },
-      );
+      firstFailureMessage ??= error.message;
+      logger.error('Failed to enqueue materialisation job', error, { campaignId: campaign.id });
     }
+  }
+
+  // F8: when EVERY dispatch failed the whole run achieved nothing — surface it as a 500 so
+  // monitoring fires, instead of a 200 that silently swallows a total QStash outage. Partial
+  // failure stays 200 with counts: the failed campaigns are already logged above, and the
+  // worker side retries independently.
+  if (dispatched === 0 && failed.length > 0) {
+    logger.error(
+      'All materialisation dispatches failed',
+      new Error(firstFailureMessage ?? 'Unknown dispatch failure'),
+      { isoWeek, failed: failed.length },
+    );
+    return NextResponse.json(
+      { error: firstFailureMessage ?? 'All dispatches failed', dispatched, failed: failed.length, isoWeek },
+      { status: 500 },
+    );
   }
 
   logger.info('Materialisation cron complete', { isoWeek, dispatched, failed: failed.length });

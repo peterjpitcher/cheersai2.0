@@ -153,8 +153,27 @@ describe('materialise-food-windows cron route', () => {
       const res = await GET(makeRequest({ 'x-cron-secret': 'test-secret' }));
       const body = await res.json();
 
+      // F8: partial failure stays 200 with counts — only TOTAL failure escalates.
+      expect(res.status).toBe(200);
       expect(body.dispatched).toBe(1);
       expect(body.failed).toBe(1);
+    });
+
+    it('F8: returns 500 when every dispatch fails so the outage is not swallowed', async () => {
+      featureFlags.foodAutoMaterialise = true;
+      setupCampaigns([
+        { id: 'c-1', account_id: 'a-1' },
+        { id: 'c-2', account_id: 'a-2' },
+      ]);
+      mockPublishJSON.mockRejectedValue(new Error('QStash unavailable'));
+
+      const res = await GET(makeRequest({ 'x-cron-secret': 'test-secret' }));
+      const body = await res.json();
+
+      expect(res.status).toBe(500);
+      expect(body.dispatched).toBe(0);
+      expect(body.failed).toBe(2);
+      expect(body.error).toBeTruthy();
     });
 
     it('returns 500 when the campaign query errors', async () => {

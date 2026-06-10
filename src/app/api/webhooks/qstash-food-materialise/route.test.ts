@@ -24,9 +24,20 @@ vi.mock('@/lib/logging', () => ({
   createLogger: vi.fn(() => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() })),
 }));
 
+// Mutable featureFlags so the F1 kill-switch test can flip FOOD_AUTO_MATERIALISE_ENABLED off.
+// Defaults ON here (beforeEach) so the rest of the suite exercises the normal path.
+vi.mock('@/env', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/env')>();
+  return {
+    ...actual,
+    featureFlags: { ...actual.featureFlags, foodAutoMaterialise: true },
+  };
+});
+
 import { verifyQStashSignature } from '@/lib/qstash/client';
 import { materialiseFoodWindowsForCampaign } from '@/lib/campaigns/food-materialise';
 import { revalidatePath } from 'next/cache';
+import { featureFlags } from '@/env';
 import { POST } from './route';
 
 const REFERENCE_ISO = '2026-06-14T01:00:00.000Z';
@@ -41,9 +52,25 @@ function makeRequest(body: unknown): Request {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  featureFlags.foodAutoMaterialise = true;
 });
 
 describe('qstash-food-materialise worker route', () => {
+  it('F1 kill switch: a signed, replayed job is skipped with 200 when the flag is off (no DB/Meta work)', async () => {
+    featureFlags.foodAutoMaterialise = false;
+    vi.mocked(verifyQStashSignature).mockResolvedValue(true);
+
+    const res = await POST(makeRequest({ campaignId: 'c-1', referenceIso: REFERENCE_ISO }));
+    const body = await res.json();
+
+    // 200 — a deliberately disabled job must NOT be retried by QStash.
+    expect(res.status).toBe(200);
+    expect(body).toEqual({ skipped: true });
+    // The kill switch halts ALL work: no materialisation (DB/Meta) and no cache busting.
+    expect(materialiseFoodWindowsForCampaign).not.toHaveBeenCalled();
+    expect(revalidatePath).not.toHaveBeenCalled();
+  });
+
   it('rejects an invalid QStash signature with 401 and does not materialise', async () => {
     vi.mocked(verifyQStashSignature).mockResolvedValue(false);
 

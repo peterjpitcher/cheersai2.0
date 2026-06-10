@@ -18,6 +18,7 @@ import { verifyQStashSignature } from '@/lib/qstash/client';
 import { materialiseFoodWindowsForCampaign } from '@/lib/campaigns/food-materialise';
 import { withCorrelationId } from '@/lib/logging/correlation';
 import { createLogger } from '@/lib/logging';
+import { featureFlags } from '@/env';
 
 export const dynamic = 'force-dynamic';
 
@@ -43,6 +44,16 @@ export async function POST(request: Request): Promise<NextResponse> {
   if (!campaignId || !referenceIso) {
     logger.warn('Missing campaignId or referenceIso in payload', { campaignId, referenceIso });
     return NextResponse.json({ error: 'Missing campaignId or referenceIso' }, { status: 400 });
+  }
+
+  // F1 kill switch: the cron gates dispatch on this flag, but a queued/replayed signed job can
+  // arrive AFTER the flag is turned off. Re-check it here so the rollback halts the worker too.
+  // 200 (not 500) — a deliberately disabled job must not be retried by QStash. No DB or Meta
+  // work happens on this path; the skip is recorded via structured logging (the payload carries
+  // no accountId, so writing an audit row would itself require the DB work this path forbids).
+  if (!featureFlags.foodAutoMaterialise) {
+    logger.warn('Skipped: FOOD_AUTO_MATERIALISE_ENABLED is off', { campaignId, referenceIso });
+    return NextResponse.json({ skipped: true });
   }
 
   return withCorrelationId(async () => {
