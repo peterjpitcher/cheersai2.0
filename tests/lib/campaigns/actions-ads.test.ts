@@ -410,9 +410,19 @@ describe("updateAdAccountConversionSettings", () => {
       update: vi.fn(() => ({ eq: updateEq })),
     });
 
+    const actionUpdateBuilder: Record<string, unknown> = {};
+    const actionQuery: Record<string, unknown> = {};
+    const contains = vi.fn(async () => ({ error: null }));
+    const actionEq = vi.fn(() => actionQuery);
+    Object.assign(actionQuery, { eq: actionEq, contains });
+    Object.assign(actionUpdateBuilder, {
+      update: vi.fn(() => actionQuery),
+    });
+
     fromQueue.push(
       { table: "meta_ad_accounts", builder: selectBuilder },
       { table: "meta_ad_accounts", builder: updateBuilder },
+      { table: "meta_optimisation_actions", builder: actionUpdateBuilder },
     );
 
     const { updateAdAccountConversionSettings } = await import(
@@ -430,6 +440,16 @@ describe("updateAdAccountConversionSettings", () => {
       conversion_event_name: "Purchase",
       conversion_optimisation_enabled: true,
       conversions_api_access_token: "capi-token-1234567890",
+    });
+    expect(actionUpdateBuilder.update).toHaveBeenCalledWith({
+      status: "skipped",
+      error: "Superseded by updated Meta CAPI configuration.",
+    });
+    expect(actionEq).toHaveBeenNthCalledWith(1, "account_id", "account-uuid-1");
+    expect(actionEq).toHaveBeenNthCalledWith(2, "status", "planned");
+    expect(actionEq).toHaveBeenNthCalledWith(3, "action_type", "tracking_issue");
+    expect(contains).toHaveBeenCalledWith("recommendation_payload", {
+      category: "missing_capi_token",
     });
     expect(fromQueue).toHaveLength(0);
   });

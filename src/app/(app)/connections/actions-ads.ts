@@ -333,10 +333,37 @@ export async function updateAdAccountConversionSettings(input: {
     return { error: updateError.message };
   }
 
+  if (capiToken) {
+    await skipSupersededCapiRecommendations(supabase, accountId);
+  }
+
   revalidatePath("/connections");
   revalidatePath("/campaigns");
 
   return { success: true };
+}
+
+async function skipSupersededCapiRecommendations(
+  supabase: ReturnType<typeof createServiceSupabaseClient>,
+  accountId: string,
+) {
+  const { error } = await supabase
+    .from("meta_optimisation_actions")
+    .update({
+      status: "skipped",
+      error: "Superseded by updated Meta CAPI configuration.",
+    })
+    .eq("account_id", accountId)
+    .eq("status", "planned")
+    .eq("action_type", "tracking_issue")
+    .contains("recommendation_payload", { category: "missing_capi_token" });
+
+  if (error) {
+    console.error("[ads] failed to skip superseded CAPI recommendations", {
+      accountId,
+      error,
+    });
+  }
 }
 
 function buildEmptyAdAccountStatus(): AdAccountSetupStatus {
