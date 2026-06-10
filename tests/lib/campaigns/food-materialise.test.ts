@@ -28,6 +28,10 @@ vi.mock('@/lib/publishing/audit', () => ({
   logPublishAuditEvent: vi.fn().mockResolvedValue(undefined),
 }));
 
+vi.mock('@/lib/logging', () => ({
+  createLogger: vi.fn(() => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() })),
+}));
+
 // Mutable featureFlags so individual tests can toggle Phase 3 food optimisation (PR9 caps).
 vi.mock('@/env', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/env')>();
@@ -45,6 +49,7 @@ import {
   selectNextWeekFoodWindows,
   materialiseFoodWindowsForCampaign,
   isoWeekLabel,
+  foodWindowOccurrenceKey,
 } from '@/lib/campaigns/food-materialise';
 import type { FoodBookingBrief } from '@/types/campaigns';
 
@@ -73,6 +78,20 @@ const SUNDAY_ROAST_BRIEF: FoodBookingBrief = {
 const CAMPAIGN_START = '2026-06-09';
 // Cron run on Sun 2026-06-14 (ISO week 24). Target = week24 start + 2 weeks → service 2026-06-28.
 const REFERENCE_ISO = '2026-06-14T01:00:00.000Z';
+
+/** Occurrence keys for the seeded publish-time ad sets (morning_commit on 06-14 + 06-21). */
+const SEEDED_KEYS = [
+  foodWindowOccurrenceKey('sunday_roast', 'morning_commit', '2026-06-14'),
+  foodWindowOccurrenceKey('sunday_roast', 'morning_commit', '2026-06-21'),
+];
+
+/** Occurrence keys for all four default-on Sunday-roast windows serving 2026-06-28. */
+const WEEK_0628_KEYS = [
+  foodWindowOccurrenceKey('sunday_roast', 'planning', '2026-06-26'),
+  foodWindowOccurrenceKey('sunday_roast', 'tomorrow', '2026-06-27'),
+  foodWindowOccurrenceKey('sunday_roast', 'morning_commit', '2026-06-28'),
+  foodWindowOccurrenceKey('sunday_roast', 'last_tables', '2026-06-28'),
+];
 
 interface FakeAdSetRecord {
   id: string;
@@ -349,7 +368,7 @@ describe('selectNextWeekFoodWindows', () => {
     const windows = selectNextWeekFoodWindows({
       brief: SUNDAY_ROAST_BRIEF,
       campaignStartDate: CAMPAIGN_START,
-      existingServiceDates: new Set(['2026-06-14', '2026-06-21']),
+      existingWindowKeys: new Set(SEEDED_KEYS),
       referenceIso: REFERENCE_ISO,
     });
     const serviceDates = [...new Set(windows.map((w) => w.serviceDate))];
@@ -362,18 +381,38 @@ describe('selectNextWeekFoodWindows', () => {
     const windows = selectNextWeekFoodWindows({
       brief: SUNDAY_ROAST_BRIEF,
       campaignStartDate: CAMPAIGN_START,
-      // 06-28 already present → same reference resolves to the same (now-filled) week.
-      existingServiceDates: new Set(['2026-06-14', '2026-06-21', '2026-06-28']),
+      // All four 06-28 windows already present → same reference resolves to the same
+      // (now-filled) week.
+      existingWindowKeys: new Set([...SEEDED_KEYS, ...WEEK_0628_KEYS]),
       referenceIso: REFERENCE_ISO,
     });
     expect(windows).toEqual([]);
+  });
+
+  it('F2: re-selects ONLY the missing windows of a partially-materialised week', () => {
+    // planning + tomorrow completed before a mid-run failure; morning_commit and
+    // last_tables must come back — and nothing else.
+    const windows = selectNextWeekFoodWindows({
+      brief: SUNDAY_ROAST_BRIEF,
+      campaignStartDate: CAMPAIGN_START,
+      existingWindowKeys: new Set([
+        ...SEEDED_KEYS,
+        foodWindowOccurrenceKey('sunday_roast', 'planning', '2026-06-26'),
+        foodWindowOccurrenceKey('sunday_roast', 'tomorrow', '2026-06-27'),
+      ]),
+      referenceIso: REFERENCE_ISO,
+    });
+    expect(windows.map((w) => w.windowKey).sort()).toEqual([
+      'sunday_roast_last_tables',
+      'sunday_roast_morning',
+    ]);
   });
 
   it('advances by one week when the cron runs a week later', () => {
     const windows = selectNextWeekFoodWindows({
       brief: SUNDAY_ROAST_BRIEF,
       campaignStartDate: CAMPAIGN_START,
-      existingServiceDates: new Set(['2026-06-14', '2026-06-21', '2026-06-28']),
+      existingWindowKeys: new Set([...SEEDED_KEYS, ...WEEK_0628_KEYS]),
       referenceIso: '2026-06-21T01:00:00.000Z',
     });
     expect([...new Set(windows.map((w) => w.serviceDate))]).toEqual(['2026-07-05']);
@@ -383,7 +422,7 @@ describe('selectNextWeekFoodWindows', () => {
     const windows = selectNextWeekFoodWindows({
       brief: SUNDAY_ROAST_BRIEF,
       campaignStartDate: CAMPAIGN_START,
-      existingServiceDates: new Set(['2026-06-14', '2026-06-21']),
+      existingWindowKeys: new Set(SEEDED_KEYS),
       referenceIso: REFERENCE_ISO,
       windowOverrides: { sunday_roast_last_tables: false },
     });
@@ -397,7 +436,7 @@ describe('selectNextWeekFoodWindows', () => {
       selectNextWeekFoodWindows({
         brief: SUNDAY_ROAST_BRIEF,
         campaignStartDate: CAMPAIGN_START,
-        existingServiceDates: new Set(),
+        existingWindowKeys: new Set(),
         referenceIso: 'not-a-date',
       }),
     ).toEqual([]);
@@ -482,6 +521,102 @@ describe('materialiseFoodWindowsForCampaign', () => {
     const second = await materialiseFoodWindowsForCampaign({ campaignId: 'campaign-123', referenceIso: REFERENCE_ISO });
     expect(second.created).toBe(0);
     expect(marketing.createMetaAdSet).not.toHaveBeenCalled();
+  });
+
+  describe('F2 partial-failure retry', () => {
+    it('completes a window whose first attempt failed after the DB insert, instead of skipping it', async () => {
+      const store = seededAdSets();
+      const fake = makeFakeSupabase({ campaign: campaignRow(), adSetStore: store });
+      vi.mocked(createServiceSupabaseClient).mockReturnValue(fake as never);
+
+      // First delivery: the very first window's Meta ad-set creation fails AFTER the local
+      // insert, stranding an incomplete row (no meta_adset_id, no ads).
+      vi.mocked(marketing.createMetaAdSet).mockRejectedValueOnce(new Error('Meta 500'));
+      await expect(
+        materialiseFoodWindowsForCampaign({ campaignId: 'campaign-123', referenceIso: REFERENCE_ISO }),
+      ).rejects.toThrow('Meta 500');
+      expect(store.some((row) => !row.meta_adset_id && row.ads.length === 0)).toBe(true);
+
+      // QStash retry (Meta healthy again): the incomplete remnant is cleaned up and the
+      // whole week completes — the broken window is NOT treated as already done.
+      const retry = await materialiseFoodWindowsForCampaign({ campaignId: 'campaign-123', referenceIso: REFERENCE_ISO });
+      expect(retry.created).toBe(4);
+      expect(retry.serviceDates.every((d) => d === '2026-06-28')).toBe(true);
+      // 2 seeds + 4 recreated windows; the remnant is gone and every row is complete.
+      expect(store).toHaveLength(6);
+      expect(store.every((row) => Boolean(row.meta_adset_id) && row.ads.length > 0)).toBe(true);
+    });
+
+    it('pauses the Meta remnant of an incomplete row (ad set created, ads never persisted) before recreating', async () => {
+      // Failure mode: meta_adset_id was persisted but no ad row ever landed — a live-ish
+      // Meta object with no local ads. The retry must pause it, delete the row, recreate.
+      const remnant: FakeAdSetRecord = {
+        id: 'broken-1',
+        meta_adset_id: 'meta-broken-1',
+        service_key: 'sunday_roast',
+        decision_stage: 'planning',
+        phase_start: '2026-06-26',
+        targeting: {},
+        placements: {},
+        optimisation_goal: 'OFFSITE_CONVERSIONS',
+        bid_strategy: 'LOWEST_COST_WITHOUT_CAP',
+        adset_media_asset_id: 'asset-1',
+        ads: [],
+      };
+      const store = [...seededAdSets(), remnant];
+      const fake = makeFakeSupabase({ campaign: campaignRow(), adSetStore: store });
+      vi.mocked(createServiceSupabaseClient).mockReturnValue(fake as never);
+
+      const result = await materialiseFoodWindowsForCampaign({ campaignId: 'campaign-123', referenceIso: REFERENCE_ISO });
+
+      // The remnant was paused on Meta (best-effort) and removed locally…
+      expect(marketing.setMetaObjectStatus).toHaveBeenCalledWith('meta-broken-1', 'token', 'PAUSED');
+      expect(store.some((row) => row.id === 'broken-1')).toBe(false);
+      // …and its window was recreated whole alongside the rest of the week.
+      expect(result.created).toBe(4);
+      expect(store).toHaveLength(6);
+      // The two complete seeded rows were left untouched (still skipped).
+      expect(store.filter((row) => row.id.startsWith('seed-'))).toHaveLength(2);
+    });
+  });
+
+  it('F6: skips a target week whose rows lie far beyond the old reconstruction horizon', async () => {
+    // The campaign anchor is 2026-06-09 with a 2-week brief. By late August the rolling
+    // campaign has rows ~14 weeks past the anchor — beyond the old min(8, weeks+4)-week
+    // reconstruction horizon, which would have failed to recognise them and double-created
+    // the week. Keys now come straight from the rows, so the week is correctly skipped.
+    const makeFarRow = (decisionStage: string, phaseStart: string, suffix: string): FakeAdSetRecord => ({
+      id: `far-${suffix}`,
+      meta_adset_id: `meta-far-${suffix}`,
+      service_key: 'sunday_roast',
+      decision_stage: decisionStage,
+      phase_start: phaseStart,
+      targeting: {},
+      placements: {},
+      optimisation_goal: 'OFFSITE_CONVERSIONS',
+      bid_strategy: 'LOWEST_COST_WITHOUT_CAP',
+      adset_media_asset_id: 'asset-1',
+      ads: [{ name: 'far ad', media_asset_id: null }],
+    });
+    // Reference Sun 2026-08-30 → target service week Mon 2026-09-07..Sun 2026-09-13.
+    const store = [
+      ...seededAdSets(),
+      makeFarRow('planning', '2026-09-11', 'planning'),
+      makeFarRow('tomorrow', '2026-09-12', 'tomorrow'),
+      makeFarRow('morning_commit', '2026-09-13', 'morning'),
+      makeFarRow('last_tables', '2026-09-13', 'last-tables'),
+    ];
+    const fake = makeFakeSupabase({ campaign: campaignRow(), adSetStore: store });
+    vi.mocked(createServiceSupabaseClient).mockReturnValue(fake as never);
+
+    const result = await materialiseFoodWindowsForCampaign({
+      campaignId: 'campaign-123',
+      referenceIso: '2026-08-30T01:00:00.000Z',
+    });
+
+    expect(result.created).toBe(0);
+    expect(marketing.createMetaAdSet).not.toHaveBeenCalled();
+    expect(store).toHaveLength(6);
   });
 
   it('forces BOOK_NOW and OFFSITE_CONVERSIONS with the pixel promoted object', async () => {

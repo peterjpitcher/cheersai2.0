@@ -16,6 +16,7 @@ import { buildConversionReadiness } from '@/lib/campaigns/conversion-readiness';
 import { featureFlags } from '@/env';
 import { MEDIA_BUCKET } from '@/lib/constants';
 import { applyAdUtmContent } from '@/lib/campaigns/ad-attribution';
+import { createLogger } from '@/lib/logging';
 import type { FoodAdWindow, FoodBookingBrief } from '@/types/campaigns';
 
 /**
@@ -26,9 +27,11 @@ import type { FoodAdWindow, FoodBookingBrief } from '@/types/campaigns';
  * Meta/DB side effects are isolated:
  *
  *  1. {@link selectNextWeekFoodWindows} — PURE. Given the campaign brief and the set of
- *     `service_date`s already materialised, returns the windows for the single next
- *     not-yet-materialised week. Idempotency lives here: any window whose `serviceDate`
- *     is already present is dropped, so a second run for the same week returns [].
+ *     window occurrences already materialised, returns the windows for the single next
+ *     not-yet-materialised week. Idempotency lives here: any window whose occurrence key
+ *     (service_key | decision_stage | run_date) is already present is dropped, so a second
+ *     run for the same week returns [] — and a partially-failed week re-creates ONLY the
+ *     missing windows (F2).
  *
  *  2. {@link materialiseFoodWindowsForCampaign} — SIDE-EFFECTING. Persists ad_set + ad rows
  *     for those windows and creates the matching Meta objects, reusing the exact Meta client
@@ -42,6 +45,8 @@ import type { FoodAdWindow, FoodBookingBrief } from '@/types/campaigns';
 const ZONE = 'Europe/London';
 type SupabaseClientLike = ReturnType<typeof createServiceSupabaseClient>;
 
+const logger = createLogger('food-materialise');
+
 /** The ISO week label (`YYYY-Www`) for a UTC instant, in the London calendar. */
 export function isoWeekLabel(referenceIso: string): string {
   const dt = DateTime.fromISO(referenceIso, { zone: ZONE });
@@ -49,12 +54,30 @@ export function isoWeekLabel(referenceIso: string): string {
   return `${base.weekYear}-W${String(base.weekNumber).padStart(2, '0')}`;
 }
 
+/**
+ * Identity of one concrete window occurrence: which window template ran on which date.
+ * Matches the persisted ad-set columns exactly (`service_key`, `decision_stage`,
+ * `phase_start` = runDate), so existing rows translate to keys with no reconstruction —
+ * regardless of how far the campaign has rolled (F6) — and idempotency is per-WINDOW, so a
+ * partially-materialised week recovers its missing windows instead of being skipped (F2).
+ */
+export function foodWindowOccurrenceKey(
+  serviceKey: string,
+  decisionStage: string,
+  runDate: string,
+): string {
+  return `${serviceKey}|${decisionStage}|${runDate}`;
+}
+
 export interface SelectNextWeekInput {
   brief: FoodBookingBrief;
   /** Calendar start date the campaign's windows are anchored to ('YYYY-MM-DD'). */
   campaignStartDate: string;
-  /** `service_date`s ('YYYY-MM-DD') already represented by existing ad sets. */
-  existingServiceDates: ReadonlySet<string>;
+  /**
+   * Occurrence keys ({@link foodWindowOccurrenceKey}) of windows already FULLY materialised
+   * by existing ad sets. Incomplete remnants of failed runs must be excluded by the caller.
+   */
+  existingWindowKeys: ReadonlySet<string>;
   /**
    * Reference instant (UTC ISO) the run is keyed to — normally the cron run time. The target
    * week is derived deterministically from this, so two runs in the same ISO week resolve to
@@ -76,10 +99,11 @@ export interface SelectNextWeekInput {
  * reference week: target = the service week starting `(referenceWeekStart + weeks)`. Because
  * this depends only on `referenceIso` (not on what's already materialised), running twice in
  * the same week resolves to the SAME week — and after the first run fills it, the
- * already-materialised `service_date` filter drops every window, so the second run returns [].
+ * already-materialised occurrence-key filter drops every window, so the second run returns [].
+ * If the first run only partially filled the week, exactly the missing windows return (F2).
  */
 export function selectNextWeekFoodWindows(input: SelectNextWeekInput): FoodAdWindow[] {
-  const { brief, campaignStartDate, existingServiceDates, referenceIso, windowOverrides } = input;
+  const { brief, campaignStartDate, existingWindowKeys, referenceIso, windowOverrides } = input;
 
   const reference = DateTime.fromISO(referenceIso, { zone: ZONE });
   if (!reference.isValid) return [];
@@ -106,8 +130,9 @@ export function selectNextWeekFoodWindows(input: SelectNextWeekInput): FoodAdWin
   return allWindows.filter((window) => {
     const enabled = windowOverrides?.[window.windowKey] ?? window.enabled;
     if (!enabled) return false;
-    // Idempotency: never re-create a window whose service date already exists.
-    if (existingServiceDates.has(window.serviceDate)) return false;
+    // Idempotency: never re-create a window occurrence that is already fully materialised.
+    const key = foodWindowOccurrenceKey(window.serviceKey, window.decisionStage, window.runDate);
+    if (existingWindowKeys.has(key)) return false;
     const serviceDate = DateTime.fromISO(window.serviceDate, { zone: ZONE });
     return serviceDate >= targetWeekStart && serviceDate < targetWeekEndExclusive;
   });
@@ -222,11 +247,14 @@ function resolveLinkUrl(
 /**
  * Materialise the next week of windows for one rolling food campaign.
  *
- * Idempotent: the not-yet-materialised week is computed by {@link selectNextWeekFoodWindows}
- * against the campaign's existing ad-set `service_date`s, so a re-run for the same week creates
- * nothing. Each new window becomes one ad set (cloning the window-stable copy + creative asset
- * from the most recent existing ad set of the same service_key/decision_stage) plus its ads,
- * created PAUSED then activated — the same Meta sequence publishCampaign uses.
+ * Idempotent per WINDOW: the not-yet-materialised occurrences are computed by
+ * {@link selectNextWeekFoodWindows} against the campaign's existing COMPLETE ad sets (F2: a
+ * row only counts once it has a `meta_adset_id` AND at least one ad row), so a re-run for the
+ * same week creates nothing — and a run that previously failed mid-window cleans up the
+ * incomplete remnant and recreates that window whole. Each new window becomes one ad set
+ * (cloning the window-stable copy + creative asset from the most recent complete ad set of the
+ * same service_key/decision_stage) plus its ads, created PAUSED then activated — the same Meta
+ * sequence publishCampaign uses.
  *
  * Returns `{ created: 0 }` (no Meta calls) when the campaign is not an active, published
  * food_booking campaign, when its brief is missing, or when there is no new week to add.
@@ -268,16 +296,20 @@ export async function materialiseFoodWindowsForCampaign(
     ? (adSetsResult.data as unknown as MaterialiseAdSetRow[])
     : [];
 
-  // The brief's foodSchedule offsets serviceDate from runDate, but the persisted ad sets only
-  // carry phase_start (= runDate) + service metadata. Reconstruct the materialised service_dates
-  // by re-deriving the schedule and matching each existing ad set's (service_key, phase_start)
-  // back to a window — this keeps the idempotency key aligned with how windows are generated.
-  const existingServiceDates = deriveExistingServiceDates(brief, campaign, existingAdSets);
+  // F2: only COMPLETE rows (Meta ad set created AND ≥1 ad persisted) count as materialised.
+  // Incomplete remnants of a previously-failed run are excluded here so their windows are
+  // re-selected, then cleaned up and recreated below.
+  const completeAdSets = existingAdSets.filter(isCompleteAdSet);
+
+  // F6: existing occurrences come straight from the rows' own (service_key, decision_stage,
+  // phase_start) — no schedule reconstruction and no generation horizon, so rolling campaigns
+  // stay idempotent no matter how far they have advanced past the campaign anchor.
+  const existingWindowKeys = deriveExistingWindowKeys(completeAdSets);
 
   const newWindows = selectNextWeekFoodWindows({
     brief,
     campaignStartDate: resolveCampaignStartDate(brief, campaign, existingAdSets),
-    existingServiceDates,
+    existingWindowKeys,
     referenceIso: options.referenceIso,
     windowOverrides: windowOverridesFrom(campaign.source_snapshot),
   });
@@ -297,7 +329,19 @@ export async function materialiseFoodWindowsForCampaign(
   let created = 0;
 
   for (const window of newWindows) {
-    const template = pickTemplateAdSet(existingAdSets, window);
+    // F2: a previously-failed run can have left an INCOMPLETE row for this exact window
+    // (insert succeeded, Meta creation or ad persistence did not). Remove it — after
+    // best-effort pausing any Meta remnant — so the window is recreated whole.
+    await cleanupIncompleteAdSetsForWindow({
+      supabase,
+      accessToken: credentials.accessToken,
+      existingAdSets,
+      window,
+      campaignId: campaign.id,
+    });
+
+    // Clone only from COMPLETE ad sets — an incomplete remnant has no ads to copy.
+    const template = pickTemplateAdSet(completeAdSets, window);
     const metaAdSetId = await materialiseSingleWindow({
       supabase,
       campaign,
@@ -394,33 +438,86 @@ async function loadMetaCredentials(
   };
 }
 
-/** Re-derive which service_dates are already covered by existing ad sets. */
-function deriveExistingServiceDates(
-  brief: FoodBookingBrief,
-  campaign: MaterialiseCampaignRow,
-  existingAdSets: MaterialiseAdSetRow[],
-): Set<string> {
-  const startDate = resolveCampaignStartDate(brief, campaign, existingAdSets);
-  // Generate a wide horizon so every existing ad set can be matched back to a window.
-  const horizonBrief: FoodBookingBrief = {
-    ...brief,
-    weeks: Math.min(8, brief.weeks + 4) as FoodBookingBrief['weeks'],
-  };
-  const windows = calculateFoodBookingPhases(horizonBrief, startDate);
+/**
+ * F2: an ad-set row only counts as a materialised window once BOTH the Meta object exists
+ * (`meta_adset_id` persisted) and at least one ad row was created under it. Anything less is
+ * the remnant of a failed run and must be cleaned up + recreated, never skipped.
+ */
+function isCompleteAdSet(adSet: MaterialiseAdSetRow): boolean {
+  return Boolean(adSet.meta_adset_id) && Array.isArray(adSet.ads) && adSet.ads.length > 0;
+}
 
-  // Map (service_key|run_date) -> serviceDate so a stored ad set resolves to its service date.
-  const byRunKey = new Map<string, string>();
-  for (const window of windows) {
-    byRunKey.set(`${window.serviceKey}|${window.runDate}`, window.serviceDate);
+/**
+ * F6: translate complete ad-set rows straight into window occurrence keys. The columns are
+ * exactly the window identity (phase_start stores the runDate), so no schedule reconstruction
+ * — and therefore no generation horizon — is needed. Rows missing any identity column (non-food
+ * or pre-food rows) are ignored.
+ */
+function deriveExistingWindowKeys(completeAdSets: MaterialiseAdSetRow[]): Set<string> {
+  const keys = new Set<string>();
+  for (const adSet of completeAdSets) {
+    if (!adSet.service_key || !adSet.decision_stage || !adSet.phase_start) continue;
+    keys.add(foodWindowOccurrenceKey(adSet.service_key, adSet.decision_stage, adSet.phase_start));
   }
+  return keys;
+}
 
-  const dates = new Set<string>();
-  for (const adSet of existingAdSets) {
-    if (!adSet.service_key || !adSet.phase_start) continue;
-    const serviceDate = byRunKey.get(`${adSet.service_key}|${adSet.phase_start}`);
-    if (serviceDate) dates.add(serviceDate);
+/** Does this row claim the same window occurrence the run is about to materialise? */
+function matchesWindowOccurrence(adSet: MaterialiseAdSetRow, window: FoodAdWindow): boolean {
+  return (
+    adSet.service_key === window.serviceKey &&
+    adSet.decision_stage === window.decisionStage &&
+    adSet.phase_start === window.runDate
+  );
+}
+
+interface CleanupIncompleteArgs {
+  supabase: SupabaseClientLike;
+  accessToken: string;
+  existingAdSets: MaterialiseAdSetRow[];
+  window: FoodAdWindow;
+  campaignId: string;
+}
+
+/**
+ * F2: delete incomplete remnants of this window left by a previously-failed run, so the
+ * window can be recreated whole. Any Meta remnant is paused first (best-effort — the local
+ * delete must not be blocked by a Meta hiccup; the recreate run owns the window from here).
+ * The delete itself is error-checked: losing it would leave the unique index (F7) blocking
+ * the recreate.
+ */
+async function cleanupIncompleteAdSetsForWindow(args: CleanupIncompleteArgs): Promise<void> {
+  const { supabase, accessToken, existingAdSets, window, campaignId } = args;
+  const stale = existingAdSets.filter(
+    (adSet) => !isCompleteAdSet(adSet) && matchesWindowOccurrence(adSet, window),
+  );
+
+  for (const remnant of stale) {
+    if (remnant.meta_adset_id) {
+      try {
+        await setMetaObjectStatus(remnant.meta_adset_id, accessToken, 'PAUSED');
+      } catch (error) {
+        logger.warn('Could not pause Meta remnant of incomplete ad set; continuing cleanup', {
+          campaignId,
+          adSetId: remnant.id,
+          metaAdSetId: remnant.meta_adset_id,
+          windowKey: window.windowKey,
+          message: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+
+    // Local ad rows (if any) cascade with the ad-set row.
+    const { error } = await supabase.from('ad_sets').delete().eq('id', remnant.id);
+    if (error) throw new Error(error.message);
+
+    logger.info('Cleaned up incomplete ad set before recreating its window', {
+      campaignId,
+      adSetId: remnant.id,
+      windowKey: window.windowKey,
+      runDate: window.runDate,
+    });
   }
-  return dates;
 }
 
 /**
@@ -449,17 +546,20 @@ function resolveCampaignStartDate(
   throw new Error('Cannot resolve a campaign start date to materialise windows.');
 }
 
-/** Choose an existing ad set to clone copy + creative from for a new window. */
+/**
+ * Choose a COMPLETE existing ad set to clone copy + creative from for a new window.
+ * Callers pass complete rows only — an incomplete remnant has no ads worth cloning.
+ */
 function pickTemplateAdSet(
-  existingAdSets: MaterialiseAdSetRow[],
+  completeAdSets: MaterialiseAdSetRow[],
   window: FoodAdWindow,
 ): MaterialiseAdSetRow | null {
-  const exact = existingAdSets.find(
+  const exact = completeAdSets.find(
     (adSet) => adSet.service_key === window.serviceKey && adSet.decision_stage === window.decisionStage,
   );
   if (exact) return exact;
-  const sameService = existingAdSets.find((adSet) => adSet.service_key === window.serviceKey);
-  return sameService ?? existingAdSets[0] ?? null;
+  const sameService = completeAdSets.find((adSet) => adSet.service_key === window.serviceKey);
+  return sameService ?? completeAdSets[0] ?? null;
 }
 
 function computeSpendCaps(
