@@ -637,7 +637,11 @@ interface MaterialiseSingleWindowArgs {
 type WindowOutcome =
   | { status: 'created'; metaAdSetId: string }
   | { status: 'skipped_no_media' }
-  | { status: 'skipped_no_template' };
+  | { status: 'skipped_no_template' }
+  | { status: 'skipped_duplicate' };
+
+/** PostgreSQL unique_violation — the F7 partial unique index rejecting a concurrent insert. */
+const PG_UNIQUE_VIOLATION = '23505';
 
 /**
  * Create one ad set (+ its ads) on Meta for a single new window and persist the rows.
@@ -677,7 +681,21 @@ async function materialiseSingleWindow(args: MaterialiseSingleWindowArgs): Promi
     .select('id')
     .single<{ id: string }>();
 
-  if (adSetError) throw new Error(adSetError.message);
+  if (adSetError) {
+    // F7: a concurrent same-week delivery won the race — the ad_sets_food_window_unique index
+    // rejected this insert. The window is (being) materialised by the other run; skip it
+    // gracefully instead of failing the whole batch. Nothing was created on Meta yet (the
+    // insert precedes every Meta call for this window).
+    if ((adSetError as { code?: string }).code === PG_UNIQUE_VIOLATION) {
+      logger.info('Window already materialised by a concurrent run; skipping', {
+        campaignId: campaign.id,
+        windowKey: window.windowKey,
+        runDate: window.runDate,
+      });
+      return { status: 'skipped_duplicate' };
+    }
+    throw new Error(adSetError.message);
+  }
   if (!adSetRow) throw new Error('Ad set insert returned no data.');
 
   // 2. Create the Meta ad set (PAUSED). food_booking uses campaign-level CBO, so no per-ad-set

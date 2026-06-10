@@ -580,6 +580,42 @@ describe('materialiseFoodWindowsForCampaign', () => {
     });
   });
 
+  it('F7: treats a 23505 unique-violation on insert as already-materialised (concurrent run)', async () => {
+    // The partial unique index ad_sets_food_window_unique rejects the loser of a concurrent
+    // same-week race. The worker must skip the window gracefully — no throw, no Meta calls
+    // (the insert precedes every Meta call for the window).
+    const store = seededAdSets();
+    const fake = makeFakeSupabase({
+      campaign: campaignRow(),
+      adSetStore: store,
+      adSetInsertError: {
+        code: '23505',
+        message: 'duplicate key value violates unique constraint "ad_sets_food_window_unique"',
+      },
+    });
+    vi.mocked(createServiceSupabaseClient).mockReturnValue(fake as never);
+
+    const result = await materialiseFoodWindowsForCampaign({ campaignId: 'campaign-123', referenceIso: REFERENCE_ISO });
+
+    expect(result.created).toBe(0);
+    expect(result.skippedNoMedia).toEqual([]);
+    expect(marketing.createMetaAdSet).not.toHaveBeenCalled();
+    expect(store).toHaveLength(2);
+  });
+
+  it('F7: still throws on a non-23505 insert error', async () => {
+    const fake = makeFakeSupabase({
+      campaign: campaignRow(),
+      adSetStore: seededAdSets(),
+      adSetInsertError: { code: '23502', message: 'null value in column violates not-null constraint' },
+    });
+    vi.mocked(createServiceSupabaseClient).mockReturnValue(fake as never);
+
+    await expect(
+      materialiseFoodWindowsForCampaign({ campaignId: 'campaign-123', referenceIso: REFERENCE_ISO }),
+    ).rejects.toThrow(/not-null/);
+  });
+
   describe('F3 silent DB errors after Meta calls', () => {
     it.each([
       ['adSetMetaIdUpdate'],
