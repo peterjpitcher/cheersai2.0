@@ -85,8 +85,13 @@ interface FakeAdSetRecord {
   optimisation_goal: string;
   bid_strategy: string;
   adset_media_asset_id: string | null;
+  status?: string;
+  meta_status?: string | null;
   ads: Array<Record<string, unknown>>;
 }
+
+/** Post-Meta DB writes that can be made to fail, one per F3 injection point. */
+type FakeFailTarget = 'adSetMetaIdUpdate' | 'adCreativeUpdate' | 'adMetaIdUpdate' | 'adSetActivate';
 
 /** The two weeks materialised at publish for the Sunday-roast brief (service 06-14 + 06-21). */
 function seededAdSets(): FakeAdSetRecord[] {
@@ -148,16 +153,22 @@ function campaignRow(over: CampaignOverrides = {}) {
 }
 
 /**
- * A stateful fake Supabase: ad_set inserts are pushed into `adSetStore`, and the ad_sets
- * select returns that store — so a second materialise run sees what the first created.
+ * A stateful fake Supabase: ad_set inserts/updates/deletes and ad inserts/updates all apply to
+ * `adSetStore` (deletes cascade to ads, mirroring the real FK), and the ad_sets select returns
+ * that store — so a second materialise run sees exactly what the first persisted, including
+ * incomplete rows left behind by a mid-run failure (F2). `failOn` makes a single post-Meta DB
+ * write fail (F3); `adSetInsertError` makes every ad_sets insert fail (F7's 23505 path).
  */
 function makeFakeSupabase(opts: {
   campaign: Record<string, unknown> | null;
   adSetStore: FakeAdSetRecord[];
   conversionReady?: boolean;
   pageConnected?: boolean;
+  failOn?: FakeFailTarget;
+  adSetInsertError?: { code?: string; message: string };
 }) {
   let adSetIdCounter = 0;
+  let adIdCounter = 0;
 
   const adAccountRow = {
     access_token: 'token',
@@ -166,6 +177,14 @@ function makeFakeSupabase(opts: {
     meta_pixel_id: opts.conversionReady === false ? null : '123456789012345',
     conversion_event_name: 'Purchase',
     conversion_optimisation_enabled: true,
+  };
+
+  const findAd = (adId: string): Record<string, unknown> | undefined => {
+    for (const adSet of opts.adSetStore) {
+      const ad = adSet.ads.find((candidate) => candidate.id === adId);
+      if (ad) return ad;
+    }
+    return undefined;
   };
 
   const from = vi.fn((table: string) => {
@@ -187,6 +206,9 @@ function makeFakeSupabase(opts: {
         insert: (row: Record<string, unknown>) => ({
           select: () => ({
             single: () => {
+              if (opts.adSetInsertError) {
+                return Promise.resolve({ data: null, error: opts.adSetInsertError });
+              }
               adSetIdCounter += 1;
               const id = `new-adset-${adSetIdCounter}`;
               opts.adSetStore.push({
@@ -200,22 +222,64 @@ function makeFakeSupabase(opts: {
                 optimisation_goal: (row.optimisation_goal as string) ?? 'OFFSITE_CONVERSIONS',
                 bid_strategy: (row.bid_strategy as string) ?? 'LOWEST_COST_WITHOUT_CAP',
                 adset_media_asset_id: (row.adset_media_asset_id as string) ?? null,
+                status: (row.status as string) ?? 'DRAFT',
+                meta_status: null,
                 ads: [],
               });
               return Promise.resolve({ data: { id }, error: null });
             },
           }),
         }),
-        update: () => ({ eq: () => Promise.resolve({ data: null, error: null }) }),
+        update: (values: Record<string, unknown>) => ({
+          eq: (_column: string, id: string) => {
+            if (opts.failOn === 'adSetMetaIdUpdate' && 'meta_adset_id' in values) {
+              return Promise.resolve({ data: null, error: { message: 'injected ad_sets meta-id update failure' } });
+            }
+            if (opts.failOn === 'adSetActivate' && values.status === 'ACTIVE') {
+              return Promise.resolve({ data: null, error: { message: 'injected ad_sets activate update failure' } });
+            }
+            const target = opts.adSetStore.find((adSet) => adSet.id === id);
+            if (target) Object.assign(target, values);
+            return Promise.resolve({ data: null, error: null });
+          },
+        }),
+        delete: () => ({
+          eq: (_column: string, id: string) => {
+            const index = opts.adSetStore.findIndex((adSet) => adSet.id === id);
+            // Removing the row drops its ads with it — mirrors the ads.adset_id CASCADE FK.
+            if (index >= 0) opts.adSetStore.splice(index, 1);
+            return Promise.resolve({ data: null, error: null });
+          },
+        }),
       };
     }
 
     if (table === 'ads') {
       return {
-        insert: () => ({
-          select: () => ({ single: () => Promise.resolve({ data: { id: 'new-ad-1' }, error: null }) }),
+        insert: (row: Record<string, unknown>) => ({
+          select: () => ({
+            single: () => {
+              adIdCounter += 1;
+              const id = `new-ad-${adIdCounter}`;
+              const parent = opts.adSetStore.find((adSet) => adSet.id === row.adset_id);
+              parent?.ads.push({ id, ...row });
+              return Promise.resolve({ data: { id }, error: null });
+            },
+          }),
         }),
-        update: () => ({ eq: () => Promise.resolve({ data: null, error: null }) }),
+        update: (values: Record<string, unknown>) => ({
+          eq: (_column: string, id: string) => {
+            if (opts.failOn === 'adCreativeUpdate' && 'meta_creative_id' in values) {
+              return Promise.resolve({ data: null, error: { message: 'injected ads creative update failure' } });
+            }
+            if (opts.failOn === 'adMetaIdUpdate' && 'meta_ad_id' in values) {
+              return Promise.resolve({ data: null, error: { message: 'injected ads meta-id update failure' } });
+            }
+            const ad = findAd(id);
+            if (ad) Object.assign(ad, values);
+            return Promise.resolve({ data: null, error: null });
+          },
+        }),
       };
     }
 
