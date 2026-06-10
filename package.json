@@ -15,6 +15,7 @@
     "typecheck": "tsc --noEmit",
     "test:ci": "CI=1 vitest run",
     "ci:verify": "npm run lint:ci && npm run typecheck && npm run test:ci && npm run build",
+    "db:rebuild": "bash scripts/db-local-rebuild.sh",
     "ops:backfill-connections": "tsx scripts/ops/backfill-connections.ts",
     "ops:repair-gbp-location-ids": "tsx scripts/ops/repair-gbp-location-ids.ts",
     "ops:backfill-link-in-bio-url": "tsx scripts/ops/backfill-link-in-bio-url.ts",

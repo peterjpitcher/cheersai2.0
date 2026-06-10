@@ -132,6 +132,12 @@ jobs:
       - uses: supabase/setup-cli@v1
         with:
           version: 2.67.1
+      - name: Stage v1 baseline (CI only — not a committed migration)
+        # The v2 migration chain assumes v1 objects (ad_sets, ads, advisory_lock_fixture,
+        # publish_jobs_with_variant, …) already exist. They do on prod but no migration
+        # creates them, so a from-scratch rebuild needs this baseline staged first, right
+        # after the v1->v2 bridge. See scripts/build-v1-baseline.py.
+        run: cp supabase/baseline/v1_baseline.sql supabase/migrations/20260519230001_v1_baseline.sql
       - name: Start local Supabase database
         run: supabase start --ignore-health-check -x gotrue,realtime,storage-api,imgproxy,kong,mailpit,postgrest,postgres-meta,studio,edge-runtime,logflare,vector,supavisor
       - run: supabase db lint --schema public

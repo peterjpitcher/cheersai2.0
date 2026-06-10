@@ -43,7 +43,11 @@ next-env.d.ts
 
 # supabase generated artifacts
 supabase/.temp/
+supabase/.branches/
 supabase/remote-*-backup.sql
+# staged v1 baseline (scripts/build-v1-baseline.py) — staged by CI and db:rebuild only,
+# must never be committed or pushed to prod
+supabase/migrations/20260519230001_v1_baseline.sql
 /temp/
 .worktrees/
 .claude/worktrees/
