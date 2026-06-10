@@ -136,15 +136,16 @@ export function buildFoodBookingInsights(
   now: Date = new Date(),
 ): FoodBookingInsights {
   const windowEnd = DateTime.fromJSDate(now);
+  const windowStart = windowEnd.minus({ days: 90 });
   const rows90 = rows.filter((row) => (
     row.booking_type === 'table'
-    && isWithinWindow(row.occurred_at, windowEnd.minus({ days: 90 }), windowEnd)
+    && isWithinWindow(row.occurred_at, windowStart, windowEnd)
   ));
   const rows30 = rows90.filter((row) => (
     isWithinWindow(row.occurred_at, windowEnd.minus({ days: 30 }), windowEnd)
   ));
   const attributionByUtm = buildFoodAdAttributionMap(campaigns);
-  const serviceSpend = buildServiceSpendMap(campaigns);
+  const serviceSpend = buildServiceSpendMap(campaigns, windowStart.toISODate() ?? '');
   const totalFoodSpend = Array.from(serviceSpend.values()).reduce((sum, spend) => sum + spend, 0);
   const resolvedRows = rows90.map((row) => resolveFoodBooking(row, attributionByUtm));
   const sundayRows = resolvedRows.filter((item) => item.serviceKey === 'sunday_roast');
@@ -242,11 +243,19 @@ function buildFoodAdAttributionMap(campaigns: Campaign[]) {
   return map;
 }
 
-function buildServiceSpendMap(campaigns: Campaign[]) {
+/**
+ * WF-5: ad-set spend is a LIFETIME total, while bookings are counted over the last
+ * 90 days. Restrict spend to campaigns whose run window overlaps that 90-day window
+ * (null end date = still running) so a food campaign that finished months ago cannot
+ * inflate cost-per-booking. This approximates true 90-day spend until daily spend
+ * history accrues in ad_metrics_history.
+ */
+function buildServiceSpendMap(campaigns: Campaign[], windowStartDate: string) {
   const map = new Map<FoodServiceKey, number>();
 
   for (const campaign of campaigns) {
     if (campaign.campaignKind !== 'food_booking') continue;
+    if (campaign.endDate !== null && campaign.endDate < windowStartDate) continue;
 
     for (const adSet of campaign.adSets ?? []) {
       if (!adSet.serviceKey) continue;

@@ -108,7 +108,7 @@ function adSet(overrides: Partial<AdSet> & {
   };
 }
 
-function campaign(adSets: AdSet[]): Campaign {
+function campaign(adSets: AdSet[], overrides: Partial<Campaign> = {}): Campaign {
   return {
     id: 'campaign-1',
     accountId: 'account-1',
@@ -144,6 +144,7 @@ function campaign(adSets: AdSet[]): Campaign {
     autoConfirm: false,
     createdAt: new Date('2026-06-01T09:00:00Z'),
     adSets,
+    ...overrides,
   };
 }
 
@@ -280,6 +281,87 @@ describe('food booking insights', () => {
     expect(insights.totalBookings30d).toBe(1);
     expect(insights.totalBookings90d).toBe(2);
     expect(insights.totalValue90d).toBe(50);
+  });
+
+  it('WF-5: excludes spend from food campaigns that ended before the 90-day booking window', () => {
+    const ongoingKey = 'sunday_roast_morning-2026-06-14-venue-1';
+    const ancientKey = 'sunday_roast_morning-2026-01-04-venue-1';
+
+    // Ended >90 days before `now` (2026-06-15 − 90d = 2026-03-17): all its bookings fall
+    // outside the window too, so it must contribute neither bookings nor spend.
+    const ancientCampaign = campaign(
+      [
+        adSet({
+          id: 'ancient-adset',
+          serviceKey: 'sunday_roast',
+          decisionStage: 'morning_commit',
+          performance: { ...EMPTY_PERFORMANCE, spend: 50 },
+          ads: [ad({ id: 'ancient-ad', adsetId: 'ancient-adset', utmContentKey: ancientKey })],
+        }),
+      ],
+      { id: 'campaign-ancient', startDate: '2025-12-01', endDate: '2026-02-01' },
+    );
+
+    // Ongoing campaign (null end date): its lifetime spend approximates the window spend.
+    const ongoingCampaign = campaign(
+      [
+        adSet({
+          id: 'ongoing-adset',
+          serviceKey: 'sunday_roast',
+          decisionStage: 'morning_commit',
+          performance: { ...EMPTY_PERFORMANCE, spend: 30 },
+          ads: [ad({ id: 'ongoing-ad', adsetId: 'ongoing-adset', utmContentKey: ongoingKey })],
+        }),
+      ],
+      { id: 'campaign-ongoing', startDate: '2026-06-01', endDate: null },
+    );
+
+    const insights = buildFoodBookingInsights(
+      [
+        row({ booking_id: 'recent-1', utm_content: ongoingKey, value: 40, occurred_at: '2026-06-14T09:00:00.000Z' }),
+        // The ancient campaign's only booking is outside the 90-day window.
+        row({ booking_id: 'ancient-1', utm_content: ancientKey, value: 35, occurred_at: '2026-01-04T13:00:00.000Z' }),
+      ],
+      [ancientCampaign, ongoingCampaign],
+      new Date('2026-06-15T12:00:00.000Z'),
+    );
+
+    expect(insights.totalBookings90d).toBe(1);
+    // £30 ongoing spend / 1 booking — NOT (30 + 50) / 1 = 80.
+    expect(insights.costPerTableBooking).toBe(30);
+    expect(insights.topServices90d).toContainEqual(expect.objectContaining({
+      key: 'sunday_roast',
+      bookings: 1,
+      costPerBooking: 30,
+    }));
+  });
+
+  it('WF-5: includes spend from a food campaign that ended inside the 90-day window', () => {
+    const recentKey = 'sunday_roast_morning-2026-05-10-venue-1';
+    const endedRecently = campaign(
+      [
+        adSet({
+          id: 'recent-adset',
+          serviceKey: 'sunday_roast',
+          decisionStage: 'morning_commit',
+          performance: { ...EMPTY_PERFORMANCE, spend: 24 },
+          ads: [ad({ id: 'recent-ad', adsetId: 'recent-adset', utmContentKey: recentKey })],
+        }),
+      ],
+      { id: 'campaign-recent', startDate: '2026-04-20', endDate: '2026-05-10' },
+    );
+
+    const insights = buildFoodBookingInsights(
+      [
+        row({ booking_id: 'in-window', utm_content: recentKey, value: 50, occurred_at: '2026-05-10T09:00:00.000Z' }),
+        row({ booking_id: 'in-window-2', utm_content: recentKey, value: 45, occurred_at: '2026-05-10T10:00:00.000Z' }),
+      ],
+      [endedRecently],
+      new Date('2026-06-15T12:00:00.000Z'),
+    );
+
+    expect(insights.totalBookings90d).toBe(2);
+    expect(insights.costPerTableBooking).toBe(12);
   });
 
   it('returns null cost per table booking when there are bookings but no food spend', () => {
