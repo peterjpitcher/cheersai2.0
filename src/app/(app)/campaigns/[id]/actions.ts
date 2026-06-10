@@ -810,14 +810,19 @@ export async function publishCampaign(
     const metaAdSetIdsToActivate = new Set<string>();
     const metaAdIdsToActivate = new Set<string>();
 
+    // food_booking budgets live on the campaign (CBO); event/evergreen keep per-ad-set
+    // budgets. This single flag drives BOTH the campaign-level CBO params and the Phase 3
+    // spend caps below, so caps can never be computed for a non-CBO publish path (F10).
+    const usesCampaignBudget = isFoodBookingCampaign(campaign);
+
     // Phase 3 (3b): under the food optimisation flag, derive per-ad-set min/max spend caps
     // from each ad set's stored budget_weight so demand-heavy windows are guaranteed a slice
     // of the shared CBO budget. Computed BEFORE any Meta object is created so its preflight
     // (the floored minimums must fit the campaign budget) fails the whole publish cleanly,
-    // leaving nothing to clean up. When the flag is off — or the campaign is not food_booking
-    // (CBO) — this Map stays empty and ad-set creation is byte-for-byte unchanged.
+    // leaving nothing to clean up. When the flag is off — or the campaign does not use
+    // campaign-level CBO — this Map stays empty and ad-set creation is byte-for-byte unchanged.
     const adSetSpendCaps = new Map<string, { minBudget: number; maxBudget: number }>();
-    if (isFoodBookingCampaign(campaign) && featureFlags.foodOptimisation) {
+    if (usesCampaignBudget && featureFlags.foodOptimisation) {
       const capResult = computeAdSetSpendCaps({
         adSets: adSets.map((adSet) => ({
           ref: adSet.id,
@@ -847,8 +852,7 @@ export async function publishCampaign(
       // match budget_type (DAILY→daily_budget, LIFETIME→lifetime_budget); a lifetime budget
       // additionally requires a campaign end_time (the flight end). Event/evergreen keep
       // per-ad-set budgets (CBO flag omitted), so behaviour is unchanged for them.
-      const useFoodBookingCbo = isFoodBookingCampaign(campaign);
-      const cboParams: Partial<CreateCampaignParams> = useFoodBookingCbo
+      const cboParams: Partial<CreateCampaignParams> = usesCampaignBudget
         ? campaign.budget_type === 'DAILY'
           ? { useCampaignBudgetOptimization: true, dailyBudget: Number(campaign.budget_amount) }
           : {
@@ -880,9 +884,8 @@ export async function publishCampaign(
     // ── 7. Process each ad set ────────────────────────────────────────────────
 
     let successfulAdSets = 0; // Fix D5: track how many ad sets were successfully created
-    // food_booking budgets live on the campaign (CBO), so we skip per-ad-set allocation
-    // entirely and send no daily/lifetime budget on each ad set.
-    const usesCampaignBudget = isFoodBookingCampaign(campaign);
+    // CBO campaigns skip per-ad-set allocation entirely and send no daily/lifetime budget
+    // on each ad set (usesCampaignBudget is hoisted above the spend-cap computation).
     const adSetBudgets = usesCampaignBudget
       ? new Map<string, number>()
       : allocateAdSetBudgets(campaign, adSets);
@@ -923,9 +926,11 @@ export async function publishCampaign(
           dailyBudget: usesCampaignBudget ? undefined : isDaily ? budgetAmount : undefined,
           lifetimeBudget: usesCampaignBudget ? undefined : !isDaily ? budgetAmount : undefined,
           // Phase 3 (3b): per-ad-set CBO spend caps, only when the flag computed them for
-          // this ad set. The Meta client only emits caps when parentUsesCampaignBudgetOptimization
-          // is set; we pass the whole trio together so the flag-off path sends nothing new.
-          parentUsesCampaignBudgetOptimization: adSetCap ? usesCampaignBudget : undefined,
+          // this ad set. Caps are only ever computed under usesCampaignBudget (F10), so a
+          // present cap implies the parent campaign owns the budget. The Meta client only
+          // emits caps when parentUsesCampaignBudgetOptimization is set; we pass the whole
+          // trio together so the flag-off path sends nothing new.
+          parentUsesCampaignBudgetOptimization: adSetCap ? true : undefined,
           minBudget: adSetCap?.minBudget,
           maxBudget: adSetCap?.maxBudget,
           startTime: resolveAdSetStartTime(adSet, campaign),

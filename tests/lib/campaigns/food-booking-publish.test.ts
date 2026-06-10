@@ -474,6 +474,33 @@ describe('publishCampaign — food_booking Phase 3 spend caps (3b)', () => {
     }
   });
 
+  it('F10: caps are only passed alongside campaign-level CBO (useCampaignBudgetOptimization: true)', async () => {
+    featureFlags.foodOptimisation = true;
+    queueFoodPublishLookups({
+      adSets: [
+        foodAdSetRow({ id: 'adset-1', budget_weight: 60 }),
+        foodAdSetRow({ id: 'adset-2', budget_weight: 40, utm_content_key: 'sunday_roast_last_tables' }),
+      ],
+    });
+    stubMetaCreateSuccess();
+
+    const result = await publishCampaign('campaign-123');
+
+    expect(result.success).toBe(true);
+    // The cap preflight and the CBO campaign params hang off the same condition, so caps can
+    // only ever ride along with a campaign created under CBO…
+    const campaignArgs = vi.mocked(marketing.createMetaCampaign).mock.calls[0][0];
+    expect(campaignArgs.useCampaignBudgetOptimization).toBe(true);
+    // …and every ad set that carries caps declares the CBO parent (never caps without CBO).
+    const capCalls = vi.mocked(marketing.createMetaAdSet).mock.calls.filter(
+      (call) => call[0].minBudget !== undefined || call[0].maxBudget !== undefined,
+    );
+    expect(capCalls.length).toBeGreaterThan(0);
+    for (const call of capCalls) {
+      expect(call[0].parentUsesCampaignBudgetOptimization).toBe(true);
+    }
+  });
+
   it('fails publish (preflight) when min caps cannot fit the campaign budget', async () => {
     featureFlags.foodOptimisation = true;
     // Five even windows on a tiny £3 budget: each floors to the £1 Meta minimum => £5 > £3.
