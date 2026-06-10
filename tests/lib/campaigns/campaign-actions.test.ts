@@ -560,6 +560,7 @@ describe('runCampaignDashboardOptimisation', () => {
         plannedActions: 3,
         appliedActions: 0,
         failedActions: 0,
+        failedActionInserts: 0,
       };
     });
 

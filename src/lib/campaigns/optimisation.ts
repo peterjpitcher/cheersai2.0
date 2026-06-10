@@ -163,6 +163,8 @@ export interface MetaCampaignOptimisationResult {
   plannedActions: number;
   appliedActions: number;
   failedActions: number;
+  /** Decisions that could not be persisted to meta_optimisation_actions (WF-4). */
+  failedActionInserts: number;
 }
 
 interface RunMetaCampaignOptimisationOptions {
@@ -240,9 +242,12 @@ export async function runMetaCampaignOptimisation({
 
     const appliedActions = 0;
     const failedActions = 0;
+    // WF-4: surface insert failures (e.g. a stale action_type CHECK constraint)
+    // instead of silently reporting a successful run with no recorded actions.
+    let failedActionInserts = 0;
 
     for (const decision of decisions) {
-      await supabase
+      const { error: insertError } = await supabase
         .from('meta_optimisation_actions')
         .insert({
           run_id: runId,
@@ -260,6 +265,11 @@ export async function runMetaCampaignOptimisation({
           error: null,
           applied_at: null,
         });
+
+      if (insertError) {
+        failedActionInserts++;
+        console.error('[optimisation] failed to record optimisation action', insertError);
+      }
     }
 
     const result: MetaCampaignOptimisationResult = {
@@ -268,6 +278,7 @@ export async function runMetaCampaignOptimisation({
       plannedActions: decisions.length,
       appliedActions,
       failedActions,
+      failedActionInserts,
     };
 
     await supabase
@@ -1010,7 +1021,12 @@ async function loadRecentOptimisationActionKeys(supabase: SupabaseClientLike, ac
 }
 
 function decisionKey(decision: Pick<OptimisationDecision, 'campaignId' | 'adId' | 'actionType' | 'reason'>) {
-  return `${decision.actionType}:${decision.campaignId}:${decision.adId ?? 'campaign'}:${decision.reason}`;
+  const identity = `${decision.actionType}:${decision.campaignId}:${decision.adId ?? 'campaign'}`;
+  // WF-3: creative_fatigue reasons embed drifting metrics (frequency, CTR %), so a
+  // reason-based key re-recorded the same warning every nightly run. Identity alone
+  // dedupes it within the lookback window. Other action types keep the reason in the
+  // key because one campaign can legitimately carry several distinct tracking issues.
+  return decision.actionType === 'creative_fatigue' ? identity : `${identity}:${decision.reason}`;
 }
 
 function dedupeDecisions(decisions: OptimisationDecision[]) {
