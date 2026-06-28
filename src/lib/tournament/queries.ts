@@ -138,6 +138,13 @@ export async function getFixtureById(
 
 // --- Content lookup helpers ---
 
+const PUBLISHED_CONTENT_STATUSES = new Set(['published', 'posted', 'succeeded']);
+const PUBLISHED_JOB_STATUSES = ['published', 'succeeded'];
+
+function isPublishedContentStatus(status: string): boolean {
+  return PUBLISHED_CONTENT_STATUSES.has(status);
+}
+
 export async function getFixtureContentItems(
   supabase: SupabaseClient,
   fixtureId: string,
@@ -164,7 +171,7 @@ export async function getPublishedPlacements(
   const published = new Set<string>();
 
   for (const item of items) {
-    if (item.status === 'published') {
+    if (isPublishedContentStatus(item.status)) {
       published.add(`${item.platform}:${item.placement}`);
       continue;
     }
@@ -173,7 +180,7 @@ export async function getPublishedPlacements(
       .from('publish_jobs')
       .select('status')
       .eq('content_item_id', item.id)
-      .eq('status', 'published')
+      .in('status', PUBLISHED_JOB_STATUSES)
       .limit(1);
 
     if (jobs?.length) {
@@ -223,14 +230,17 @@ export async function deriveFixtureContentStatuses(
       continue;
     }
 
-    const allPublished = items.every((i) => i.status === 'published');
+    const allPublished = items.every((i) => isPublishedContentStatus(i.status));
     if (allPublished) {
       statusMap.set(fixture.id, 'published');
       continue;
     }
 
     const anyPastDue = items.some(
-      (i) => i.scheduledFor && new Date(i.scheduledFor).getTime() < now && i.status !== 'published',
+      (i) =>
+        i.scheduledFor
+        && new Date(i.scheduledFor).getTime() < now
+        && !isPublishedContentStatus(i.status),
     );
     if (anyPastDue) {
       statusMap.set(fixture.id, 'past_due');

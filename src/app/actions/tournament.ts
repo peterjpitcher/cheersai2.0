@@ -24,13 +24,45 @@ import {
 } from '@/lib/tournament/generate';
 import { redactId, tournamentDebug, tournamentDebugError } from '@/lib/tournament/debug';
 import { areBothTeamsConfirmed } from '@/lib/tournament/placeholder';
-import { enqueueAndDispatch } from '@/lib/publishing/queue';
+import { dispatchToQStash } from '@/lib/publishing/dispatch';
+import { enqueueAndDispatch, enqueuePublishJob } from '@/lib/publishing/queue';
 import type { Tournament } from '@/types/tournament';
 import type { Platform } from '@/types/content';
 
 // ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------
+
+const PUBLISHED_CONTENT_STATUSES = new Set(['published', 'posted', 'succeeded']);
+const PUBLISHED_JOB_STATUSES = new Set(['published', 'posted', 'succeeded']);
+const LOCKED_JOB_STATUSES = new Set(['publishing', 'in_progress']);
+
+function isPublishedContentStatus(status: unknown): boolean {
+  return typeof status === 'string' && PUBLISHED_CONTENT_STATUSES.has(status);
+}
+
+function isPublishedJobStatus(status: unknown): boolean {
+  return typeof status === 'string' && PUBLISHED_JOB_STATUSES.has(status);
+}
+
+function isLockedJobStatus(status: unknown): boolean {
+  return typeof status === 'string' && LOCKED_JOB_STATUSES.has(status);
+}
+
+async function isLegacyPublishQueue(
+  supabase: ReturnType<typeof createServiceSupabaseClient>,
+): Promise<boolean> {
+  const { error } = await supabase
+    .from('publish_jobs')
+    .select('platform')
+    .limit(0);
+
+  if (!error) return false;
+  if (error.code === '42703' || /column .*platform.* does not exist/i.test(error.message)) {
+    return true;
+  }
+  throw error;
+}
 
 async function buildConnectionsMap(
   accountId: string,
@@ -604,40 +636,143 @@ export async function publishNowFixture(
 
     // Only target content that has not already reached the published state.
     const unpublishedItems = fixtureItems.filter(
-      (item: Record<string, unknown>) =>
-        item.status !== 'published' && item.status !== 'succeeded',
+      (item: Record<string, unknown>) => !isPublishedContentStatus(item.status),
     );
 
     if (!unpublishedItems.length) {
       return { success: false, error: 'No unpublished content found for this fixture' };
     }
 
+    const legacyQueue = await isLegacyPublishQueue(supabase);
     let enqueuedCount = 0;
 
     for (const item of unpublishedItems) {
       const itemId = item.id as string;
       const itemPlatform = (item.platform as string) ?? 'facebook';
+      const placement = (item.placement as 'feed' | 'story' | null) ?? 'feed';
+      const nowIso = new Date().toISOString();
+      const idempotencyKey = `${itemId}:${itemPlatform}:${nowIso}`;
 
-      // Check for existing scheduled/queued/publishing jobs — skip if already enqueued.
-      const { data: existingJobs } = await supabase
-        .from('publish_jobs')
+      const { data: variantRow, error: variantError } = await supabase
+        .from('content_variants')
         .select('id')
         .eq('content_item_id', itemId)
-        .in('status', ['scheduled', 'queued', 'publishing'])
-        .limit(1);
+        .order('updated_at', { ascending: false })
+        .limit(1)
+        .maybeSingle<{ id: string }>();
 
-      if (existingJobs && existingJobs.length > 0) {
-        continue; // already queued
+      if (variantError) return { success: false, error: variantError.message };
+      if (!variantRow?.id) {
+        return { success: false, error: 'Variant missing for content item' };
       }
 
-      await enqueueAndDispatch({
-        contentItemId: itemId,
-        accountId,
-        platform: itemPlatform as Platform,
-        scheduledAt: new Date(),
-      });
+      const { data: existingJobs, error: existingJobsError } = await supabase
+        .from('publish_jobs')
+        .select('id, status')
+        .eq('content_item_id', itemId)
+        .order('created_at', { ascending: false });
+
+      if (existingJobsError) return { success: false, error: existingJobsError.message };
+
+      const alreadyPublished = (existingJobs ?? []).some((job: Record<string, unknown>) =>
+        isPublishedJobStatus(job.status),
+      );
+      if (alreadyPublished) {
+        continue;
+      }
+
+      const lockedJob = (existingJobs ?? []).find((job: Record<string, unknown>) =>
+        isLockedJobStatus(job.status),
+      );
+      if (lockedJob) {
+        continue;
+      }
+
+      const { error: contentUpdateError } = await supabase
+        .from('content_items')
+        .update({
+          status: 'queued',
+          scheduled_for: nowIso,
+          scheduled_at: nowIso,
+          updated_at: nowIso,
+        })
+        .eq('id', itemId);
+
+      if (contentUpdateError) return { success: false, error: contentUpdateError.message };
+
+      const reusableJob = (existingJobs ?? []).find((job: Record<string, unknown>) =>
+        !isPublishedJobStatus(job.status) && !isLockedJobStatus(job.status),
+      );
+
+      if (reusableJob?.id) {
+        const { error: jobUpdateError } = await supabase
+          .from('publish_jobs')
+          .update({
+            account_id: accountId,
+            variant_id: variantRow.id,
+            placement,
+            status: 'queued',
+            scheduled_at: nowIso,
+            next_attempt_at: nowIso,
+            idempotency_key: idempotencyKey,
+            last_error: null,
+            error_message: null,
+            error_code: null,
+            attempt: 0,
+            retry_count: 0,
+            updated_at: nowIso,
+          })
+          .eq('id', reusableJob.id as string);
+
+        if (jobUpdateError) return { success: false, error: jobUpdateError.message };
+
+        if (!legacyQueue) {
+          await dispatchToQStash({
+            jobId: reusableJob.id as string,
+            deduplicationId: idempotencyKey,
+          });
+        }
+
+        enqueuedCount++;
+        continue;
+      }
+
+      if (legacyQueue) {
+        await enqueuePublishJob({
+          contentItemId: itemId,
+          accountId,
+          platform: itemPlatform as Platform,
+          scheduledAt: new Date(nowIso),
+          placement,
+          variantId: variantRow.id,
+        });
+      } else {
+        await enqueueAndDispatch({
+          contentItemId: itemId,
+          accountId,
+          platform: itemPlatform as Platform,
+          scheduledAt: new Date(nowIso),
+          placement,
+          variantId: variantRow.id,
+        });
+      }
 
       enqueuedCount++;
+    }
+
+    if (legacyQueue && enqueuedCount > 0) {
+      const { error: invokeError } = await supabase.functions.invoke('publish-queue', {
+        body: {
+          leadWindowMinutes: 5,
+          source: 'tournament-publish-now',
+        },
+      });
+
+      if (invokeError) return { success: false, error: invokeError.message };
+    }
+
+    if (enqueuedCount === 0) {
+      return { success: false, error: 'No publishable content found for this fixture' };
     }
 
     revalidatePath(`/tournaments/${tournamentId}`);

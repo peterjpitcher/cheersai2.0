@@ -162,8 +162,14 @@ export function FixtureRow({
 
   async function handlePublishNow() {
     setLoading(true);
+    setError(null);
     try {
-      await publishNowFixture(tournament.id, fixture.id);
+      const result = await publishNowFixture(tournament.id, fixture.id);
+      if (!result.success) {
+        setError(result.error ?? 'Publish failed');
+        return;
+      }
+      router.refresh();
     } finally {
       setLoading(false);
     }
