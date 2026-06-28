@@ -189,8 +189,15 @@ export function CreateWizard({ initialDraftId, accountId, onClose }: CreateWizar
           setBannerDefaults(data.bannerDefaults);
         }
       })
-      .catch(() => { /* non-blocking — media picker still works without library */ });
-  }, [accountId]);
+      .catch((error) => {
+        // Non-blocking — uploads still work — but surface it: a silent failure here
+        // leaves the library empty and every preview reads "No media attached".
+        console.error('[create-wizard] failed to load media library', error);
+        toast.error('Couldn’t load your media library', {
+          description: 'You can still upload, but existing media may not appear. Try refreshing.',
+        });
+      });
+  }, [accountId, toast]);
 
   // -----------------------------------------------------------------------
   // Auto-save helper
@@ -467,6 +474,7 @@ export function CreateWizard({ initialDraftId, accountId, onClose }: CreateWizar
                 accountId={accountId}
                 campaignName={form.getValues('title')}
                 libraryItems={libraryItems}
+                onLibraryItemsChange={setLibraryItems}
               />
             )}
             {currentStep === 2 && (
@@ -501,6 +509,7 @@ export function CreateWizard({ initialDraftId, accountId, onClose }: CreateWizar
                 publishMode={watchedContentType === 'instant_post' ? watchedPublishMode : 'schedule'}
                 accountId={accountId}
                 libraryItems={libraryItems}
+                onLibraryUpdate={setLibraryItems}
                 bannerDefaults={bannerDefaults}
                 isContextStale={
                   lastGenerationContext !== null && (

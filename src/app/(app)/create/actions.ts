@@ -1,29 +1,7 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
-import { DateTime } from "luxon";
 import { z } from "zod";
 
-import {
-  createEventCampaign,
-  createInstantPost,
-  createPromotionCampaign,
-  createWeeklyCampaign,
-} from "@/lib/create/service";
-import {
-  eventCampaignFormSchema,
-  eventCampaignSchema,
-  instantPostFormSchema,
-  instantPostSchema,
-  promotionCampaignFormSchema,
-  promotionCampaignSchema,
-  weeklyCampaignFormSchema,
-  weeklyCampaignSchema,
-} from "@/lib/create/schema";
-import { DEFAULT_POST_TIME, DEFAULT_TIMEZONE } from "@/lib/constants";
-import { getPlannerContentDetail } from "@/lib/planner/data";
-import { buildEventScheduleOffsets } from "@/lib/create/event-cadence";
-import { resolveStoryScheduledFor } from "@/lib/create/story-schedule";
 import {
   getManagementEventDetail,
   listManagementEvents,
@@ -43,130 +21,6 @@ import {
 } from "@/lib/management-app/mappers";
 import { isSchemaMissingError } from "@/lib/supabase/errors";
 
-export async function handleInstantPostSubmission(rawValues: unknown) {
-  const formValues = instantPostFormSchema.parse(rawValues);
-  const storyScheduledFor =
-    formValues.placement === "story"
-      ? resolveStoryScheduledFor(formValues.scheduledFor ?? new Date(), DEFAULT_TIMEZONE)
-      : null;
-
-  const parsed = instantPostSchema.parse({
-    ...formValues,
-    publishMode: storyScheduledFor ? "schedule" : formValues.publishMode,
-    scheduledFor:
-      storyScheduledFor ??
-      (formValues.publishMode === "schedule" && formValues.scheduledFor
-        ? DateTime.fromISO(formValues.scheduledFor, { zone: DEFAULT_TIMEZONE }).toJSDate()
-        : undefined),
-  });
-
-  const result = await createInstantPost(parsed);
-
-  revalidatePath("/planner");
-  revalidatePath("/library");
-
-  return result;
-}
-
-export async function handleEventCampaignSubmission(rawValues: unknown) {
-  const formValues = eventCampaignFormSchema.parse(rawValues);
-  const timezone = formValues.timezone && formValues.timezone.length ? formValues.timezone : DEFAULT_TIMEZONE;
-  const defaultOffsets = buildEventScheduleOffsets({
-    startDate: formValues.startDate,
-    startTime: formValues.startTime,
-    timezone,
-  });
-
-  const { useManualSchedule, manualSlots, timezone: _ignoredTimezone, bannerDefaults, ...rest } = formValues;
-  void _ignoredTimezone;
-  const manualScheduleDates = (manualSlots ?? [])
-    .map((slot) => parseManualSlot(slot.date, slot.time))
-    .filter((slot): slot is Date => Boolean(slot));
-
-  const parsed = eventCampaignSchema.parse({
-    ...rest,
-    startDate: DateTime.fromISO(formValues.startDate, { zone: timezone }).toJSDate(),
-    scheduleOffsets: defaultOffsets,
-    customSchedule: useManualSchedule ? manualScheduleDates : undefined,
-    bannerDefaults,
-  });
-
-  const result = await createEventCampaign(parsed);
-
-  revalidatePath("/planner");
-  revalidatePath("/library");
-
-  return result;
-}
-
-export async function handlePromotionCampaignSubmission(rawValues: unknown) {
-  const formValues = promotionCampaignFormSchema.parse(rawValues);
-
-  const { useManualSchedule, manualSlots, bannerDefaults: promoBannerDefaults, ...rest } = formValues;
-  const manualScheduleDates = (manualSlots ?? [])
-    .map((slot) => parseManualSlot(slot.date, DEFAULT_POST_TIME))
-    .filter((slot): slot is Date => Boolean(slot));
-  const campaignStart = DateTime.now().setZone(DEFAULT_TIMEZONE).startOf("day").toJSDate();
-
-  const parsed = promotionCampaignSchema.parse({
-    ...rest,
-    startDate: campaignStart,
-    endDate: DateTime.fromISO(formValues.endDate, { zone: DEFAULT_TIMEZONE }).toJSDate(),
-    dateMode: "ends_on",
-    customSchedule: useManualSchedule ? manualScheduleDates : undefined,
-    bannerDefaults: promoBannerDefaults,
-  });
-
-  const result = await createPromotionCampaign(parsed);
-
-  revalidatePath("/planner");
-  revalidatePath("/library");
-
-  return result;
-}
-
-export async function handleWeeklyCampaignSubmission(rawValues: unknown) {
-  const formValues = weeklyCampaignFormSchema.parse(rawValues);
-
-  const { useManualSchedule, manualSlots, bannerDefaults: weeklyBannerDefaults, ...rest } = formValues;
-  const manualScheduleDates = (manualSlots ?? [])
-    .map((slot) => parseManualSlot(slot.date, slot.time))
-    .filter((slot): slot is Date => Boolean(slot));
-
-  const parsed = weeklyCampaignSchema.parse({
-    ...rest,
-    dayOfWeek: Number(formValues.dayOfWeek),
-    startDate: DateTime.fromISO(formValues.startDate, { zone: DEFAULT_TIMEZONE }).toJSDate(),
-    weeksAhead:
-      useManualSchedule ? undefined : formValues.weeksAhead ? Number(formValues.weeksAhead) : undefined,
-    customSchedule: useManualSchedule ? manualScheduleDates : undefined,
-    bannerDefaults: weeklyBannerDefaults,
-  });
-
-  const result = await createWeeklyCampaign(parsed);
-
-  revalidatePath("/planner");
-  revalidatePath("/library");
-
-  return result;
-}
-
-const previewSchema = z.object({
-  contentIds: z.array(z.string().uuid()).min(1),
-});
-
-export async function fetchGeneratedContentDetails(payload: unknown) {
-  const { contentIds } = previewSchema.parse(payload);
-
-  const details = await Promise.all(
-    contentIds.map(async (contentId) => {
-      const detail = await getPlannerContentDetail(contentId);
-      return detail;
-    }),
-  );
-
-  return details.filter((detail): detail is NonNullable<typeof detail> => Boolean(detail));
-}
 
 export interface ManagementActionError {
   code:
@@ -425,16 +279,6 @@ export async function getManagementPromotionPrefill(
       error: mapManagementActionError(error),
     };
   }
-}
-
-function parseManualSlot(date: string, time: string) {
-  if (!date) return null;
-  const sanitizedTime = time && /^\d{2}:\d{2}$/.test(time) ? time : DEFAULT_POST_TIME;
-  const candidate = DateTime.fromISO(`${date}T${sanitizedTime}`, { zone: DEFAULT_TIMEZONE }).startOf("minute");
-  if (!candidate.isValid) {
-    return null;
-  }
-  return candidate.toJSDate();
 }
 
 function findSpecialById(items: ManagementMenuSpecialItem[], specialId: string) {

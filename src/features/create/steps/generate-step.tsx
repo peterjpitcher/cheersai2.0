@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type Dispatch, type SetStateAction } from 'react';
 import { createPortal } from 'react-dom';
 import { DateTime } from 'luxon';
 import {
@@ -151,6 +151,8 @@ interface GenerateStepProps {
   isSubmitting: boolean;
   accountId: string;
   libraryItems?: MediaAssetSummary[];
+  /** Propagates library changes (e.g. uploads in the per-slot media modal) up to the wizard. */
+  onLibraryUpdate?: Dispatch<SetStateAction<MediaAssetSummary[]>>;
   bannerDefaults?: AccountBannerDefaults | null;
 }
 
@@ -181,6 +183,7 @@ export function GenerateStep({
   isSubmitting,
   accountId,
   libraryItems,
+  onLibraryUpdate,
   bannerDefaults,
 }: GenerateStepProps): React.JSX.Element {
   const platforms = (contentBrief.platforms ?? []) as Platform[];
@@ -314,9 +317,13 @@ export function GenerateStep({
     if (isStorySchedule) return;
     setIsGeneratingBatch(true);
 
-    // Initialize all slots as pending. Seed each slot's media from any existing
-    // per-slot choice (preserved across "Regenerate All"), else the wizard-level
-    // selection from the Media step.
+    // Initialize all slots as pending. Preserve any existing *explicit* per-slot
+    // media choice (kept across "Regenerate All"), otherwise leave mediaIds
+    // undefined so the slot inherits the live wizard-level selection at render and
+    // submit time. Do NOT bake selectedMediaIds in here: doing so freezes an empty
+    // array when media is added after generating, which then defeats the
+    // `?? selectedMediaIds` fallback (an empty array is not nullish) and the post
+    // ends up scheduled with no media. `undefined` = inherit, `[]` = explicit none.
     const initialCopies: SlotGeneratedCopy[] = effectiveSlots.map(slot => ({
       slotKey: slot.key,
       scheduledAt: publishMode === 'now' && slot.key === 'now' ? null : slotToIso(slot),
@@ -324,7 +331,7 @@ export function GenerateStep({
       copy: null,
       warnings: [],
       status: 'pending' as const,
-      mediaIds: generatedSlotCopies.find(sc => sc.slotKey === slot.key)?.mediaIds ?? selectedMediaIds,
+      mediaIds: generatedSlotCopies.find(sc => sc.slotKey === slot.key)?.mediaIds,
     }));
     onSlotCopiesChange(initialCopies);
 
@@ -1048,6 +1055,7 @@ export function GenerateStep({
             accountId={accountId}
             campaignName={contentBrief.title}
             libraryItems={libraryItems ?? []}
+            onLibraryItemsChange={onLibraryUpdate}
             selectedMediaIds={targetCopy?.mediaIds ?? selectedMediaIds}
             onMediaChange={(ids) => handleSlotMediaChange(mediaTargetSlot, ids)}
             onClose={() => setMediaTargetSlot(null)}
@@ -1067,6 +1075,7 @@ interface SlotMediaModalProps {
   accountId: string;
   campaignName?: string;
   libraryItems: MediaAssetSummary[];
+  onLibraryItemsChange?: Dispatch<SetStateAction<MediaAssetSummary[]>>;
   selectedMediaIds: string[];
   onMediaChange: (ids: string[]) => void;
   onClose: () => void;
@@ -1077,6 +1086,7 @@ function SlotMediaModal({
   accountId,
   campaignName,
   libraryItems,
+  onLibraryItemsChange,
   selectedMediaIds,
   onMediaChange,
   onClose,
@@ -1128,6 +1138,7 @@ function SlotMediaModal({
             accountId={accountId}
             campaignName={campaignName}
             libraryItems={libraryItems}
+            onLibraryItemsChange={onLibraryItemsChange}
             selectedMediaIds={selectedMediaIds}
             onMediaChange={onMediaChange}
           />

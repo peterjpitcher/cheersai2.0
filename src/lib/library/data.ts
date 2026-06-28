@@ -4,6 +4,15 @@ import { normaliseTags } from "@/lib/library/tags";
 import { SYSTEM_MEDIA_TAGS } from "@/lib/library/system-tags";
 import { isSchemaMissingError } from "@/lib/supabase/errors";
 
+/** Default cap on how many library assets a single list call returns. */
+const DEFAULT_MEDIA_LIBRARY_LIMIT = 100;
+/**
+ * TTL (seconds) for signed preview URLs. Kept long enough to outlast a typical
+ * create/planner session so previews don't silently break mid-flow (the create
+ * wizard signs once on open and reuses the list across steps).
+ */
+const PREVIEW_URL_SIGN_TTL_SECONDS = 60 * 60;
+
 export interface MediaAssetSummary {
   id: string;
   fileName: string;
@@ -39,6 +48,12 @@ interface ListMediaAssetsOptions {
   includeSystemAssets?: boolean;
   /** Storage path prefixes to exclude (uses SQL LIKE with trailing %) */
   excludeStoragePathPrefixes?: string[];
+  /**
+   * Max assets to return (newest first). Defaults to {@link DEFAULT_MEDIA_LIBRARY_LIMIT}.
+   * Surfaces that let a user pick from a large library (e.g. the create wizard)
+   * can raise this so older selections stay resolvable.
+   */
+  limit?: number;
 }
 
 export async function listMediaAssets(
@@ -76,7 +91,7 @@ export async function listMediaAssets(
 
     const { data, error } = await query
       .order("uploaded_at", { ascending: false })
-      .limit(100)
+      .limit(options.limit ?? DEFAULT_MEDIA_LIBRARY_LIMIT)
       .returns<MediaAssetRow[]>();
 
     if (error) {
@@ -127,7 +142,7 @@ export async function listMediaAssets(
     if (requestedPaths.size) {
       const { data: signed, error: signedError } = await supabase.storage
         .from(MEDIA_BUCKET)
-        .createSignedUrls(Array.from(requestedPaths), 600);
+        .createSignedUrls(Array.from(requestedPaths), PREVIEW_URL_SIGN_TTL_SECONDS);
 
       if (signedError) {
         console.error("[library] failed to sign media previews", signedError);

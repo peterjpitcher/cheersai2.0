@@ -9,7 +9,10 @@ import { DEFAULT_TIMEZONE } from "@/lib/constants";
 
 export async function getCreateModalData() {
     const [mediaAssets, ownerSettings] = await Promise.all([
-        listMediaAssets({ excludeTags: ["Tournament"] }),
+        // Raise the cap above the default: the create wizard lets the user pick from
+        // (and restore drafts referencing) a large library, so older assets must stay
+        // resolvable rather than dropping off a 100-item window.
+        listMediaAssets({ excludeTags: ["Tournament"], limit: 250 }),
         getOwnerSettings(),
     ]);
 

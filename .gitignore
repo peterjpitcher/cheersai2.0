@@ -62,3 +62,6 @@ tasks/codex-qa-review/*-review-pack.md
 tasks/codex-qa-review/*-findings.json
 .env*.local
 node-compile-cache/
+
+# graphify knowledge-graph output (generated tooling artifact)
+graphify-out/

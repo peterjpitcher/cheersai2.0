@@ -2,7 +2,7 @@
 
 import { GripVertical, X } from 'lucide-react';
 import Image from 'next/image';
-import { useCallback, useState } from 'react';
+import { useCallback, useState, type Dispatch, type SetStateAction } from 'react';
 
 import { MediaUploadPanel } from '@/features/library/media-upload-panel';
 import { updateMediaAsset } from '@/app/(app)/library/actions';
@@ -24,6 +24,13 @@ interface MediaPickerProps {
   accountId: string;
   /** Full library items for browse/select */
   libraryItems?: MediaAssetSummary[];
+  /**
+   * Notifies the parent when the library contents change (e.g. a new upload),
+   * so the parent's library state stays in sync. Without this, freshly uploaded
+   * assets live only inside this component and become unresolvable in later
+   * wizard steps that look selected ids up in the parent's library.
+   */
+  onLibraryItemsChange?: Dispatch<SetStateAction<MediaAssetSummary[]>>;
 }
 
 // ---------------------------------------------------------------------------
@@ -43,10 +50,23 @@ export function MediaPicker({
   campaignName,
   accountId,
   libraryItems = [],
+  onLibraryItemsChange,
 }: MediaPickerProps): React.JSX.Element {
   const [allItems, setAllItems] = useState<MediaAssetSummary[]>(libraryItems);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+
+  // Apply a library change locally AND mirror it to the parent so both copies
+  // stay in sync. The generate-step preview resolves selected media against the
+  // wizard's library, so an upload that only updated this component's local copy
+  // would render as "No media attached" downstream.
+  const applyLibraryChange = useCallback<Dispatch<SetStateAction<MediaAssetSummary[]>>>(
+    (action) => {
+      setAllItems(action);
+      onLibraryItemsChange?.(action);
+    },
+    [onLibraryItemsChange],
+  );
 
   // Find selected items maintaining order
   const selectedItems = selectedMediaIds
@@ -56,7 +76,7 @@ export function MediaPicker({
   // Handle new upload completion -- auto-tag with campaign name
   const handleUploadComplete = useCallback(
     async (item: MediaAssetSummary) => {
-      setAllItems((prev) => [item, ...prev]);
+      applyLibraryChange((prev) => [item, ...prev]);
       onMediaChange([...selectedMediaIds, item.id]);
 
       // Auto-tag with campaign name (D-13)
@@ -71,7 +91,7 @@ export function MediaPicker({
         }
       }
     },
-    [selectedMediaIds, onMediaChange, campaignName],
+    [selectedMediaIds, onMediaChange, campaignName, applyLibraryChange],
   );
 
   // Handle selecting from library tab
@@ -182,7 +202,7 @@ export function MediaPicker({
         libraryItems={allItems}
         onLibrarySelect={handleLibrarySelect}
         onLibrarySelectionChange={handleLibrarySelectionChange}
-        onLibraryItemsChange={setAllItems}
+        onLibraryItemsChange={applyLibraryChange}
         selectedIds={selectedMediaIds}
       />
     </div>

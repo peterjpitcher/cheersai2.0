@@ -163,7 +163,8 @@ describe("listMediaAssets", () => {
         "account-1/original/music-bingo.png",
         "derived/asset-1/square.jpg",
       ]),
-      600,
+      // Preview-URL TTL, raised to 1h so signed URLs outlast a typical create/planner session.
+      3600,
     );
     expect(assets[0]?.previewUrl).toBe("signed:account-1/original/music-bingo.png");
   });

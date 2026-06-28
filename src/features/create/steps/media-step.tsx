@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback } from 'react';
+import { useCallback, type Dispatch, type SetStateAction } from 'react';
 import { ImagePlus } from 'lucide-react';
 
 import { MediaPicker } from '@/features/create/media/media-picker';
@@ -18,6 +18,8 @@ interface MediaStepProps {
   accountId: string;
   campaignName?: string;
   libraryItems?: MediaAssetSummary[];
+  /** Propagates library changes (e.g. new uploads) up to the wizard's library state. */
+  onLibraryItemsChange?: Dispatch<SetStateAction<MediaAssetSummary[]>>;
   platforms?: string[];
 }
 
@@ -38,6 +40,7 @@ export function MediaStep({
   accountId,
   campaignName,
   libraryItems = [],
+  onLibraryItemsChange,
   platforms = [],
 }: MediaStepProps): React.JSX.Element {
   // contentId kept in props for wizard compatibility; not used directly in this step
@@ -82,6 +85,7 @@ export function MediaStep({
         campaignName={campaignName}
         accountId={accountId}
         libraryItems={libraryItems}
+        onLibraryItemsChange={onLibraryItemsChange}
       />
 
       {platforms.includes('instagram') && selectedMediaIds.length >= 2 && (
