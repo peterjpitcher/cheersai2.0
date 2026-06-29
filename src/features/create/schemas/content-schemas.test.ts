@@ -98,6 +98,33 @@ describe('Content Zod Schemas', () => {
       const result = weeklyCampaignBriefSchema.safeParse(input);
       expect(result.success).toBe(true);
     });
+
+    it('should default placement to feed when omitted', () => {
+      const result = weeklyCampaignBriefSchema.safeParse({
+        ...baseFields,
+        contentType: 'weekly_recurring' as const,
+        dayOfWeek: 1,
+        time: '12:00',
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.placement).toBe('feed');
+      }
+    });
+
+    it('should accept a story placement for weekly recurring posts', () => {
+      const result = weeklyCampaignBriefSchema.safeParse({
+        ...baseFields,
+        contentType: 'weekly_recurring' as const,
+        dayOfWeek: 5,
+        time: '19:00',
+        placement: 'story',
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.placement).toBe('story');
+      }
+    });
   });
 
   describe('contentBriefSchema (discriminated union)', () => {

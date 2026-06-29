@@ -65,6 +65,10 @@ function resolveBatchPlacements(
     return placements.length ? Array.from(new Set(placements)) : ['feed'];
   }
 
+  if (contentType === 'weekly_recurring') {
+    return brief.placement === 'story' ? ['story'] : ['feed'];
+  }
+
   return ['feed'];
 }
 

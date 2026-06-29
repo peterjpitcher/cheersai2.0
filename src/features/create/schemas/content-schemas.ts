@@ -108,7 +108,10 @@ export const weeklyCampaignBriefSchema = baseContentSchema.extend({
   time: z
     .string()
     .regex(/^\d{2}:\d{2}$/, 'Time must be HH:MM format'),
+  // Number of weekly occurrences to repeat (not a calendar end date).
   weeksAhead: z.number().int().min(1).max(12).default(4),
+  // Whether each occurrence posts to the feed or as a story (Facebook/Instagram only).
+  placement: z.enum(['feed', 'story']).default('feed'),
 });
 
 // ---------------------------------------------------------------------------

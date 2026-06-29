@@ -304,13 +304,19 @@ async function buildContentPayload(
     .single();
 
   const metadata = item as ContentItemMetadata | null;
-  const contentType = (metadata?.content_type ?? 'instant_post') as ContentPayload['contentType'];
+  const rawContentType = (metadata?.content_type ?? 'instant_post') as ContentPayload['contentType'];
   const text = (variant?.body as string) ?? '';
   const mediaIds = (variant?.media_ids as string[]) ?? [];
 
-  // Determine placement from content type
+  // Determine placement from content type or the row's explicit placement.
   const placement: 'feed' | 'story' =
-    contentType === 'story' || metadata?.placement === 'story' ? 'story' : 'feed';
+    rawContentType === 'story' || metadata?.placement === 'story' ? 'story' : 'feed';
+
+  // Publish as a story whenever the placement is story — regardless of the
+  // content type. This covers weekly_recurring items posted as stories, which
+  // must dispatch to publishStory rather than publishPost.
+  const contentType: ContentPayload['contentType'] =
+    placement === 'story' ? 'story' : rawContentType;
 
   // Resolve media URLs -- sign via Supabase storage instead of passing raw paths
   const resolved = await resolveMediaUrls({ mediaIds, placement });

@@ -256,7 +256,7 @@ export function CreateWizard({ initialDraftId, accountId, onClose }: CreateWizar
         story: {},
         event: { eventName: '', eventDate: '', eventTime: '', venue: DEFAULT_EVENT_VENUE, placements: ['feed'] },
         promotion: { offerSummary: '', endDate: '', placements: ['feed'] },
-        weekly_recurring: { dayOfWeek: 1, time: '12:00', weeksAhead: 4 },
+        weekly_recurring: { dayOfWeek: 1, time: '12:00', weeksAhead: 4, placement: 'feed' },
       };
 
       form.reset({

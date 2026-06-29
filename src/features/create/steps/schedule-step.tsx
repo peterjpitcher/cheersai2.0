@@ -72,6 +72,9 @@ export function ScheduleStep({
   const timezone = DEFAULT_TIMEZONE;
   const today = DateTime.now().setZone(timezone).toFormat('yyyy-MM-dd');
 
+  // Weekly recurring is a pure occurrence count, not a calendar of chosen dates.
+  const isWeeklyRecurring = contentBrief.contentType === 'weekly_recurring';
+
   // -------------------------------------------------------------------------
   // Existing planner items
   // -------------------------------------------------------------------------
@@ -179,6 +182,29 @@ export function ScheduleStep({
   }, [rawSuggestions, existingItems, timezone]);
 
   // -------------------------------------------------------------------------
+  // Weekly recurring: auto-select every derived occurrence
+  // -------------------------------------------------------------------------
+  // The user picks day-of-week, time and a count — they never choose specific
+  // dates. We materialise exactly `weeksAhead` occurrences (no deconfliction,
+  // so the count is honoured) and keep them in sync if the brief changes.
+  useEffect(() => {
+    if (!isWeeklyRecurring) return;
+    const desired: ScheduleSlot[] = rawSuggestions.map((s) => ({
+      key: `suggestion:${s.id}:${s.date}:${s.time}`,
+      date: s.date,
+      time: s.time,
+      label: s.label,
+      source: 'suggestion',
+      suggestionId: s.id,
+    }));
+    const desiredKeys = desired.map((s) => s.key).join('|');
+    const currentKeys = selectedSlots.map((s) => s.key).join('|');
+    if (desiredKeys !== currentKeys) {
+      onSlotsChange(desired);
+    }
+  }, [isWeeklyRecurring, rawSuggestions, selectedSlots, onSlotsChange]);
+
+  // -------------------------------------------------------------------------
   // Slot management
   // -------------------------------------------------------------------------
 
@@ -254,7 +280,8 @@ export function ScheduleStep({
   // -------------------------------------------------------------------------
 
   const showCalendar =
-    contentBrief.contentType !== 'instant_post' || publishMode === 'schedule';
+    !isWeeklyRecurring &&
+    (contentBrief.contentType !== 'instant_post' || publishMode === 'schedule');
 
   // -------------------------------------------------------------------------
   // Render
@@ -318,6 +345,34 @@ export function ScheduleStep({
         <p className="text-sm text-muted-foreground">
           Your post will be queued for immediate publishing.
         </p>
+      )}
+
+      {/* Weekly recurring: read-only occurrence summary (no date picking) */}
+      {isWeeklyRecurring && (
+        <div className="space-y-3">
+          <p className="text-sm text-muted-foreground">
+            This will publish {rawSuggestions.length}{' '}
+            {rawSuggestions.length === 1 ? 'post' : 'posts'}, one each week at the
+            same time. You don’t need to pick dates — change the day, time or count
+            on the previous step.
+          </p>
+          <ul className="divide-y divide-border rounded-lg border border-border">
+            {rawSuggestions.map((slot) => {
+              const dt = DateTime.fromISO(`${slot.date}T${slot.time}`, { zone: timezone });
+              return (
+                <li
+                  key={slot.id}
+                  className="flex items-center justify-between px-3 py-2 text-sm"
+                >
+                  <span className="font-medium text-foreground">{slot.label}</span>
+                  <span className="text-muted-foreground">
+                    {dt.isValid ? dt.toFormat('ccc d LLL, HH:mm') : `${slot.date} ${slot.time}`}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
       )}
 
       {/* Calendar */}

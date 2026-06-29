@@ -23,14 +23,45 @@ interface WeeklyRecurringFieldsProps {
  * Type-specific fields for weekly recurring content.
  * Provides day-of-week selector, time picker, and weeks-ahead slider.
  */
+const PLACEMENTS = [
+  { value: 'feed', label: 'Feed post' },
+  { value: 'story', label: 'Story' },
+] as const;
+
 export function WeeklyRecurringFields({ form }: WeeklyRecurringFieldsProps): React.JSX.Element {
   const { register, watch, setValue, formState: { errors } } = form;
   const selectedDay = watch('dayOfWeek') as number | undefined;
   const weeksAhead = (watch('weeksAhead') as number) ?? 4;
+  const placement = (watch('placement') as 'feed' | 'story') ?? 'feed';
 
   return (
     <fieldset className="space-y-4">
       <legend className="text-sm font-medium text-foreground">Recurring Schedule</legend>
+
+      <div className="space-y-1.5">
+        <Label>Post type</Label>
+        <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Post type">
+          {PLACEMENTS.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              role="radio"
+              aria-checked={placement === option.value}
+              className={`rounded-lg border px-3.5 py-2 text-sm font-medium transition-colors ${
+                placement === option.value
+                  ? 'border-primary bg-primary text-primary-foreground'
+                  : 'border-border bg-card text-foreground hover:border-ring/40 hover:bg-muted'
+              }`}
+              onClick={() => setValue('placement', option.value, { shouldValidate: true })}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Stories post to Facebook and Instagram only and need one image.
+        </p>
+      </div>
 
       <div className="space-y-1.5">
         <Label>
@@ -76,9 +107,9 @@ export function WeeklyRecurringFields({ form }: WeeklyRecurringFieldsProps): Rea
 
       <div className="space-y-1.5">
         <div className="flex items-center justify-between">
-          <Label htmlFor="weeksAhead">Weeks ahead</Label>
+          <Label htmlFor="weeksAhead">Number of posts</Label>
           <span className="text-sm font-medium text-foreground">
-            {weeksAhead} {weeksAhead === 1 ? 'week' : 'weeks'}
+            {weeksAhead} {weeksAhead === 1 ? 'post' : 'posts'}
           </span>
         </div>
         <input
@@ -91,9 +122,12 @@ export function WeeklyRecurringFields({ form }: WeeklyRecurringFieldsProps): Rea
           {...register('weeksAhead', { valueAsNumber: true })}
         />
         <div className="flex justify-between text-xs text-muted-foreground">
-          <span>1 week</span>
-          <span>12 weeks</span>
+          <span>1 post</span>
+          <span>12 posts</span>
         </div>
+        <p className="text-xs text-muted-foreground">
+          Repeats weekly at the chosen time — no fixed end date.
+        </p>
       </div>
     </fieldset>
   );

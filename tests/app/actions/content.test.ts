@@ -325,6 +325,89 @@ describe('createScheduledBatch', () => {
     ]);
   });
 
+  it('creates story-placement rows for a weekly recurring story', async () => {
+    supabaseMock.enqueueResult({ data: { id: 'draft-1' }, error: null });
+    supabaseMock.enqueueResult({ data: { id: 'camp-1' }, error: null });
+
+    let selectCallCount = 0;
+    (supabaseMock.mock as Record<string, unknown>).select = vi.fn((...args: unknown[]) => {
+      supabaseMock.calls.push({ method: 'select', args });
+      selectCallCount++;
+      if (selectCallCount === 3) {
+        return {
+          data: [
+            { id: 'ci-story-fb', platform: 'facebook' },
+            { id: 'ci-story-ig', platform: 'instagram' },
+          ],
+          error: null,
+        };
+      }
+      return supabaseMock.mock;
+    });
+
+    (supabaseMock.mock as Record<string, unknown>).upsert = vi.fn((...args: unknown[]) => {
+      supabaseMock.calls.push({ method: 'upsert', args });
+      return Promise.resolve({ error: null });
+    });
+
+    (supabaseMock.mock as Record<string, unknown>).delete = vi.fn((...args: unknown[]) => {
+      supabaseMock.calls.push({ method: 'delete', args });
+      return supabaseMock.mock;
+    });
+
+    const { createScheduledBatch } = await import('@/app/actions/content');
+
+    const result = await createScheduledBatch({
+      draftContentId: 'draft-1',
+      contentType: 'weekly_recurring',
+      brief: {
+        title: 'Friday Specials',
+        prompt: 'Weekly food special',
+        dayOfWeek: 5,
+        time: '18:00',
+        weeksAhead: 1,
+        placement: 'story',
+        platforms: ['facebook', 'instagram'],
+      },
+      selectedMediaIds: ['media-1'],
+      slotCopies: [
+        {
+          slotKey: 'week-1',
+          scheduledAt: '2026-07-03T18:00:00.000Z',
+          label: 'Week 1',
+          copy: {
+            facebook: { body: 'FB story copy' },
+            instagram: { body: 'IG story copy' },
+          },
+        },
+      ],
+      platforms: ['facebook', 'instagram'],
+      mode: 'schedule',
+    });
+
+    expect(result.error).toBeUndefined();
+    expect(result.success).toBe(true);
+    // One slot x story placement x 2 platforms = 2 jobs
+    expect(enqueueAndDispatch).toHaveBeenCalledTimes(2);
+
+    const contentInsertCall = supabaseMock.calls.find((call) => {
+      if (call.method !== 'insert') return false;
+      const payload = call.args[0];
+      return Array.isArray(payload) && Boolean((payload[0] as Record<string, unknown> | undefined)?.prompt_context);
+    });
+    const contentRows = contentInsertCall?.args[0] as Array<Record<string, unknown>>;
+    expect(contentRows.map((row) => `${row.platform}:${row.placement}`)).toEqual([
+      'facebook:story',
+      'instagram:story',
+    ]);
+    expect(contentRows.every((row) => row.content_type === 'weekly_recurring')).toBe(true);
+
+    // Stories carry no body text
+    const variantUpsertCall = supabaseMock.calls.find((call) => call.method === 'upsert');
+    const variantRows = variantUpsertCall?.args[0] as Array<Record<string, unknown>>;
+    expect(variantRows.map((row) => row.body)).toEqual(['', '']);
+  });
+
   it('rejects event campaigns that request both post and story placements', async () => {
     supabaseMock.enqueueResult({ data: { id: 'draft-1' }, error: null });
 
