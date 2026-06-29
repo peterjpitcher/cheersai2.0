@@ -157,7 +157,7 @@ describe('createScheduledBatch', () => {
     const result = await createScheduledBatch({
       draftContentId: 'draft-1',
       contentType: 'event',
-      brief: { title: 'Test Event', eventDate: '2026-06-15', eventTime: '19:00' },
+      brief: { title: 'Test Event', eventName: 'Test Event', platforms: ['facebook', 'instagram'], eventDate: '2026-06-15', eventTime: '19:00' },
       selectedMediaIds: [],
       slotCopies: [
         {
@@ -267,7 +267,8 @@ describe('createScheduledBatch', () => {
         platforms: ['facebook', 'instagram'],
         placements: ['feed', 'story'],
       },
-      selectedMediaIds: [],
+      // Story placement requires media — provide an image so the guard passes.
+      selectedMediaIds: ['media-1'],
       slotCopies: [
         {
           slotKey: 'slot-1',
@@ -457,6 +458,7 @@ describe('createScheduledBatch', () => {
       contentType: 'event',
       brief: {
         title: 'Quiz Night',
+        eventName: 'Quiz Night',
         eventDate: '2026-06-15',
         eventTime: '19:00',
         platforms: ['facebook', 'instagram'],
@@ -535,7 +537,7 @@ describe('createScheduledBatch', () => {
     const result = await createScheduledBatch({
       draftContentId: 'draft-1',
       contentType: 'event',
-      brief: { title: 'Test Event', eventDate: '2026-06-15', eventTime: '19:00' },
+      brief: { title: 'Test Event', eventName: 'Test Event', platforms: ['facebook', 'instagram'], eventDate: '2026-06-15', eventTime: '19:00' },
       selectedMediaIds: [],
       slotCopies: [
         {

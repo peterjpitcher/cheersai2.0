@@ -1,6 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { DateTime } from 'luxon';
 
 import { requireAuthContext } from '@/lib/auth/server';
 import { contentBriefSchema } from '@/features/create/schemas/content-schemas';
@@ -10,7 +11,7 @@ import { enqueueAndDispatch } from '@/lib/publishing/queue';
 import { buildCampaignMetadata, mapCampaignType } from '@/lib/publishing/build-campaign-metadata';
 import { composePublishBody, buildPreviewData } from '@/lib/publishing/compose-body';
 import { readPlatformCtaLinks } from '@/lib/publishing/copy-rules';
-import { MEDIA_BUCKET } from '@/lib/constants';
+import { MEDIA_BUCKET, DEFAULT_TIMEZONE } from '@/lib/constants';
 import type { ContentItem, ContentType, Platform, PlatformCopy } from '@/types/content';
 
 // ---------------------------------------------------------------------------
@@ -320,12 +321,14 @@ export async function scheduleContent(
   try {
     const { supabase, accountId } = await requireAuthContext();
 
-    // Validate date is in the future
-    const scheduledDate = new Date(scheduledAt);
-    if (isNaN(scheduledDate.getTime())) {
+    // Validate date is in the future. Parse via Luxon in the app timezone so a
+    // naive datetime string is interpreted as Europe/London (not the server's
+    // UTC), consistent with the rest of the create flow.
+    const scheduledDate = DateTime.fromISO(scheduledAt, { zone: DEFAULT_TIMEZONE });
+    if (!scheduledDate.isValid) {
       return { error: 'Invalid date provided' };
     }
-    if (scheduledDate.getTime() <= Date.now()) {
+    if (scheduledDate.toMillis() <= DateTime.now().toMillis()) {
       return { error: 'Schedule date must be in the future' };
     }
 
@@ -440,8 +443,13 @@ export async function getCalendarItemsAction(
       `)
       .eq('account_id', accountId)
       .is('deleted_at', null)
-      .or(`scheduled_for.gte.${startIso},scheduled_at.gte.${startIso}`)
-      .or(`scheduled_for.lte.${endIso},scheduled_at.lte.${endIso}`)
+      // A row is in range when EITHER timestamp column falls fully within
+      // [start, end]. Expressed as an OR of two ANDs so the window can't be
+      // satisfied by mixing one column's lower bound with the other's upper.
+      .or(
+        `and(scheduled_for.gte.${startIso},scheduled_for.lte.${endIso}),` +
+        `and(scheduled_at.gte.${startIso},scheduled_at.lte.${endIso})`,
+      )
       .not('status', 'eq', 'draft')
       .order('scheduled_for', { ascending: true, nullsFirst: false });
 
@@ -497,8 +505,15 @@ export async function getCalendarItemsAction(
       const scheduledFor = (row.scheduled_for as string) ?? (row.scheduled_at as string);
       if (!scheduledFor) continue;
 
-      // Ensure item falls within the requested range
-      if (scheduledFor < startIso || scheduledFor > endIso) continue;
+      // Ensure item falls within the requested range. Compare instants (millis),
+      // not raw ISO strings — mixed offsets (e.g. +01:00 vs Z) sort incorrectly
+      // lexicographically and would mis-drop boundary items across BST/GMT.
+      const scheduledMillis = DateTime.fromISO(scheduledFor).toMillis();
+      const startMillis = DateTime.fromISO(startIso).toMillis();
+      const endMillis = DateTime.fromISO(endIso).toMillis();
+      if (Number.isNaN(scheduledMillis) || scheduledMillis < startMillis || scheduledMillis > endMillis) {
+        continue;
+      }
 
       let mediaPreview: CalendarItemDisplay['mediaPreview'] = null;
       const previewRef = previewRefs.get(row.id as string);
@@ -641,6 +656,16 @@ export async function createScheduledBatch(
       mode,
     } = input;
 
+    // Re-validate the brief server-side — this batch path is a trust boundary
+    // and must not rely on the client having validated. The discriminated union
+    // keys off contentType (passed as a sibling field), so inject it. We keep
+    // the original brief object (downstream reads several fields by key) and
+    // only reject when it is not a well-formed content brief.
+    const briefValidation = contentBriefSchema.safeParse({ ...brief, contentType });
+    if (!briefValidation.success) {
+      return { error: briefValidation.error.issues[0]?.message ?? 'Invalid content brief' };
+    }
+
     // Verify the draft row exists and belongs to this account
     const { data: draftRow, error: draftError } = await supabase
       .from('content_items')
@@ -665,11 +690,11 @@ export async function createScheduledBatch(
       return { error: 'Select Facebook or Instagram when scheduling stories.' };
     }
 
-    // Weekly-recurring stories require an image. Reject up front rather than
-    // scheduling a blank story that only fails (or publishes empty) at publish
-    // time. Scoped to weekly_recurring (the new story-placement path); the same
-    // gap for story/event/promotion placements is tracked separately.
-    if (contentType === 'weekly_recurring' && placements.includes('story')) {
+    // Stories require an image. Reject up front rather than scheduling a blank
+    // story that only fails (or publishes empty) at publish time. Applies to any
+    // story placement (story content type, or event/promotion/weekly with a
+    // story placement) — a story slot must resolve to at least one media asset.
+    if (placements.includes('story')) {
       const storySlotMissingMedia = slotCopies.some(
         (slot) => (slot.mediaIds ?? selectedMediaIds).length === 0,
       );

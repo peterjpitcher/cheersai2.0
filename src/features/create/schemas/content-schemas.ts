@@ -13,7 +13,7 @@ import { z } from 'zod';
 const placementSchema = z.enum(['feed', 'story']);
 const eventPlacementsSchema = z
   .array(placementSchema)
-  .length(1, 'Choose either a post or a story for event campaigns, not both')
+  .length(1, 'Choose either a post or a story for event campaigns, not both.')
   .default(['feed']);
 const campaignPlacementsSchema = z
   .array(placementSchema)
