@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
   classifyMetaError,
-  classifyGoogleError,
   ErrorClassification,
   isExplicitMetaConnectionFailure,
   parseMetaGraphError,
@@ -94,32 +93,6 @@ describe('parseMetaGraphError', () => {
     expect(isExplicitMetaConnectionFailure(parseMetaGraphError(400, {
       error: { message: 'Invalid OAuth 2.0 Access Token', type: 'OAuthException', code: 190 },
     }))).toBe(true);
-  });
-});
-
-describe('classifyGoogleError', () => {
-  it('should classify 401 as AUTH', () => {
-    expect(classifyGoogleError(401)).toBe(ErrorClassification.AUTH);
-  });
-
-  it('should classify 403 as AUTH', () => {
-    expect(classifyGoogleError(403)).toBe(ErrorClassification.AUTH);
-  });
-
-  it('should classify 429 as RATE_LIMIT', () => {
-    expect(classifyGoogleError(429)).toBe(ErrorClassification.RATE_LIMIT);
-  });
-
-  it('should classify 500 as TRANSIENT', () => {
-    expect(classifyGoogleError(500)).toBe(ErrorClassification.TRANSIENT);
-  });
-
-  it('should classify 400 as CONTENT_REJECTED', () => {
-    expect(classifyGoogleError(400)).toBe(ErrorClassification.CONTENT_REJECTED);
-  });
-
-  it('should classify 200 as UNKNOWN', () => {
-    expect(classifyGoogleError(200)).toBe(ErrorClassification.UNKNOWN);
   });
 });
 

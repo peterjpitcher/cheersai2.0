@@ -10,8 +10,8 @@ export const MEDIA_BUCKET = "media";
 /** All content types matching the content_type database enum */
 export const CONTENT_TYPES = ['instant_post', 'story', 'event', 'promotion', 'weekly_recurring'] as const;
 
-/** All platforms matching the platform database enum */
-export const PLATFORMS = ['facebook', 'instagram', 'gbp'] as const;
+/** All platforms the app publishes to */
+export const PLATFORMS = ['facebook', 'instagram'] as const;
 
 /** All content statuses matching the content_status database enum */
 export const CONTENT_STATUSES = ['draft', 'review', 'approved', 'scheduled', 'queued', 'publishing', 'published', 'failed'] as const;

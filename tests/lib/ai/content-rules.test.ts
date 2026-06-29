@@ -7,7 +7,7 @@ const ORIGINAL_PROOF_POINTS = [...PROOF_POINTS];
 const SAMPLE_PROOF_POINT: ProofPoint = {
   id: "parking",
   variants: ["Free parking available."],
-  allowedChannels: ["facebook", "instagram", "gbp"],
+  allowedChannels: ["facebook", "instagram"],
   allowedUseCases: ["event", "promotion", "weekly", "instant"],
   intentTags: ["convenience"],
 };
@@ -49,8 +49,8 @@ describe("content rules", () => {
     expect(result.issues.some((issue) => issue.code === "link_in_bio_missing")).toBe(true);
   });
 
-  it("passes story lint for all three platforms with an empty body and a campaign cta", () => {
-    for (const platform of ["facebook", "instagram", "gbp"] as const) {
+  it("passes story lint for all platforms with an empty body and a campaign cta", () => {
+    for (const platform of ["facebook", "instagram"] as const) {
       const result = lintContent({
         body: "",
         platform,
@@ -125,21 +125,6 @@ describe("content rules", () => {
     expect(body).toContain("Book now via the link in our bio.");
     expect(body).not.toContain("the-anchor.pub");
     expect(body).not.toContain("Book now at");
-  });
-
-  it("enforces GBP hard rules (no hashtags, no link-in-bio, max length)", () => {
-    const longBody = `${"Great food and drink. ".repeat(60)} Link in bio for details. #pubnight`;
-    const { body } = applyChannelRules({
-      body: longBody,
-      platform: "gbp",
-      placement: "feed",
-      context: { ctaUrl: "https://example.com/book" },
-      advanced: { includeHashtags: true, includeEmojis: true },
-    });
-
-    expect(body.toLowerCase()).not.toContain("link in bio");
-    expect(body).not.toContain("#");
-    expect(body.length).toBeLessThanOrEqual(900);
   });
 
   it("flags blocked tokens in lint", () => {
@@ -351,46 +336,6 @@ describe("applyChannelRules — Instagram feed", () => {
   });
 });
 
-describe("applyChannelRules — GBP feed", () => {
-  it("removes hashtags entirely", () => {
-    const { body } = applyChannelRules({
-      body: "Join us tonight. #pubnight #food",
-      platform: "gbp",
-      placement: "feed",
-      context: {},
-      advanced: { includeHashtags: true, includeEmojis: false },
-    });
-
-    expect(body).not.toContain("#");
-  });
-
-  it("enforces 900-character limit", () => {
-    const longBody = "A".repeat(1000);
-    const { body } = applyChannelRules({
-      body: longBody,
-      platform: "gbp",
-      placement: "feed",
-      context: {},
-      advanced: { includeHashtags: false, includeEmojis: false },
-    });
-
-    expect(body.length).toBeLessThanOrEqual(900);
-  });
-
-  it("trims emojis to 2", () => {
-    const { body } = applyChannelRules({
-      body: "Great food. \u{1F37B}\u{1F37A}\u{1F355}\u{1F3B5}",
-      platform: "gbp",
-      placement: "feed",
-      context: {},
-      advanced: { includeHashtags: false, includeEmojis: true },
-    });
-
-    const emojis = body.match(/\p{Extended_Pictographic}/gu) ?? [];
-    expect(emojis.length).toBeLessThanOrEqual(2);
-  });
-});
-
 describe("applyChannelRules — Story", () => {
   it("returns empty body regardless of input", () => {
     const { body } = applyChannelRules({
@@ -444,19 +389,6 @@ describe("lintContent", () => {
 
     expect(lint.pass).toBe(false);
     expect(lint.issues.some((issue) => issue.code === "url_disallowed")).toBe(true);
-  });
-
-  it("fails for GBP post with hashtags with gbp_hashtags issue", () => {
-    const lint = lintContent({
-      body: "Good food tonight. #pubnight",
-      platform: "gbp",
-      placement: "feed",
-      context: {},
-      advanced: { includeHashtags: true, includeEmojis: false },
-    });
-
-    expect(lint.pass).toBe(false);
-    expect(lint.issues.some((issue) => issue.code === "gbp_hashtags")).toBe(true);
   });
 
   it("fails for post with blocked token 'undefined'", () => {

@@ -39,11 +39,6 @@ vi.mock('@/lib/connections/metadata', () => ({
   evaluateConnectionMetadata: vi.fn(() => ({ complete: true, missingKeys: [] })),
 }));
 
-vi.mock('@/lib/gbp/location-id', () => ({
-  getGbpLocationIdValidationError: vi.fn(() => null),
-  normalizeCanonicalGbpLocationId: vi.fn((v: string) => v),
-}));
-
 vi.mock('next/cache', () => ({
   revalidatePath: vi.fn(),
 }));
@@ -282,12 +277,12 @@ describe('completeOAuthConnect', () => {
 
   it('should store refresh token when present', async () => {
     const oauthStateRow = {
-      id: 'state-row-1', provider: 'gbp',
+      id: 'state-row-1', provider: 'instagram',
       used_at: null, expires_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
     };
     mockCompleteOAuthFrom({ oauthStateRow });
 
-    await completeOAuthConnect('gbp', 'auth-code-123', 'valid-state');
+    await completeOAuthConnect('instagram', 'auth-code-123', 'valid-state');
 
     expect(mockStoreEncryptedToken).toHaveBeenCalledWith('conn-1', 'refresh', 'refresh-tok-456');
   });

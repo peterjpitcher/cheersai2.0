@@ -203,8 +203,8 @@ export interface PostprocessResult {
 /**
  * Multi-platform post-processing pipeline for AI-generated copy (AI-06).
  *
- * Strips banned phrases, clamps hashtags/emojis/word counts, appends
- * platform signatures, and warns about missing GBP CTAs (AI-08).
+ * Strips banned phrases, clamps hashtags/emojis/word counts, and appends
+ * platform signatures.
  */
 export function postprocessCopy(
   raw: AiGenerationResponse,
@@ -222,7 +222,6 @@ export function postprocessCopy(
     'instagram',
     config,
   );
-  const gbp = processPlatformBody(raw.gbp.body, 'gbp', config);
 
   const hasInstagramLink = Boolean(config.ctaLinks?.instagram?.trim());
   let instagramLinkInBioLine = sanitiseInstagramLinkInBioLine(
@@ -243,13 +242,6 @@ export function postprocessCopy(
   const fbHashtags = normalizeHashtags(raw.facebook.hashtags, 'facebook', config.maxHashtags['facebook'] ?? 5) ?? [];
   const igHashtags = normalizeHashtags(raw.instagram.hashtags, 'instagram', config.maxHashtags['instagram'] ?? 10) ?? [];
 
-  // AI-08: Warn when GBP CTA is null and no brand default
-  if (!raw.gbp.cta_action && !config.defaultCta) {
-    warnings.push(
-      'GBP post has no call-to-action. Consider adding one for better engagement.',
-    );
-  }
-
   return {
     copy: {
       facebook: {
@@ -261,10 +253,6 @@ export function postprocessCopy(
         body: instagramSanitised.body,
         hashtags: igHashtags,
         link_in_bio_line: instagramLinkInBioLine,
-      },
-      gbp: {
-        body: gbp,
-        cta_action: raw.gbp.cta_action,
       },
     },
     warnings,

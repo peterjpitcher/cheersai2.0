@@ -77,7 +77,7 @@ describe('materialiseRecurring', () => {
       makeRecurring({
         id: 'rec-3',
         recurringDayOfWeek: 5, // Friday
-        bodyDraft: { platforms: ['gbp'], recurringTime: '09:00', weeksAhead: 2 },
+        bodyDraft: { platforms: ['facebook'], recurringTime: '09:00', weeksAhead: 2 },
       }),
     ];
 

@@ -78,17 +78,6 @@ describe("ConnectionCards — token expiry display", () => {
     expect(screen.getByText("Does not expire")).toBeDefined();
   });
 
-  it('renders "Unknown expiry" for GBP with null expiry', async () => {
-    mockListConnectionSummaries.mockResolvedValue([
-      makeConnection({ provider: "gbp", expiresAt: undefined }),
-    ]);
-
-    const element = await ConnectionCards();
-    render(element);
-
-    expect(screen.getByText("Unknown expiry")).toBeDefined();
-  });
-
   it('renders "Expired — reconnect required" for past expiry date', async () => {
     const pastDate = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
     mockListConnectionSummaries.mockResolvedValue([
@@ -107,7 +96,7 @@ describe("ConnectionCards — token expiry display", () => {
     const formatted = soon.toLocaleDateString();
 
     mockListConnectionSummaries.mockResolvedValue([
-      makeConnection({ provider: "gbp", expiresAt: soonIso }),
+      makeConnection({ provider: "instagram", expiresAt: soonIso }),
     ]);
 
     const element = await ConnectionCards();

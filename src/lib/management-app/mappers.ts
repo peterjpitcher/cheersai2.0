@@ -58,14 +58,6 @@ export function mapManagementEventToEventCampaignPrefill(
     detail.linkInBioShortLink?.trim() ||
     detail.link_in_bio_short_link?.trim() ||
     undefined;
-  const gbpCtaUrl =
-    detail.ctaLinks?.gbp?.trim() ||
-    detail.ctaLinks?.google_business_profile?.trim() ||
-    detail.cta_links?.gbp?.trim() ||
-    detail.cta_links?.google_business_profile?.trim() ||
-    detail.googleBusinessProfileShortLink?.trim() ||
-    detail.google_business_profile_short_link?.trim() ||
-    undefined;
   const metaAdsShortLink =
     detail.ctaLinks?.meta_ads?.trim() ||
     detail.cta_links?.meta_ads?.trim() ||
@@ -131,7 +123,6 @@ export function mapManagementEventToEventCampaignPrefill(
       ctaLinks: {
         ...(facebookCtaUrl ? { facebook: facebookCtaUrl } : {}),
         ...(linkInBioUrl ? { instagram: linkInBioUrl } : {}),
-        ...(gbpCtaUrl ? { gbp: gbpCtaUrl } : {}),
       },
       prompt: promptParts.join(" "),
     },

@@ -172,7 +172,6 @@ describe('createScheduledBatch', () => {
               publishBodyOverride: 'FB1 edited final\n\nCustom booking line\n\n#Edited',
             },
             instagram: { body: 'IG1' },
-            gbp: { body: 'GBP1' },
           },
         },
         {
@@ -182,7 +181,6 @@ describe('createScheduledBatch', () => {
           copy: {
             facebook: { body: 'FB2' },
             instagram: { body: 'IG2' },
-            gbp: { body: 'GBP2' },
           },
         },
       ],
@@ -237,7 +235,6 @@ describe('createScheduledBatch', () => {
           data: [
             { id: 'ci-feed-fb', platform: 'facebook' },
             { id: 'ci-feed-ig', platform: 'instagram' },
-            { id: 'ci-feed-gbp', platform: 'gbp' },
             { id: 'ci-story-fb', platform: 'facebook' },
             { id: 'ci-story-ig', platform: 'instagram' },
           ],
@@ -267,7 +264,7 @@ describe('createScheduledBatch', () => {
         offerSummary: "25% off Gordon's Tropical Passionfruit.",
         startDate: '2026-05-01',
         endDate: '2026-05-31',
-        platforms: ['facebook', 'instagram', 'gbp'],
+        platforms: ['facebook', 'instagram'],
         placements: ['feed', 'story'],
       },
       selectedMediaIds: [],
@@ -279,17 +276,16 @@ describe('createScheduledBatch', () => {
           copy: {
             facebook: { body: 'FB promotion copy' },
             instagram: { body: 'IG promotion copy' },
-            gbp: { body: 'GBP promotion copy' },
           },
         },
       ],
-      platforms: ['facebook', 'instagram', 'gbp'],
+      platforms: ['facebook', 'instagram'],
       mode: 'schedule',
     });
 
     expect(result.error).toBeUndefined();
     expect(result.success).toBe(true);
-    expect(enqueueAndDispatch).toHaveBeenCalledTimes(5);
+    expect(enqueueAndDispatch).toHaveBeenCalledTimes(4);
 
     const campaignInsertCall = supabaseMock.calls.find((call) => {
       if (call.method !== 'insert') return false;
@@ -313,7 +309,6 @@ describe('createScheduledBatch', () => {
     expect(contentRows.map((row) => `${row.platform}:${row.placement}`)).toEqual([
       'facebook:feed',
       'instagram:feed',
-      'gbp:feed',
       'facebook:story',
       'instagram:story',
     ]);
@@ -325,7 +320,6 @@ describe('createScheduledBatch', () => {
     expect(variantRows.map((row) => row.body)).toEqual([
       expect.stringContaining('FB promotion copy'),
       expect.stringContaining('IG promotion copy'),
-      expect.stringContaining('GBP promotion copy'),
       '',
       '',
     ]);
@@ -354,7 +348,6 @@ describe('createScheduledBatch', () => {
           copy: {
             facebook: { body: 'FB event copy' },
             instagram: { body: 'IG event copy' },
-            gbp: { body: 'GBP event copy' },
           },
         },
       ],
@@ -429,7 +422,6 @@ describe('createScheduledBatch', () => {
           copy: {
             facebook: { body: 'FB1' },
             instagram: { body: 'IG1' },
-            gbp: { body: 'GBP1' },
           },
         },
       ],

@@ -18,13 +18,11 @@ const ISSUE_STYLES = {
 const PROVIDER_LABELS = {
   facebook: "Facebook Page",
   instagram: "Instagram Business",
-  gbp: "Google Business Profile",
 } as const;
 
 const PROVIDER_DOC_LINKS = {
   facebook: "https://developers.facebook.com/docs/pages/publishing/",
   instagram: "https://developers.facebook.com/docs/instagram-api/guides/content-publishing/",
-  gbp: "https://developers.google.com/my-business/content/posts-data",
 } as const;
 
 const METADATA_FIELDS = {
@@ -40,12 +38,6 @@ const METADATA_FIELDS = {
     placeholder: "178414...",
     key: "igBusinessId",
   },
-  gbp: {
-    label: "Google Location Resource",
-    helper: "Use the account-qualified Google Business Profile resource (`accounts/{accountId}/locations/{locationId}`). Reconnecting is the easiest way to fill this correctly. Place IDs like `ChIJ...` do not work.",
-    placeholder: "accounts/123456789/locations/987654321",
-    key: "locationId",
-  },
 } as const;
 
 export async function ConnectionCards() {
@@ -59,11 +51,9 @@ export async function ConnectionCards() {
         const metadataConfig = METADATA_FIELDS[connection.provider];
         const metadataRecord = (connection.metadata ?? {}) as Record<string, unknown>;
         const metadataValue =
-          connection.provider === "gbp" && typeof metadataRecord.localPostParent === "string"
-            ? metadataRecord.localPostParent
-            : typeof metadataRecord[metadataConfig.key] === "string"
-              ? (metadataRecord[metadataConfig.key] as string)
-              : "";
+          typeof metadataRecord[metadataConfig.key] === "string"
+            ? (metadataRecord[metadataConfig.key] as string)
+            : "";
         const metadataMissing = !connection.metadataValid;
         const helperText = metadataMissing
           ? `Required: ${metadataConfig.helper}`

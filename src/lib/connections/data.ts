@@ -9,7 +9,7 @@ import {
 import { isSchemaMissingError } from "@/lib/supabase/errors";
 
 export interface ConnectionSummary {
-  provider: "facebook" | "instagram" | "gbp";
+  provider: "facebook" | "instagram";
   status: ConnectionStatus;
   ready: boolean;
   lastSyncedAt?: string;
@@ -28,7 +28,7 @@ export interface ConnectionSummary {
  */
 type ConnectionRow = {
   id: string;
-  provider: "facebook" | "instagram" | "gbp";
+  provider: "facebook" | "instagram";
   status: string | null;
   platform_account_name: string | null;
   display_name: string | null;
@@ -42,10 +42,9 @@ type ConnectionRow = {
 const PROVIDER_LABELS: Record<string, string> = {
   facebook: "Facebook Page",
   instagram: "Instagram Business",
-  gbp: "Google Business Profile",
 };
 
-const PROVIDERS = ["facebook", "instagram", "gbp"] as const;
+const PROVIDERS = ["facebook", "instagram"] as const;
 
 export async function listConnectionSummaries(): Promise<ConnectionSummary[]> {
   const { supabase, accountId } = await requireAuthContext();
@@ -71,7 +70,7 @@ export async function listConnectionSummaries(): Promise<ConnectionSummary[]> {
       }
 
       const evaluation = evaluateConnectionMetadata(row.provider, row.metadata);
-      // Prefer token_expires_at (v2); fall back to legacy expires_at for GBP connections
+      // Prefer token_expires_at (v2); fall back to legacy expires_at column
       const effectiveExpiry = row.token_expires_at ?? row.expires_at;
       const hasAccessToken = hasTokenValue(row.access_token) || vaultAccessTokenIds.has(row.id);
       const readiness = deriveConnectionReadiness({

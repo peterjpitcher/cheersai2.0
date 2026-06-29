@@ -35,7 +35,6 @@ function makeBrandProfile() {
     defaultEmojis: ["🍺", "🎉"],
     facebookSignature: "— The Anchor Team",
     instagramSignature: null,
-    gbpCta: "LEARN_MORE",
   };
 }
 
@@ -299,19 +298,6 @@ describe("Prompt builder includes copy intelligence context", () => {
       platform: "instagram",
     });
     expect(igResult.user).toContain("first line must stop the scroll");
-
-    const gbpResult = buildInstantPostPrompt({
-      brand: brand as never,
-      input: input as never,
-      platform: "gbp",
-      venueName: "The Anchor",
-      context: {
-        venueLocation: "Shepperton, Surrey",
-      },
-    });
-    expect(gbpResult.user).toContain("Google Business Profile");
-    expect(gbpResult.user).toContain("<venue_location>Shepperton, Surrey</venue_location>");
-    expect(gbpResult.user).toContain("<venue_name>The Anchor</venue_name>");
   });
 });
 
@@ -370,14 +356,14 @@ describe("End-to-end: scheduling + copy intelligence", () => {
 
     // 5. Schedule across a week
     const config: SpreadConfig = {
-      postsPerWeek: 3,
-      platforms: ["facebook", "instagram", "gbp"],
+      postsPerWeek: 2,
+      platforms: ["facebook", "instagram"],
       staggerPlatforms: true,
       windowStart: new Date(2026, 3, 6),
       windowEnd: new Date(2026, 3, 12),
     };
     const slots = buildSpreadEvenlySlots(config, []);
-    expect(slots).toHaveLength(3);
+    expect(slots).toHaveLength(2);
 
     // 6. Get posting time for first slot
     const time = getEngagementOptimisedHour(slots[0]!.date, null, "18:00");

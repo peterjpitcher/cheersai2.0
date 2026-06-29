@@ -38,7 +38,7 @@ function mapContentItem(row: Record<string, unknown>): ContentItem {
 }
 
 function isPlatform(value: unknown): value is Platform {
-  return value === 'facebook' || value === 'instagram' || value === 'gbp';
+  return value === 'facebook' || value === 'instagram';
 }
 
 // ---------------------------------------------------------------------------

@@ -3,7 +3,7 @@ import { z } from "zod";
 import { DEFAULT_TIMEZONE } from "@/lib/constants";
 import { BannerDefaultsSchema } from "@/lib/scheduling/banner-config";
 
-export const platformEnum = z.enum(["facebook", "instagram", "gbp"]);
+export const platformEnum = z.enum(["facebook", "instagram"]);
 export const placementEnum = z.enum(["feed", "story"]);
 const eventPlacementsSchema = z
   .array(placementEnum)
@@ -126,15 +126,6 @@ export const instantPostSchema = z
           path: ["media"],
         });
       }
-
-      const disallowedPlatform = data.platforms.find((platform) => platform === "gbp");
-      if (disallowedPlatform) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: "Stories are only supported on Facebook and Instagram.",
-          path: ["platforms"],
-        });
-      }
     }
   });
 
@@ -187,15 +178,6 @@ export const instantPostFormSchema = z
           code: z.ZodIssueCode.custom,
           message: "Stories support images only.",
           path: ["media"],
-        });
-      }
-
-      const disallowedPlatform = data.platforms.find((platform) => platform === "gbp");
-      if (disallowedPlatform) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: "Stories are only supported on Facebook and Instagram.",
-          path: ["platforms"],
         });
       }
     }

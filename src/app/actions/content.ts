@@ -45,7 +45,7 @@ function mapContentItem(row: Record<string, unknown>): ContentItem {
 }
 
 function isPlatform(value: unknown): value is Platform {
-  return value === 'facebook' || value === 'instagram' || value === 'gbp';
+  return value === 'facebook' || value === 'instagram';
 }
 
 function isPlacement(value: unknown): value is 'feed' | 'story' {
@@ -392,7 +392,7 @@ export async function approveForQueue(
 interface CalendarItemDisplay {
   id: string;
   scheduledFor: string;
-  platform: 'facebook' | 'instagram' | 'gbp';
+  platform: 'facebook' | 'instagram';
   status: 'draft' | 'scheduled' | 'queued' | 'publishing' | 'posted' | 'failed';
   placement?: 'feed' | 'story';
   campaignName?: string | null;

@@ -43,7 +43,6 @@ describe('getOverflowItems', () => {
 
     // These are NOT in MOBILE_NAV_ITEMS and should be in overflow
     expect(overflowIds).toContain('campaigns');
-    expect(overflowIds).toContain('reviews');
     expect(overflowIds).toContain('tournaments');
     expect(overflowIds).toContain('settings');
   });

@@ -5,7 +5,6 @@ import { DateTime } from "https://esm.sh/luxon@3.7.2";
 
 import { publishToFacebook } from "./providers/facebook.ts";
 import { publishToInstagram } from "./providers/instagram.ts";
-import { publishToGBP } from "./providers/gbp.ts";
 import { resolveConnectionMetadata } from "./metadata.ts";
 import {
     compactMetaGraphError,
@@ -922,8 +921,6 @@ export class PublishQueueWorker {
                 return publishToFacebook(request);
             case "instagram":
                 return publishToInstagram(request);
-            case "gbp":
-                return publishToGBP(request);
             default:
                 throw new Error(`Unsupported platform ${platform}`);
         }

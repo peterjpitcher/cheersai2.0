@@ -21,7 +21,6 @@ function mockGenerateSuccess(): void {
       copy: {
         facebook: { body: "FB body" },
         instagram: { body: "IG body" },
-        gbp: { body: "GBP body" },
       },
       warnings: [],
     },
@@ -70,10 +69,6 @@ describe("<GenerateStep />", () => {
             linkInBioLine: "Link in bio to book",
             hashtags: ["#PubNight"],
           },
-          gbp: {
-            body: "Generated Google body",
-            ctaAction: "BOOK",
-          },
         },
       },
     ];
@@ -84,11 +79,10 @@ describe("<GenerateStep />", () => {
           contentId="draft-1"
           contentBrief={{
             contentType: "event",
-            platforms: ["facebook", "instagram", "gbp"],
+            platforms: ["facebook", "instagram"],
             ctaLinks: {
               facebook: "https://example.com/fb",
               instagram: "https://example.com/ig",
-              gbp: "https://example.com/gbp",
             },
           } as unknown as ContentBrief}
           selectedSlots={[{
@@ -121,7 +115,7 @@ describe("<GenerateStep />", () => {
     expect(screen.queryByText("CTA")).not.toBeInTheDocument();
 
     const previews = screen.getAllByLabelText("Final publish preview") as HTMLTextAreaElement[];
-    expect(previews).toHaveLength(3);
+    expect(previews).toHaveLength(2);
     expect(previews[0].value).toContain("Book now: https://example.com/fb");
 
     fireEvent.change(previews[0], { target: { value: "Edited final Facebook post" } });
@@ -261,7 +255,7 @@ describe("<GenerateStep />", () => {
           contentId="draft-1"
           contentBrief={{
             contentType: "event",
-            platforms: ["facebook", "instagram", "gbp"],
+            platforms: ["facebook", "instagram"],
           } as unknown as ContentBrief}
           selectedSlots={[{ key: "slot-1", date: "2026-06-01", time: "17:00", source: "manual" }]}
           generatedSlotCopies={[]}
@@ -303,7 +297,6 @@ describe("<GenerateStep />", () => {
         copy: {
           facebook: { body: "FB" },
           instagram: { body: "IG" },
-          gbp: { body: "GBP" },
         },
       },
     ];
@@ -314,7 +307,7 @@ describe("<GenerateStep />", () => {
           contentId="draft-1"
           contentBrief={{
             contentType: "event",
-            platforms: ["facebook", "instagram", "gbp"],
+            platforms: ["facebook", "instagram"],
           } as unknown as ContentBrief}
           selectedSlots={[{ key: "slot-1", date: "2026-06-01", time: "17:00", source: "manual" }]}
           generatedSlotCopies={existing}
@@ -352,7 +345,6 @@ describe("<GenerateStep />", () => {
         copy: {
           facebook: { body: "FB" },
           instagram: { body: "IG" },
-          gbp: { body: "GBP" },
         },
       },
     ];
@@ -363,7 +355,7 @@ describe("<GenerateStep />", () => {
           contentId="draft-1"
           contentBrief={{
             contentType: "event",
-            platforms: ["facebook", "instagram", "gbp"],
+            platforms: ["facebook", "instagram"],
           } as unknown as ContentBrief}
           selectedSlots={[{ key: "slot-1", date: "2026-06-01", time: "17:00", source: "manual" }]}
           generatedSlotCopies={slotCopies}
@@ -399,7 +391,6 @@ describe("<GenerateStep />", () => {
         copy: {
           facebook: { body: "FB" },
           instagram: { body: "IG" },
-          gbp: { body: "GBP" },
         },
       },
     ];
@@ -410,7 +401,7 @@ describe("<GenerateStep />", () => {
           contentId="draft-1"
           contentBrief={{
             contentType: "event",
-            platforms: ["facebook", "instagram", "gbp"],
+            platforms: ["facebook", "instagram"],
           } as unknown as ContentBrief}
           selectedSlots={[{ key: "slot-1", date: "2026-06-01", time: "17:00", source: "manual" }]}
           generatedSlotCopies={slotCopies}

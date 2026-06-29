@@ -163,16 +163,6 @@ describe('composePublishBody', () => {
       expect(result).not.toContain('Book now at');
     });
   });
-
-  describe('gbp', () => {
-    it('returns body only -- CTA is an API field, not body text', () => {
-      const result = composePublishBody('gbp', {
-        body: 'We are open for business.',
-        ctaAction: 'BOOK',
-      });
-      expect(result).toBe('We are open for business.');
-    });
-  });
 });
 
 describe('buildPreviewData', () => {
@@ -203,21 +193,17 @@ describe('buildPreviewData', () => {
 
   it('stores CTA metadata for publish adapters', () => {
     const result = buildPreviewData(
-      'gbp',
-      { body: 'Book for live jazz.', ctaAction: 'BOOK' },
+      'facebook',
+      { body: 'Book for live jazz.', ctaText: 'Book now' },
       undefined,
       {
-        ctaLinks: { gbp: 'https://vip-club.uk/gp-live-jazz' },
+        ctaLinks: { facebook: 'https://vip-club.uk/fb-live-jazz' },
         contentType: 'event',
       },
     );
 
     expect(result).toMatchObject({
-      ctaUrl: 'https://vip-club.uk/gp-live-jazz',
-      cta: {
-        url: 'https://vip-club.uk/gp-live-jazz',
-        action: 'BOOK',
-      },
+      ctaUrl: 'https://vip-club.uk/fb-live-jazz',
     });
   });
 });

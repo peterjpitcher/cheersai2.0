@@ -9,7 +9,6 @@ import { useToast } from "@/components/providers/toast-provider";
 import type { PostingDefaults } from "@/lib/settings/data";
 import { DEFAULT_TIMEZONE } from "@/lib/constants";
 import {
-  GBP_CTA_OPTIONS_BY_POST_TYPE,
   PostingDefaultsFormValues,
   postingDefaultsFormSchema,
 } from "@/features/settings/schema";
@@ -26,13 +25,6 @@ interface PostingDefaultsFormProps {
 }
 
 const TIMEZONE_OPTIONS = [DEFAULT_TIMEZONE];
-
-const CTA_LABELS = {
-  LEARN_MORE: "Learn more",
-  BOOK: "Book",
-  CALL: "Call",
-  REDEEM: "Redeem",
-} as const;
 
 /* Shared style objects for design tokens */
 const fieldsetStyle: React.CSSProperties = {
@@ -60,13 +52,11 @@ function getPostingDefaultsFormDefaultValues(data: PostingDefaults): PostingDefa
     timezone: data.timezone,
     facebookLocationId: data.facebookLocationId,
     instagramLocationId: data.instagramLocationId,
-    gbpLocationId: data.gbpLocationId,
     defaultPostingTime: data.defaultPostingTime,
     venueLocation: data.venueLocation ?? "",
     venueLatitude: data.venueLatitude?.toString() ?? "",
     venueLongitude: data.venueLongitude?.toString() ?? "",
     notifications: { ...data.notifications },
-    gbpCtaDefaults: { ...data.gbpCtaDefaults },
     bannerDefaults: { ...data.bannerDefaults },
   };
 }
@@ -198,16 +188,6 @@ export function PostingDefaultsForm({ data }: PostingDefaultsFormProps) {
         </div>
         <div className="grid gap-4 md:grid-cols-2">
           <div>
-            <label className="text-sm font-medium" style={{ color: "var(--c-ink-2)" }}>Default GBP location ID</label>
-            <input
-              type="text"
-              placeholder="locations/123"
-              className="mt-2 w-full p-3 text-sm focus:outline-none"
-              style={inputStyle}
-              {...form.register("gbpLocationId")}
-            />
-          </div>
-          <div>
             <label className="text-sm font-medium" style={{ color: "var(--c-ink-2)" }}>Facebook Page ID</label>
             <input
               type="text"
@@ -229,41 +209,6 @@ export function PostingDefaultsForm({ data }: PostingDefaultsFormProps) {
               {...form.register("instagramLocationId")}
             />
           </div>
-        </div>
-      </fieldset>
-
-      <fieldset className="p-6" style={fieldsetStyle}>
-        <legend className="text-lg font-semibold" style={{ color: "var(--c-ink)" }}>
-          GBP CTA defaults
-        </legend>
-        <div className="grid gap-4 md:grid-cols-3">
-          {([
-            ["standard", "Standard posts"],
-            ["event", "Event posts"],
-            ["offer", "Offer posts"],
-          ] as const).map(([key, label]) => (
-            <div key={key}>
-              <p className="text-sm font-medium" style={{ color: "var(--c-ink-2)" }}>{label}</p>
-              <Controller
-                control={form.control}
-                name={`gbpCtaDefaults.${key}` as const}
-                render={({ field }) => (
-                  <select
-                    className="mt-2 w-full p-3 text-sm focus:outline-none"
-                    style={inputStyle}
-                    value={field.value}
-                    onChange={(event) => field.onChange(event.target.value)}
-                  >
-                    {GBP_CTA_OPTIONS_BY_POST_TYPE[key].map((value) => (
-                      <option key={value} value={value}>
-                        {CTA_LABELS[value]}
-                      </option>
-                    ))}
-                  </select>
-                )}
-              />
-            </div>
-          ))}
         </div>
       </fieldset>
 

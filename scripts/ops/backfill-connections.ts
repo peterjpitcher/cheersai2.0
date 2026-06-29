@@ -1,9 +1,7 @@
 #!/usr/bin/env tsx
 import { createClient } from "@supabase/supabase-js";
 
-import { normalizeCanonicalGbpLocationId } from "../../src/lib/gbp/location-id";
-
-type Provider = "facebook" | "instagram" | "gbp";
+type Provider = "facebook" | "instagram";
 
 type ConnectionStatus = "active" | "expiring" | "needs_action";
 
@@ -25,7 +23,6 @@ type BackfillResult = {
 const REQUIRED_METADATA: Record<Provider, string> = {
   facebook: "pageId",
   instagram: "igBusinessId",
-  gbp: "locationId",
 };
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -89,7 +86,7 @@ async function main() {
     }
 
     try {
-      const result = await resolveMetadata(connection, existingMetadata);
+      const result = await resolveMetadata(connection);
       if (!result) {
         summary.alreadyComplete += 1;
         continue;
@@ -144,15 +141,12 @@ async function main() {
 
 async function resolveMetadata(
   connection: ConnectionRow,
-  existingMetadata: Record<string, unknown>,
 ): Promise<BackfillResult | null> {
   switch (connection.provider) {
     case "facebook":
       return backfillFacebook(connection.access_token!);
     case "instagram":
       return backfillInstagram(connection.access_token!);
-    case "gbp":
-      return backfillGoogle(existingMetadata, connection.access_token!);
     default:
       return null;
   }
@@ -218,85 +212,6 @@ async function backfillInstagram(accessToken: string): Promise<BackfillResult> {
   };
 }
 
-async function backfillGoogle(
-  existingMetadata: Record<string, unknown>,
-  accessToken: string,
-): Promise<BackfillResult> {
-  const headers = { Authorization: `Bearer ${accessToken}` };
-  const desiredLocationId = getString(existingMetadata.locationId);
-
-  if (desiredLocationId) {
-    const locationResponse = await fetch(
-      `https://mybusinessbusinessinformation.googleapis.com/v1/${desiredLocationId}`,
-      { headers },
-    );
-    const locationJson = await safeJson(locationResponse);
-    if (locationResponse.ok) {
-      const canonicalLocationId = normalizeCanonicalGbpLocationId(getString(locationJson?.name) ?? desiredLocationId) ?? desiredLocationId;
-      return {
-        metadata: { locationId: canonicalLocationId },
-        displayName: getString(locationJson?.title) ?? null,
-      };
-    }
-    console.warn("⚠️ Failed to hydrate stored locationId – will enumerate locations", resolveGoogleError(locationJson));
-  }
-
-  const accountsResponse = await fetch(
-    "https://mybusinessbusinessinformation.googleapis.com/v1/accounts",
-    { headers },
-  );
-  const accountsJson = await safeJson(accountsResponse);
-
-  if (!accountsResponse.ok) {
-    throw new Error(resolveGoogleError(accountsJson));
-  }
-
-  const accounts = Array.isArray(accountsJson?.accounts) ? accountsJson.accounts : [];
-
-  for (const account of accounts) {
-    const accountName = getString(account?.name);
-    if (!accountName) {
-      continue;
-    }
-
-    const locationsResponse = await fetch(
-      `https://mybusinessbusinessinformation.googleapis.com/v1/${accountName}/locations?pageSize=100`,
-      { headers },
-    );
-    const locationsJson = await safeJson(locationsResponse);
-
-    if (!locationsResponse.ok) {
-      console.warn("⚠️ Failed to list GBP locations", resolveGoogleError(locationsJson));
-      continue;
-    }
-
-    const locations = Array.isArray(locationsJson?.locations) ? locationsJson.locations : [];
-    if (!locations.length) {
-      continue;
-    }
-
-    const matched = desiredLocationId
-      ? locations.find((loc: unknown) => getString((loc as Record<string, unknown>)?.name) === desiredLocationId)
-      : locations[0];
-
-    if (!matched) {
-      continue;
-    }
-
-    const locationId = normalizeCanonicalGbpLocationId(getString((matched as Record<string, unknown>)?.name));
-    if (!locationId) {
-      continue;
-    }
-
-    return {
-      metadata: { locationId },
-      displayName: getString((matched as Record<string, unknown>)?.title) ?? null,
-    };
-  }
-
-  throw new Error("No Google Business Profile locations were returned for this access token.");
-}
-
 function normaliseError(error: unknown) {
   if (error instanceof Error && typeof error.message === "string") {
     return error.message;
@@ -333,18 +248,6 @@ function resolveGraphError(payload: unknown) {
     return JSON.stringify(payload);
   } catch {
     return "Facebook API error";
-  }
-}
-
-function resolveGoogleError(payload: unknown) {
-  const error = (payload as { error?: { message?: string } })?.error;
-  if (error?.message) {
-    return error.message;
-  }
-  try {
-    return JSON.stringify(payload);
-  } catch {
-    return "Google API error";
   }
 }
 

@@ -26,7 +26,6 @@ interface PlatformComparisonChartProps {
 const PLATFORM_LABELS: Record<string, string> = {
   facebook: 'Facebook',
   instagram: 'Instagram',
-  gbp: 'Google Business',
 };
 
 interface ChartDataPoint {

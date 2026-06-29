@@ -28,7 +28,6 @@ interface ComposeOptions {
  *
  * - Facebook: body + ctaText + hashtags
  * - Instagram: body + linkInBioLine + hashtags
- * - GBP: body only (CTA is a separate API field stored in preview_data)
  */
 export function composePublishBody(
   platform: Platform,
@@ -63,8 +62,6 @@ export function composePublishBody(
     if (hashtags?.length) parts.push(hashtags.join(' '));
   }
 
-  // GBP: body only — ctaAction is a separate API field stored in preview_data
-
   return parts.join('\n\n');
 }
 
@@ -80,7 +77,6 @@ export function buildPreviewData(
   options: ComposeOptions = {},
 ): Record<string, unknown> {
   const ctaUrl = resolvePlatformCtaUrl(platform, options.ctaLinks);
-  const gbpCopy = platform === 'gbp' ? copy as PlatformCopy['gbp'] : null;
 
   return {
     structuredCopy: copy,
@@ -90,9 +86,6 @@ export function buildPreviewData(
           ctaUrl,
           cta: {
             url: ctaUrl,
-            ...(platform === 'gbp'
-              ? { action: normaliseGbpCtaAction(gbpCopy?.ctaAction) }
-              : {}),
           },
         }
       : {}),
@@ -123,11 +116,4 @@ function defaultLinkInBioLine(contentType?: ContentType): string {
     default:
       return 'Details in bio';
   }
-}
-
-function normaliseGbpCtaAction(action?: string | null): string {
-  const candidate = action?.trim().toUpperCase();
-  return candidate && ['BOOK', 'ORDER', 'SHOP', 'LEARN_MORE', 'SIGN_UP'].includes(candidate)
-    ? candidate
-    : 'LEARN_MORE';
 }

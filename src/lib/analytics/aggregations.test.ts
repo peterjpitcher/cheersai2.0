@@ -91,16 +91,16 @@ describe('aggregateByPlatform', () => {
 
   it('should handle null impressions/engagement by treating as zero', () => {
     const rows: PostAnalytics[] = [
-      makePost({ platform: 'gbp', impressions: null, engagementCount: null }),
+      makePost({ platform: 'instagram', impressions: null, engagementCount: null }),
     ];
 
     const result = aggregateByPlatform(rows);
-    const gbp = result.find(r => r.platform === 'gbp');
-    expect(gbp).toBeDefined();
-    expect(gbp!.totalImpressions).toBe(0);
-    expect(gbp!.totalEngagement).toBe(0);
-    expect(gbp!.weightedEngagementRate).toBe(0);
-    expect(gbp!.postCount).toBe(1);
+    const ig = result.find(r => r.platform === 'instagram');
+    expect(ig).toBeDefined();
+    expect(ig!.totalImpressions).toBe(0);
+    expect(ig!.totalEngagement).toBe(0);
+    expect(ig!.weightedEngagementRate).toBe(0);
+    expect(ig!.postCount).toBe(1);
   });
 });
 
@@ -216,12 +216,6 @@ describe('describeEmptyReason', () => {
 
   it('should return "no_metrics_yet" when publish jobs exist but snapshots empty', () => {
     expect(describeEmptyReason({ publishJobCount: 5, snapshotCount: 0 })).toBe('no_metrics_yet');
-  });
-
-  it('should return "gbp_data_delayed" for GBP within 3-day window', () => {
-    expect(
-      describeEmptyReason({ publishJobCount: 1, snapshotCount: 0, isGbp: true, daysFromNow: 2 }),
-    ).toBe('gbp_data_delayed');
   });
 
   it('should return "platform_not_connected" when not connected', () => {

@@ -51,7 +51,7 @@ export default async function SettingsPage() {
         <div className="space-y-1">
           <h3 className="text-xl font-semibold" style={{ color: "var(--c-ink)" }}>Posting defaults</h3>
           <p className="text-sm" style={{ color: "var(--c-ink-3)" }}>
-            Define scheduling rules, GBP CTA defaults, and email alerts for issues.
+            Define scheduling rules, banner defaults, and email alerts for issues.
           </p>
         </div>
         <PostingDefaultsForm data={settings.posting} />

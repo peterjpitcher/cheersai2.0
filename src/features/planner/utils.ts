@@ -1,11 +1,9 @@
-export function formatPlatformLabel(platform: "facebook" | "instagram" | "gbp") {
+export function formatPlatformLabel(platform: "facebook" | "instagram") {
   switch (platform) {
     case "facebook":
       return "Facebook";
     case "instagram":
       return "Instagram";
-    case "gbp":
-      return "Google Business";
     default:
       return platform;
   }

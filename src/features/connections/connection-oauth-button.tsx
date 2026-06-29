@@ -6,7 +6,7 @@ import { initiateOAuthConnect } from "@/app/(app)/connections/actions";
 import { useToast } from "@/components/providers/toast-provider";
 
 interface ConnectionOAuthButtonProps {
-  provider: "facebook" | "instagram" | "gbp";
+  provider: "facebook" | "instagram";
   status: "active" | "expiring" | "needs_action";
 }
 

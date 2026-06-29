@@ -9,7 +9,6 @@ const LINK_IN_BIO_SENTENCE =
 const PLATFORM_HASHTAG_LIMIT: Record<Platform, number> = {
   facebook: 5,
   instagram: 10,
-  gbp: 0,
 };
 
 export function readPlatformCtaLinks(brief: Record<string, unknown>): PlatformCtaLinks {
@@ -18,7 +17,7 @@ export function readPlatformCtaLinks(brief: Record<string, unknown>): PlatformCt
   const source = value as Record<string, unknown>;
   const links: PlatformCtaLinks = {};
 
-  for (const platform of ["facebook", "instagram", "gbp"] as const) {
+  for (const platform of ["facebook", "instagram"] as const) {
     const raw = source[platform];
     if (typeof raw === "string") {
       const trimmed = raw.trim();

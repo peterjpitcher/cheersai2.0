@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { updateConnectionMetadata } from "@/app/(app)/connections/actions";
 import { useToast } from "@/components/providers/toast-provider";
 
-type Provider = "facebook" | "instagram" | "gbp";
+type Provider = "facebook" | "instagram";
 
 interface ConnectionMetadataFormProps {
   provider: Provider;

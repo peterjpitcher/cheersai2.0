@@ -93,7 +93,7 @@ type ContentPlacement = "feed" | "story";
 
 interface PlannerItem {
   id: string;
-  platform: "facebook" | "instagram" | "gbp";
+  platform: "facebook" | "instagram";
   placement: ContentPlacement;
   scheduledFor: string;
   campaignName: string;
@@ -109,7 +109,7 @@ interface PlannerItem {
 
 export interface TrashedPlannerItem {
   id: string;
-  platform: "facebook" | "instagram" | "gbp";
+  platform: "facebook" | "instagram";
   placement: ContentPlacement;
   status: PlannerItem["status"];
   scheduledFor: string | null;
@@ -142,7 +142,7 @@ export interface PlannerOverview {
 
 export interface PlannerContentDetail {
   id: string;
-  platform: "facebook" | "instagram" | "gbp";
+  platform: "facebook" | "instagram";
   placement: ContentPlacement;
   status: PlannerItem["status"];
   scheduledFor: string | null;
@@ -183,7 +183,7 @@ type ContentVariantRow = {
 
 type ContentRow = {
   id: string;
-  platform: "facebook" | "instagram" | "gbp";
+  platform: "facebook" | "instagram";
   placement: ContentPlacement;
   scheduled_for: string | null;
   status: PlannerItem["status"];
@@ -209,7 +209,7 @@ type ContentDetailVariantRow = {
 
 type ContentDetailRow = {
   id: string;
-  platform: "facebook" | "instagram" | "gbp";
+  platform: "facebook" | "instagram";
   placement: ContentPlacement;
   scheduled_for: string | null;
   status: PlannerItem["status"];
@@ -227,7 +227,7 @@ type ContentDetailRow = {
 
 type TrashedContentRow = {
   id: string;
-  platform: "facebook" | "instagram" | "gbp";
+  platform: "facebook" | "instagram";
   placement: ContentPlacement;
   status: PlannerItem["status"];
   auto_generated: boolean | null;

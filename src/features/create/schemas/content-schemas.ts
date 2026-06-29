@@ -28,7 +28,7 @@ const baseContentSchema = z.object({
   title: z.string().min(1, 'Title is required').max(200),
   prompt: z.string().default(''),
   platforms: z
-    .array(z.enum(['facebook', 'instagram', 'gbp']))
+    .array(z.enum(['facebook', 'instagram']))
     .min(1, 'Select at least one platform'),
   // Fine-tune controls (D-04 progressive disclosure defaults)
   tone: z
@@ -53,7 +53,6 @@ const baseContentSchema = z.object({
     .object({
       facebook: z.string().url().optional(),
       instagram: z.string().url().optional(),
-      gbp: z.string().url().optional(),
     })
     .partial()
     .optional(),

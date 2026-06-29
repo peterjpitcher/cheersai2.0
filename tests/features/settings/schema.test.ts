@@ -1,20 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  GBP_CTA_OPTIONS_BY_POST_TYPE,
-  postingDefaultsFormSchema,
-} from "@/features/settings/schema";
+import { postingDefaultsFormSchema } from "@/features/settings/schema";
 
 const basePostingDefaults = {
   timezone: "Europe/London",
   notifications: {
     emailFailures: true,
     emailTokenExpiring: true,
-  },
-  gbpCtaDefaults: {
-    standard: "LEARN_MORE",
-    event: "LEARN_MORE",
-    offer: "REDEEM",
   },
   bannerDefaults: {
     bannersEnabled: false,
@@ -85,21 +77,5 @@ describe("postingDefaultsFormSchema", () => {
 
     expect(result.success).toBe(false);
     expect(result.error?.issues.map((issue) => issue.message).join(" ")).toContain("UK latitude");
-  });
-
-  it("accepts every CTA option exposed by posting defaults", () => {
-    for (const [postType, options] of Object.entries(GBP_CTA_OPTIONS_BY_POST_TYPE)) {
-      for (const option of options) {
-        const parsed = postingDefaultsFormSchema.parse({
-          ...basePostingDefaults,
-          gbpCtaDefaults: {
-            ...basePostingDefaults.gbpCtaDefaults,
-            [postType]: option,
-          },
-        });
-
-        expect(parsed.gbpCtaDefaults[postType as keyof typeof parsed.gbpCtaDefaults]).toBe(option);
-      }
-    }
   });
 });

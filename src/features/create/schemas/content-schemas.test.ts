@@ -2,7 +2,6 @@ import { describe, it, expect } from 'vitest';
 
 import {
   instantPostBriefSchema,
-  storyBriefSchema,
   eventBriefSchema,
   promotionBriefSchema,
   weeklyCampaignBriefSchema,
@@ -85,18 +84,6 @@ describe('Content Zod Schemas', () => {
       };
       const result = promotionBriefSchema.safeParse(input);
       expect(result.success).toBe(true);
-    });
-  });
-
-  describe('storyBriefSchema', () => {
-    it('should restrict platforms to facebook and instagram only (no gbp)', () => {
-      const input = {
-        title: 'Story Test',
-        platforms: ['gbp'] as unknown as ('facebook' | 'instagram')[],
-        contentType: 'story' as const,
-      };
-      const result = storyBriefSchema.safeParse(input);
-      expect(result.success).toBe(false);
     });
   });
 

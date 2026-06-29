@@ -51,7 +51,6 @@ const TONE_OPTIONS: { value: string; label: string }[] = [
 const ALL_PLATFORMS: { value: Platform; label: string }[] = [
   { value: 'facebook', label: 'Facebook' },
   { value: 'instagram', label: 'Instagram' },
-  { value: 'gbp', label: 'Google' },
 ];
 
 const DEFAULT_CAMPAIGN_PLACEMENTS: Array<'feed' | 'story'> = ['feed'];
@@ -79,14 +78,11 @@ export function BriefStep({ form, onContentTypeChange }: BriefStepProps): React.
   const selectedPlatforms = watch('platforms') ?? [];
   const watchedPlacements = watch('placements') as Array<'feed' | 'story'> | undefined;
   const selectedPlacements = watchedPlacements ?? DEFAULT_CAMPAIGN_PLACEMENTS;
-  const isStory = contentType === 'story';
   const isEventCampaign = contentType === 'event';
   const hasCampaignPlacements = contentType === 'event' || contentType === 'promotion';
   const placementKey = selectedPlacements.join('|');
 
-  const availablePlatforms = isStory
-    ? ALL_PLATFORMS.filter((p) => p.value !== 'gbp')
-    : ALL_PLATFORMS;
+  const availablePlatforms = ALL_PLATFORMS;
 
   useEffect(() => {
     if (!isEventCampaign) return;

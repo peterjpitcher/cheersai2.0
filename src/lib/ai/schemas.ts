@@ -22,13 +22,6 @@ export const AiGenerationResponseSchema = z.object({
     hashtags: z.array(z.string()).nullable().describe('Relevant hashtags with # prefix, max 10'),
     link_in_bio_line: z.string().nullable().describe('Link-in-bio call-to-action line. Use link-in-bio wording only; never include a URL or domain'),
   }),
-  gbp: z.object({
-    body: z.string().describe('Google Business Profile update. No URLs, phone numbers, hashtags, or link-in-bio wording'),
-    cta_action: z
-      .string()
-      .nullable()
-      .describe('CTA action type: LEARN_MORE, BOOK, ORDER, SIGN_UP, CALL'),
-  }),
 });
 
 export type AiGenerationResponse = z.infer<typeof AiGenerationResponseSchema>;

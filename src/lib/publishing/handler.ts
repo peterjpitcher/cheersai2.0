@@ -11,7 +11,6 @@ import { createLogger } from '@/lib/logging';
 import { getCorrelationId } from '@/lib/logging/correlation';
 import { getAdapter } from '@/lib/providers/registry';
 import { initializeProviderRegistry } from '@/lib/providers/init';
-import { isGbpAdapter } from '@/lib/providers/types';
 import { ProviderError, ErrorClassification } from '@/lib/providers/errors';
 import { transitionStatus } from './state-machine';
 import { logPublishAuditEvent } from './audit';
@@ -157,10 +156,6 @@ export async function processPublishJob(jobId: string): Promise<ProcessResult> {
 
     if (contentType === 'story' && adapter.publishStory) {
       result = await adapter.publishStory(connectionId, payload);
-    } else if (isGbpAdapter(adapter) && contentType === 'event') {
-      result = await adapter.publishEvent(connectionId, payload);
-    } else if (isGbpAdapter(adapter) && contentType === 'promotion') {
-      result = await adapter.publishOffer(connectionId, payload);
     } else {
       result = await adapter.publishPost(connectionId, payload);
     }
@@ -267,19 +262,7 @@ export async function processPublishJob(jobId: string): Promise<ProcessResult> {
 /** Row shape for content_items query in buildContentPayload */
 interface ContentItemMetadata {
   content_type: string;
-  title: string | null;
-  event_date: string | null;
-  event_end_date: string | null;
-  coupon_code: string | null;
-  campaign_name: string | null;
-  campaign_id: string | null;
   placement: 'feed' | 'story' | null;
-}
-
-interface CampaignMetadataRow {
-  name: string | null;
-  campaign_type: string | null;
-  metadata: Record<string, unknown> | null;
 }
 
 /** Row shape for content_variants query */
@@ -293,7 +276,6 @@ interface ContentVariantRow {
 /**
  * Build a ContentPayload from content_items + content_variants data.
  * Signs media URLs via Supabase storage for provider consumption.
- * Populates eventDetails and offerDetails from campaign metadata for GBP.
  */
 async function buildContentPayload(
   db: ReturnType<typeof createServiceSupabaseClient>,
@@ -314,10 +296,10 @@ async function buildContentPayload(
     ?? allVariants[0]
     ?? null;
 
-  // Load content item for type info and campaign metadata
+  // Load content item for type and placement info
   const { data: item } = await db
     .from('content_items')
-    .select('content_type, title, event_date, event_end_date, coupon_code, campaign_name, campaign_id, placement')
+    .select('content_type, placement')
     .eq('id', contentItemId)
     .single();
 
@@ -325,17 +307,6 @@ async function buildContentPayload(
   const contentType = (metadata?.content_type ?? 'instant_post') as ContentPayload['contentType'];
   const text = (variant?.body as string) ?? '';
   const mediaIds = (variant?.media_ids as string[]) ?? [];
-
-  let campaign: CampaignMetadataRow | null = null;
-  if (metadata?.campaign_id) {
-    const { data: campaignData } = await db
-      .from('campaigns')
-      .select('name, campaign_type, metadata')
-      .eq('id', metadata.campaign_id)
-      .maybeSingle();
-
-    campaign = campaignData as CampaignMetadataRow | null;
-  }
 
   // Determine placement from content type
   const placement: 'feed' | 'story' =
@@ -366,59 +337,6 @@ async function buildContentPayload(
   const ctaAction = firstString(cta?.action);
   if (ctaUrl) payload.ctaUrl = ctaUrl;
   if (ctaAction) payload.ctaAction = ctaAction;
-
-  const campaignMetadata = (campaign?.metadata ?? {}) as Record<string, unknown>;
-  const campaignBrief = (campaignMetadata.brief ?? {}) as Record<string, unknown>;
-
-  // Populate eventDetails for GBP event posts. Wizard-created rows store
-  // event timing on campaign metadata, while older/manual rows may store it
-  // directly on content_items.
-  if (contentType === 'event' && metadata) {
-    const eventTitle = firstString(
-      metadata.title,
-      metadata.campaign_name,
-      campaign?.name,
-      campaignBrief.title,
-      campaignBrief.eventTitle,
-    );
-    const startDate = firstString(
-      metadata.event_date,
-      campaignMetadata.eventStart,
-      campaignMetadata.startDate,
-      campaignBrief.eventDate,
-    );
-    const endDate = firstString(
-      metadata.event_end_date,
-      campaignMetadata.endDate,
-      campaignBrief.eventEndDate,
-      startDate,
-    );
-
-    if (eventTitle && startDate) {
-      payload.eventDetails = {
-        title: eventTitle,
-        startDate,
-        endDate,
-      };
-    }
-  }
-
-  // Populate offerDetails for GBP promotion posts. Wizard-created rows store
-  // coupon/terms on campaign metadata or its brief.
-  if (contentType === 'promotion' && metadata) {
-    const couponCode = firstString(
-      metadata.coupon_code,
-      campaignMetadata.couponCode,
-      campaignBrief.couponCode,
-    );
-    if (couponCode) {
-      payload.offerDetails = {
-        couponCode,
-        redeemUrl: firstString(campaignMetadata.redeemUrl, campaignBrief.redeemUrl) || undefined,
-        terms: firstString(campaignMetadata.terms, campaignBrief.terms) || undefined,
-      };
-    }
-  }
 
   return payload;
 }

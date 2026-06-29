@@ -11,11 +11,6 @@ import { buildOAuthRedirectUrl } from "@/lib/connections/oauth";
 import { deriveConnectionReadiness, hasTokenValue } from "@/lib/connections/readiness";
 import { exchangeProviderAuthCode } from "@/lib/connections/token-exchange";
 import { storeEncryptedToken } from "@/lib/providers/token-helpers";
-import {
-  getGbpLocationIdValidationError,
-  normalizeCanonicalGbpLocationId,
-  normalizeGbpLocalPostParent,
-} from "@/lib/gbp/location-id";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
 import { isSchemaMissingError } from "@/lib/supabase/errors";
 
@@ -23,19 +18,17 @@ import { isSchemaMissingError } from "@/lib/supabase/errors";
 // Schemas
 // ---------------------------------------------------------------------------
 
-const providerSchema = z.enum(["facebook", "instagram", "gbp"]);
+const providerSchema = z.enum(["facebook", "instagram"]);
 type Provider = z.infer<typeof providerSchema>;
 
 const metadataKeyMap: Record<Provider, string> = {
   facebook: "pageId",
   instagram: "igBusinessId",
-  gbp: "locationId",
 };
 
 const providerDisplayNames: Record<Provider, string> = {
   facebook: "Facebook Page",
   instagram: "Instagram Business Account",
-  gbp: "Google Business Profile",
 };
 
 /** OAuth state expiry: 10 minutes */
@@ -251,8 +244,7 @@ export async function disconnectProvider(
 
 export async function updateConnectionMetadata(input: unknown) {
   const { provider, metadataValue } = payloadSchema.parse(input);
-  const rawValue = metadataValue?.trim() ?? "";
-  const value = normaliseMetadataValue(provider, rawValue);
+  const value = metadataValue?.trim() ?? "";
   const { accountId } = await requireAuthContext();
   const supabase = createServiceSupabaseClient();
 
@@ -286,20 +278,8 @@ export async function updateConnectionMetadata(input: unknown) {
 
   if (value.length > 0) {
     nextMetadata[key] = value;
-    const localPostParent = provider === "gbp" ? normalizeGbpLocalPostParent(rawValue) : null;
-    if (localPostParent) {
-      nextMetadata.localPostParent = localPostParent;
-    } else if (
-      provider === "gbp" &&
-      normalizeCanonicalGbpLocationId(nextMetadata.localPostParent as string | null | undefined) !== value
-    ) {
-      delete nextMetadata.localPostParent;
-    }
   } else {
     delete nextMetadata[key];
-    if (provider === "gbp") {
-      delete nextMetadata.localPostParent;
-    }
   }
 
   const evaluation = evaluateUpdatedMetadata(provider, nextMetadata);
@@ -407,17 +387,6 @@ async function hasVaultAccessToken(
   return Boolean(data?.id);
 }
 
-function normaliseMetadataValue(provider: Provider, value: string) {
-  if (provider !== "gbp" || value.length === 0) {
-    return value;
-  }
-  const validationError = getGbpLocationIdValidationError(value);
-  if (validationError) {
-    throw new Error(validationError);
-  }
-  return normalizeCanonicalGbpLocationId(value) ?? value;
-}
-
 function evaluateUpdatedMetadata(
   provider: Provider,
   metadata: Record<string, unknown>,
@@ -448,8 +417,6 @@ function derivePlatformAccountId(
       return typeof metadata.pageId === "string" ? metadata.pageId : "default";
     case "instagram":
       return typeof metadata.igBusinessId === "string" ? metadata.igBusinessId : "default";
-    case "gbp":
-      return typeof metadata.locationId === "string" ? metadata.locationId : "default";
     default:
       return "default";
   }
@@ -471,8 +438,6 @@ function getScopesForProvider(provider: Provider): string[] {
         "instagram_basic", "instagram_content_publish", "instagram_manage_comments",
         "pages_show_list", "pages_read_engagement", "business_management",
       ];
-    case "gbp":
-      return ["https://www.googleapis.com/auth/business.manage"];
     default:
       return [];
   }

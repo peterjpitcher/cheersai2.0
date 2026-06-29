@@ -60,7 +60,7 @@ function getItemPlatforms(item: CalendarDisplayItem): Platform[] {
   const platforms = draft?.platforms;
   if (!Array.isArray(platforms)) return [];
   return platforms.filter(
-    (p): p is Platform => p === 'facebook' || p === 'instagram' || p === 'gbp',
+    (p): p is Platform => p === 'facebook' || p === 'instagram',
   );
 }
 
@@ -87,16 +87,14 @@ export function toDesignStatus(status: string): DesignStatus {
 }
 
 /** Map full platform name to PlatformDot key */
-function toPlatformKey(p: Platform): 'fb' | 'ig' | 'gbp' {
+function toPlatformKey(p: Platform): 'fb' | 'ig' {
   if (p === 'facebook') return 'fb';
-  if (p === 'instagram') return 'ig';
-  return 'gbp';
+  return 'ig';
 }
 
 function formatPlatformLabel(platform: Platform): string {
   if (platform === 'facebook') return 'Facebook';
-  if (platform === 'instagram') return 'Instagram';
-  return 'Google';
+  return 'Instagram';
 }
 
 function formatChannelTitle(platforms: Platform[]): string {

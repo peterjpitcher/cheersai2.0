@@ -28,7 +28,7 @@ describe('deriveConnectionHealth', () => {
   });
 
   it('should return red when status is expired', () => {
-    expect(deriveConnectionHealth('expired', null, 'gbp')).toBe('red');
+    expect(deriveConnectionHealth('expired', null, 'instagram')).toBe('red');
   });
 
   it('should return red when status needs action', () => {
@@ -37,10 +37,6 @@ describe('deriveConnectionHealth', () => {
 
   it('should return green for Facebook page tokens where token_expires_at is null and status is active (page tokens do not expire)', () => {
     expect(deriveConnectionHealth('active', null, 'facebook')).toBe('green');
-  });
-
-  it('should return amber when token_expires_at is null and status is active for GBP (unknown expiry)', () => {
-    expect(deriveConnectionHealth('active', null, 'gbp')).toBe('amber');
   });
 
   it('should return green for Instagram Page tokens where token_expires_at is null and status is active', () => {

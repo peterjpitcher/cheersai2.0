@@ -2,10 +2,9 @@ import { OWNER_ACCOUNT_ID, OWNER_DISPLAY_NAME, OWNER_EMAIL, DEFAULT_TIMEZONE } f
 import { isSchemaMissingError } from "@/lib/supabase/errors";
 import { tryCreateServiceSupabaseClient } from "@/lib/supabase/service";
 
-const PROVIDERS: Array<"facebook" | "instagram" | "gbp"> = [
+const PROVIDERS: Array<"facebook" | "instagram"> = [
   "facebook",
   "instagram",
-  "gbp",
 ];
 
 type AccountRow = {
@@ -56,9 +55,6 @@ export async function ensureOwnerAccount() {
         emailFailures: true,
         emailTokenExpiring: true,
       },
-      gbp_cta_standard: "LEARN_MORE",
-      gbp_cta_event: "LEARN_MORE",
-      gbp_cta_offer: "REDEEM",
     } as const;
 
     const { error: defaultsError } = await supabase

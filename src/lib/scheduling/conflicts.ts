@@ -30,7 +30,7 @@ function extractPlatforms(item: ContentItem): Platform[] {
   if (!Array.isArray(platforms)) return [];
   return platforms.filter(
     (p): p is Platform =>
-      p === 'facebook' || p === 'instagram' || p === 'gbp',
+      p === 'facebook' || p === 'instagram',
   );
 }
 

@@ -8,7 +8,7 @@ interface StoryFieldsProps {
 
 /**
  * Type-specific fields for stories.
- * Stories are limited to Facebook and Instagram (no GBP support).
+ * Stories are limited to Facebook and Instagram.
  * Platform selection is handled by the parent BriefStep with restricted options.
  */
 export function StoryFields({ form }: StoryFieldsProps): React.JSX.Element {
@@ -23,8 +23,7 @@ export function StoryFields({ form }: StoryFieldsProps): React.JSX.Element {
         style={{ background: 'var(--c-orange-soft)', border: '1px solid var(--c-orange)', borderRadius: 'var(--r-lg)', color: 'var(--c-ink)' }}
         role="note"
       >
-        Stories are available on Facebook and Instagram only. Google Business Profile does
-        not support stories.
+        Stories are available on Facebook and Instagram only.
       </div>
 
       {errors.platforms && (

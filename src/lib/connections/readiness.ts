@@ -1,4 +1,4 @@
-export type ConnectionProvider = "facebook" | "instagram" | "gbp";
+export type ConnectionProvider = "facebook" | "instagram";
 
 export type ConnectionStatus = "active" | "expiring" | "needs_action";
 
@@ -42,7 +42,6 @@ const NEVER_EXPIRING_PROVIDERS: ConnectionProvider[] = ["facebook", "instagram"]
 const PROVIDER_LABELS: Record<ConnectionProvider, string> = {
   facebook: "Facebook",
   instagram: "Instagram",
-  gbp: "Google Business Profile",
 };
 
 export function hasTokenValue(token: string | null | undefined): boolean {

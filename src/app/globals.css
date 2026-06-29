@@ -46,12 +46,10 @@
   /* ── Platform tokens ── */
   --c-fb: #1B4DB1;    --c-fb-bg: #DDE7F5;
   --c-ig: #B72A6B;    --c-ig-bg: #F8DEEA;
-  --c-gbp: #1C7C43;   --c-gbp-bg: #DCEDE2;
 
   /* Backward-compatible platform aliases */
   --platform-fb: #1B4DB1;    --platform-fb-bg: #DDE7F5;
   --platform-ig: #B72A6B;    --platform-ig-bg: #F8DEEA;
-  --platform-gbp: #1C7C43;   --platform-gbp-bg: #DCEDE2;
 
   /* ── Radius tokens ── */
   --r-xs: 3px;  --r-sm: 4px;   --r-md: 6px;
@@ -130,8 +128,6 @@
   --color-fb-bg: var(--c-fb-bg);
   --color-ig: var(--c-ig);
   --color-ig-bg: var(--c-ig-bg);
-  --color-gbp: var(--c-gbp);
-  --color-gbp-bg: var(--c-gbp-bg);
 
   /* ── Semantic colour mappings (shadcn compat) ── */
   --color-background: var(--background);

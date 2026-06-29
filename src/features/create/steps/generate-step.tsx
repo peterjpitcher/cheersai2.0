@@ -94,10 +94,6 @@ function toPlatformCopy(raw: PostprocessResult['copy']): PlatformCopy {
       hashtags: raw.instagram.hashtags ?? undefined,
       linkInBioLine: raw.instagram.link_in_bio_line ?? undefined,
     },
-    gbp: {
-      body: raw.gbp.body,
-      ctaAction: raw.gbp.cta_action ?? undefined,
-    },
   };
 }
 
@@ -105,7 +101,6 @@ function createEmptyStoryCopy(): PlatformCopy {
   return {
     facebook: { body: '' },
     instagram: { body: '' },
-    gbp: { body: '' },
   };
 }
 
@@ -120,7 +115,6 @@ function storyCopySignature(copies: SlotGeneratedCopy[]): string {
       mediaIds: copy.mediaIds ?? null,
       facebookBody: copy.copy?.facebook.body ?? null,
       instagramBody: copy.copy?.instagram.body ?? null,
-      gbpBody: copy.copy?.gbp.body ?? null,
     })),
   );
 }

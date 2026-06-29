@@ -46,7 +46,6 @@ function getBrandProfileDefaultValues(data: BrandProfile): BrandProfileFormValue
     defaultEmojis: [...data.defaultEmojis],
     instagramSignature: data.instagramSignature,
     facebookSignature: data.facebookSignature,
-    gbpCta: data.gbpCta,
   };
 }
 
@@ -315,9 +314,9 @@ export function BrandVoiceForm({ data }: BrandVoiceFormProps) {
 
       <fieldset className="grid gap-4 p-6" style={fieldsetStyle}>
         <legend className="text-lg font-semibold" style={{ color: "var(--c-ink)" }}>
-          Platform signatures & CTA
+          Platform signatures
         </legend>
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <div>
             <label className="text-sm font-medium" style={{ color: "var(--c-ink-2)" }}>
               Instagram signature
@@ -343,26 +342,6 @@ export function BrandVoiceForm({ data }: BrandVoiceFormProps) {
               }}
               {...form.register("facebookSignature")}
             />
-          </div>
-          <div>
-            <label className="text-sm font-medium" style={{ color: "var(--c-ink-2)" }}>
-              GBP default CTA
-            </label>
-            <select
-              className="mt-2 w-full p-3 text-sm focus:outline-none"
-              style={{
-                backgroundColor: "var(--c-paper)",
-                border: "1px solid var(--c-line)",
-                borderRadius: "var(--r-xl)",
-                color: "var(--c-ink-2)",
-              }}
-              {...form.register("gbpCta")}
-            >
-              <option value="LEARN_MORE">Learn more</option>
-              <option value="BOOK">Book</option>
-              <option value="CALL">Call</option>
-              <option value="REDEEM">Redeem</option>
-            </select>
           </div>
         </div>
       </fieldset>

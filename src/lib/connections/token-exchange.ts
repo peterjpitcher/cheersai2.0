@@ -1,8 +1,6 @@
 import { env } from "@/env";
 import { getMetaGraphApiBase } from "@/lib/meta/graph";
 import type { Provider } from "@/lib/connections/oauth";
-import { GbpRateLimitError, resolveGoogleLocation as resolveGoogleBusinessLocation } from "@/lib/gbp/business-info";
-import { normalizeCanonicalGbpLocationId } from "@/lib/gbp/location-id";
 
 const SITE_URL = env.client.NEXT_PUBLIC_SITE_URL.replace(/\/$/, "");
 const GRAPH_BASE = getMetaGraphApiBase();
@@ -11,9 +9,6 @@ interface ExchangeOptions {
   existingMetadata?: Record<string, unknown> | null;
   existingDisplayName?: string | null;
 }
-
-const GOOGLE_LOCATION_CACHE_TTL_MS = 5 * 60 * 1000;
-const googleLocationCache = new Map<string, { metadata: { locationId: string; localPostParent?: string }; displayName: string | null; expiresAt: number }>();
 
 interface FacebookPage {
   id?: string;
@@ -43,8 +38,6 @@ export async function exchangeProviderAuthCode(
     case "facebook":
     case "instagram":
       return exchangeFacebookFamilyCode(provider, authCode, options.existingMetadata ?? null);
-    case "gbp":
-      return exchangeGoogleCode(authCode, options.existingMetadata ?? null, options.existingDisplayName ?? null);
     default:
       throw new Error(`Unsupported provider ${provider}`);
   }
@@ -176,51 +169,6 @@ async function exchangeFacebookFamilyCode(
   };
 }
 
-async function exchangeGoogleCode(
-  code: string,
-  existingMetadata: Record<string, unknown> | null,
-  existingDisplayName: string | null,
-): Promise<ProviderTokenExchange> {
-  const redirectUri = `${SITE_URL}/api/oauth/gbp/callback`;
-  const response = await fetch("https://oauth2.googleapis.com/token", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded",
-    },
-    body: new URLSearchParams({
-      client_id: env.server.GOOGLE_MY_BUSINESS_CLIENT_ID,
-      client_secret: env.server.GOOGLE_MY_BUSINESS_CLIENT_SECRET,
-      redirect_uri: redirectUri,
-      grant_type: "authorization_code",
-      code,
-    }),
-  });
-
-  const json = await safeJson(response);
-  if (!response.ok) {
-    throw new Error(resolveGoogleError(json));
-  }
-
-  const accessToken = getString(json?.access_token);
-  if (!accessToken) {
-    throw new Error("Google token exchange failed: missing access token");
-  }
-
-  const refreshToken = getString(json?.refresh_token);
-  const expiresIn = normaliseExpires(json?.expires_in);
-  const expiresAt = expiresIn ? toIsoExpiry(expiresIn) : null;
-
-  const resolvedLocation = await resolveGoogleLocation(accessToken, existingMetadata, existingDisplayName);
-
-  return {
-    accessToken,
-    refreshToken: refreshToken ?? null,
-    expiresAt,
-    displayName: resolvedLocation?.displayName ?? null,
-    metadata: resolvedLocation?.metadata ?? null,
-  };
-}
-
 async function exchangeLongLivedFacebookToken(shortToken: string) {
   const longParams = new URLSearchParams({
     grant_type: "fb_exchange_token",
@@ -317,62 +265,6 @@ function selectInstagramAccount(pages: FacebookPage[], desiredInstagramId: strin
   };
 }
 
-async function resolveGoogleLocation(
-  accessToken: string,
-  existingMetadata: Record<string, unknown> | null,
-  existingDisplayName: string | null,
-) {
-  const desiredLocationId = getString(existingMetadata?.locationId);
-  const existingCanonicalLocationId = normalizeCanonicalGbpLocationId(desiredLocationId);
-  const existingLocalPostParent = getString(existingMetadata?.localPostParent);
-  const cacheKeys = [existingCanonicalLocationId, desiredLocationId].filter((value): value is string => Boolean(value));
-
-  for (const cacheKey of cacheKeys) {
-    const cached = googleLocationCache.get(cacheKey);
-    if (cached && cached.expiresAt > Date.now()) {
-      return cached;
-    }
-  }
-
-  try {
-    const resolved = await resolveGoogleBusinessLocation(accessToken, desiredLocationId, {
-      requireLocalPostParent: true,
-    });
-    const result = {
-      metadata: {
-        locationId: resolved.locationId,
-        ...(resolved.localPostParent ? { localPostParent: resolved.localPostParent } : {}),
-      },
-      displayName: resolved.displayName ?? existingDisplayName ?? null,
-    } as const;
-    const expiresAt = Date.now() + GOOGLE_LOCATION_CACHE_TTL_MS;
-
-    googleLocationCache.set(resolved.locationId, { ...result, expiresAt });
-    for (const cacheKey of cacheKeys) {
-      googleLocationCache.set(cacheKey, { ...result, expiresAt });
-    }
-
-    return result;
-  } catch (error) {
-    if (error instanceof GbpRateLimitError && existingCanonicalLocationId) {
-      console.warn("[connections] GBP quota exceeded during OAuth, preserving existing canonical locationId:", existingCanonicalLocationId);
-      return {
-        metadata: {
-          locationId: existingCanonicalLocationId,
-          ...(existingLocalPostParent ? { localPostParent: existingLocalPostParent } : {}),
-        },
-        displayName: existingDisplayName ?? null,
-      };
-    }
-
-    if (error instanceof GbpRateLimitError) {
-      throw new Error(error.googleDetail || "Google Business Profile API quota exceeded. Please retry in a few minutes.");
-    }
-
-    throw error;
-  }
-}
-
 async function safeJson(response: Response) {
   try {
     return await response.json();
@@ -390,31 +282,6 @@ function resolveGraphError(payload: unknown) {
     return `${type}${message}${code}`;
   }
   return "Facebook token exchange failed";
-}
-
-function resolveGoogleError(payload: unknown) {
-  if (payload && typeof payload === "object") {
-    if (
-      "error_description" in payload &&
-      typeof (payload as { error_description: unknown }).error_description === "string"
-    ) {
-      return (payload as { error_description: string }).error_description;
-    }
-    if ("error" in payload && typeof (payload as { error: unknown }).error === "string") {
-      return (payload as { error: string }).error;
-    }
-    if ("error" in payload && typeof (payload as { error: unknown }).error === "object") {
-      const err = (payload as { error: { message?: unknown; status?: unknown; code?: unknown } }).error;
-      if (err && typeof err === "object") {
-        const message = typeof err.message === "string" ? err.message : undefined;
-        const status = typeof err.status === "string" ? err.status : undefined;
-        if (message) {
-          return status ? `${status}: ${message}` : message;
-        }
-      }
-    }
-  }
-  return "Google token exchange failed";
 }
 
 function getString(value: unknown): string | null {

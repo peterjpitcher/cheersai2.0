@@ -8,7 +8,7 @@ export interface ToggleChipProps {
   onClick?: () => void;
   icon?: React.ComponentType<{ className?: string }>;
   children: React.ReactNode;
-  tone?: 'fb' | 'ig' | 'gbp' | 'orange';
+  tone?: 'fb' | 'ig' | 'orange';
   count?: number;
   className?: string;
 }
@@ -16,7 +16,6 @@ export interface ToggleChipProps {
 const toneActiveStyles: Record<string, string> = {
   fb: "bg-[var(--c-fb-bg)] text-[var(--c-fb)] border-[var(--c-fb)]",
   ig: "bg-[var(--c-ig-bg)] text-[var(--c-ig)] border-[var(--c-ig)]",
-  gbp: "bg-[var(--c-gbp-bg)] text-[var(--c-gbp)] border-[var(--c-gbp)]",
   orange: "border-[var(--c-orange)] text-[var(--c-orange)]",
 };
 

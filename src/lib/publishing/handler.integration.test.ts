@@ -135,10 +135,6 @@ vi.mock('@/lib/providers/init', () => ({
   initializeProviderRegistry: vi.fn(),
 }));
 
-vi.mock('@/lib/providers/types', () => ({
-  isGbpAdapter: vi.fn().mockReturnValue(false),
-}));
-
 // Mock logging and correlation
 vi.mock('@/lib/logging', () => ({
   createLogger: vi.fn(() => ({

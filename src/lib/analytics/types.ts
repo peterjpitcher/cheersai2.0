@@ -12,7 +12,7 @@ export interface DateRange {
 /** Per-post analytics snapshot with joined content metadata */
 export interface PostAnalytics {
   publishJobId: string;
-  platform: 'facebook' | 'instagram' | 'gbp';
+  platform: 'facebook' | 'instagram';
   impressions: number | null;
   reach: number | null;
   engagementCount: number | null;
@@ -28,7 +28,7 @@ export interface PostAnalytics {
 
 /** Aggregated engagement metrics per platform */
 export interface PlatformEngagement {
-  platform: 'facebook' | 'instagram' | 'gbp';
+  platform: 'facebook' | 'instagram';
   totalImpressions: number;
   totalEngagement: number;
   weightedEngagementRate: number;
@@ -52,20 +52,9 @@ export interface BestTimeSlot {
   postCount: number;
 }
 
-/** GBP location-level daily metrics */
-export interface GbpLocationMetrics {
-  metricDate: string;
-  searchViews: number | null;
-  mapViews: number | null;
-  websiteClicks: number | null;
-  directionRequests: number | null;
-  phoneCalls: number | null;
-}
-
 /** Descriptive reason when analytics data is empty or unavailable */
 export type AnalyticsEmptyReason =
   | 'no_published_content'
   | 'no_metrics_yet'
-  | 'gbp_data_delayed'
   | 'platform_not_connected'
   | null;

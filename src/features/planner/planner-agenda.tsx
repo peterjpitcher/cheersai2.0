@@ -37,10 +37,9 @@ export function toDesignStatus(status: ContentStatus): DesignStatus {
 }
 
 /** Map full platform name to PlatformDot key */
-function toPlatformKey(p: Platform): 'fb' | 'ig' | 'gbp' {
+function toPlatformKey(p: Platform): 'fb' | 'ig' {
   if (p === 'facebook') return 'fb';
-  if (p === 'instagram') return 'ig';
-  return 'gbp';
+  return 'ig';
 }
 
 function getItemPlatforms(item: CalendarDisplayItem): Platform[] {
@@ -50,7 +49,7 @@ function getItemPlatforms(item: CalendarDisplayItem): Platform[] {
   const platforms = draft?.platforms;
   if (!Array.isArray(platforms)) return [];
   return platforms.filter(
-    (p): p is Platform => p === 'facebook' || p === 'instagram' || p === 'gbp',
+    (p): p is Platform => p === 'facebook' || p === 'instagram',
   );
 }
 
@@ -61,8 +60,8 @@ function getItemCaption(item: CalendarDisplayItem): string | null {
   if (!draft) return null;
   const generatedCopy = draft.generatedCopy as Record<string, Record<string, string>> | undefined;
   if (!generatedCopy) return null;
-  // Try facebook body, then instagram, then gbp
-  return generatedCopy.facebook?.body ?? generatedCopy.instagram?.body ?? generatedCopy.gbp?.body ?? null;
+  // Try facebook body, then instagram
+  return generatedCopy.facebook?.body ?? generatedCopy.instagram?.body ?? null;
 }
 
 interface DayGroup {

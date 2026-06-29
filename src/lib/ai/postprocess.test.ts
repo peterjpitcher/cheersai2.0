@@ -5,9 +5,9 @@ import { postprocessCopy, type PostprocessConfig } from './postprocess';
 
 function makeConfig(overrides?: Partial<PostprocessConfig>): PostprocessConfig {
   return {
-    maxHashtags: { facebook: 5, instagram: 10, gbp: 3 },
-    maxEmojis: { facebook: 3, instagram: 3, gbp: 2 },
-    maxWords: { facebook: 300, instagram: 150, gbp: 750 },
+    maxHashtags: { facebook: 5, instagram: 10 },
+    maxEmojis: { facebook: 3, instagram: 3 },
+    maxWords: { facebook: 300, instagram: 150 },
     bannedPhrases: ['Check out our amazing', 'Don\'t miss out', 'Act now'],
     platformSignatures: {},
     defaultCta: null,
@@ -19,7 +19,6 @@ function makeRawCopy(overrides?: Partial<AiGenerationResponse>): AiGenerationRes
   return {
     facebook: { body: 'Join us for a great night.', cta_text: null, hashtags: ['#pub', '#food'] },
     instagram: { body: 'A lovely evening awaits.', hashtags: ['#pub'], link_in_bio_line: null },
-    gbp: { body: 'Visit us today.', cta_action: 'LEARN_MORE' },
     ...overrides,
   };
 }
@@ -95,7 +94,7 @@ describe('postprocessCopy', () => {
     expect(result.copy.facebook.body).toBe('Bring your crew and let’s make it! This will be a brilliant.');
   });
 
-  it('enforces word limit (150 for Instagram, 300 for Facebook, 750 for GBP)', () => {
+  it('enforces word limit (150 for Instagram, 300 for Facebook)', () => {
     const longBody = Array.from({ length: 200 }, () => 'word').join(' ');
     const raw = makeRawCopy({
       instagram: { body: longBody, hashtags: [], link_in_bio_line: null },
@@ -160,35 +159,5 @@ describe('postprocessCopy', () => {
     expect(result.copy.instagram.body).not.toContain('Link in bio');
     expect(result.copy.instagram.body).not.toContain('the-anchor.pub');
     expect(result.copy.instagram.link_in_bio_line).toBe('Link in bio to book.');
-  });
-
-  it('warns when GBP CTA is null and no brand default (AI-08)', () => {
-    const raw = makeRawCopy({
-      gbp: { body: 'Visit us today.', cta_action: null },
-    });
-    const config = makeConfig({ defaultCta: null });
-    const result = postprocessCopy(raw, config);
-    expect(result.warnings).toContain(
-      'GBP post has no call-to-action. Consider adding one for better engagement.',
-    );
-  });
-
-  it('does not warn when GBP CTA is present', () => {
-    const raw = makeRawCopy({
-      gbp: { body: 'Visit us today.', cta_action: 'BOOK' },
-    });
-    const result = postprocessCopy(raw, makeConfig());
-    const ctaWarnings = result.warnings.filter((w) => w.includes('call-to-action'));
-    expect(ctaWarnings.length).toBe(0);
-  });
-
-  it('does not warn when defaultCta is set even if GBP CTA is null', () => {
-    const raw = makeRawCopy({
-      gbp: { body: 'Visit us today.', cta_action: null },
-    });
-    const config = makeConfig({ defaultCta: 'LEARN_MORE' });
-    const result = postprocessCopy(raw, config);
-    const ctaWarnings = result.warnings.filter((w) => w.includes('call-to-action'));
-    expect(ctaWarnings.length).toBe(0);
   });
 });

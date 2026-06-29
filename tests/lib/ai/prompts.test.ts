@@ -22,7 +22,6 @@ function buildBrand(overrides: Partial<BrandProfile> = {}): BrandProfile {
     defaultEmojis: ["🍺", "😊"],
     instagramSignature: undefined,
     facebookSignature: undefined,
-    gbpCta: "LEARN_MORE",
     ...overrides,
   };
 }
@@ -73,17 +72,6 @@ describe("buildInstantPostPrompt", () => {
       brand: buildBrand(),
       input: buildInput({ platforms: ["instagram"] }),
       platform: "instagram",
-    });
-
-    expect(typeof result.system).toBe("string");
-    expect(typeof result.user).toBe("string");
-  });
-
-  it("returns system and user strings for gbp", () => {
-    const result = buildInstantPostPrompt({
-      brand: buildBrand(),
-      input: buildInput({ platforms: ["gbp"] }),
-      platform: "gbp",
     });
 
     expect(typeof result.system).toBe("string");
@@ -199,32 +187,6 @@ describe("buildInstantPostPrompt", () => {
     expect(result.user).toMatch(/80 words/i);
   });
 
-  it("gbp guidance mentions word/character hard limit", () => {
-    const result = buildInstantPostPrompt({
-      brand: buildBrand(),
-      input: buildInput({ platforms: ["gbp"] }),
-      platform: "gbp",
-    });
-
-    expect(result.user).toMatch(/150 words|900 characters/i);
-  });
-
-  it("gbp guidance differs from facebook guidance", () => {
-    const facebook = buildInstantPostPrompt({
-      brand: buildBrand(),
-      input: buildInput({ platforms: ["facebook"] }),
-      platform: "facebook",
-    });
-
-    const gbp = buildInstantPostPrompt({
-      brand: buildBrand(),
-      input: buildInput({ platforms: ["gbp"] }),
-      platform: "gbp",
-    });
-
-    expect(facebook.user).not.toBe(gbp.user);
-  });
-
   it("includes scheduled time context in the user message when scheduledFor is provided", () => {
     const scheduledFor = new Date("2026-03-15T19:00:00.000Z");
 
@@ -262,30 +224,6 @@ describe("buildInstantPostPrompt", () => {
     expect(result.user).toContain("dog friendly");
   });
 
-  it("includes GBP CTA instruction in gbp platform guidance", () => {
-    const brand = buildBrand({ gbpCta: "BOOK" });
-
-    const result = buildInstantPostPrompt({
-      brand,
-      input: buildInput({ platforms: ["gbp"] }),
-      platform: "gbp",
-    });
-
-    expect(result.user).toContain("BOOK");
-  });
-
-  it("falls back to LEARN_MORE CTA for gbp when gbpCta is not set on brand", () => {
-    const brand = buildBrand({ gbpCta: undefined });
-
-    const result = buildInstantPostPrompt({
-      brand,
-      input: buildInput({ platforms: ["gbp"] }),
-      platform: "gbp",
-    });
-
-    expect(result.user).toContain("LEARN_MORE");
-  });
-
   it("notes media assets in the user message when provided", () => {
     const input = buildInput({
       media: [{ assetId: "abc123", mediaType: "image", fileName: "roast.jpg" }],
@@ -315,7 +253,7 @@ describe("buildUserPrompt", () => {
   it("tells the structured generator not to clone captions across platforms", () => {
     const prompt = buildSystemPrompt("event", "friendly_warm");
 
-    expect(prompt).toContain("Do not clone the same caption three times");
+    expect(prompt).toContain("Do not clone the same caption twice");
     expect(prompt).toContain("Do not invent operational details");
   });
 
@@ -361,7 +299,7 @@ describe("buildUserPrompt", () => {
     const brief = {
       title: "Live Jazz",
       prompt: "A live jazz night with local artists.",
-      platforms: ["facebook", "instagram", "gbp"],
+      platforms: ["facebook", "instagram"],
       tone: "friendly_warm",
       lengthPreference: "standard",
       includeHashtags: true,
@@ -376,7 +314,6 @@ describe("buildUserPrompt", () => {
       ctaLinks: {
         facebook: "https://vip-club.uk/fb-live-jazz",
         instagram: "https://vip-club.uk/bio-live-jazz",
-        gbp: "https://vip-club.uk/gp-live-jazz",
       },
     } satisfies ContentBrief;
 
@@ -385,10 +322,8 @@ describe("buildUserPrompt", () => {
     expect(prompt).toContain("CTA links:");
     expect(prompt).toContain("Facebook event CTA URL is available");
     expect(prompt).toContain("Instagram event link-in-bio destination is available");
-    expect(prompt).toContain("Google Business Profile event CTA URL is available");
     expect(prompt).not.toContain("https://vip-club.uk/fb-live-jazz");
     expect(prompt).not.toContain("https://vip-club.uk/bio-live-jazz");
-    expect(prompt).not.toContain("https://vip-club.uk/gp-live-jazz");
     expect(prompt).toContain("instagram.link_in_bio_line");
     expect(prompt).toContain("Do not put any URL, bare domain, direct booking link");
   });

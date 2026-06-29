@@ -33,9 +33,9 @@ interface GenerationContextInput {
 }
 
 // Default post-processing limits per platform
-const MAX_HASHTAGS: Record<string, number> = { facebook: 5, instagram: 10, gbp: 3 };
-const MAX_EMOJIS: Record<string, number> = { facebook: 3, instagram: 3, gbp: 2 };
-const MAX_WORDS: Record<string, number> = { facebook: 300, instagram: 150, gbp: 750 };
+const MAX_HASHTAGS: Record<string, number> = { facebook: 5, instagram: 10 };
+const MAX_EMOJIS: Record<string, number> = { facebook: 3, instagram: 3 };
+const MAX_WORDS: Record<string, number> = { facebook: 300, instagram: 150 };
 
 /**
  * Generate platform-specific copy from a content brief.
@@ -57,14 +57,14 @@ export async function generateContent(
     const { supabase, accountId } = await requireAuthContext();
 
     // Load the configured brand voice (key phrases, banned phrases, signatures,
-    // tone sliders, GBP CTA) from the brand_profile table — the same store the
+    // tone sliders) from the brand_profile table — the same store the
     // Settings → Brand Voice form writes to.
     const brand = await loadBrandProfile(supabase, accountId);
 
     const voiceConfig: BrandVoiceConfig = {
       tone: brief.tone,
       style: null,
-      defaultCta: brand.gbpCta ?? null,
+      defaultCta: null,
       platformSignatures: brandSignatures(brand),
     };
 
@@ -162,7 +162,7 @@ export async function regenerateWithModifier(
     const voiceConfig: BrandVoiceConfig = {
       tone: brief.tone,
       style: null,
-      defaultCta: brand.gbpCta ?? null,
+      defaultCta: null,
       platformSignatures: brandSignatures(brand),
     };
 
@@ -259,14 +259,13 @@ async function loadBrandProfile(
     defaultEmojis: [],
     instagramSignature: undefined,
     facebookSignature: undefined,
-    gbpCta: 'LEARN_MORE',
   };
 
   try {
     const { data, error } = await supabase
       .from('brand_profile')
       .select(
-        'tone_formal, tone_playful, key_phrases, banned_topics, banned_phrases, default_hashtags, default_emojis, instagram_signature, facebook_signature, gbp_cta',
+        'tone_formal, tone_playful, key_phrases, banned_topics, banned_phrases, default_hashtags, default_emojis, instagram_signature, facebook_signature',
       )
       .eq('account_id', accountId)
       .maybeSingle<{
@@ -279,7 +278,6 @@ async function loadBrandProfile(
         default_emojis: string[] | null;
         instagram_signature: string | null;
         facebook_signature: string | null;
-        gbp_cta: string | null;
       }>();
 
     if (error || !data) return defaults;
@@ -294,7 +292,6 @@ async function loadBrandProfile(
       defaultEmojis: data.default_emojis ?? [],
       instagramSignature: data.instagram_signature ?? undefined,
       facebookSignature: data.facebook_signature ?? undefined,
-      gbpCta: data.gbp_cta ?? 'LEARN_MORE',
     };
   } catch {
     return defaults;

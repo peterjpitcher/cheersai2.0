@@ -11,7 +11,6 @@ import { createServiceSupabaseClient } from '@/lib/supabase/service';
 const RATE_LIMITS: Record<ProviderPlatform, { ceiling: number; windowMs: number }> = {
   facebook: { ceiling: 200, windowMs: 60 * 60 * 1000 },      // 200/hr (BUC policy)
   instagram: { ceiling: 200, windowMs: 60 * 60 * 1000 },     // 200/hr
-  gbp: { ceiling: 1000, windowMs: 24 * 60 * 60 * 1000 },     // ~1000/day (varies by quota)
 };
 
 /**

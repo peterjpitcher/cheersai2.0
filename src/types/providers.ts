@@ -3,7 +3,7 @@
  * Used by publishing pipeline, connection health, and OAuth flows.
  */
 
-export type ProviderPlatform = 'facebook' | 'instagram' | 'gbp';
+export type ProviderPlatform = 'facebook' | 'instagram';
 
 export interface PublishResult {
   platformPostId: string;

@@ -23,7 +23,6 @@ const NOTIFICATION_CATEGORY = 'publish_failed_immediate';
 const PLATFORM_LABELS: Record<string, string> = {
   facebook: 'Facebook',
   instagram: 'Instagram',
-  gbp: 'Google Business Profile',
 };
 
 type PublishJobRow = {

@@ -31,7 +31,6 @@ import { BannerOverlay } from "@/features/planner/banner-overlay";
 const PLATFORM_STYLES: Record<string, React.CSSProperties> = {
   facebook: { backgroundColor: 'color-mix(in srgb, var(--c-fb) 10%, transparent)', color: 'var(--c-fb)', border: '1px solid color-mix(in srgb, var(--c-fb) 30%, transparent)' },
   instagram: { backgroundColor: 'color-mix(in srgb, var(--c-ig) 12%, transparent)', color: 'var(--c-ig)', border: '1px solid color-mix(in srgb, var(--c-ig) 30%, transparent)' },
-  gbp: { backgroundColor: 'color-mix(in srgb, var(--c-gbp) 12%, transparent)', color: 'var(--c-gbp)', border: '1px solid color-mix(in srgb, var(--c-gbp) 30%, transparent)' },
 };
 
 const STATUS_TEXT_STYLES: Record<string, React.CSSProperties> = {

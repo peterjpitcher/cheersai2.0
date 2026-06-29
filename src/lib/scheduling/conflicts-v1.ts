@@ -6,7 +6,7 @@
 
 export interface ScheduledSlot {
   id: string;
-  platform: "facebook" | "instagram" | "gbp";
+  platform: "facebook" | "instagram";
   scheduledFor: Date;
 }
 

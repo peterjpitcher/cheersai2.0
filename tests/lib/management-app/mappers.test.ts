@@ -20,7 +20,6 @@ describe("management app mappers", () => {
       longDescription: "A full live jazz set with local artists.",
       facebook_short_link: "https://l.the-anchor.pub/fb-live-jazz",
       link_in_bio_short_link: "https://l.the-anchor.pub/bio-live-jazz",
-      google_business_profile_short_link: "https://l.the-anchor.pub/gp-live-jazz",
       meta_ads_short_link: "https://l.the-anchor.pub/ma-live-jazz",
       meta_ads_destination_url: "https://www.the-anchor.pub/events/live-jazz?utm_source=facebook",
       booking_url: "https://www.the-anchor.pub/events/live-jazz",
@@ -52,7 +51,6 @@ describe("management app mappers", () => {
       ctaLinks: {
         facebook: "https://l.the-anchor.pub/fb-live-jazz",
         instagram: "https://l.the-anchor.pub/bio-live-jazz",
-        gbp: "https://l.the-anchor.pub/gp-live-jazz",
       },
       eventCategoryName: "Live Music",
       eventCategorySlug: "live-music",

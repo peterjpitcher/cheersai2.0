@@ -68,8 +68,6 @@ export interface ManagementEventDetail {
   facebook_short_link?: string | null;
   linkInBioShortLink?: string | null;
   link_in_bio_short_link?: string | null;
-  googleBusinessProfileShortLink?: string | null;
-  google_business_profile_short_link?: string | null;
   metaAdsShortLink?: string | null;
   meta_ads_short_link?: string | null;
   metaAdsDestinationUrl?: string | null;
@@ -104,8 +102,6 @@ export interface ManagementEventDetail {
 export interface ManagementEventCtaLinks {
   facebook?: string | null;
   instagram?: string | null;
-  google_business_profile?: string | null;
-  gbp?: string | null;
   meta_ads?: string | null;
 }
 
@@ -478,8 +474,6 @@ function shapeEventDetail(value: unknown): ManagementEventDetail {
     facebook_short_link: canonicaliseShortLinkUrl(asOptionalString(row.facebook_short_link)),
     linkInBioShortLink: canonicaliseShortLinkUrl(asOptionalString(row.linkInBioShortLink)),
     link_in_bio_short_link: canonicaliseShortLinkUrl(asOptionalString(row.link_in_bio_short_link)),
-    googleBusinessProfileShortLink: canonicaliseShortLinkUrl(asOptionalString(row.googleBusinessProfileShortLink)),
-    google_business_profile_short_link: canonicaliseShortLinkUrl(asOptionalString(row.google_business_profile_short_link)),
     metaAdsShortLink: canonicaliseShortLinkUrl(asOptionalString(row.metaAdsShortLink)),
     meta_ads_short_link: canonicaliseShortLinkUrl(asOptionalString(row.meta_ads_short_link)),
     metaAdsDestinationUrl: asOptionalString(row.metaAdsDestinationUrl),
@@ -516,17 +510,10 @@ function readCtaLinks(value: unknown): ManagementEventCtaLinks | null {
 
   const facebook = asOptionalString(row.facebook);
   const instagram = asOptionalString(row.instagram);
-  const googleBusinessProfile =
-    asOptionalString(row.google_business_profile) ?? asOptionalString(row.gbp);
   const metaAds = asOptionalString(row.meta_ads);
 
   if (facebook) links.facebook = canonicaliseShortLinkUrl(facebook);
   if (instagram) links.instagram = canonicaliseShortLinkUrl(instagram);
-  if (googleBusinessProfile) {
-    const canonical = canonicaliseShortLinkUrl(googleBusinessProfile);
-    links.google_business_profile = canonical;
-    links.gbp = canonical;
-  }
   if (metaAds) links.meta_ads = canonicaliseShortLinkUrl(metaAds);
 
   return Object.keys(links).length ? links : null;

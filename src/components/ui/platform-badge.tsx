@@ -1,6 +1,6 @@
 'use client';
 
-import { Facebook, Instagram, Globe2 } from 'lucide-react';
+import { Facebook, Instagram } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Platform } from '@/types/content';
 
@@ -11,7 +11,6 @@ const platformConfig: Record<
 > = {
   facebook: { token: 'fb', icon: Facebook, label: 'Facebook' },
   instagram: { token: 'ig', icon: Instagram, label: 'Instagram' },
-  gbp: { token: 'gbp', icon: Globe2, label: 'Google' },
 };
 
 interface PlatformBadgeProps {

@@ -10,7 +10,6 @@ export const brandProfileFormSchema = z.object({
   defaultEmojis: z.array(z.string()).max(10, "Use 10 or fewer default emojis."),
   instagramSignature: z.string().optional(),
   facebookSignature: z.string().optional(),
-  gbpCta: z.string().optional(),
 });
 
 export type BrandProfileFormValues = z.infer<typeof brandProfileFormSchema>;
@@ -18,17 +17,10 @@ export type BrandProfileFormValues = z.infer<typeof brandProfileFormSchema>;
 const HEX_COLOUR = /^#[0-9A-Fa-f]{6}$/;
 const BANNER_POSITION_ENUM = z.enum(["top", "bottom", "left", "right"]);
 
-export const GBP_CTA_OPTIONS_BY_POST_TYPE = {
-  standard: ["LEARN_MORE", "BOOK", "CALL"],
-  event: ["LEARN_MORE", "BOOK", "CALL"],
-  offer: ["REDEEM", "CALL", "LEARN_MORE"],
-} as const;
-
 export const postingDefaultsFormSchema = z.object({
   timezone: z.string(),
   facebookLocationId: z.string().optional(),
   instagramLocationId: z.string().optional(),
-  gbpLocationId: z.string().optional(),
   defaultPostingTime: z.string()
     .regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Must be HH:mm format")
     .optional()
@@ -53,11 +45,6 @@ export const postingDefaultsFormSchema = z.object({
   notifications: z.object({
     emailFailures: z.boolean(),
     emailTokenExpiring: z.boolean(),
-  }),
-  gbpCtaDefaults: z.object({
-    standard: z.enum(GBP_CTA_OPTIONS_BY_POST_TYPE.standard),
-    event: z.enum(GBP_CTA_OPTIONS_BY_POST_TYPE.event),
-    offer: z.enum(GBP_CTA_OPTIONS_BY_POST_TYPE.offer),
   }),
   bannerDefaults: z.object({
     bannersEnabled: z.boolean(),

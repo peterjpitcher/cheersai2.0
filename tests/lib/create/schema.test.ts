@@ -166,7 +166,7 @@ describe("contentBriefSchema campaign placements", () => {
       title: "Manager's Special",
       offerSummary: "25% off Gordon's Tropical Passionfruit.",
       endDate: "2026-06-10",
-      platforms: ["facebook", "instagram", "gbp"],
+      platforms: ["facebook", "instagram"],
       placements: ["feed", "story"],
     });
 

@@ -21,11 +21,9 @@ const INSTAGRAM_SCOPES = [
   "business_management",
 ].join(",");
 
-const GBP_SCOPES = ["https://www.googleapis.com/auth/business.manage"].join(" ");
-
 const SITE_URL = env.client.NEXT_PUBLIC_SITE_URL.replace(/\/$/, "");
 
-export type Provider = "facebook" | "instagram" | "gbp";
+export type Provider = "facebook" | "instagram";
 
 export function buildOAuthRedirectUrl(provider: Provider, state: string) {
   switch (provider) {
@@ -33,8 +31,6 @@ export function buildOAuthRedirectUrl(provider: Provider, state: string) {
       return buildFacebookOAuthUrl(state);
     case "instagram":
       return buildInstagramOAuthUrl(state);
-    case "gbp":
-      return buildGoogleOAuthUrl(state);
     default:
       throw new Error(`Unsupported provider ${provider}`);
   }
@@ -62,21 +58,6 @@ function buildInstagramOAuthUrl(state: string) {
     response_type: "code",
   });
   return `${getMetaOAuthBase()}/dialog/oauth?${params.toString()}`;
-}
-
-function buildGoogleOAuthUrl(state: string) {
-  const redirectUri = `${SITE_URL}/api/oauth/gbp/callback`;
-  const params = new URLSearchParams({
-    client_id: env.server.GOOGLE_MY_BUSINESS_CLIENT_ID,
-    redirect_uri: redirectUri,
-    state,
-    scope: GBP_SCOPES,
-    response_type: "code",
-    access_type: "offline",
-    include_granted_scopes: "true",
-    prompt: "consent",
-  });
-  return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
 }
 
 const FACEBOOK_ADS_SCOPES = [

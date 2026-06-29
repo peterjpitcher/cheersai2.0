@@ -44,7 +44,6 @@ function providerLabel(provider: string): string {
   const labels: Record<string, string> = {
     facebook: 'Facebook Page',
     instagram: 'Instagram Business',
-    gbp: 'Google Business Profile',
   };
   return labels[provider] ?? provider.charAt(0).toUpperCase() + provider.slice(1);
 }

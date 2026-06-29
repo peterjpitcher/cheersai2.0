@@ -5,7 +5,7 @@ import { hasTokenValue } from "@/lib/connections/readiness";
 import { lintContent } from "@/lib/ai/content-rules";
 import type { InstantPostAdvancedOptions } from "@/lib/create/schema";
 
-type Provider = "facebook" | "instagram" | "gbp";
+type Provider = "facebook" | "instagram";
 type Placement = "feed" | "story";
 
 interface PublishReadinessIssue {
@@ -24,13 +24,11 @@ interface PublishReadinessParams {
 const PROVIDER_LABELS: Record<Provider, string> = {
   facebook: "Facebook",
   instagram: "Instagram",
-  gbp: "Google Business Profile",
 };
 
 const METADATA_LABELS: Record<Provider, string> = {
   facebook: "Facebook Page ID",
   instagram: "Instagram Business Account ID",
-  gbp: "Google Business Location ID",
 };
 
 export async function getPublishReadinessIssues({
@@ -64,7 +62,7 @@ export async function getPublishReadinessIssues({
         message: `${PROVIDER_LABELS[platform]} access token is missing. Reconnect to continue.`,
       });
     } else {
-      // Prefer token_expires_at (v2); fall back to legacy expires_at for GBP connections
+      // Prefer token_expires_at (v2); fall back to legacy expires_at
       const effectiveExpiry = connection.token_expires_at ?? connection.expires_at;
       if (effectiveExpiry) {
         const expiry = new Date(effectiveExpiry);
@@ -84,13 +82,6 @@ export async function getPublishReadinessIssues({
         message: `Missing ${METADATA_LABELS[platform]}. Update it in Connections.`,
       });
     }
-  }
-
-  if (placement === "story" && platform === "gbp") {
-    issues.push({
-      code: "placement_invalid",
-      message: "Stories are only supported on Facebook and Instagram.",
-    });
   }
 
   const variantData = await loadVariantData({ supabase, contentId });

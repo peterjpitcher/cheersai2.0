@@ -102,7 +102,7 @@ export function CreateWizard({ initialDraftId, accountId, onClose }: CreateWizar
       contentType: 'instant_post',
       title: '',
       prompt: '',
-      platforms: ['facebook', 'instagram', 'gbp'],
+      platforms: ['facebook', 'instagram'],
       tone: 'friendly_warm',
       lengthPreference: 'standard',
       includeHashtags: true,
@@ -242,7 +242,7 @@ export function CreateWizard({ initialDraftId, accountId, onClose }: CreateWizar
         prompt: currentValues.prompt,
         platforms: type === 'story'
           ? (['facebook', 'instagram'] as const)
-          : (currentValues.platforms ?? ['facebook', 'instagram', 'gbp']),
+          : (currentValues.platforms ?? ['facebook', 'instagram']),
         tone: currentValues.tone,
         lengthPreference: currentValues.lengthPreference,
         includeHashtags: currentValues.includeHashtags,

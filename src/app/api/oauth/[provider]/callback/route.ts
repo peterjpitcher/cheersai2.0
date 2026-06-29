@@ -4,7 +4,7 @@ import { completeOAuthConnect } from "@/app/(app)/connections/actions";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
 import { env } from "@/env";
 
-const SUPPORTED_PROVIDERS = new Set(["facebook", "instagram", "gbp"]);
+const SUPPORTED_PROVIDERS = new Set(["facebook", "instagram"]);
 
 /**
  * OAuth callback route.

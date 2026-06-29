@@ -6,7 +6,6 @@ import {
   getEngagementByPlatform,
   getEngagementByContentType,
   getBestDayTimeSlots,
-  getGbpDailyMetrics,
 } from '@/lib/analytics/queries';
 import type {
   DateRange,
@@ -14,7 +13,6 @@ import type {
   PlatformEngagement,
   ContentTypePerformance,
   BestTimeSlot,
-  GbpLocationMetrics,
 } from '@/lib/analytics/types';
 
 // ---------------------------------------------------------------------------
@@ -80,21 +78,5 @@ export async function getBestTimes(): Promise<{ data?: BestTimeSlot[]; error?: s
   } catch (err) {
     console.error('[analytics-action] getBestTimes error:', err);
     return { error: 'Failed to load best posting times' };
-  }
-}
-
-/**
- * Fetch GBP daily location metrics.
- */
-export async function getGbpMetrics(
-  dateRange: DateRange,
-): Promise<{ data?: GbpLocationMetrics[]; error?: string }> {
-  try {
-    const { accountId } = await requireAuthContext();
-    const data = await getGbpDailyMetrics(accountId, dateRange);
-    return { data };
-  } catch (err) {
-    console.error('[analytics-action] getGbpMetrics error:', err);
-    return { error: 'Failed to load GBP metrics' };
   }
 }

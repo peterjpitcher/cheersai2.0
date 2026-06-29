@@ -8,7 +8,7 @@ import { isSchemaMissingError } from "@/lib/supabase/errors";
 import type { ContentItem } from "@/types/content";
 
 interface CadenceEntry {
-  platform: "facebook" | "instagram" | "gbp";
+  platform: "facebook" | "instagram";
   weekday: number;
   hour: number;
   minute: number;
@@ -59,7 +59,7 @@ function parseCadence(metadata: Record<string, unknown> | null): CadenceEntry[] 
       typeof entry.weekday === "number" &&
       typeof entry.hour === "number" &&
       typeof entry.minute === "number" &&
-      ["facebook", "instagram", "gbp"].includes(entry.platform),
+      ["facebook", "instagram"].includes(entry.platform),
   );
 }
 
@@ -129,7 +129,7 @@ async function materialiseCampaign(
     .lte("scheduled_for", windowEnd.toISO());
 
   const occupiedSlots: ScheduledSlot[] = (allAccountItems ?? [])
-    .filter((row): row is { id: string; scheduled_for: string; platform: "facebook" | "instagram" | "gbp" } =>
+    .filter((row): row is { id: string; scheduled_for: string; platform: "facebook" | "instagram" } =>
       !!row.scheduled_for && !!row.platform)
     .map((row) => ({
       id: row.id,

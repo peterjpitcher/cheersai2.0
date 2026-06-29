@@ -1,4 +1,4 @@
-export type ConnectionProvider = "facebook" | "instagram" | "gbp";
+export type ConnectionProvider = "facebook" | "instagram";
 
 export interface ConnectionMetadataResult {
   complete: boolean;
@@ -8,10 +8,6 @@ export interface ConnectionMetadataResult {
 const REQUIRED_KEYS: Record<ConnectionProvider, Array<{ key: string; label: string }>> = {
   facebook: [{ key: "pageId", label: "Facebook Page ID" }],
   instagram: [{ key: "igBusinessId", label: "Instagram Business Account ID" }],
-  gbp: [
-    { key: "locationId", label: "Google Business Location ID" },
-    { key: "localPostParent", label: "Google Business publish parent" },
-  ],
 };
 
 export function evaluateConnectionMetadata(

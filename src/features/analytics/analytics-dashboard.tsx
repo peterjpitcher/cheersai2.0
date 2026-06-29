@@ -10,13 +10,11 @@ import { describeEmptyReason } from '@/lib/analytics/aggregations';
 import type { DateRange } from '@/lib/analytics/types';
 
 import { useAnalyticsData, usePlatformComparison, useContentTypeComparison, useBestTimes } from './hooks/use-analytics-data';
-import { useGbpMetrics } from './hooks/use-gbp-metrics';
 import { EmptyAnalyticsState } from './cards/empty-analytics-state';
 import { PostPerformanceCard } from './cards/post-performance-card';
 import { EngagementChart } from './charts/engagement-chart';
 import { PlatformComparisonChart } from './charts/platform-comparison';
 import { BestTimeHeatmap } from './charts/best-time-heatmap';
-import { GbpMetricsChart } from './charts/gbp-metrics-chart';
 
 // ---------------------------------------------------------------------------
 // Date range presets
@@ -44,12 +42,11 @@ const RANGE_OPTIONS: Array<{ label: string; value: RangePreset }> = [
 // ---------------------------------------------------------------------------
 
 /**
- * Analytics dashboard with 5 tabbed views:
+ * Analytics dashboard with 4 tabbed views:
  * 1. Overview - summary cards + engagement chart
  * 2. By Platform - platform comparison bar chart (ANLY-03)
  * 3. By Content Type - content type comparison (ANLY-03)
  * 4. Best Times - 7x24 heatmap (ANLY-04)
- * 5. GBP Metrics - location metrics line chart (ANLY-05)
  *
  * Empty states handled per ANLY-06.
  */
@@ -64,7 +61,6 @@ export function AnalyticsDashboard() {
   const platformQuery = usePlatformComparison(dateRange);
   const contentTypeQuery = useContentTypeComparison(dateRange);
   const bestTimesQuery = useBestTimes();
-  const gbpQuery = useGbpMetrics(dateRange);
 
   // Compute summary metrics from posts data
   const summary = useMemo(() => {
@@ -114,7 +110,6 @@ export function AnalyticsDashboard() {
           <TabsTrigger value="platform">By Platform</TabsTrigger>
           <TabsTrigger value="content-type">By Content Type</TabsTrigger>
           <TabsTrigger value="best-times">Best Times</TabsTrigger>
-          <TabsTrigger value="gbp">GBP Metrics</TabsTrigger>
         </TabsList>
 
         {/* Overview tab */}
@@ -215,34 +210,6 @@ export function AnalyticsDashboard() {
               </CardContent>
             </Card>
           )}
-        </TabsContent>
-
-        {/* GBP Metrics tab */}
-        <TabsContent value="gbp">
-          <div className="flex flex-col gap-4">
-            {(gbpQuery.data?.length ?? 0) === 0 && !gbpQuery.isLoading ? (
-              <EmptyAnalyticsState
-                reason={describeEmptyReason({
-                  publishJobCount: postsQuery.data?.length ?? 0,
-                  snapshotCount: gbpQuery.data?.length ?? 0,
-                  isGbp: true,
-                  daysFromNow: 1,
-                })}
-              />
-            ) : (
-              <Card>
-                <CardHeader>
-                  <CardTitle>Google Business Profile Metrics</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <GbpMetricsChart
-                    data={gbpQuery.data ?? []}
-                    loading={gbpQuery.isLoading}
-                  />
-                </CardContent>
-              </Card>
-            )}
-          </div>
         </TabsContent>
       </Tabs>
     </div>

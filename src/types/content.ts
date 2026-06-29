@@ -8,7 +8,7 @@ export type ContentType = 'instant_post' | 'story' | 'event' | 'promotion' | 'we
 
 export type ContentStatus = 'draft' | 'review' | 'approved' | 'scheduled' | 'queued' | 'publishing' | 'published' | 'posted' | 'failed';
 
-export type Platform = 'facebook' | 'instagram' | 'gbp';
+export type Platform = 'facebook' | 'instagram';
 
 export type PlatformCtaLinks = Partial<Record<Platform, string | null>>;
 
@@ -47,7 +47,6 @@ export interface ContentItemVersion {
 export interface PlatformCopy {
   facebook: { body: string; ctaText?: string; hashtags?: string[]; publishBodyOverride?: string };
   instagram: { body: string; hashtags?: string[]; linkInBioLine?: string; publishBodyOverride?: string };
-  gbp: { body: string; ctaAction?: string; publishBodyOverride?: string };
 }
 
 /** A single time slot selected by the user in the multi-date schedule step */

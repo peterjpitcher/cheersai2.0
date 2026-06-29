@@ -29,10 +29,10 @@ const TWO_WEEK_END = makeDate(2026, 4, 26);
 
 describe("buildSpreadEvenlySlots", () => {
   describe("empty calendar", () => {
-    it("distributes 3 posts across 3 different days with 3 platforms and stagger=true", () => {
+    it("distributes 2 posts across 2 different days with 2 platforms and stagger=true", () => {
       const config: SpreadConfig = {
-        postsPerWeek: 3,
-        platforms: ["instagram", "facebook", "gbp"],
+        postsPerWeek: 2,
+        platforms: ["instagram", "facebook"],
         staggerPlatforms: true,
         windowStart: WEEK_START,
         windowEnd: WEEK_END,
@@ -40,19 +40,18 @@ describe("buildSpreadEvenlySlots", () => {
 
       const slots = buildSpreadEvenlySlots(config, []);
 
-      // Should have 3 slots (one per platform per week)
-      expect(slots).toHaveLength(3);
+      // Should have 2 slots (one per platform per week)
+      expect(slots).toHaveLength(2);
 
       // Each platform should appear exactly once
       const platforms = slots.map((s) => s.platform);
       expect(platforms).toContain("instagram");
       expect(platforms).toContain("facebook");
-      expect(platforms).toContain("gbp");
 
       // All on different days
       const days = slots.map((s) => toLocalDateStr(s.date));
       const uniqueDays = new Set(days);
-      expect(uniqueDays.size).toBe(3);
+      expect(uniqueDays.size).toBe(2);
     });
 
     it("places 1 post/week on one day when stagger=false", () => {
@@ -162,10 +161,10 @@ describe("buildSpreadEvenlySlots", () => {
   });
 
   describe("platform staggering edge cases", () => {
-    it("groups 2 platforms on same day when only 1 empty day with 3 platforms", () => {
+    it("groups 2 platforms on same day when only 1 empty day", () => {
       const config: SpreadConfig = {
-        postsPerWeek: 3,
-        platforms: ["instagram", "facebook", "gbp"],
+        postsPerWeek: 2,
+        platforms: ["instagram", "facebook"],
         staggerPlatforms: true,
         windowStart: WEEK_START,
         windowEnd: WEEK_END,
@@ -184,21 +183,21 @@ describe("buildSpreadEvenlySlots", () => {
 
       const slots = buildSpreadEvenlySlots(config, existing);
 
-      expect(slots).toHaveLength(3);
+      expect(slots).toHaveLength(2);
 
-      // Instagram should get the empty day (Wednesday), the other 2 share a least-busy day
+      // Instagram should get the empty day (Wednesday); the other shares a least-busy day
       const instagramSlot = slots.find((s) => s.platform === "instagram");
       expect(instagramSlot).toBeDefined();
       expect(toLocalDateStr(instagramSlot!.date)).toBe("2026-04-15");
     });
 
     it("groups extra platforms onto least-busy day when empty days run out", () => {
-      // 3 platforms, stagger=true, but only 1 truly empty day (Wednesday).
-      // After Instagram takes Wednesday, Facebook and GBP should land on
+      // 2 platforms, stagger=true, but only 1 truly empty day (Wednesday).
+      // After Instagram takes Wednesday, Facebook should land on
       // the least-busy already-assigned day (Wednesday), not the busiest.
       const config: SpreadConfig = {
-        postsPerWeek: 3,
-        platforms: ["instagram", "facebook", "gbp"],
+        postsPerWeek: 2,
+        platforms: ["instagram", "facebook"],
         staggerPlatforms: true,
         windowStart: WEEK_START,
         windowEnd: WEEK_END,
@@ -222,31 +221,28 @@ describe("buildSpreadEvenlySlots", () => {
 
       const slots = buildSpreadEvenlySlots(config, existing);
 
-      // All 3 platforms must be present (none dropped)
-      expect(slots).toHaveLength(3);
+      // Both platforms must be present (none dropped)
+      expect(slots).toHaveLength(2);
       const platforms = slots.map((s) => s.platform);
       expect(platforms).toContain("instagram");
       expect(platforms).toContain("facebook");
-      expect(platforms).toContain("gbp");
 
       // Instagram gets the empty day (Wednesday). When dayIndex exceeds
       // available days, remaining platforms should land on the LEAST busy
       // day (which is now Wednesday with just 1 post), not some random busy day.
       const instagramSlot = slots.find((s) => s.platform === "instagram");
       const facebookSlot = slots.find((s) => s.platform === "facebook");
-      const gbpSlot = slots.find((s) => s.platform === "gbp");
 
       expect(toLocalDateStr(instagramSlot!.date)).toBe("2026-04-15");
-      // Facebook and GBP should land on Wednesday too (now least-busy with 1 post)
-      // or another least-busy day — but NOT on a day with 2 posts when Wednesday has only 1
+      // Facebook should land on Wednesday too (now least-busy with 1 post)
+      // — but NOT on a day with 2 posts when Wednesday has only 1
       expect(toLocalDateStr(facebookSlot!.date)).toBe("2026-04-15");
-      expect(toLocalDateStr(gbpSlot!.date)).toBe("2026-04-15");
     });
 
     it("assigns all platforms to same day when stagger=false", () => {
       const config: SpreadConfig = {
         postsPerWeek: 1,
-        platforms: ["instagram", "facebook", "gbp"],
+        platforms: ["instagram", "facebook"],
         staggerPlatforms: false,
         windowStart: WEEK_START,
         windowEnd: WEEK_END,
@@ -254,7 +250,7 @@ describe("buildSpreadEvenlySlots", () => {
 
       const slots = buildSpreadEvenlySlots(config, []);
 
-      expect(slots).toHaveLength(3);
+      expect(slots).toHaveLength(2);
 
       // All on the same day
       const days = new Set(slots.map((s) => toLocalDateStr(s.date)));
@@ -290,10 +286,10 @@ describe("buildSpreadEvenlySlots", () => {
   });
 
   describe("platform priority order", () => {
-    it("assigns Instagram first, then Facebook, then GBP when staggering", () => {
+    it("assigns Instagram first, then Facebook when staggering", () => {
       const config: SpreadConfig = {
-        postsPerWeek: 3,
-        platforms: ["facebook", "gbp", "instagram"], // Intentionally disordered
+        postsPerWeek: 2,
+        platforms: ["facebook", "instagram"], // Intentionally disordered
         staggerPlatforms: true,
         windowStart: WEEK_START,
         windowEnd: WEEK_END,
@@ -301,20 +297,17 @@ describe("buildSpreadEvenlySlots", () => {
 
       const slots = buildSpreadEvenlySlots(config, []);
 
-      expect(slots).toHaveLength(3);
+      expect(slots).toHaveLength(2);
 
       // Instagram should get the first (emptiest) day
       const instagramSlot = slots.find((s) => s.platform === "instagram");
       const facebookSlot = slots.find((s) => s.platform === "facebook");
-      const gbpSlot = slots.find((s) => s.platform === "gbp");
 
       expect(instagramSlot).toBeDefined();
       expect(facebookSlot).toBeDefined();
-      expect(gbpSlot).toBeDefined();
 
       // Instagram should be on the earliest/emptiest day
       expect(instagramSlot!.date.getTime()).toBeLessThanOrEqual(facebookSlot!.date.getTime());
-      expect(facebookSlot!.date.getTime()).toBeLessThanOrEqual(gbpSlot!.date.getTime());
     });
   });
 

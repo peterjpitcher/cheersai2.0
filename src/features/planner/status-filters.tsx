@@ -13,10 +13,9 @@ const STATUS_OPTIONS: Array<{ value: ContentStatus; label: string }> = [
 ];
 
 /** Platform filter options with display labels */
-const PLATFORM_OPTIONS: Array<{ value: Platform; label: string; tone: 'fb' | 'ig' | 'gbp' }> = [
+const PLATFORM_OPTIONS: Array<{ value: Platform; label: string; tone: 'fb' | 'ig' }> = [
   { value: 'facebook', label: 'Facebook', tone: 'fb' },
   { value: 'instagram', label: 'Instagram', tone: 'ig' },
-  { value: 'gbp', label: 'Google', tone: 'gbp' },
 ];
 
 interface StatusFiltersProps {
@@ -29,7 +28,7 @@ interface StatusFiltersProps {
 /**
  * Horizontal filter bar for the planner calendar.
  * Provides status toggles (Draft, Scheduled, Published, Failed)
- * and platform toggles (Facebook, Instagram, GBP) using ToggleChip components.
+ * and platform toggles (Facebook, Instagram) using ToggleChip components.
  */
 export function StatusFilters({
   onStatusChange,

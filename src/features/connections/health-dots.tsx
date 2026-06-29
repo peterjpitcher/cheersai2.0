@@ -16,7 +16,7 @@ const HEALTH_COLORS: Record<ConnectionHealth, string> = {
   red: 'bg-red-500',
 };
 
-const PLATFORM_ORDER: ProviderPlatform[] = ['facebook', 'instagram', 'gbp'];
+const PLATFORM_ORDER: ProviderPlatform[] = ['facebook', 'instagram'];
 
 interface ConnectionHealthDotsProps {
   summaries: ConnectionHealthSummary[];

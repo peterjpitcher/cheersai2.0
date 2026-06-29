@@ -3,7 +3,7 @@
  * Uses batch signing via createSignedUrls() to minimise API calls.
  *
  * For publish payloads, we need signed URLs because providers (Facebook,
- * Instagram, GBP) fetch the media at publish time -- raw storage paths
+ * Instagram) fetch the media at publish time -- raw storage paths
  * are not publicly accessible.
  *
  * Signed URL TTL: 3600s (1 hour) -- generous window for provider fetch.

@@ -14,13 +14,13 @@ import {
  */
 
 describe("spread-evenly campaign creation flow", () => {
-  it("produces correctly spread slots for a 3-platform, 4-week campaign", () => {
+  it("produces correctly spread slots for a 2-platform, 4-week campaign", () => {
     const windowStart = new Date(2026, 3, 13); // Monday April 13
     const windowEnd = new Date(2026, 4, 10); // Sunday May 10
 
     const config: SpreadConfig = {
-      postsPerWeek: 3,
-      platforms: ["instagram", "facebook", "gbp"],
+      postsPerWeek: 2,
+      platforms: ["instagram", "facebook"],
       staggerPlatforms: true,
       windowStart,
       windowEnd,
@@ -34,21 +34,20 @@ describe("spread-evenly campaign creation flow", () => {
 
     const slots = buildSpreadEvenlySlots(config, existingPosts);
 
-    // 4 weeks * 3 posts/week = 12 slots
-    expect(slots).toHaveLength(12);
+    // 4 weeks * 2 posts/week = 8 slots
+    expect(slots).toHaveLength(8);
 
-    // Each week should have 3 slots
+    // Each week should have 2 slots
     const byWeek = groupByWeek(slots.map((s) => s.date), windowStart);
     expect(Object.keys(byWeek).length).toBeGreaterThanOrEqual(4);
 
-    // All 3 platforms should appear in each week
+    // Both platforms should appear in each week
     const platformCounts = new Map<string, number>();
     for (const slot of slots) {
       platformCounts.set(slot.platform, (platformCounts.get(slot.platform) ?? 0) + 1);
     }
     expect(platformCounts.get("instagram")).toBe(4);
     expect(platformCounts.get("facebook")).toBe(4);
-    expect(platformCounts.get("gbp")).toBe(4);
   });
 
   it("applies engagement-optimised times to spread slots", () => {
@@ -92,7 +91,7 @@ describe("spread-evenly campaign creation flow", () => {
   it("handles stagger=false with multiple platforms on same day", () => {
     const config: SpreadConfig = {
       postsPerWeek: 2,
-      platforms: ["instagram", "facebook", "gbp"],
+      platforms: ["instagram", "facebook"],
       staggerPlatforms: false,
       windowStart: new Date(2026, 3, 13),
       windowEnd: new Date(2026, 3, 19),
@@ -100,8 +99,8 @@ describe("spread-evenly campaign creation flow", () => {
 
     const slots = buildSpreadEvenlySlots(config, []);
 
-    // 2 posts/week * 3 platforms = 6 slots
-    expect(slots).toHaveLength(6);
+    // 2 posts/week * 2 platforms = 4 slots
+    expect(slots).toHaveLength(4);
 
     // Group by day — should be exactly 2 unique days
     const days = new Set(

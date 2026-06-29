@@ -1,6 +1,6 @@
 /**
  * Provider error classification (PLAT-07).
- * Categorises API errors from Facebook, Instagram, and GBP into
+ * Categorises API errors from Facebook and Instagram into
  * actionable classifications that drive retry/alert behaviour.
  */
 
@@ -74,17 +74,6 @@ export function classifyMetaError(statusCode: number, errorPayload: unknown): Er
   const details = parseMetaGraphError(statusCode, errorPayload);
   if (statusCode === 429) return ErrorClassification.RATE_LIMIT;
   if (isExplicitMetaConnectionFailure(details)) return ErrorClassification.AUTH;
-  if (statusCode >= 500) return ErrorClassification.TRANSIENT;
-  if (statusCode === 400) return ErrorClassification.CONTENT_REJECTED;
-  return ErrorClassification.UNKNOWN;
-}
-
-/**
- * Classify a Google Business Profile API error.
- */
-export function classifyGoogleError(statusCode: number): ErrorClassification {
-  if (statusCode === 401 || statusCode === 403) return ErrorClassification.AUTH;
-  if (statusCode === 429) return ErrorClassification.RATE_LIMIT;
   if (statusCode >= 500) return ErrorClassification.TRANSIENT;
   if (statusCode === 400) return ErrorClassification.CONTENT_REJECTED;
   return ErrorClassification.UNKNOWN;

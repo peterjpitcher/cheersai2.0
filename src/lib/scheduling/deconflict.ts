@@ -8,7 +8,7 @@
  * - Shift range is ±1-2 calendar days. If nothing is empty, leave in place.
  * - Prefers earlier shifts (day-1 before day+1, day-2 before day+2).
  * - When multiple platforms are targeted and a post is shifted, platforms
- *   can be staggered across adjacent days (Instagram first, Facebook, GBP).
+ *   can be staggered across adjacent days (Instagram first, Facebook).
  *
  * All date arithmetic uses Luxon in the target timezone to avoid DST bugs.
  */

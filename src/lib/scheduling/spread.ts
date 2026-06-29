@@ -14,7 +14,7 @@ import { DateTime } from "luxon";
 
 import { DEFAULT_POST_TIME } from "@/lib/constants";
 
-type Platform = "facebook" | "instagram" | "gbp";
+type Platform = "facebook" | "instagram";
 
 export interface SpreadConfig {
   postsPerWeek: number;
@@ -31,8 +31,8 @@ export interface SpreadSlot {
   platform: Platform;
 }
 
-/** Platform priority order: Instagram first (visual teaser), Facebook second, GBP last (SEO). */
-const PLATFORM_PRIORITY: Platform[] = ["instagram", "facebook", "gbp"];
+/** Platform priority order: Instagram first (visual teaser), Facebook second. */
+const PLATFORM_PRIORITY: Platform[] = ["instagram", "facebook"];
 
 /** Fallback timezone when none provided (matches project default). */
 const DEFAULT_TZ = "Europe/London";

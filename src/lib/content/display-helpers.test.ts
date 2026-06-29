@@ -90,17 +90,6 @@ describe('getDisplayTitle', () => {
     expect(getDisplayTitle(item)).toBe('IG post text');
   });
 
-  it('falls back through gbp body when facebook and instagram are missing', () => {
-    const item = makeItem({
-      bodyDraft: {
-        generatedCopy: {
-          gbp: { body: 'GBP post text' },
-        },
-      },
-    });
-    expect(getDisplayTitle(item)).toBe('GBP post text');
-  });
-
   it('returns "Untitled" when all fields are null', () => {
     const item = makeItem();
     expect(getDisplayTitle(item)).toBe('Untitled');

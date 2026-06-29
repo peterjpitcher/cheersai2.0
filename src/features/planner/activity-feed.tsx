@@ -19,7 +19,6 @@ const LEVEL_TONE = {
 const PROVIDER_LABELS: Record<string, string> = {
   facebook: "Facebook Page",
   instagram: "Instagram Business",
-  gbp: "Google Business Profile",
 };
 
 export type PlannerActivityItem = {

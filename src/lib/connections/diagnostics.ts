@@ -3,7 +3,7 @@ import { tryCreateServiceSupabaseClient } from "@/lib/supabase/service";
 import { isSchemaMissingError } from "@/lib/supabase/errors";
 
 export interface ConnectionDiagnostic {
-  provider: "facebook" | "instagram" | "gbp";
+  provider: "facebook" | "instagram";
   status: "active" | "expiring" | "needs_action";
   displayName: string | null;
   accessTokenPreview: string | null;
@@ -15,7 +15,7 @@ export interface ConnectionDiagnostic {
 }
 
 type ConnectionRow = {
-  provider: "facebook" | "instagram" | "gbp";
+  provider: "facebook" | "instagram";
   status: string | null;
   display_name: string | null;
   access_token: string | null;

@@ -15,8 +15,6 @@ function seedBaseEnv() {
     ALERTS_SECRET: "test-alert",
     CRON_SECRET: "test-cron",
     FACEBOOK_APP_SECRET: "fb-secret",
-    GOOGLE_MY_BUSINESS_CLIENT_ID: "google-client",
-    GOOGLE_MY_BUSINESS_CLIENT_SECRET: "google-secret",
     INSTAGRAM_APP_ID: "ig-app",
     INSTAGRAM_APP_SECRET: "ig-secret",
     INSTAGRAM_VERIFY_TOKEN: "verify",

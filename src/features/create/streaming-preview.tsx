@@ -12,7 +12,6 @@ interface StreamingPreviewProps {
 const PLATFORM_DISPLAY_NAMES: Record<string, string> = {
   facebook: "Facebook",
   instagram: "Instagram",
-  gbp: "Google Business Profile",
 };
 
 /**

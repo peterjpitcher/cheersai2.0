@@ -1,21 +1,20 @@
 'use client';
 
-import { Facebook, Instagram, Globe2 } from 'lucide-react';
+import { Facebook, Instagram } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-export type PlatformKey = 'fb' | 'ig' | 'gbp' | 'facebook' | 'instagram';
+export type PlatformKey = 'fb' | 'ig' | 'facebook' | 'instagram';
 
 /** Normalise production keys to design tokens */
-function toDesignKey(key: PlatformKey): 'fb' | 'ig' | 'gbp' {
+function toDesignKey(key: PlatformKey): 'fb' | 'ig' {
   if (key === 'facebook') return 'fb';
   if (key === 'instagram') return 'ig';
-  return key as 'fb' | 'ig' | 'gbp';
+  return key as 'fb' | 'ig';
 }
 
-const platformIcons: Record<'fb' | 'ig' | 'gbp', typeof Facebook> = {
+const platformIcons: Record<'fb' | 'ig', typeof Facebook> = {
   fb: Facebook,
   ig: Instagram,
-  gbp: Globe2,
 };
 
 interface PlatformDotProps {

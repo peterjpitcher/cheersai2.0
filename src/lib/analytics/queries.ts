@@ -13,7 +13,6 @@ import type {
   PlatformEngagement,
   ContentTypePerformance,
   BestTimeSlot,
-  GbpLocationMetrics,
 } from './types';
 
 // ---------------------------------------------------------------------------
@@ -22,7 +21,7 @@ import type {
 
 interface AnalyticsSnapshotRow {
   publish_job_id: string;
-  platform: 'facebook' | 'instagram' | 'gbp';
+  platform: 'facebook' | 'instagram';
   impressions: number | null;
   reach: number | null;
   engagement_count: number | null;
@@ -38,15 +37,6 @@ interface AnalyticsSnapshotRow {
       content_type: string | null;
     } | null;
   } | null;
-}
-
-interface GbpDailyMetricsRow {
-  metric_date: string;
-  search_views: number | null;
-  map_views: number | null;
-  website_clicks: number | null;
-  direction_requests: number | null;
-  phone_calls: number | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -68,17 +58,6 @@ function mapSnapshotToPostAnalytics(row: AnalyticsSnapshotRow): PostAnalytics {
     contentItemId: row.publish_jobs?.content_item_id ?? null,
     contentType: row.publish_jobs?.content_items?.content_type ?? null,
     scheduledFor: row.publish_jobs?.scheduled_for ?? null,
-  };
-}
-
-function mapGbpRow(row: GbpDailyMetricsRow): GbpLocationMetrics {
-  return {
-    metricDate: row.metric_date,
-    searchViews: row.search_views,
-    mapViews: row.map_views,
-    websiteClicks: row.website_clicks,
-    directionRequests: row.direction_requests,
-    phoneCalls: row.phone_calls,
   };
 }
 
@@ -169,30 +148,4 @@ export async function getBestDayTimeSlots(accountId: string): Promise<BestTimeSl
     }));
 
   return computeBestTimeSlots(items);
-}
-
-/**
- * Fetch GBP daily location metrics for an account within a date range.
- */
-export async function getGbpDailyMetrics(
-  accountId: string,
-  dateRange: DateRange,
-): Promise<GbpLocationMetrics[]> {
-  const supabase = createServiceSupabaseClient();
-
-  const { data, error } = await supabase
-    .from('gbp_daily_metrics')
-    .select('metric_date, search_views, map_views, website_clicks, direction_requests, phone_calls')
-    .eq('account_id', accountId)
-    .gte('metric_date', dateRange.start)
-    .lte('metric_date', dateRange.end)
-    .order('metric_date', { ascending: true })
-    .returns<GbpDailyMetricsRow[]>();
-
-  if (error || !data) {
-    console.error('[analytics] Failed to fetch GBP daily metrics:', error?.message);
-    return [];
-  }
-
-  return data.map(mapGbpRow);
 }

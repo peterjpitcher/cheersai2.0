@@ -168,7 +168,6 @@ function buildBrandFixture() {
     defaultEmojis: [] as string[],
     instagramSignature: undefined,
     facebookSignature: undefined,
-    gbpCta: "LEARN_MORE",
   };
 }
 
@@ -177,17 +176,11 @@ function buildPostingFixture() {
     timezone: "Europe/London",
     facebookLocationId: undefined,
     instagramLocationId: undefined,
-    gbpLocationId: undefined,
     defaultPostingTime: undefined,
     venueLocation: undefined,
     venueLatitude: undefined,
     venueLongitude: undefined,
     notifications: { emailFailures: false, emailTokenExpiring: false },
-    gbpCtaDefaults: {
-      standard: "LEARN_MORE" as const,
-      event: "LEARN_MORE" as const,
-      offer: "LEARN_MORE" as const,
-    },
     bannerDefaults: {
       bannersEnabled: true,
       bannerPosition: "right" as const,
@@ -994,7 +987,7 @@ describe("refreshTimingForPlan", () => {
         "Focus: 2 days to go. Say it's tomorrow (Wednesday 20 May) and stress limited spots before 7:00 pm.",
       ].join("\n"),
       scheduledFor: at("2026-05-19T12:00"),
-      platforms: ["facebook"] as ("facebook" | "instagram" | "gbp")[],
+      platforms: ["facebook"] as ("facebook" | "instagram")[],
       media: [],
       promptContext: {
         useCase: "event",
@@ -1070,7 +1063,7 @@ describe("refreshTimingForPlan", () => {
         "Focus: Last chance. Stress that it ends tomorrow (Wednesday 20 May).",
       ].join("\n"),
       scheduledFor: at("2026-05-20T10:00"),
-      platforms: ["facebook"] as ("facebook" | "instagram" | "gbp")[],
+      platforms: ["facebook"] as ("facebook" | "instagram")[],
       media: [],
       promptContext: {
         useCase: "promotion",
@@ -1101,7 +1094,7 @@ describe("refreshTimingForPlan", () => {
         "Focus: Last chance. Stress that it ends tomorrow (Wednesday 20 May).",
       ].join("\n"),
       scheduledFor: at("2026-05-21T10:00"),
-      platforms: ["facebook"] as ("facebook" | "instagram" | "gbp")[],
+      platforms: ["facebook"] as ("facebook" | "instagram")[],
       media: [],
       promptContext: {
         useCase: "promotion",

@@ -13,14 +13,12 @@ export interface BrandProfile {
   defaultEmojis: string[];
   instagramSignature?: string;
   facebookSignature?: string;
-  gbpCta?: string;
 }
 
 export interface PostingDefaults {
   timezone: string;
   facebookLocationId?: string;
   instagramLocationId?: string;
-  gbpLocationId?: string;
   defaultPostingTime?: string;
   venueLocation?: string;
   venueLatitude?: number;
@@ -28,11 +26,6 @@ export interface PostingDefaults {
   notifications: {
     emailFailures: boolean;
     emailTokenExpiring: boolean;
-  };
-  gbpCtaDefaults: {
-    standard: "LEARN_MORE" | "BOOK" | "CALL";
-    event: "LEARN_MORE" | "BOOK" | "CALL";
-    offer: "REDEEM" | "CALL" | "LEARN_MORE";
   };
   bannerDefaults: {
     bannersEnabled: boolean;
@@ -59,21 +52,16 @@ type BrandProfileRow = {
   default_emojis: string[] | null;
   instagram_signature: string | null;
   facebook_signature: string | null;
-  gbp_cta: string | null;
 };
 
 type PostingDefaultsRow = {
   facebook_location_id: string | null;
   instagram_location_id: string | null;
-  gbp_location_id: string | null;
   default_posting_time: string | null;
   venue_location: string | null;
   venue_latitude: number | string | null;
   venue_longitude: number | string | null;
   notifications: Record<string, boolean> | null;
-  gbp_cta_standard: string;
-  gbp_cta_event: string;
-  gbp_cta_offer: string;
   banners_enabled: boolean | null;
   banner_position: BannerPosition | null;
   banner_bg: string | null;
@@ -98,7 +86,6 @@ export async function getOwnerSettings(): Promise<OwnerSettings> {
     defaultEmojis: [],
     instagramSignature: undefined,
     facebookSignature: undefined,
-    gbpCta: "LEARN_MORE",
   };
 
   try {
@@ -131,7 +118,7 @@ export async function getOwnerSettings(): Promise<OwnerSettings> {
     const { data: brandRow, error: brandError } = await supabase
       .from("brand_profile")
       .select(
-        "tone_formal, tone_playful, key_phrases, banned_topics, banned_phrases, default_hashtags, default_emojis, instagram_signature, facebook_signature, gbp_cta",
+        "tone_formal, tone_playful, key_phrases, banned_topics, banned_phrases, default_hashtags, default_emojis, instagram_signature, facebook_signature",
       )
       .eq("account_id", accountId)
       .maybeSingle<BrandProfileRow>();
@@ -146,7 +133,7 @@ export async function getOwnerSettings(): Promise<OwnerSettings> {
     const { data: postingRow, error: postingError } = await supabase
       .from("posting_defaults")
       .select(
-        "facebook_location_id, instagram_location_id, gbp_location_id, default_posting_time, venue_location, venue_latitude, venue_longitude, notifications, gbp_cta_standard, gbp_cta_event, gbp_cta_offer, banners_enabled, banner_position, banner_bg, banner_text_colour",
+        "facebook_location_id, instagram_location_id, default_posting_time, venue_location, venue_latitude, venue_longitude, notifications, banners_enabled, banner_position, banner_bg, banner_text_colour",
       )
       .eq("account_id", accountId)
       .maybeSingle<PostingDefaultsRow>();
@@ -170,14 +157,12 @@ export async function getOwnerSettings(): Promise<OwnerSettings> {
       defaultEmojis: brandRow?.default_emojis ?? defaultBrand.defaultEmojis,
       instagramSignature: brandRow?.instagram_signature ?? defaultBrand.instagramSignature,
       facebookSignature: brandRow?.facebook_signature ?? defaultBrand.facebookSignature,
-      gbpCta: brandRow?.gbp_cta ?? defaultBrand.gbpCta,
     };
 
     const posting: PostingDefaults = {
       timezone,
       facebookLocationId: postingRow?.facebook_location_id ?? undefined,
       instagramLocationId: postingRow?.instagram_location_id ?? undefined,
-      gbpLocationId: postingRow?.gbp_location_id ?? undefined,
       defaultPostingTime: postingRow?.default_posting_time ?? undefined,
       venueLocation: postingRow?.venue_location ?? undefined,
       venueLatitude: normaliseOptionalNumber(postingRow?.venue_latitude),
@@ -185,14 +170,6 @@ export async function getOwnerSettings(): Promise<OwnerSettings> {
       notifications: {
         emailFailures: Boolean(notifications?.emailFailures ?? defaultPosting.notifications.emailFailures),
         emailTokenExpiring: Boolean(notifications?.emailTokenExpiring ?? defaultPosting.notifications.emailTokenExpiring),
-      },
-      gbpCtaDefaults: {
-        standard:
-          (postingRow?.gbp_cta_standard as PostingDefaults["gbpCtaDefaults"]["standard"]) ?? defaultPosting.gbpCtaDefaults.standard,
-        event:
-          (postingRow?.gbp_cta_event as PostingDefaults["gbpCtaDefaults"]["event"]) ?? defaultPosting.gbpCtaDefaults.event,
-        offer:
-          (postingRow?.gbp_cta_offer as PostingDefaults["gbpCtaDefaults"]["offer"]) ?? defaultPosting.gbpCtaDefaults.offer,
       },
       bannerDefaults: {
         bannersEnabled: postingRow?.banners_enabled ?? defaultPosting.bannerDefaults.bannersEnabled,
@@ -221,11 +198,6 @@ function createDefaultPosting(timezone: string): PostingDefaults {
     notifications: {
       emailFailures: true,
       emailTokenExpiring: true,
-    },
-    gbpCtaDefaults: {
-      standard: "LEARN_MORE",
-      event: "LEARN_MORE",
-      offer: "REDEEM",
     },
     bannerDefaults: {
       bannersEnabled: true,

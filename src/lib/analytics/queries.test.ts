@@ -52,7 +52,6 @@ import {
   getPostAnalytics,
   getEngagementByPlatform,
   getEngagementByContentType,
-  getGbpDailyMetrics,
 } from './queries';
 
 // ---------------------------------------------------------------------------
@@ -196,54 +195,5 @@ describe('getEngagementByContentType', () => {
     const result = await getEngagementByContentType(ACCOUNT_ID, DATE_RANGE);
     expect(result).toHaveLength(1);
     expect(result[0].contentType).toBe('event');
-  });
-});
-
-// ---------------------------------------------------------------------------
-// getGbpDailyMetrics
-// ---------------------------------------------------------------------------
-
-describe('getGbpDailyMetrics', () => {
-  it('should query gbp_daily_metrics and return shaped GbpLocationMetrics[]', async () => {
-    const chain = buildChain();
-    mockFrom.mockReturnValue(chain);
-    mockReturns.mockResolvedValue({
-      data: [
-        {
-          metric_date: '2026-05-10',
-          search_views: 120,
-          map_views: 45,
-          website_clicks: 30,
-          direction_requests: 8,
-          phone_calls: 5,
-        },
-      ],
-      error: null,
-    });
-
-    const result = await getGbpDailyMetrics(ACCOUNT_ID, DATE_RANGE);
-
-    expect(mockFrom).toHaveBeenCalledWith('gbp_daily_metrics');
-    expect(result).toHaveLength(1);
-    expect(result[0]).toMatchObject({
-      metricDate: '2026-05-10',
-      searchViews: 120,
-      mapViews: 45,
-      websiteClicks: 30,
-      directionRequests: 8,
-      phoneCalls: 5,
-    });
-  });
-
-  it('should return empty array on query error', async () => {
-    const chain = buildChain();
-    mockFrom.mockReturnValue(chain);
-    mockReturns.mockResolvedValue({
-      data: null,
-      error: { message: 'Some error' },
-    });
-
-    const result = await getGbpDailyMetrics(ACCOUNT_ID, DATE_RANGE);
-    expect(result).toEqual([]);
   });
 });

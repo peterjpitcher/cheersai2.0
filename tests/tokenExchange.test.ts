@@ -34,10 +34,6 @@ describe("exchangeProviderAuthCode", () => {
     process.env.ALERTS_SECRET = process.env.ALERTS_SECRET ?? "test-alert";
     process.env.CRON_SECRET = process.env.CRON_SECRET ?? "test-cron";
     process.env.FACEBOOK_APP_SECRET = process.env.FACEBOOK_APP_SECRET ?? "fb-secret";
-    process.env.GOOGLE_MY_BUSINESS_CLIENT_ID =
-      process.env.GOOGLE_MY_BUSINESS_CLIENT_ID ?? "google-client";
-    process.env.GOOGLE_MY_BUSINESS_CLIENT_SECRET =
-      process.env.GOOGLE_MY_BUSINESS_CLIENT_SECRET ?? "google-secret";
     process.env.INSTAGRAM_APP_ID = process.env.INSTAGRAM_APP_ID ?? "ig-app";
     process.env.INSTAGRAM_APP_SECRET = process.env.INSTAGRAM_APP_SECRET ?? "ig-secret";
     process.env.INSTAGRAM_VERIFY_TOKEN = process.env.INSTAGRAM_VERIFY_TOKEN ?? "verify";
@@ -126,85 +122,6 @@ describe("exchangeProviderAuthCode", () => {
     });
     expect(result.displayName).toBe("pubtwo");
     expect(result.expiresAt).toBe("2025-03-02T00:00:00.000Z");
-  });
-
-  it("retrieves Google Business Profile location metadata", async () => {
-    mockFetchSequence([
-      jsonResponse({
-        access_token: "google-token",
-        refresh_token: "refresh-token",
-        expires_in: 3600,
-      }),
-      jsonResponse({
-        accounts: [
-          { name: "accounts/123", accountName: "Cheers Org" },
-        ],
-      }),
-      jsonResponse({
-        locations: [
-          { name: "accounts/123/locations/456789", title: "Cheers Tavern" },
-        ],
-      }),
-    ]);
-
-    const result = await exchangeProviderAuthCode("gbp", "AUTH_CODE");
-
-    expect(result.accessToken).toBe("google-token");
-    expect(result.refreshToken).toBe("refresh-token");
-    expect(result.expiresAt).toBe("2025-01-01T01:00:00.000Z");
-    expect(result.metadata).toEqual({
-      locationId: "locations/456789",
-      localPostParent: "accounts/123/locations/456789",
-    });
-    expect(result.displayName).toBe("Cheers Tavern");
-  });
-
-  it("preserves an existing canonical GBP location when Google is rate limited during reconnect", async () => {
-    mockFetchSequence([
-      jsonResponse({
-        access_token: "google-token",
-        refresh_token: "refresh-token",
-        expires_in: 3600,
-      }),
-      jsonResponse({
-        error: {
-          message: "Quota exceeded for quota metric Requests.",
-          details: [{ retryDelay: "107s" }],
-        },
-      }, { status: 429 }),
-    ]);
-
-    const result = await exchangeProviderAuthCode("gbp", "AUTH_CODE", {
-      existingMetadata: {
-        locationId: "locations/987654",
-        localPostParent: "accounts/555/locations/987654",
-      },
-      existingDisplayName: "Existing Tavern",
-    });
-
-    expect(result.metadata).toEqual({
-      locationId: "locations/987654",
-      localPostParent: "accounts/555/locations/987654",
-    });
-    expect(result.displayName).toBe("Existing Tavern");
-  });
-
-  it("fails cleanly when GBP quota prevents canonical location discovery on first connect", async () => {
-    mockFetchSequence([
-      jsonResponse({
-        access_token: "google-token",
-        refresh_token: "refresh-token",
-        expires_in: 3600,
-      }),
-      jsonResponse({
-        error: {
-          message: "Quota exceeded for quota metric Requests.",
-          details: [{ retryDelay: "107s" }],
-        },
-      }, { status: 429 }),
-    ]);
-
-    await expect(exchangeProviderAuthCode("gbp", "AUTH_CODE")).rejects.toThrow(/quota exceeded/i);
   });
 
   it("throws when no Facebook pages are available", async () => {

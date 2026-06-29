@@ -1,16 +1,16 @@
 /**
  * Temperature configuration per content-type x platform (AI-04).
  *
- * Lower temperatures produce more deterministic, factual copy (promotions, GBP).
+ * Lower temperatures produce more deterministic, factual copy (promotions).
  * Higher temperatures produce more creative, varied copy (stories, weekly recurring).
  */
 
 export const TEMPERATURE_MAP: Record<string, Record<string, number>> = {
-  instant_post: { facebook: 0.7, instagram: 0.7, gbp: 0.6 },
-  story: { facebook: 0.8, instagram: 0.8, gbp: 0.6 },
-  event: { facebook: 0.7, instagram: 0.7, gbp: 0.6 },
-  promotion: { facebook: 0.6, instagram: 0.6, gbp: 0.6 },
-  weekly_recurring: { facebook: 0.8, instagram: 0.8, gbp: 0.7 },
+  instant_post: { facebook: 0.7, instagram: 0.7 },
+  story: { facebook: 0.8, instagram: 0.8 },
+  event: { facebook: 0.7, instagram: 0.7 },
+  promotion: { facebook: 0.6, instagram: 0.6 },
+  weekly_recurring: { facebook: 0.8, instagram: 0.8 },
 };
 
 const DEFAULT_TEMPERATURE = 0.7;

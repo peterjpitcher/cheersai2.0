@@ -139,8 +139,6 @@ export function computeEngagementRate(engagementCount: number, impressions: numb
 export function describeEmptyReason(context: {
   publishJobCount: number;
   snapshotCount: number;
-  isGbp?: boolean;
-  daysFromNow?: number;
   isConnected?: boolean;
 }): AnalyticsEmptyReason {
   // Platform not connected takes priority
@@ -151,11 +149,6 @@ export function describeEmptyReason(context: {
   // No published content at all
   if (context.publishJobCount === 0 && context.snapshotCount === 0) {
     return 'no_published_content';
-  }
-
-  // GBP data delay: metrics within 3-day window
-  if (context.isGbp && context.daysFromNow !== undefined && context.daysFromNow < 3) {
-    return 'gbp_data_delayed';
   }
 
   // Published content exists but no metrics yet

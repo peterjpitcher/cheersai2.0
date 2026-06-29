@@ -6,7 +6,7 @@ import type { InstantPostAdvancedOptions } from "@/lib/create/schema";
 import { DEFAULT_TIMEZONE } from "@/lib/constants";
 import { extractDirectLinks, stripDirectLinks, stripDirectLinkSentences } from "@/lib/utils/social-links";
 
-export type Platform = "facebook" | "instagram" | "gbp";
+export type Platform = "facebook" | "instagram";
 export type Placement = "feed" | "story";
 
 export type LintSeverity = "error" | "warning";
@@ -141,16 +141,11 @@ export function resolveContract({
   const hasLink = Boolean(getContextString(context, "linkInBioUrl") || getContextString(context, "ctaUrl"));
 
   const maxHashtags =
-    platform === "gbp"
-      ? 0
-      : platform === "instagram"
-        ? includeHashtags ? 6 : 0
-        : includeHashtags ? 3 : 0;
+    platform === "instagram"
+      ? includeHashtags ? 6 : 0
+      : includeHashtags ? 3 : 0;
 
-  const maxEmojis =
-    platform === "gbp"
-      ? includeEmojis ? 2 : 0
-      : includeEmojis ? 3 : 0;
+  const maxEmojis = includeEmojis ? 3 : 0;
 
   return {
     platform,
@@ -160,7 +155,7 @@ export function resolveContract({
     maxHashtags,
     maxEmojis,
     maxWords: platform === "instagram" ? 80 : undefined,
-    maxChars: platform === "gbp" ? 900 : undefined,
+    maxChars: undefined,
     allowLinkInBio: platform === "instagram" && hasLink,
     hasLink,
   };
@@ -239,7 +234,7 @@ export function applyChannelRules({
   output = proofPointResult.value;
 
   const withoutUrls =
-    platform === "instagram" || platform === "gbp"
+    platform === "instagram"
       ? stripDirectLinkSentences(output)
       : stripDirectLinks(output);
   if (withoutUrls !== output) {
@@ -428,16 +423,6 @@ export function lintContent({
     }
   }
 
-  if (platform === "gbp" && hasLinkInBio) {
-    const code = "gbp_link_in_bio";
-    issues.push({ code, message: "GBP posts cannot mention link-in-bio.", severity: resolveSeverity(code) });
-  }
-
-  if (platform === "gbp" && hashtags.length) {
-    const code = "gbp_hashtags";
-    issues.push({ code, message: "GBP posts cannot include hashtags.", severity: resolveSeverity(code) });
-  }
-
   if (hasUrl) {
     const ctaUrl = getContextString(context, "ctaUrl");
     if (platform === "facebook" && ctaUrl) {
@@ -474,7 +459,7 @@ export function lintContent({
 
   if (contract.maxChars && charCount > contract.maxChars) {
     const code = "char_limit";
-    issues.push({ code, message: "GBP copy exceeds the hard length cap.", severity: resolveSeverity(code) });
+    issues.push({ code, message: "Copy exceeds the hard length cap.", severity: resolveSeverity(code) });
   }
 
   if (/\.\.\.+$/.test(trimmed) || /…$/.test(trimmed)) {

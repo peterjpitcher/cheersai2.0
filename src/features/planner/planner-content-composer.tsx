@@ -8,13 +8,10 @@ import clsx from "clsx";
 import {
   Bookmark,
   CheckCircle2,
-  Globe,
   Heart,
-  MapPin,
   MessageCircle,
   MoreHorizontal,
   RefreshCw,
-  Search,
   Send,
   Share2,
   ThumbsUp,
@@ -66,12 +63,6 @@ const PLATFORM_THEME: Record<
     badge: "bg-[#FEE7F8] text-[#C2338B]",
     frame: "border-[#F5D8EA] bg-white",
     subheader: "text-[#C2338B]/75",
-  },
-  gbp: {
-    shell: "border-[#D5EEDD] bg-[#F7FCF8]",
-    badge: "bg-[#EAF8ED] text-[#1C7C43]",
-    frame: "border-[#D5EEDD] bg-white",
-    subheader: "text-[#1C7C43]/75",
   },
 };
 
@@ -284,7 +275,7 @@ export function PlannerContentComposer({ detail, ownerTimezone, mediaLibrary }: 
             <div className="mb-3 flex items-center justify-between">
               <div className="flex items-center gap-2 text-sm font-semibold text-slate-800">
                 <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-slate-200 text-xs font-bold text-slate-600">
-                  {detail.platform === "facebook" ? "F" : detail.platform === "instagram" ? "IG" : "GB"}
+                  {detail.platform === "facebook" ? "F" : "IG"}
                 </span>
                 <span>{detail.campaign?.name ?? "Untitled campaign"}</span>
               </div>
@@ -323,17 +314,11 @@ export function PlannerContentComposer({ detail, ownerTimezone, mediaLibrary }: 
                   </div>
                   <Bookmark className="h-4 w-4" />
                 </div>
-              ) : detail.platform === "facebook" ? (
+              ) : (
                 <div className="flex flex-wrap items-center gap-4 text-xs">
                   <span className="inline-flex items-center gap-1"><ThumbsUp className="h-4 w-4" />Like</span>
                   <span className="inline-flex items-center gap-1"><MessageCircle className="h-4 w-4" />Comment</span>
                   <span className="inline-flex items-center gap-1"><Share2 className="h-4 w-4" />Share</span>
-                </div>
-              ) : (
-                <div className="flex flex-wrap items-center gap-4 text-xs">
-                  <span className="inline-flex items-center gap-1"><Search className="h-4 w-4" />Search</span>
-                  <span className="inline-flex items-center gap-1"><MapPin className="h-4 w-4" />Directions</span>
-                  <span className="inline-flex items-center gap-1"><Globe className="h-4 w-4" />Website</span>
                 </div>
               )}
             </div>

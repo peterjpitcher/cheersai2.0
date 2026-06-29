@@ -57,7 +57,7 @@ const updateScheduleSchema = z.object({
 });
 
 const createSchema = z.object({
-  platform: z.enum(["facebook", "instagram", "gbp"]),
+  platform: z.enum(["facebook", "instagram"]),
   placement: z.enum(["feed", "story"]),
 });
 
@@ -167,7 +167,7 @@ export async function approveDraftContent(payload: unknown) {
       scheduled_for: string | null;
       account_id: string;
       placement: "feed" | "story" | null;
-      platform: "facebook" | "instagram" | "gbp";
+      platform: "facebook" | "instagram";
     }>();
 
   if (error) {
@@ -834,7 +834,7 @@ export async function updatePlannerContentSchedule(payload: unknown) {
     .select("id, status, placement, platform, campaign_id, account_id")
     .eq("id", contentId)
     .eq("account_id", accountId)
-    .maybeSingle<{ id: string; status: string; placement: "feed" | "story"; platform: "facebook" | "instagram" | "gbp"; campaign_id: string | null; account_id: string }>();
+    .maybeSingle<{ id: string; status: string; placement: "feed" | "story"; platform: "facebook" | "instagram"; campaign_id: string | null; account_id: string }>();
 
   if (contentError) {
     throw contentError;

@@ -80,7 +80,7 @@ export async function getConnectionHealthSummaries(): Promise<ConnectionHealthSu
     expires_at: string | null;
     last_synced_at: string | null;
   }) => {
-    // Prefer token_expires_at (v2); fall back to legacy expires_at for GBP connections
+    // Prefer token_expires_at (v2); fall back to legacy expires_at column
     const effectiveExpiry = row.token_expires_at ?? row.expires_at;
     return {
       provider: row.provider as ProviderPlatform,

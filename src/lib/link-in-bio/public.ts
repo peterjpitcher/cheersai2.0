@@ -88,7 +88,7 @@ interface CampaignContentRow {
   placement: "feed" | "story";
   prompt_context: Record<string, unknown> | null;
   content_variants: CampaignVariantRow[] | CampaignVariantRow | null;
-  platform: "facebook" | "instagram" | "gbp";
+  platform: "facebook" | "instagram";
   campaigns: {
     id: string;
     name: string | null;
@@ -625,7 +625,7 @@ export async function getPublicLinkInBioPageData(slug: string): Promise<PublicLi
       )
       .eq("campaigns.account_id", accountId)
       .eq("placement", "feed")
-      .in("platform", ["instagram", "facebook", "gbp"])
+      .in("platform", ["instagram", "facebook"])
       .in("status", ["scheduled", "publishing", "posted"])
       .order("scheduled_for", { ascending: true })
       .returns<CampaignContentRow[]>();
@@ -739,7 +739,6 @@ export async function getPublicLinkInBioPageData(slug: string): Promise<PublicLi
       const platformRank: Record<CampaignContentRow["platform"], number> = {
         instagram: 0,
         facebook: 1,
-        gbp: 2,
       };
 
       const liveEntries = sortedEntries

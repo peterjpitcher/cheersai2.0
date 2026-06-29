@@ -40,7 +40,6 @@ function providerLabel(provider: string): string {
   const labels: Record<string, string> = {
     facebook: "Facebook Page",
     instagram: "Instagram Business",
-    gbp: "Google Business Profile",
   };
   return labels[provider] ?? provider.charAt(0).toUpperCase() + provider.slice(1);
 }
@@ -69,7 +68,7 @@ async function notifyExpiringConnections(): Promise<{
   const windowEnd = new Date(now.getTime() + EXPIRY_WARNING_DAYS * 24 * 60 * 60 * 1000).toISOString();
 
   // Fetch connections expiring within the warning window (not already expired, not inactive).
-  // Use token_expires_at (v2) with fallback to legacy expires_at for GBP connections.
+  // Use token_expires_at (v2) with fallback to legacy expires_at.
   const { data: expiringConnections, error: connectionsError } = await service
     .from("social_connections")
     .select("id, account_id, provider, token_expires_at, expires_at")

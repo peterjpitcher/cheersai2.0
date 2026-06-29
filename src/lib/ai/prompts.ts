@@ -21,7 +21,7 @@ function mergedBannedPhrases(brandPhrases: string[]): string[] {
 interface PromptContext {
   brand: BrandProfile;
   input: InstantPostInput;
-  platform: "facebook" | "instagram" | "gbp";
+  platform: "facebook" | "instagram";
   scheduledFor?: Date | null;
   context?: Record<string, unknown>;
   venueName?: string;
@@ -56,7 +56,7 @@ export function buildInstantPostPrompt({ brand, input, platform, scheduledFor, c
   const brandLines = [
     formatListLine("Key phrases to weave in if natural", brand.keyPhrases),
     formatListLine("Preferred phrases when natural", PREFERRED_PHRASES),
-    input.includeHashtags && platform !== "instagram" && platform !== "gbp"
+    input.includeHashtags && platform !== "instagram"
       ? formatListLine("Default hashtags", brand.defaultHashtags, " ")
       : null,
     input.includeEmojis ? formatListLine("Preferred emojis", brand.defaultEmojis, " ") : null,
@@ -72,7 +72,7 @@ export function buildInstantPostPrompt({ brand, input, platform, scheduledFor, c
     buildMediaLine(input),
     buildContextBlock({ scheduledFor, context }),
     pillarNudge ? `Content angle advisory:\n${pillarNudge}` : null,
-    `Platform guidance:\n${buildPlatformGuidance(platform, brand, input, { venueName, context })}`,
+    `Platform guidance:\n${buildPlatformGuidance(platform, brand, input)}`,
     `Adjustments:\n${describeAdjustments(platform, input, context)}`,
     `Examples of good style (British English, warm, no hashtags in body):\n${getFewShotExamples()}`,
   ].filter(isNonEmptyString);
@@ -84,10 +84,9 @@ export function buildInstantPostPrompt({ brand, input, platform, scheduledFor, c
 }
 
 function buildPlatformGuidance(
-  platform: "facebook" | "instagram" | "gbp",
+  platform: "facebook" | "instagram",
   brand: BrandProfile,
   input: InstantPostInput,
-  options?: { venueName?: string; context?: Record<string, unknown> },
 ) {
   switch (platform) {
     case "facebook":
@@ -120,38 +119,13 @@ function buildPlatformGuidance(
         .filter(Boolean)
         .join("\n");
     }
-    case "gbp": {
-      const lines = [
-        "Write a concise Google Business Profile update. Keep it under 150 words (hard limit: 900 characters).",
-        'Write in first-person plural — "we", "our", "us" — exactly as you would for Facebook or Instagram. GBP copy must also follow the first-person rule.',
-        `Include CTA action: ${brand.gbpCta ?? "LEARN_MORE"}.`,
-        "Avoid hashtags. Avoid exclamation-heavy hype language. Write as if speaking directly to a local who already knows the pub.",
-        "Write for someone searching Google for a local pub. Include natural local keywords (e.g., the town name, 'pub near [area]').",
-        "Lead with the most important fact — what, when, and how to act. No preamble.",
-      ];
-
-      const venueName = options?.venueName;
-      const venueLocationValue =
-        typeof options?.context?.venueLocation === "string"
-          ? options.context.venueLocation.trim()
-          : null;
-
-      if (venueName) {
-        lines.push(`Venue name: <venue_name>${venueName}</venue_name>`);
-      }
-      if (venueLocationValue) {
-        lines.push(`Venue location: <venue_location>${venueLocationValue}</venue_location>`);
-      }
-
-      return lines.join("\n");
-    }
     default:
       return "";
   }
 }
 
 function describeAdjustments(
-  platform: "facebook" | "instagram" | "gbp",
+  platform: "facebook" | "instagram",
   input: InstantPostInput,
   context?: Record<string, unknown>,
 ) {
@@ -187,7 +161,7 @@ function describeAdjustments(
     lines.push("Use emojis sparingly and only where they enhance the message.");
   }
 
-  if (!input.includeHashtags || platform === "gbp") {
+  if (!input.includeHashtags) {
     lines.push("Do not include hashtags in the copy.");
   }
 
@@ -381,9 +355,6 @@ The Six Nations is back on our screens. We'll be showing every match live — gr
 Example 3 (Facebook, casual midweek):
 Looking for the perfect spot for a midweek catch-up? Our burger and pint night is just the ticket. Great food, cold drinks, and even better company. See you at the bar!
 
-Example 4 (GBP, lunch deal):
-We're running a two-course lunch deal every weekday — £12.50 per person. Soup, a main from our kitchen, and tea or coffee included. Walk-ins welcome or book ahead for a table.
-
 Grammar rules — strictly follow these:
 - "we" is a SUBJECT pronoun: "We're serving...", "We'll be showing..."
 - "us" is an OBJECT pronoun: "Join us", "Come to us", "Find us", "See you with us"
@@ -411,8 +382,7 @@ const CONTENT_TYPE_CONTEXT: Record<ContentType, string> = {
 const PLATFORM_RULES = [
   'Facebook: target 80-140 words for announcements and 50-90 words for reminders. Conversational tone. Put hashtags only in facebook.hashtags and CTA wording only in facebook.cta_text.',
   'Instagram: target 45-90 words. First line must hook within 125 characters. Use short line breaks. Put hashtags only in instagram.hashtags and booking wording only in instagram.link_in_bio_line.',
-  'GBP: target 70-130 words. No hashtags, no phone number in the body, no link-in-bio wording. Lead with event name, date, time, venue, price, and booking relevance. Include CTA action.',
-  'Do not clone the same caption three times. Facebook can be fuller and conversational, Instagram should be hook-led and scannable, and GBP should be factual, local-search friendly, and concise.',
+  'Do not clone the same caption twice. Facebook can be fuller and conversational, while Instagram should be hook-led and scannable.',
 ].join('\n');
 
 // House style for pub social copy — keeps copy warm, local and plain-speaking,
@@ -445,7 +415,7 @@ export function buildSystemPrompt(
 ): string {
   const lines: string[] = [
     'You are CheersAI, an expert hospitality social media copywriter.',
-    'Generate platform-specific copy for Facebook, Instagram, and Google Business Profile from a single brief.',
+    'Generate platform-specific copy for Facebook and Instagram from a single brief.',
     'Use British English throughout.',
     'Write in first-person plural ("we", "our", "us"). Never use "we" in object position.',
     'Write plain text only. Do not use markdown formatting — no **bold**, *italics*, _underscores_, # headings or backticks. Social platforms display these symbols literally.',
@@ -685,12 +655,6 @@ function buildCtaInstruction(contentType: ContentType, ctaLinks?: PlatformCtaLin
   if (links.instagram) {
     lines.push(
       'Instagram event link-in-bio destination is available from the source system and is canonical. Put the CTA only in instagram.link_in_bio_line using natural link-in-bio wording. Do not put any URL, bare domain, direct booking link, or duplicate link-in-bio line in instagram.body.',
-    );
-  }
-
-  if (links.gbp) {
-    lines.push(
-      'Google Business Profile event CTA URL is available from the source system and is canonical for the post button. Keep the GBP copy aligned with the CTA, set gbp.cta_action to BOOK for bookable events, and do not include the URL, phone number, hashtags, or link-in-bio wording in the body.',
     );
   }
 

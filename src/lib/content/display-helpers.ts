@@ -9,7 +9,7 @@ const MAX_BODY_PREVIEW_LENGTH = 40;
 
 /**
  * Extract a body preview from the bodyDraft JSON blob.
- * Tries facebook, instagram, then gbp body text from generatedCopy.
+ * Tries facebook, then instagram body text from generatedCopy.
  */
 function extractBodyPreview(bodyDraft: Record<string, unknown> | null): string | null {
   if (!bodyDraft) return null;
@@ -20,7 +20,6 @@ function extractBodyPreview(bodyDraft: Record<string, unknown> | null): string |
   const raw =
     generatedCopy.facebook?.body ??
     generatedCopy.instagram?.body ??
-    generatedCopy.gbp?.body ??
     null;
   if (!raw || raw.trim().length === 0) return null;
   return raw.trim();

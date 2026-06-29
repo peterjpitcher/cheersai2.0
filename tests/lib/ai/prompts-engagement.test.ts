@@ -19,7 +19,6 @@ function buildBrand(overrides: Partial<BrandProfile> = {}): BrandProfile {
     defaultEmojis: ["🍺"],
     instagramSignature: undefined,
     facebookSignature: undefined,
-    gbpCta: "LEARN_MORE",
     ...overrides,
   };
 }
@@ -110,97 +109,6 @@ describe("platform personality sharpening", () => {
     });
   });
 
-  describe("gbp guidance", () => {
-    it("includes local search keyword instruction", () => {
-      const result = buildInstantPostPrompt({
-        brand: buildBrand(),
-        input: buildInput({ platforms: ["gbp"] }),
-        platform: "gbp",
-      });
-
-      expect(result.user).toContain("searching Google for a local pub");
-      expect(result.user).toContain("natural local keywords");
-    });
-
-    it("includes lead-with-facts instruction", () => {
-      const result = buildInstantPostPrompt({
-        brand: buildBrand(),
-        input: buildInput({ platforms: ["gbp"] }),
-        platform: "gbp",
-      });
-
-      expect(result.user).toContain("Lead with the most important fact");
-      expect(result.user).toContain("No preamble");
-    });
-
-    it("wraps venue name in XML delimiters for GBP", () => {
-      const result = buildInstantPostPrompt({
-        brand: buildBrand(),
-        input: buildInput({ platforms: ["gbp"] }),
-        platform: "gbp",
-        venueName: "The Anchor",
-      });
-
-      expect(result.user).toContain("<venue_name>The Anchor</venue_name>");
-    });
-
-    it("wraps venue location in XML delimiters for GBP", () => {
-      const result = buildInstantPostPrompt({
-        brand: buildBrand(),
-        input: buildInput({ platforms: ["gbp"] }),
-        platform: "gbp",
-        venueName: "The Anchor",
-        context: { venueLocation: "Leatherhead, Surrey" },
-      });
-
-      expect(result.user).toContain("<venue_location>Leatherhead, Surrey</venue_location>");
-    });
-
-    it("omits venue location XML when not provided", () => {
-      const result = buildInstantPostPrompt({
-        brand: buildBrand(),
-        input: buildInput({ platforms: ["gbp"] }),
-        platform: "gbp",
-        venueName: "The Anchor",
-      });
-
-      expect(result.user).not.toContain("<venue_location>");
-    });
-
-    it("omits venue name XML when venueName is not provided for GBP", () => {
-      const result = buildInstantPostPrompt({
-        brand: buildBrand(),
-        input: buildInput({ platforms: ["gbp"] }),
-        platform: "gbp",
-      });
-
-      expect(result.user).not.toContain("<venue_name>");
-    });
-
-    it("ignores non-string venueLocation values", () => {
-      const result = buildInstantPostPrompt({
-        brand: buildBrand(),
-        input: buildInput({ platforms: ["gbp"] }),
-        platform: "gbp",
-        venueName: "The Anchor",
-        context: { venueLocation: 42 },
-      });
-
-      expect(result.user).not.toContain("<venue_location>");
-    });
-
-    it("trims whitespace from venueLocation", () => {
-      const result = buildInstantPostPrompt({
-        brand: buildBrand(),
-        input: buildInput({ platforms: ["gbp"] }),
-        platform: "gbp",
-        venueName: "The Anchor",
-        context: { venueLocation: "  Leatherhead  " },
-      });
-
-      expect(result.user).toContain("<venue_location>Leatherhead</venue_location>");
-    });
-  });
 });
 
 // ---------------------------------------------------------------------------

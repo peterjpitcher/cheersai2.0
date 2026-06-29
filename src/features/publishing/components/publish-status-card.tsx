@@ -92,7 +92,7 @@ export function PublishStatusCard({ job, onRetried }: PublishStatusCardProps): R
         <div className="flex items-center gap-2">
           <span className="size-2 animate-pulse rounded-full bg-blue-500" aria-hidden="true" />
           <p className="text-sm" style={{ color: 'var(--c-ink-2)' }}>
-            Publishing to {job.platform === 'gbp' ? 'Google Business Profile' : job.platform.charAt(0).toUpperCase() + job.platform.slice(1)}...
+            Publishing to {job.platform.charAt(0).toUpperCase() + job.platform.slice(1)}...
           </p>
         </div>
       )}

@@ -1,6 +1,6 @@
 'use client';
 
-import { BarChart3, Clock, Globe, Unplug } from 'lucide-react';
+import { BarChart3, Clock, Unplug } from 'lucide-react';
 
 import { Card, CardContent } from '@/components/ui/card';
 import type { AnalyticsEmptyReason } from '@/lib/analytics/types';
@@ -29,12 +29,6 @@ const EMPTY_STATE_CONFIG: Record<
     title: 'Metrics on the way',
     description:
       'Your content is published but metrics have not been collected yet. Check back in 24-48 hours.',
-  },
-  gbp_data_delayed: {
-    icon: Globe,
-    title: 'GBP data is delayed',
-    description:
-      'Google Business Profile metrics are typically 2-3 days behind. Recent data will appear soon.',
   },
   platform_not_connected: {
     icon: Unplug,

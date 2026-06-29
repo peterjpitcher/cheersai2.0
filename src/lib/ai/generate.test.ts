@@ -21,7 +21,6 @@ const { generatePlatformCopy } = await import('./generate');
 const VALID_RESPONSE: AiGenerationResponse = {
   facebook: { body: 'Join us tonight.', hashtags: ['#pub'], cta_text: 'Book now' },
   instagram: { body: 'A great evening.', hashtags: ['#food'], link_in_bio_line: null },
-  gbp: { body: 'Visit us today.', cta_action: 'LEARN_MORE' },
 };
 
 const DEFAULT_OPTIONS = {

@@ -28,7 +28,7 @@ export interface SuggestedSlotDisplay {
 export interface ExistingPlannerItemDisplay {
   id: string;
   scheduledFor: string; // ISO timestamp in UTC
-  platform: "facebook" | "instagram" | "gbp";
+  platform: "facebook" | "instagram";
   status: "draft" | "scheduled" | "queued" | "publishing" | "posted" | "failed";
   placement?: "feed" | "story";
   campaignName?: string | null;
@@ -69,7 +69,7 @@ interface DayBucket {
 interface ExistingEntry {
   id: string;
   occursAt: DateTime;
-  platform: "facebook" | "instagram" | "gbp";
+  platform: "facebook" | "instagram";
   status: "draft" | "scheduled" | "queued" | "publishing" | "posted" | "failed";
   placement?: "feed" | "story";
   campaignName?: string | null;
