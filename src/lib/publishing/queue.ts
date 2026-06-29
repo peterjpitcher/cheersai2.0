@@ -163,14 +163,25 @@ export async function enqueueAndDispatch({
   });
 
   const isImmediate = scheduledAt.getTime() <= Date.now() + IMMEDIATE_THRESHOLD_MS;
-
-  if (isImmediate) {
-    const idempotencyKey = `${contentItemId}:${platform}:${scheduledAt.toISOString()}`;
-    await dispatchToQStash({ jobId, deduplicationId: idempotencyKey });
-    return { jobId, dispatched: true };
+  if (!isImmediate) {
+    return { jobId, dispatched: false };
   }
 
-  return { jobId, dispatched: false };
+  // The QStash webhook worker (src/lib/publishing/handler.ts) only understands
+  // the v2 schema (publish_jobs.platform). In legacy-bridge mode it cannot
+  // process the job, so dispatching here would only burn QStash retries.
+  // Instead the publish-scheduler cron invokes the edge-function worker, which
+  // drains queued jobs due within its lead window (≈1 min) — covering immediate
+  // posts too. Only dispatch to QStash when the v2 worker can actually run.
+  const supabase = createServiceSupabaseClient();
+  const schemaMode = await detectQueueSchemaMode(supabase);
+  if (schemaMode === 'legacy-bridge') {
+    return { jobId, dispatched: false };
+  }
+
+  const idempotencyKey = `${contentItemId}:${platform}:${scheduledAt.toISOString()}`;
+  await dispatchToQStash({ jobId, deduplicationId: idempotencyKey });
+  return { jobId, dispatched: true };
 }
 
 /**

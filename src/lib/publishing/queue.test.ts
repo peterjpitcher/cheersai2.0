@@ -176,4 +176,21 @@ describe('enqueueAndDispatch()', () => {
       variant_id: 'variant-from-db',
     }));
   });
+
+  it('does NOT dispatch to QStash in legacy-bridge mode even for immediate jobs', async () => {
+    // The QStash worker (handler.ts) cannot process legacy-bridge jobs; the
+    // edge-function worker drains them instead, so dispatching would only burn
+    // QStash retries.
+    const { enqueueAndDispatch } = await loadQueue();
+    mockPublishJobsSchemaLimit.mockResolvedValue({
+      data: null,
+      error: { code: '42703', message: 'column publish_jobs.platform does not exist' },
+    });
+
+    const result = await enqueueAndDispatch(baseOptions({ scheduledAt: new Date(), variantId: null }));
+
+    expect(mockDispatchToQStash).not.toHaveBeenCalled();
+    expect(result.dispatched).toBe(false);
+    expect(result.jobId).toBe(TEST_JOB_ID);
+  });
 });
