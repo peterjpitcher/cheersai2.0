@@ -408,6 +408,45 @@ describe('createScheduledBatch', () => {
     expect(variantRows.map((row) => row.body)).toEqual(['', '']);
   });
 
+  it('rejects a weekly recurring story with no media before scheduling', async () => {
+    supabaseMock.enqueueResult({ data: { id: 'draft-1' }, error: null });
+
+    const { createScheduledBatch } = await import('@/app/actions/content');
+
+    const result = await createScheduledBatch({
+      draftContentId: 'draft-1',
+      contentType: 'weekly_recurring',
+      brief: {
+        title: 'Friday Specials',
+        prompt: 'Weekly food special',
+        dayOfWeek: 5,
+        time: '18:00',
+        weeksAhead: 1,
+        placement: 'story',
+        platforms: ['facebook', 'instagram'],
+      },
+      selectedMediaIds: [],
+      slotCopies: [
+        {
+          slotKey: 'week-1',
+          scheduledAt: '2026-07-03T18:00:00.000Z',
+          label: 'Week 1',
+          copy: {
+            facebook: { body: '' },
+            instagram: { body: '' },
+          },
+        },
+      ],
+      platforms: ['facebook', 'instagram'],
+      mode: 'schedule',
+    });
+
+    expect(result.success).toBeUndefined();
+    expect(result.error).toMatch(/need at least one image/i);
+    // Guard fires before any campaign/content insert
+    expect(enqueueAndDispatch).not.toHaveBeenCalled();
+  });
+
   it('rejects event campaigns that request both post and story placements', async () => {
     supabaseMock.enqueueResult({ data: { id: 'draft-1' }, error: null });
 

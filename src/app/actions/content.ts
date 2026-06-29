@@ -665,6 +665,19 @@ export async function createScheduledBatch(
       return { error: 'Select Facebook or Instagram when scheduling stories.' };
     }
 
+    // Weekly-recurring stories require an image. Reject up front rather than
+    // scheduling a blank story that only fails (or publishes empty) at publish
+    // time. Scoped to weekly_recurring (the new story-placement path); the same
+    // gap for story/event/promotion placements is tracked separately.
+    if (contentType === 'weekly_recurring' && placements.includes('story')) {
+      const storySlotMissingMedia = slotCopies.some(
+        (slot) => (slot.mediaIds ?? selectedMediaIds).length === 0,
+      );
+      if (storySlotMissingMedia) {
+        return { error: 'Stories need at least one image. Add media before scheduling.' };
+      }
+    }
+
     // Create a campaign row for types that need one
     let campaignId: string | null = null;
     const needsCampaign =
@@ -740,7 +753,7 @@ export async function createScheduledBatch(
     }
 
     if (!contentRows.length) {
-      return { error: 'Select Facebook or Instagram when scheduling stories.' };
+      return { error: 'No content to schedule — select at least one platform.' };
     }
 
     const { data: insertedContent, error: contentError } = await supabase
@@ -801,6 +814,15 @@ export async function createScheduledBatch(
       .upsert(variantPayloads, { onConflict: 'content_item_id' });
 
     if (variantError) {
+      // Roll back the content_items (and campaign) we just inserted so a failed
+      // variant write does not leave orphaned rows with no variant — those would
+      // otherwise fail every publish attempt and clutter the planner.
+      await rollbackCreatedScheduledBatch({
+        supabase,
+        contentItemIds: insertedItems.map((i) => i.id),
+        campaignId,
+        deleteCampaign: Boolean(campaignId),
+      });
       return { error: `Variant insert failed: ${variantError.message}` };
     }
 
@@ -832,7 +854,7 @@ export async function createScheduledBatch(
     // Enqueue publish jobs for ALL modes — enqueueAndDispatch handles
     // future vs immediate scheduling internally (PUB-03)
     for (const [index, item] of insertedItems.entries()) {
-      const { slotIdx, platform } = slotPlatformIndex[index];
+      const { slotIdx, platform, placement } = slotPlatformIndex[index];
       const slot = slotCopies[slotIdx];
       const scheduledAt = slot.scheduledAt
         ? new Date(slot.scheduledAt)
@@ -844,6 +866,7 @@ export async function createScheduledBatch(
           accountId,
           platform: platform as Platform,
           scheduledAt,
+          placement,
         });
       } catch (publishError) {
         console.error(

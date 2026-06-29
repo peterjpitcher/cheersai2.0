@@ -235,6 +235,12 @@ export function CreateWizard({ initialDraftId, accountId, onClose }: CreateWizar
 
   const handleContentTypeChange = useCallback(
     (type: ContentType) => {
+      // Switching content type invalidates any slots/copy derived for the old
+      // type (e.g. weekly's auto-derived occurrences must not leak onto an event).
+      setSelectedSlots([]);
+      setGeneratedSlotCopies([]);
+      setLastGenerationContext(null);
+
       // Reset form to match new content type defaults while preserving shared fields
       const currentValues = form.getValues();
       const sharedFields = {
@@ -310,7 +316,12 @@ export function CreateWizard({ initialDraftId, accountId, onClose }: CreateWizar
         form.getValues('contentType') === 'instant_post' &&
         (form.watch('publishMode') ?? 'now') === 'now';
 
-      if (!isInstantNow) {
+      // Weekly recurring has no manual date selection — the schedule step derives
+      // and auto-selects its occurrences, so it must not be gated on selectedSlots
+      // (which the child effect may populate a tick after this handler reads it).
+      const isWeeklyRecurring = form.getValues('contentType') === 'weekly_recurring';
+
+      if (!isInstantNow && !isWeeklyRecurring) {
         // Validate at least one slot selected for schedule mode
         if (selectedSlots.length === 0) {
           toast.error('Select at least one schedule slot');
