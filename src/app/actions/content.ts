@@ -11,6 +11,7 @@ import { enqueueAndDispatch } from '@/lib/publishing/queue';
 import { buildCampaignMetadata, mapCampaignType } from '@/lib/publishing/build-campaign-metadata';
 import { composePublishBody, buildPreviewData } from '@/lib/publishing/compose-body';
 import { readPlatformCtaLinks } from '@/lib/publishing/copy-rules';
+import { logPublishAuditEvent } from '@/lib/publishing/audit';
 import { MEDIA_BUCKET, DEFAULT_TIMEZONE } from '@/lib/constants';
 import type { ContentItem, ContentType, Platform, PlatformCopy } from '@/types/content';
 
@@ -920,10 +921,33 @@ export async function createScheduledBatch(
       .eq('account_id', accountId)
       .eq('status', 'draft');
 
+    const contentItemIds = insertedItems.map((item) => item.id);
+
+    // Audit the scheduling action (best-effort — never block scheduling on the
+    // audit write).
+    try {
+      await logPublishAuditEvent({
+        accountId,
+        operationType: 'content_scheduled',
+        resourceType: 'content_item',
+        resourceId: campaignId ?? contentItemIds[0] ?? draftContentId,
+        details: {
+          mode,
+          contentType,
+          placements,
+          itemCount: contentItemIds.length,
+          campaignId: campaignId ?? null,
+        },
+      });
+    } catch (auditErr) {
+      console.error(
+        '[createScheduledBatch] audit log failed (non-fatal):',
+        auditErr instanceof Error ? auditErr.message : auditErr,
+      );
+    }
+
     revalidatePath('/planner');
     revalidatePath('/dashboard/create');
-
-    const contentItemIds = insertedItems.map((item) => item.id);
 
     return {
       success: true,

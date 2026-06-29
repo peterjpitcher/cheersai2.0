@@ -9,7 +9,7 @@ import { getCorrelationId } from '@/lib/logging/correlation';
 
 interface AuditEventParams {
   accountId: string;
-  operationType: 'publish_attempt' | 'publish_success' | 'publish_failure' | 'publish_retry' | 'state_transition';
+  operationType: 'publish_attempt' | 'publish_success' | 'publish_failure' | 'publish_retry' | 'state_transition' | 'content_scheduled';
   resourceType: 'publish_job' | 'content_item';
   resourceId: string;
   details?: Record<string, unknown>;
