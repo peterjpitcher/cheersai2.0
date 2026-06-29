@@ -14,13 +14,6 @@ vi.mock("next/cache", () => ({
   revalidatePath: revalidatePathMock,
 }));
 
-vi.mock("@/lib/create/service", () => ({
-  createEventCampaign: vi.fn(),
-  createInstantPost: vi.fn(),
-  createPromotionCampaign: vi.fn(),
-  createWeeklyCampaign: vi.fn(),
-}));
-
 vi.mock("@/lib/planner/data", () => ({
   getPlannerContentDetail: vi.fn(),
 }));

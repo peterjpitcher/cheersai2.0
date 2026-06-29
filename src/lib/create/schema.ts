@@ -284,47 +284,6 @@ export const eventCampaignFormSchema = z
     }
   });
 
-export const promotionCampaignSchema = z
-  .object({
-    name: z.string().min(1, "Promotion name is required"),
-    offerSummary: z.string().min(1, "Tell guests what the offer is"),
-    startDate: z.date(),
-    endDate: z.date(),
-    dateMode: z.literal("ends_on").optional(),
-    prompt: z.string().optional(),
-    ctaUrl: z.string().url("Enter a valid URL").optional(),
-    ctaLabel: z.string().trim().min(1, "Select a link goal").max(30, "Keep link goals concise").optional(),
-    linkInBioUrl: z.string().url("Enter a valid URL").optional(),
-    platforms: z.array(platformEnum).min(1, "Select at least one platform"),
-    heroMedia: z.array(mediaAssetSchema).optional(),
-    toneAdjust: toneAdjustEnum.default("default"),
-    lengthPreference: lengthPreferenceEnum.default("standard"),
-    includeHashtags: z.boolean().default(true),
-    includeEmojis: z.boolean().default(true),
-    ctaStyle: ctaStyleEnum.default("default"),
-    customSchedule: z.array(z.date()).optional(),
-    placements: campaignPlacementsSchema,
-    bannerDefaults: BannerDefaultsSchema.optional(),
-  })
-  .merge(proofPointOptionsSchema)
-  .superRefine((data, ctx) => {
-    if (!data.heroMedia || data.heroMedia.length === 0) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Attach at least one image or video.",
-        path: ["heroMedia"],
-      });
-    }
-
-    if (data.customSchedule && data.customSchedule.length === 0) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Add at least one manual schedule slot or disable manual scheduling.",
-        path: ["customSchedule"],
-      });
-    }
-  });
-
 export const promotionCampaignFormSchema = z
   .object({
     name: z.string().min(1, "Promotion name is required"),
@@ -371,128 +330,11 @@ export const promotionCampaignFormSchema = z
     }
   });
 
-export const scheduleModeEnum = z.enum(["fixed_days", "spread_evenly"]);
-
-export const weeklyCampaignSchema = z
-  .object({
-    name: z.string().min(1, "Campaign name is required"),
-    description: z.string().min(1, "Give us some detail"),
-    dayOfWeek: z.number().int().min(0).max(6),
-    startDate: z.date(),
-    time: z.string().regex(/^\d{2}:\d{2}$/),
-    weeksAhead: z.number().int().min(1).max(12).default(4),
-    prompt: z.string().optional(),
-    ctaUrl: z.string().url("Enter a valid URL").optional(),
-    ctaLabel: z.string().trim().min(1, "Select a link goal").max(30, "Keep link goals concise").optional(),
-    linkInBioUrl: z.string().url("Enter a valid URL").optional(),
-    platforms: z.array(platformEnum).min(1, "Select at least one platform"),
-    heroMedia: z.array(mediaAssetSchema).optional(),
-    toneAdjust: toneAdjustEnum.default("default"),
-    lengthPreference: lengthPreferenceEnum.default("standard"),
-    includeHashtags: z.boolean().default(true),
-    includeEmojis: z.boolean().default(true),
-    ctaStyle: ctaStyleEnum.default("default"),
-    customSchedule: z.array(z.date()).optional(),
-    scheduleMode: scheduleModeEnum.default("fixed_days"),
-    postsPerWeek: z.number().int().min(1).max(7).optional(),
-    staggerPlatforms: z.boolean().default(true),
-    bannerDefaults: BannerDefaultsSchema.optional(),
-  })
-  .merge(proofPointOptionsSchema)
-  .superRefine((data, ctx) => {
-    if (!data.heroMedia || data.heroMedia.length === 0) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Attach at least one image or video.",
-        path: ["heroMedia"],
-      });
-    }
-
-    if (data.customSchedule && data.customSchedule.length === 0) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Add at least one manual schedule slot or disable manual scheduling.",
-        path: ["customSchedule"],
-      });
-    }
-
-    if (data.scheduleMode === "spread_evenly" && data.postsPerWeek == null) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Posts per week is required when using spread evenly mode.",
-        path: ["postsPerWeek"],
-      });
-    }
-  });
-
-export const weeklyCampaignFormSchema = z
-  .object({
-    name: z.string().min(1, "Campaign name is required"),
-    description: z.string().min(1, "Give us some detail"),
-    dayOfWeek: z.string().min(1, "Select a day"),
-    startDate: z.string().min(1, "Start date required"),
-    time: z.string().regex(/^\d{2}:\d{2}$/),
-    weeksAhead: z.string().optional(),
-    prompt: z.string().optional(),
-    ctaUrl: optionalUrlFormField,
-    ctaLabel: optionalCtaLabelFormField,
-    linkInBioUrl: optionalUrlFormField,
-    platforms: z.array(platformEnum).min(1, "Select at least one platform"),
-    heroMedia: z.array(mediaAssetSchema).optional(),
-    toneAdjust: toneAdjustEnum.default("default"),
-    lengthPreference: lengthPreferenceEnum.default("standard"),
-    includeHashtags: z.boolean().default(true),
-    includeEmojis: z.boolean().default(true),
-    ctaStyle: ctaStyleEnum.default("default"),
-    useManualSchedule: z.boolean().default(false),
-    manualSlots: z
-      .array(
-        z.object({
-          date: z.string().min(1, "Date required"),
-          time: z.string().regex(/^\d{2}:\d{2}$/),
-        }),
-      )
-      .default([]),
-    scheduleMode: scheduleModeEnum.default("fixed_days"),
-    postsPerWeek: z.string().optional(),
-    staggerPlatforms: z.boolean().default(true),
-    bannerDefaults: BannerDefaultsSchema.optional(),
-  })
-  .merge(proofPointOptionsSchema)
-  .superRefine((data, ctx) => {
-    if (!data.heroMedia || data.heroMedia.length === 0) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Attach at least one image or video.",
-        path: ["heroMedia"],
-      });
-    }
-
-    if (data.useManualSchedule && data.manualSlots.length === 0) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Add at least one schedule slot.",
-        path: ["manualSlots"],
-      });
-    }
-
-    if (data.scheduleMode === "spread_evenly" && !data.postsPerWeek) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Posts per week is required when using spread evenly mode.",
-        path: ["postsPerWeek"],
-      });
-    }
-  });
-
 export type MediaAssetInput = z.infer<typeof mediaAssetSchema>;
 export type InstantPostInput = z.infer<typeof instantPostSchema>;
 export type InstantPostFormValues = z.infer<typeof instantPostFormSchema>;
 export type EventCampaignInput = z.infer<typeof eventCampaignSchema>;
 export type EventCampaignFormValues = z.infer<typeof eventCampaignFormSchema>;
-export type PromotionCampaignInput = z.infer<typeof promotionCampaignSchema>;
 export type PromotionCampaignFormValues = z.infer<typeof promotionCampaignFormSchema>;
-export type WeeklyCampaignInput = z.infer<typeof weeklyCampaignSchema>;
-export type WeeklyCampaignFormValues = z.infer<typeof weeklyCampaignFormSchema>;
 
 export type InstantPostAdvancedOptions = z.infer<typeof advancedOptionsSchema>;

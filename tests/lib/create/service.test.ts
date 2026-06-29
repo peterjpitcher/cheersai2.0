@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DateTime } from "luxon";
 
-import type { EventCampaignInput, InstantPostInput, PromotionCampaignInput } from "@/lib/create/schema";
+import type { InstantPostInput } from "@/lib/create/schema";
 
 process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY =
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "https://example.com/key";
@@ -55,9 +55,7 @@ vi.mock("@/lib/scheduling/deconflict", () => ({
 }));
 
 const { __testables } = await import("@/lib/create/service");
-const { createInstantPost, createEventCampaign, createPromotionCampaign } = await import(
-  "@/lib/create/service"
-);
+const { createInstantPost } = await import("@/lib/create/service");
 
 // --- Supabase chain mock builder --------------------------------------------
 //
@@ -644,44 +642,6 @@ function buildBaseInstantInput(
   } as InstantPostInput;
 }
 
-function buildBaseEventInput(
-  overrides: Partial<EventCampaignInput> = {},
-): EventCampaignInput {
-  const startDate = DateTime.now()
-    .setZone("Europe/London")
-    .plus({ months: 6 })
-    .startOf("day")
-    .toJSDate();
-  return {
-    name: "Test Event",
-    description: "A regression-guard event used for banner-override testing.",
-    startDate,
-    startTime: "19:00",
-    timezone: "Europe/London",
-    prompt: undefined,
-    platforms: ["facebook"],
-    placements: ["story"],
-    heroMedia: [
-      { assetId: "asset-1", mediaType: "image", fileName: "hero.jpg" },
-    ],
-    ctaUrl: undefined,
-    ctaLabel: undefined,
-    linkInBioUrl: undefined,
-    toneAdjust: "default",
-    lengthPreference: "standard",
-    includeHashtags: false,
-    includeEmojis: false,
-    ctaStyle: "default",
-    proofPointMode: "off",
-    proofPointsSelected: [],
-    proofPointIntentTags: [],
-    scheduleOffsets: [{ label: "Event day", offsetHours: 0 }],
-    customSchedule: undefined,
-    bannerDefaults: undefined,
-    ...overrides,
-  } as EventCampaignInput;
-}
-
 describe("createInstantPost — banner override (Bug A)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -790,142 +750,6 @@ describe("createInstantPost — banner override (Bug A)", () => {
       banner_enabled: true,
       banner_text_override: "TONIGHT",
     });
-  });
-});
-
-describe("createCampaignFromPlans — campaign caller regression guard (Bug A, test 3)", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    const mock = buildSupabaseMock();
-    requireAuthContextMock.mockResolvedValue({
-      supabase: mock.client,
-      accountId: "acc-test-1",
-      user: { id: "user-test-1", email: "test@example.com" },
-    });
-    getOwnerSettingsMock.mockResolvedValue({
-      brand: buildBrandFixture(),
-      posting: buildPostingFixture(),
-      venueName: "The Anchor",
-      venueLocation: "Stanwell Moor",
-    });
-    enqueuePublishJobMock.mockResolvedValue(undefined);
-    deconflictCampaignPlansMock.mockImplementation(
-      async (
-        _supabase: unknown,
-        _accountId: unknown,
-        plans: unknown,
-      ) => plans,
-    );
-  });
-
-  afterEach(() => {
-    vi.clearAllMocks();
-  });
-
-  it("writes NO banner_enabled column for campaign callers that omit bannerDefaults", async () => {
-    // Today's campaign caller: `bannerDefaults` undefined → variant payload
-    // must contain none of the banner_* columns so the publish-queue worker
-    // resolves them from the account default (banners_enabled=true today).
-    // This is the exact behaviour the Backend Implementer in Wave 2 must
-    // preserve when they add the new `bannerOverride` parameter.
-    const input = buildBaseEventInput({ bannerDefaults: undefined });
-
-    await createEventCampaign(input);
-
-    expect(variantUpsertCallsRef.calls.length).toBeGreaterThan(0);
-    const variantPayload = variantUpsertCallsRef.calls[0]?.[0] as
-      | Record<string, unknown>
-      | undefined;
-    expect(variantPayload).toBeDefined();
-    // The critical assertion: no banner_enabled key whatsoever.
-    expect(variantPayload).not.toHaveProperty("banner_enabled");
-    expect(variantPayload).not.toHaveProperty("banner_position");
-    expect(variantPayload).not.toHaveProperty("banner_bg");
-    expect(variantPayload).not.toHaveProperty("banner_text_colour");
-  });
-});
-
-function buildBasePromotionInput(
-  overrides: Partial<PromotionCampaignInput> = {},
-): PromotionCampaignInput {
-  const TZ = "Europe/London";
-  const startDate = DateTime.fromISO("2026-05-15T00:00", { zone: TZ }).toJSDate();
-  const endDate = DateTime.fromISO("2026-05-20T00:00", { zone: TZ }).toJSDate();
-  return {
-    name: "Happy Hour",
-    offerSummary: "2-for-1 cocktails all week",
-    startDate,
-    endDate,
-    dateMode: "ends_on",
-    prompt: undefined,
-    platforms: ["facebook"],
-    placements: ["story"],
-    heroMedia: [
-      { assetId: "asset-1", mediaType: "image", fileName: "hero.jpg" },
-    ],
-    ctaUrl: undefined,
-    ctaLabel: undefined,
-    linkInBioUrl: undefined,
-    toneAdjust: "default",
-    lengthPreference: "standard",
-    includeHashtags: true,
-    includeEmojis: true,
-    ctaStyle: "default",
-    customSchedule: undefined,
-    bannerDefaults: undefined,
-    proofPointMode: "off",
-    proofPointsSelected: [],
-    proofPointIntentTags: [],
-    ...overrides,
-  } as PromotionCampaignInput;
-}
-
-describe("createPromotionCampaign — phase date regression", () => {
-  beforeEach(() => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-05-14T12:00:00Z"));
-    vi.clearAllMocks();
-    const mock = buildSupabaseMock();
-    requireAuthContextMock.mockResolvedValue({
-      supabase: mock.client,
-      accountId: "acc-test-1",
-      user: { id: "user-test-1", email: "test@example.com" },
-    });
-    getOwnerSettingsMock.mockResolvedValue({
-      brand: buildBrandFixture(),
-      posting: buildPostingFixture(),
-      venueName: "The Anchor",
-      venueLocation: "Stanwell Moor",
-    });
-    enqueuePublishJobMock.mockResolvedValue(undefined);
-    deconflictCampaignPlansMock.mockImplementation(
-      async (_supabase: unknown, _accountId: unknown, plans: unknown) => plans,
-    );
-  });
-
-  afterEach(() => {
-    vi.useRealTimers();
-    vi.clearAllMocks();
-  });
-
-  it("preserves raw end date in promptContext.promotionEnd (not effectiveEnd)", async () => {
-    const TZ = "Europe/London";
-    const endDate = DateTime.fromISO("2026-05-20T00:00", { zone: TZ }).toJSDate();
-    const input = buildBasePromotionInput({
-      startDate: DateTime.fromISO("2026-05-15T00:00", { zone: TZ }).toJSDate(),
-      endDate,
-    });
-
-    await createPromotionCampaign(input);
-
-    expect(variantUpsertCallsRef.calls.length).toBeGreaterThan(0);
-    const allPayloads = variantUpsertCallsRef.calls.flat() as Array<Record<string, unknown>>;
-    for (const payload of allPayloads) {
-      const ctx = payload?.prompt_context as Record<string, unknown> | undefined;
-      if (ctx?.promotionEnd) {
-        expect(ctx.promotionEnd).toBe(endDate.toISOString());
-      }
-    }
   });
 });
 
@@ -1117,79 +941,3 @@ describe("refreshTimingForPlan", () => {
   });
 });
 
-describe("createEventCampaign — post-deconfliction timing refresh", () => {
-  let contentItemInserts: Array<Record<string, unknown>>;
-
-  beforeEach(() => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-05-17T12:00:00Z"));
-    vi.clearAllMocks();
-    contentItemInserts = [];
-
-    const baseMock = buildSupabaseMock();
-
-    const patchedClient = {
-      from: (table: string) => {
-        const chain = baseMock.client.from(table);
-        if (table === "content_items") {
-          const origInsert = (chain as Record<string, (...args: unknown[]) => unknown>).insert;
-          (chain as Record<string, unknown>).insert = (rows: unknown) => {
-            const items = Array.isArray(rows) ? rows : [rows];
-            contentItemInserts.push(...(items as Array<Record<string, unknown>>));
-            return origInsert(rows);
-          };
-        }
-        return chain;
-      },
-    };
-
-    requireAuthContextMock.mockResolvedValue({
-      supabase: patchedClient,
-      accountId: "acc-test-1",
-      user: { id: "user-test-1", email: "test@example.com" },
-    });
-    getOwnerSettingsMock.mockResolvedValue({
-      brand: buildBrandFixture(),
-      posting: buildPostingFixture(),
-      venueName: "The Anchor",
-      venueLocation: "Stanwell Moor",
-    });
-    enqueuePublishJobMock.mockResolvedValue(undefined);
-  });
-
-  afterEach(() => {
-    vi.useRealTimers();
-    vi.clearAllMocks();
-  });
-
-  it("updates promptContext.timingLabel when deconfliction shifts a plan earlier", async () => {
-    const TZ = "Europe/London";
-    // Event is Wednesday 20 May 2026 at 19:00.
-    // Plan originally scheduled for Tuesday 19 May (= "tomorrow").
-    // Deconfliction shifts it to Monday 18 May (= "building").
-    deconflictCampaignPlansMock.mockImplementation(
-      async (_supabase: unknown, _accountId: unknown, plans: unknown) => {
-        return (plans as Array<Record<string, unknown>>).map((plan) => {
-          const scheduledFor = plan.scheduledFor as Date | null;
-          if (!scheduledFor) return plan;
-          const shifted = new Date(scheduledFor.getTime() - 24 * 60 * 60 * 1000);
-          return { ...plan, scheduledFor: shifted };
-        });
-      },
-    );
-
-    const input = buildBaseEventInput({
-      startDate: DateTime.fromISO("2026-05-20T00:00", { zone: TZ }).toJSDate(),
-      startTime: "19:00",
-      placements: ["story"],
-      scheduleOffsets: [{ label: "1 day to go", offsetHours: -24 }],
-    });
-
-    await createEventCampaign(input);
-
-    expect(contentItemInserts.length).toBeGreaterThan(0);
-    const ctx = contentItemInserts[0]?.prompt_context as Record<string, unknown> | undefined;
-    // After shift: Mon 18 May → Wed 20 May = 2 calendar days = "building"
-    expect(ctx?.timingLabel).toBe("building");
-  });
-});
