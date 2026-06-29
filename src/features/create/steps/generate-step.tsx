@@ -309,6 +309,9 @@ export function GenerateStep({
   const handleGenerateAll = useCallback(async () => {
     if (!contentId) return;
     if (isStorySchedule) return;
+    // Double-submit guard (F7): bail if a batch is already running so a rapid
+    // second click can't fire the generation server action twice.
+    if (isGeneratingBatch) return;
     setIsGeneratingBatch(true);
 
     // Initialize all slots as pending. Preserve any existing *explicit* per-slot
@@ -386,6 +389,15 @@ export function GenerateStep({
 
     await limitConcurrency(tasks, 3);
 
+    // Surface batch generation failures (F8): allSettled swallows per-slot
+    // errors, so summarise any failed slots via toast without throwing. The
+    // success path is unchanged.
+    const failedCount = results.filter(r => r.status === 'failed').length;
+    if (failedCount > 0) {
+      const total = results.length;
+      toast.error(`${failedCount} of ${total} post${total === 1 ? '' : 's'} couldn't be generated`);
+    }
+
     // Record generation context
     onGeneratedWithContext({
       mediaIds: selectedMediaIds,
@@ -398,7 +410,7 @@ export function GenerateStep({
     });
 
     setIsGeneratingBatch(false);
-  }, [contentId, contentBrief, effectiveSlots, selectedMediaIds, publishMode, onSlotCopiesChange, onGeneratedWithContext, generatedSlotCopies, isStorySchedule]);
+  }, [contentId, contentBrief, effectiveSlots, selectedMediaIds, publishMode, onSlotCopiesChange, onGeneratedWithContext, generatedSlotCopies, isStorySchedule, isGeneratingBatch, toast]);
 
   // -----------------------------------------------------------------------
   // Single-slot regeneration
@@ -1006,6 +1018,8 @@ export function GenerateStep({
           <Button
             type="button"
             onClick={async () => {
+              // Double-submit guard (F7): ignore re-entry if a queue is in flight.
+              if (isQueueing) return;
               setIsQueueing(true);
               try { await onQueueAll(); } finally { setIsQueueing(false); }
             }}
@@ -1023,6 +1037,8 @@ export function GenerateStep({
           <Button
             type="button"
             onClick={async () => {
+              // Double-submit guard (F7): ignore re-entry if scheduling is in flight.
+              if (isScheduling) return;
               setIsScheduling(true);
               try { await onScheduleAll(); } finally { setIsScheduling(false); }
             }}

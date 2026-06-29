@@ -59,6 +59,13 @@ vi.mock("@/lib/create/service", () => ({
   createInstantPost: createInstantPostMock,
 }));
 
+// Mock the rate limiter — the real module imports 'server-only', which the
+// test runtime cannot resolve. Allow all requests through (mirrors feed-route.test).
+vi.mock("@/lib/auth/rate-limit", () => ({
+  getRateLimitKey: (_req: Request, prefix: string) => `test:${prefix}`,
+  isRateLimited: vi.fn().mockResolvedValue(false),
+}));
+
 import { POST } from "@/app/api/create/generate-stream/route";
 
 // --- Helpers ----------------------------------------------------------------

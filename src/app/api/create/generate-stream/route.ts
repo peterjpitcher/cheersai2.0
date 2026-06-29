@@ -17,6 +17,7 @@ import { DateTime } from "luxon";
 
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { resolveAccountId } from "@/lib/auth/server";
+import { getRateLimitKey, isRateLimited } from "@/lib/auth/rate-limit";
 import { getOpenAIClient } from "@/lib/ai/client";
 import { buildInstantPostPrompt } from "@/lib/ai/prompts";
 import { getOwnerSettings } from "@/lib/settings/data";
@@ -67,11 +68,28 @@ export async function POST(request: NextRequest): Promise<Response> {
     });
   }
 
+  // --- Rate limit (per account) — before any parsing or generation ---
+  // Generation triggers OpenAI calls, so cap requests per account. Uses the
+  // shared limiter; no-op when Upstash is not configured (dev/local).
+  const rateLimitKey = getRateLimitKey(request, `create:generate-stream:${accountId}`);
+  const limited = await isRateLimited({
+    key: rateLimitKey,
+    maxAttempts: 20,
+    windowMs: 60_000,
+  });
+  if (limited) {
+    return new Response(JSON.stringify({ error: "Rate limit exceeded" }), {
+      status: 429,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
   // --- Parse body ---
   let rawBody: unknown;
   try {
     rawBody = await request.json();
-  } catch {
+  } catch (err) {
+    console.error("[create/generate-stream] Failed to parse JSON body", err);
     return new Response(JSON.stringify({ error: "Invalid JSON body" }), {
       status: 400,
       headers: { "Content-Type": "application/json" },
@@ -82,6 +100,7 @@ export async function POST(request: NextRequest): Promise<Response> {
   try {
     formValues = instantPostFormSchema.parse(rawBody);
   } catch (err) {
+    console.error("[create/generate-stream] Invalid request payload", err);
     const message = err instanceof Error ? err.message : "Invalid request";
     return new Response(JSON.stringify({ error: message }), {
       status: 400,
@@ -90,22 +109,32 @@ export async function POST(request: NextRequest): Promise<Response> {
   }
 
   // Resolve to the domain input type (same transform as the server action)
-  const storyScheduledFor =
-    formValues.placement === "story"
-      ? resolveStoryScheduledFor(formValues.scheduledFor ?? new Date(), DEFAULT_TIMEZONE)
-      : null;
-  const input: InstantPostInput = instantPostSchema.parse({
-    ...formValues,
-    publishMode: storyScheduledFor ? "schedule" : formValues.publishMode,
-    scheduledFor:
-      storyScheduledFor ??
-      (formValues.publishMode === "schedule" && formValues.scheduledFor
-        ? DateTime.fromISO(formValues.scheduledFor, { zone: DEFAULT_TIMEZONE }).toJSDate()
-        : undefined),
-    // Carry the optional banner override through to createInstantPost so the
-    // service layer can write an explicit banner_enabled to the variant row.
-    banner: formValues.banner,
-  });
+  let input: InstantPostInput;
+  try {
+    const storyScheduledFor =
+      formValues.placement === "story"
+        ? resolveStoryScheduledFor(formValues.scheduledFor ?? new Date(), DEFAULT_TIMEZONE)
+        : null;
+    input = instantPostSchema.parse({
+      ...formValues,
+      publishMode: storyScheduledFor ? "schedule" : formValues.publishMode,
+      scheduledFor:
+        storyScheduledFor ??
+        (formValues.publishMode === "schedule" && formValues.scheduledFor
+          ? DateTime.fromISO(formValues.scheduledFor, { zone: DEFAULT_TIMEZONE }).toJSDate()
+          : undefined),
+      // Carry the optional banner override through to createInstantPost so the
+      // service layer can write an explicit banner_enabled to the variant row.
+      banner: formValues.banner,
+    });
+  } catch (err) {
+    console.error("[create/generate-stream] Failed to resolve post input", err);
+    const message = err instanceof Error ? err.message : "Invalid request";
+    return new Response(JSON.stringify({ error: message }), {
+      status: 400,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
 
   // --- Build the SSE stream ---
   const encoder = new TextEncoder();
@@ -171,6 +200,10 @@ export async function POST(request: NextRequest): Promise<Response> {
 
         send({ type: "done", contentItemIds: result.contentItemIds });
       } catch (error) {
+        console.error(
+          "[create/generate-stream] Content generation failed",
+          error,
+        );
         const message =
           error instanceof Error ? error.message : "Content generation failed.";
         send({ type: "error", message });

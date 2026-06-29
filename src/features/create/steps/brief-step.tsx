@@ -352,6 +352,9 @@ export function BriefStep({ form, onContentTypeChange }: BriefStepProps): React.
           <div className="space-y-1.5">
             <Label htmlFor="proofPoints">Proof points</Label>
             <textarea
+              // Remount on content-type switch / draft resume so the
+              // uncontrolled defaultValue reflects the current form state (F9).
+              key={contentType}
               id="proofPoints"
               rows={2}
               className="flex w-full rounded-md border border-input bg-card px-3 py-2 text-sm shadow-[0_1px_2px_0_rgb(0_0_0/0.04)] placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-all duration-150 resize-none"
