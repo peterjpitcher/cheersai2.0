@@ -55,5 +55,24 @@ Verification: `tsc` 0 errors · eslint 0 warnings · 1556 tests pass · build OK
 ### Additional SAFE-but-pre-existing items available on request (not applied to keep this pass scoped)
 F7 double-submit guards · F8 surface per-slot generate failures · F9 `proofPoints` `defaultValue` desync on type-switch/resume · F10 weekly "select a date" copy never applies · F11 radio-group roving-focus a11y · M4 document the service-role RLS-bypass invariant · F3/F5 weekly slots derived from `now()` at render can drift / draft-resume re-dates (needs a stable anchor).
 
+## Round 2 — batched items resolved (user approved "fix them all")
+
+| ID | Resolution | Commit |
+|----|-----------|--------|
+| PR2 (DB) | GBP tables/columns dropped, GBP connection+oauth_states deleted, applied to prod & verified (token_vault cascaded, queue intact) | `2e59811` |
+| FF-001 | Root cause was narrow: `enqueueAndDispatch` ignored the established legacy-bridge mode. Now skips the QStash→handler.ts dispatch in legacy-bridge (the edge-function worker drains queued jobs ≤1 min). +test. | `3a4b6c7` |
+| C2 | Server-side brief re-validation in `createScheduledBatch` (validate-only, keeps original object). +test fixtures completed. | `07f1fd2` |
+| H3 | Calendar range filter → OR-of-ANDs + millisecond comparison (BST-safe). | `07f1fd2` |
+| M1 | `scheduleContent` future-check via Luxon/Europe-London. | `07f1fd2` |
+| M3 (broad) | Story-media guard now covers all story placements. +promotion test updated. | `07f1fd2` |
+| H1 | Best-effort `audit_log` write on `createScheduledBatch` success (non-fatal). | `76b4f6f` |
+| H2 | Substantially mitigated: rollback (C1) cleans `publish_jobs`+rows on failure, draft-delete-on-success blocks re-runs, and F7 guards concurrent clicks. No separate dedup key added. | `b23ce71`/`8afd013` |
+| F7/F8/F9 | Double-submit guards; surface batch generate failures; proof-points remount. | `8afd013` |
+| generate-stream | Per-account rate limiter (429), wrapped domain-input parse (400), failure logging. | `8afd013` |
+
+### Still deferred (deliberately, with reason)
+- **Dead legacy-campaign code** (`createEventCampaign`/`createPromotionCampaign`/`createWeeklyCampaign` + `weeklyCampaignSchema`/`scheduleModeEnum`/`buildSpreadEvenlyPlans` in `lib/create/service.ts`/`schema.ts`): confirmed no production caller, BUT ~1000 lines with heavy test coverage and a `management-actions` test surface. Removing it at the tail of this session is a large, maintainability-only change that risks the management-app path — belongs in its own reviewed PR. **Recommend a dedicated follow-up.**
+- **handler.ts v2 worker vs live schema**: now bypassed in production (FF-001 fix), so harmless. Whether to delete handler.ts/`publish_attempts`/QStash entirely, or migrate the live schema to v2, remains an architectural decision — not forced by any bug now.
+
 ### Passes run
 2 discovery passes (my live-DB trace + 4-agent sweep). Sibling search surfaced the broad story-no-media gap (M3-broad) and the audit-logging gap across all `content.ts` mutations — both queued above. No new defects after the fixes verified clean.
