@@ -3,6 +3,7 @@ import { timingSafeEqual } from "node:crypto";
 
 import { renderBannerServer } from "@/lib/banner/render-server";
 import type { ResolvedConfig, BannerPosition } from "@/lib/banner/config";
+import { BANNER_TEXT_PATTERN } from "@/lib/banner/text";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -74,13 +75,13 @@ interface RenderBannerRequestBody {
 // cap label length, restrict the label charset to a generous but bounded
 // set, and require strict hex format on colour fields. Anything else is a
 // fast 400 reject before we touch the renderer.
+// The endpoint validates the FINAL label, which may be either a user's per-post
+// overlay text (<=20 chars, opt-in) OR a computed proximity label (e.g. "THIS
+// FRIDAY", "SAT 12 JUL" — all well under 20). The length bound stays generous to
+// cover any computed label; the charset is the shared BANNER_TEXT_PATTERN so the
+// gate here accepts exactly what create/planner allow to be saved (notably £),
+// closing the save-then-400 gap on natural pub pricing text.
 const MAX_LABEL_LENGTH = 60;
-// Allowed: word chars, whitespace, and common punctuation we've seen in
-// natural banner labels. Anything else (control chars, emoji, raw quotes,
-// SVG meta-chars beyond the ones already escaped by the renderer) is
-// rejected. This is intentionally permissive enough to cover labels like
-// "WEDNESDAY 25 SEPTEMBER" and "Buy 1 get 1 free" while excluding garbage.
-const LABEL_PATTERN = /^[\w\s\-:.,!?'"&%@#()/]+$/;
 const HEX_COLOUR_PATTERN = /^#[0-9A-Fa-f]{6}$/;
 
 /**
@@ -100,7 +101,7 @@ function validateBody(value: unknown): string | null {
     if (v.label.length > MAX_LABEL_LENGTH) {
         return "label";
     }
-    if (!LABEL_PATTERN.test(v.label)) {
+    if (!BANNER_TEXT_PATTERN.test(v.label)) {
         return "label";
     }
 
