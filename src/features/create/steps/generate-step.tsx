@@ -35,9 +35,10 @@ import type {
 } from '@/types/content';
 import type { PostprocessResult } from '@/lib/ai/postprocess';
 import { BannerOverlay } from '@/features/planner/banner-overlay';
-import { bannerConfigResolver } from '@/lib/banner/config';
-import type { AccountBannerDefaults } from '@/lib/banner/config';
-import { buildGenerationTemporalContext, getCreatePreviewBannerLabel } from '@/lib/create/temporal-context';
+import { bannerConfigResolver, FIXED_BANNER_POSITION, FIXED_BANNER_BG, FIXED_BANNER_TEXT } from '@/lib/banner/config';
+import type { AccountBannerDefaults, ResolvedConfig } from '@/lib/banner/config';
+import { normaliseBannerText, validateBannerText, MAX_BANNER_TEXT_LENGTH } from '@/lib/banner/text';
+import { buildGenerationTemporalContext } from '@/lib/create/temporal-context';
 import type { MediaAssetSummary } from '@/lib/library/data';
 import { composePublishBody } from '@/lib/publishing/compose-body';
 
@@ -534,6 +535,22 @@ export function GenerateStep({
   );
 
   // -----------------------------------------------------------------------
+  // Per-card overlay: set the optional free-text banner label for a slot.
+  // Blank = no overlay (opt-in). Stored verbatim here; normalised/validated at
+  // persist time (createScheduledBatch) and previewed live below.
+  // -----------------------------------------------------------------------
+
+  const handleSlotBannerChange = useCallback(
+    (slotKey: string, bannerTextOverride: string) => {
+      const updated = generatedSlotCopies.map(sc =>
+        sc.slotKey === slotKey ? { ...sc, bannerTextOverride } : sc,
+      );
+      onSlotCopiesChange(updated);
+    },
+    [generatedSlotCopies, onSlotCopiesChange],
+  );
+
+  // -----------------------------------------------------------------------
   // Render: Save Draft button (reusable)
   // -----------------------------------------------------------------------
 
@@ -665,15 +682,21 @@ export function GenerateStep({
           const isExpanded = expandedCards.has(slot.key);
           const status = slotCopy?.status ?? 'pending';
           const isApproved = slotCopy?.approved === true;
-          const previewScheduledAt = publishMode === 'now' && slot.key === 'now'
-            ? null
-            : slotCopy?.scheduledAt ?? slotToIso(slot);
-          const bannerPreviewLabel = getCreatePreviewBannerLabel({
-            contentType: contentBrief.contentType,
-            brief: contentBrief as Record<string, unknown>,
-            scheduledAt: previewScheduledAt,
-            slotCount: effectiveSlots.length,
-          });
+          // Overlays are opt-in per post: the preview shows the banner only when
+          // the user has typed overlay text for this slot (blank = no overlay).
+          const slotOverlayText = normaliseBannerText(slotCopy?.bannerTextOverride);
+          const slotOverlayInvalid = !validateBannerText(slotCopy?.bannerTextOverride).ok;
+          const slotBannerConfig: ResolvedConfig | null = slotOverlayText
+            ? bannerConfig
+              ? { ...bannerConfig, enabled: true, textOverride: slotOverlayText }
+              : {
+                  enabled: true,
+                  position: FIXED_BANNER_POSITION,
+                  bgColour: FIXED_BANNER_BG,
+                  textColour: FIXED_BANNER_TEXT,
+                  textOverride: slotOverlayText,
+                }
+            : null;
           const slotMediaIds = slotCopy?.mediaIds ?? selectedMediaIds;
           const slotMedia = slotMediaIds
             .map((id) => libraryItems?.find((item) => item.id === id))
@@ -863,11 +886,11 @@ export function GenerateStep({
                                   className="rounded-md border-border bg-muted"
                                 >
                                   {primary && primary.mediaType === 'image' && primary.previewUrl ? (
-                                    bannerConfig?.enabled && publishMode === 'schedule' ? (
+                                    slotBannerConfig ? (
                                       <BannerOverlay
                                         mediaUrl={primary.previewUrl}
-                                        config={bannerConfig}
-                                        label={bannerPreviewLabel}
+                                        config={slotBannerConfig}
+                                        label={slotOverlayText}
                                         className="size-full"
                                       />
                                     ) : (
@@ -931,6 +954,37 @@ export function GenerateStep({
                         </div>
                       </div>
 
+                      {/* Per-post image overlay (opt-in, non-story only) */}
+                      <div className="mx-auto w-full max-w-6xl space-y-1.5">
+                        <label
+                          htmlFor={`overlay-${slot.key}`}
+                          className="text-xs font-medium text-muted-foreground"
+                        >
+                          Image overlay (optional)
+                        </label>
+                        <input
+                          id={`overlay-${slot.key}`}
+                          type="text"
+                          maxLength={MAX_BANNER_TEXT_LENGTH}
+                          value={slotCopy?.bannerTextOverride ?? ''}
+                          onChange={(e) => handleSlotBannerChange(slot.key, e.target.value)}
+                          disabled={isApproved || isBusy}
+                          placeholder="Add overlay text, e.g. £5 PINTS — leave blank for none"
+                          aria-invalid={slotOverlayInvalid}
+                          aria-describedby={`overlay-help-${slot.key}`}
+                          className="flex w-full rounded-md border border-input bg-card px-3 py-2 text-sm shadow-[0_1px_2px_0_rgb(0_0_0/0.04)] placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:bg-muted/40 disabled:text-muted-foreground"
+                        />
+                        {slotOverlayInvalid ? (
+                          <p id={`overlay-help-${slot.key}`} className="text-xs text-destructive">
+                            Overlay text can only use letters, numbers, spaces, £ and basic punctuation.
+                          </p>
+                        ) : (
+                          <p id={`overlay-help-${slot.key}`} className="text-xs text-muted-foreground">
+                            Shows as a strip on the image. Leave blank for no overlay.
+                          </p>
+                        )}
+                      </div>
+
                       {/* Refine + approve controls */}
                       {isApproved ? (
                         <div className="flex items-center justify-between gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2">
@@ -981,7 +1035,7 @@ export function GenerateStep({
                               type="button"
                               size="sm"
                               onClick={() => handleToggleApprove(slot.key, true)}
-                              disabled={isBusy}
+                              disabled={isBusy || slotOverlayInvalid}
                             >
                               <Check className="size-3.5 mr-1.5" aria-hidden="true" /> Approve this post
                             </Button>
