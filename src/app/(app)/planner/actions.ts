@@ -11,6 +11,7 @@ import { getPublishReadinessIssues } from "@/lib/publishing/preflight";
 import { requireAuthContext } from "@/lib/auth/server";
 import { DEFAULT_TIMEZONE } from "@/lib/constants";
 import { BANNER_EDITABLE_STATUSES } from "@/lib/scheduling/banner-config";
+import { validateBannerText } from "@/lib/banner/text";
 
 const approveSchema = z.object({
   contentId: z.string().uuid(),
@@ -1034,11 +1035,14 @@ const BANNER_POSITION_ENUM = z.enum(["top", "bottom", "left", "right"]);
 
 const updateBannerSchema = z.object({
   contentItemId: z.string().uuid(),
+  // `enabled` is accepted for wire compatibility but is derived server-side from
+  // the overlay text (see below) — it is never trusted from the client.
   enabled: z.boolean().nullable(),
   position: BANNER_POSITION_ENUM.nullable(),
   bgColour: z.string().regex(HEX_COLOUR).nullable(),
   textColour: z.string().regex(HEX_COLOUR).nullable(),
-  textOverride: z.string().max(20).nullable(),
+  // Upper-bounded generously; the shared validator normalises/caps to 20.
+  textOverride: z.string().max(200).nullable(),
 });
 
 export type UpdatePlannerBannerConfigInput = z.input<typeof updateBannerSchema>;
@@ -1069,14 +1073,24 @@ export async function updatePlannerBannerConfig(
     return { error: "This post can no longer be edited." };
   }
 
+  // Overlays are opt-in: validate the text against the shared charset rules and
+  // derive banner_enabled from it (blank = off) rather than trusting the client.
+  // This guarantees a post can always be turned OFF and can never be persisted
+  // enabled-but-blank.
+  const overlay = validateBannerText(data.textOverride);
+  if (!overlay.ok) {
+    return { error: overlay.reason };
+  }
+  const bannerEnabled = overlay.value !== null;
+
   const { error } = await supabase
     .from("content_variants")
     .update({
-      banner_enabled: data.enabled,
+      banner_enabled: bannerEnabled,
       banner_position: data.position,
       banner_bg: data.bgColour,
       banner_text_colour: data.textColour,
-      banner_text_override: data.textOverride,
+      banner_text_override: overlay.value,
     })
     .eq("content_item_id", data.contentItemId);
 

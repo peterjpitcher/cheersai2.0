@@ -13,23 +13,16 @@ import {
   type ResolvedConfig,
 } from "@/lib/banner/config";
 import { updatePlannerBannerConfig } from "@/app/(app)/planner/actions";
+import { MAX_BANNER_TEXT_LENGTH, validateBannerText } from "@/lib/banner/text";
 
 interface BannerControlsProps {
   contentItemId: string;
   status: string;
   accountDefaults: AccountBannerDefaults;
   overrides: PostBannerOverrides;
-  autoLabel: string | null;
+  /** @deprecated Overlays are opt-in per post; the automatic label is no longer shown. */
+  autoLabel?: string | null;
   onUpdate?: (config: ResolvedConfig) => void;
-}
-
-function sanitiseTextOverride(value: string): string | null {
-  // Strip control characters, trim, uppercase. Returns null when empty.
-  const cleaned = value
-    .replace(/[\n\r\t\x00-\x1f\x7f]/g, "")
-    .trim()
-    .toUpperCase();
-  return cleaned.length === 0 ? null : cleaned.slice(0, 20);
 }
 
 export function BannerControls({
@@ -37,7 +30,6 @@ export function BannerControls({
   status,
   accountDefaults,
   overrides,
-  autoLabel,
   onUpdate,
 }: BannerControlsProps): React.ReactElement {
   const toast = useToast();
@@ -55,12 +47,18 @@ export function BannerControls({
 
   async function persist(next: PostBannerOverrides): Promise<void> {
     if (isLocked) return;
+    // Overlays are opt-in: the banner is enabled iff there is overlay text.
+    // Writing an explicit boolean (never NULL) means a post can be turned OFF
+    // and stays OFF on later edits, and can never be left enabled-but-blank.
+    const overlayText = next.banner_text_override;
+    const enabled = overlayText != null && overlayText.length > 0;
     const normalised: PostBannerOverrides = {
       ...next,
-      banner_enabled: true,
+      banner_enabled: enabled,
       banner_position: FIXED_BANNER_POSITION,
       banner_bg: FIXED_BANNER_BG,
       banner_text_colour: FIXED_BANNER_TEXT,
+      banner_text_override: enabled ? overlayText : null,
     };
     setSaving(true);
     const previous = localOverrides;
@@ -90,9 +88,13 @@ export function BannerControls({
   }
 
   function commitTextOverride(): void {
-    const sanitised = sanitiseTextOverride(textOverrideDraft);
-    setTextOverrideDraft(sanitised ?? "");
-    void persist({ ...localOverrides, banner_text_override: sanitised });
+    const check = validateBannerText(textOverrideDraft);
+    if (!check.ok) {
+      toast.error(check.reason);
+      return;
+    }
+    setTextOverrideDraft(check.value ?? "");
+    void persist({ ...localOverrides, banner_text_override: check.value });
   }
 
   return (
@@ -100,21 +102,25 @@ export function BannerControls({
       <div>
         <span className="text-sm font-medium">Overlay</span>
         <p className="mt-1 text-xs text-muted-foreground">
-          Right-side gold banner. Leave blank to use the automatic label for this post.
+          Add overlay text to switch it on for this post. Leave blank for no overlay.
         </p>
       </div>
 
       <div className="flex items-center gap-2">
         <span className="text-xs text-muted-foreground">Preview</span>
-        <div
-          className="flex h-6 items-center rounded px-3 text-[10px] font-bold uppercase tracking-wider"
-          style={{
-            backgroundColor: FIXED_BANNER_BG,
-            color: FIXED_BANNER_TEXT,
-          }}
-        >
-          {resolved.textOverride || autoLabel || "SAMPLE"}
-        </div>
+        {resolved.textOverride ? (
+          <div
+            className="flex h-6 items-center rounded px-3 text-[10px] font-bold uppercase tracking-wider"
+            style={{
+              backgroundColor: FIXED_BANNER_BG,
+              color: FIXED_BANNER_TEXT,
+            }}
+          >
+            {resolved.textOverride}
+          </div>
+        ) : (
+          <span className="text-xs italic text-muted-foreground">No overlay</span>
+        )}
       </div>
 
       <div>
@@ -125,8 +131,8 @@ export function BannerControls({
           <input
             type="text"
             aria-label="Custom overlay text"
-            maxLength={20}
-            placeholder={autoLabel ?? "Auto-generated"}
+            maxLength={MAX_BANNER_TEXT_LENGTH}
+            placeholder="Add overlay text (optional)"
             value={textOverrideDraft}
             disabled={isLocked}
             className="flex-1 rounded border px-2 py-1 text-sm uppercase"
@@ -142,10 +148,10 @@ export function BannerControls({
             }}
             className="rounded border px-2 py-1 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-50"
           >
-            Auto
+            Turn off
           </button>
           <span className="self-center text-xs text-muted-foreground">
-            {textOverrideDraft.length}/20
+            {textOverrideDraft.length}/{MAX_BANNER_TEXT_LENGTH}
           </span>
         </div>
       </div>
