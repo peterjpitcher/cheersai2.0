@@ -10,6 +10,7 @@ import { buildGenerationTemporalContext } from '@/lib/create/temporal-context';
 import { enqueueAndDispatch } from '@/lib/publishing/queue';
 import { buildCampaignMetadata, mapCampaignType } from '@/lib/publishing/build-campaign-metadata';
 import { composePublishBody, buildPreviewData } from '@/lib/publishing/compose-body';
+import { normaliseBannerText, validateBannerText } from '@/lib/banner/text';
 import { readPlatformCtaLinks } from '@/lib/publishing/copy-rules';
 import { logPublishAuditEvent } from '@/lib/publishing/audit';
 import { MEDIA_BUCKET, DEFAULT_TIMEZONE } from '@/lib/constants';
@@ -617,6 +618,8 @@ interface CreateScheduledBatchInput {
     copy: PlatformCopy;
     /** Media for this slot; falls back to selectedMediaIds when absent */
     mediaIds?: string[];
+    /** Optional free-text overlay label; blank/undefined = no overlay */
+    bannerTextOverride?: string;
   }>;
   platforms: Platform[];
   mode: 'schedule' | 'queue_now';
@@ -665,6 +668,16 @@ export async function createScheduledBatch(
     const briefValidation = contentBriefSchema.safeParse({ ...brief, contentType });
     if (!briefValidation.success) {
       return { error: briefValidation.error.issues[0]?.message ?? 'Invalid content brief' };
+    }
+
+    // Validate per-post overlay text before any writes (all-or-nothing, like the
+    // brief gate above). Blank is valid (= no overlay); non-blank must match the
+    // shared banner-text charset so we never persist text the renderer would 400 on.
+    for (const slot of slotCopies) {
+      const overlayCheck = validateBannerText(slot.bannerTextOverride);
+      if (!overlayCheck.ok) {
+        return { error: overlayCheck.reason };
+      }
     }
 
     // Verify the draft row exists and belongs to this account
@@ -827,11 +840,20 @@ export async function createScheduledBatch(
         : null;
       const slotMedia = resolveSlotMedia(slot);
 
+      // Overlays are opt-in per post. Derive the overlay once per slot; it applies
+      // to every platform variant of that slot. Write an explicit banner_enabled
+      // (never NULL) so the resolver's account-default fallback can't re-enable it,
+      // and keep the invariant "enabled ⇒ non-empty text". Stories never carry an
+      // overlay regardless of typed text.
+      const overlay = placement === 'story' ? null : normaliseBannerText(slot.bannerTextOverride);
+
       return {
         content_item_id: item.id,
         body,
         preview_data: previewData,
         media_ids: slotMedia.length > 0 ? slotMedia : null,
+        banner_enabled: overlay !== null,
+        banner_text_override: overlay,
       };
     });
 

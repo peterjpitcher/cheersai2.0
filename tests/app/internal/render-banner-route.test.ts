@@ -409,4 +409,23 @@ describe("POST /api/internal/render-banner", () => {
         const sourceArg = renderBannerServerMock.mock.calls[0][0] as Buffer;
         expect(Buffer.from(sourceBytes).equals(sourceArg)).toBe(true);
     });
+
+    it("accepts a pound-sign label (£) and renders it instead of 400ing", async () => {
+        // Regression: natural pub pricing like "£5 PINTS" used to be rejected at
+        // this gate, failing the whole publish job. It must now pass through.
+        globalThis.fetch = vi.fn().mockResolvedValue(buildAllowedSourceResponse(new Uint8Array([1, 2, 3, 4])));
+        renderBannerServerMock.mockResolvedValueOnce(Buffer.from([0xff, 0xd8, 0xff, 0xe0]));
+
+        const response = await POST(buildRequest({
+            headers: { authorization: "Bearer test-cron-secret" },
+            body: { sourceMediaUrl: ALLOWED_URL, config: VALID_CONFIG, label: "£5 PINTS" },
+        }));
+
+        expect(response.status).toBe(200);
+        expect(renderBannerServerMock).toHaveBeenCalledWith(
+            expect.any(Buffer),
+            VALID_CONFIG,
+            "£5 PINTS",
+        );
+    });
 });

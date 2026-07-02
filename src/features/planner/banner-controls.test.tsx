@@ -45,7 +45,7 @@ describe("<BannerControls />", () => {
     vi.clearAllMocks();
   });
 
-  it("saves custom text per post with fixed banner presentation", async () => {
+  it("enables the overlay and saves custom text with fixed presentation", async () => {
     updatePlannerBannerConfigMock.mockResolvedValueOnce({});
     const onUpdate = vi.fn();
 
@@ -55,12 +55,11 @@ describe("<BannerControls />", () => {
         status="draft"
         accountDefaults={accountDefaults}
         overrides={defaultOverrides}
-        autoLabel="THIS FRIDAY"
         onUpdate={onUpdate}
       />,
     );
 
-    expect(screen.getByText(/right-side gold banner/i)).toBeInTheDocument();
+    expect(screen.getByText(/leave blank for no overlay/i)).toBeInTheDocument();
 
     const input = screen.getByLabelText("Custom overlay text");
     fireEvent.change(input, { target: { value: "late deal" } });
@@ -86,7 +85,7 @@ describe("<BannerControls />", () => {
     });
   });
 
-  it("clears post custom text back to the automatic label", async () => {
+  it("turns the overlay OFF when the text is cleared", async () => {
     updatePlannerBannerConfigMock.mockResolvedValueOnce({});
 
     render(
@@ -94,20 +93,65 @@ describe("<BannerControls />", () => {
         contentItemId="content-1"
         status="draft"
         accountDefaults={accountDefaults}
-        overrides={{ ...defaultOverrides, banner_text_override: "BANK HOLIDAY" }}
-        autoLabel="THIS FRIDAY"
+        overrides={{ ...defaultOverrides, banner_enabled: true, banner_text_override: "BANK HOLIDAY" }}
       />,
     );
 
     const input = screen.getByLabelText("Custom overlay text");
     expect(input).toHaveValue("BANK HOLIDAY");
 
-    fireEvent.click(screen.getByRole("button", { name: "Auto" }));
+    fireEvent.click(screen.getByRole("button", { name: "Turn off" }));
 
     await waitFor(() => {
       expect(updatePlannerBannerConfigMock).toHaveBeenCalledWith(
-        expect.objectContaining({ textOverride: null }),
+        expect.objectContaining({ enabled: false, textOverride: null }),
       );
     });
+  });
+
+  it("keeps the overlay OFF when a post with no text is re-saved blank (regression)", async () => {
+    updatePlannerBannerConfigMock.mockResolvedValueOnce({});
+
+    render(
+      <BannerControls
+        contentItemId="content-1"
+        status="draft"
+        accountDefaults={accountDefaults}
+        overrides={{ ...defaultOverrides, banner_enabled: false }}
+      />,
+    );
+
+    const input = screen.getByLabelText("Custom overlay text");
+    expect(input).toHaveValue("");
+    // Editing then blurring with no text must persist an explicit OFF, never
+    // re-enable the banner (the trap this fix closes).
+    fireEvent.focus(input);
+    fireEvent.blur(input);
+
+    await waitFor(() => {
+      expect(updatePlannerBannerConfigMock).toHaveBeenCalledWith(
+        expect.objectContaining({ enabled: false, textOverride: null }),
+      );
+    });
+  });
+
+  it("rejects invalid overlay text with a toast and does not persist", async () => {
+    render(
+      <BannerControls
+        contentItemId="content-1"
+        status="draft"
+        accountDefaults={accountDefaults}
+        overrides={defaultOverrides}
+      />,
+    );
+
+    const input = screen.getByLabelText("Custom overlay text");
+    fireEvent.change(input, { target: { value: "QUIZ \u{1F389}" } });
+    fireEvent.blur(input);
+
+    await waitFor(() => {
+      expect(toastErrorMock).toHaveBeenCalled();
+    });
+    expect(updatePlannerBannerConfigMock).not.toHaveBeenCalled();
   });
 });

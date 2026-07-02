@@ -550,6 +550,7 @@ export function CreateWizard({ initialDraftId, accountId, onClose }: CreateWizar
                       label: sc.label,
                       copy: sc.copy!,
                       mediaIds: sc.mediaIds ?? selectedMediaIds,
+                      bannerTextOverride: sc.bannerTextOverride,
                     }));
                   if (!readySlotCopies.length) return;
                   const result = await createScheduledBatch({
@@ -578,6 +579,7 @@ export function CreateWizard({ initialDraftId, accountId, onClose }: CreateWizar
                       label: sc.label,
                       copy: sc.copy!,
                       mediaIds: sc.mediaIds ?? selectedMediaIds,
+                      bannerTextOverride: sc.bannerTextOverride,
                     }));
                   if (!readySlotCopies.length) return;
                   const result = await createScheduledBatch({

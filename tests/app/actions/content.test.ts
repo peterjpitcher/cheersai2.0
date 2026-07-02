@@ -220,6 +220,13 @@ describe('createScheduledBatch', () => {
         publishBodyOverride: 'FB1 edited final\n\nCustom booking line\n\n#Edited',
       }),
     }));
+    // Overlays are opt-in per post: with no overlay text supplied, every variant must be
+    // written with an explicit banner_enabled=false (never NULL) so it cannot inherit the
+    // account default. banner_text_override must be null.
+    for (const row of variantRows) {
+      expect(row.banner_enabled).toBe(false);
+      expect(row.banner_text_override).toBeNull();
+    }
   });
 
   it('keeps promotion feed and story placements on the same campaign timing', async () => {
@@ -407,6 +414,150 @@ describe('createScheduledBatch', () => {
     const variantUpsertCall = supabaseMock.calls.find((call) => call.method === 'upsert');
     const variantRows = variantUpsertCall?.args[0] as Array<Record<string, unknown>>;
     expect(variantRows.map((row) => row.body)).toEqual(['', '']);
+  });
+
+  it('persists per-post overlay text and enables the banner when supplied', async () => {
+    supabaseMock.enqueueResult({ data: { id: 'draft-1' }, error: null });
+    supabaseMock.enqueueResult({ data: { id: 'camp-1' }, error: null });
+
+    let selectCallCount = 0;
+    (supabaseMock.mock as Record<string, unknown>).select = vi.fn((...args: unknown[]) => {
+      supabaseMock.calls.push({ method: 'select', args });
+      selectCallCount++;
+      if (selectCallCount === 3) {
+        return {
+          data: [
+            { id: 'ci-1', platform: 'facebook' },
+            { id: 'ci-2', platform: 'instagram' },
+          ],
+          error: null,
+        };
+      }
+      return supabaseMock.mock;
+    });
+    (supabaseMock.mock as Record<string, unknown>).upsert = vi.fn((...args: unknown[]) => {
+      supabaseMock.calls.push({ method: 'upsert', args });
+      return Promise.resolve({ error: null });
+    });
+    (supabaseMock.mock as Record<string, unknown>).delete = vi.fn((...args: unknown[]) => {
+      supabaseMock.calls.push({ method: 'delete', args });
+      return supabaseMock.mock;
+    });
+
+    const { createScheduledBatch } = await import('@/app/actions/content');
+
+    const result = await createScheduledBatch({
+      draftContentId: 'draft-1',
+      contentType: 'event',
+      brief: { title: 'Quiz', eventName: 'Quiz', platforms: ['facebook', 'instagram'], eventDate: '2026-06-15', eventTime: '19:00' },
+      selectedMediaIds: ['media-1'],
+      slotCopies: [
+        {
+          slotKey: 'slot-1',
+          scheduledAt: '2026-06-14T10:00:00.000Z',
+          label: 'x',
+          copy: { facebook: { body: 'FB' }, instagram: { body: 'IG' } },
+          // Lowercase with a pound sign — must be normalised (uppercased) and accepted.
+          bannerTextOverride: '£5 pints',
+        },
+      ],
+      platforms: ['facebook', 'instagram'],
+      mode: 'schedule',
+    });
+
+    expect(result.error).toBeUndefined();
+    expect(result.success).toBe(true);
+    const variantUpsertCall = supabaseMock.calls.find((call) => call.method === 'upsert');
+    const variantRows = variantUpsertCall?.args[0] as Array<Record<string, unknown>>;
+    expect(variantRows.length).toBe(2);
+    for (const row of variantRows) {
+      expect(row.banner_enabled).toBe(true);
+      expect(row.banner_text_override).toBe('£5 PINTS');
+    }
+  });
+
+  it('rejects the batch when overlay text contains disallowed characters', async () => {
+    const { createScheduledBatch } = await import('@/app/actions/content');
+
+    const result = await createScheduledBatch({
+      draftContentId: 'draft-1',
+      contentType: 'event',
+      brief: { title: 'Quiz', eventName: 'Quiz', platforms: ['facebook'], eventDate: '2026-06-15', eventTime: '19:00' },
+      selectedMediaIds: ['media-1'],
+      slotCopies: [
+        {
+          slotKey: 'slot-1',
+          scheduledAt: '2026-06-14T10:00:00.000Z',
+          copy: { facebook: { body: 'FB' }, instagram: { body: 'IG' } },
+          bannerTextOverride: 'QUIZ \u{1F389}',
+        },
+      ],
+      platforms: ['facebook'],
+      mode: 'schedule',
+    });
+
+    expect(result.success).toBeUndefined();
+    expect(result.error).toBeTruthy();
+    // The overlay gate runs before any writes, so nothing is inserted/upserted.
+    expect(supabaseMock.calls.some((c) => c.method === 'insert' || c.method === 'upsert')).toBe(false);
+  });
+
+  it('forces banner off on story placements even when overlay text is supplied', async () => {
+    supabaseMock.enqueueResult({ data: { id: 'draft-1' }, error: null });
+    supabaseMock.enqueueResult({ data: { id: 'camp-1' }, error: null });
+
+    let selectCallCount = 0;
+    (supabaseMock.mock as Record<string, unknown>).select = vi.fn((...args: unknown[]) => {
+      supabaseMock.calls.push({ method: 'select', args });
+      selectCallCount++;
+      if (selectCallCount === 3) {
+        return {
+          data: [
+            { id: 'ci-story-fb', platform: 'facebook' },
+            { id: 'ci-story-ig', platform: 'instagram' },
+          ],
+          error: null,
+        };
+      }
+      return supabaseMock.mock;
+    });
+    (supabaseMock.mock as Record<string, unknown>).upsert = vi.fn((...args: unknown[]) => {
+      supabaseMock.calls.push({ method: 'upsert', args });
+      return Promise.resolve({ error: null });
+    });
+    (supabaseMock.mock as Record<string, unknown>).delete = vi.fn((...args: unknown[]) => {
+      supabaseMock.calls.push({ method: 'delete', args });
+      return supabaseMock.mock;
+    });
+
+    const { createScheduledBatch } = await import('@/app/actions/content');
+
+    const result = await createScheduledBatch({
+      draftContentId: 'draft-1',
+      contentType: 'weekly_recurring',
+      brief: { title: 'Friday Specials', prompt: 'Weekly food special', dayOfWeek: 5, time: '18:00', weeksAhead: 1, placement: 'story', platforms: ['facebook', 'instagram'] },
+      selectedMediaIds: ['media-1'],
+      slotCopies: [
+        {
+          slotKey: 'week-1',
+          scheduledAt: '2026-07-03T18:00:00.000Z',
+          label: 'Week 1',
+          copy: { facebook: { body: 'FB' }, instagram: { body: 'IG' } },
+          bannerTextOverride: '£5 PINTS',
+        },
+      ],
+      platforms: ['facebook', 'instagram'],
+      mode: 'schedule',
+    });
+
+    expect(result.error).toBeUndefined();
+    const variantUpsertCall = supabaseMock.calls.find((call) => call.method === 'upsert');
+    const variantRows = variantUpsertCall?.args[0] as Array<Record<string, unknown>>;
+    expect(variantRows.length).toBe(2);
+    for (const row of variantRows) {
+      expect(row.banner_enabled).toBe(false);
+      expect(row.banner_text_override).toBeNull();
+    }
   });
 
   it('rejects a weekly recurring story with no media before scheduling', async () => {

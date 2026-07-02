@@ -72,6 +72,12 @@ export interface SlotGeneratedCopy {
   approved?: boolean;
   /** Media attached to this slot (defaults to the wizard-level selection) */
   mediaIds?: string[];
+  /**
+   * Free-text image overlay ("banner") label the user optionally types at
+   * approval. Blank/undefined = no overlay (opt-in). Persisted per post via
+   * createScheduledBatch. Stories never carry an overlay.
+   */
+  bannerTextOverride?: string;
 }
 
 /** Context snapshot used to detect stale generation when slots or media change */

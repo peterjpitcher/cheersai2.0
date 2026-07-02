@@ -426,4 +426,82 @@ describe("<GenerateStep />", () => {
     expect(screen.queryByRole("img")).not.toBeInTheDocument();
     expect(screen.getAllByText("No media attached").length).toBeGreaterThan(0);
   });
+
+  // -------------------------------------------------------------------------
+  // Per-post image overlay (opt-in)
+  // -------------------------------------------------------------------------
+
+  function readySlot(overrides: Partial<SlotGeneratedCopy> = {}): SlotGeneratedCopy {
+    return {
+      slotKey: "slot-1",
+      scheduledAt: "2026-06-01T16:00:00.000Z",
+      status: "ready",
+      mediaIds: ["media-1"],
+      copy: {
+        facebook: { body: "FB body" },
+        instagram: { body: "IG body" },
+      },
+      ...overrides,
+    };
+  }
+
+  function renderOverlayStep(slotCopies: SlotGeneratedCopy[], onSlotCopiesChange = vi.fn()) {
+    render(
+      <ToastProvider>
+        <GenerateStep
+          contentId="draft-1"
+          contentBrief={{
+            contentType: "event",
+            platforms: ["facebook"],
+            ctaLinks: { facebook: "https://example.com/fb" },
+          } as unknown as ContentBrief}
+          selectedSlots={[{ key: "slot-1", date: "2026-06-01", time: "17:00", source: "manual" }]}
+          generatedSlotCopies={slotCopies}
+          onSlotCopiesChange={onSlotCopiesChange}
+          selectedMediaIds={["media-1"]}
+          publishMode="schedule"
+          isContextStale={false}
+          onGeneratedWithContext={vi.fn()}
+          onSaveDraft={vi.fn()}
+          onScheduleAll={vi.fn()}
+          onQueueAll={vi.fn()}
+          isSubmitting={false}
+          accountId="acc-1"
+          libraryItems={[mediaAsset("media-1")]}
+          bannerDefaults={null}
+        />
+      </ToastProvider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /Mon 1 Jun, 17:00/i }));
+    return onSlotCopiesChange;
+  }
+
+  it("shows an empty overlay input and no overlay strip when no text is set", () => {
+    renderOverlayStep([readySlot()]);
+    const input = screen.getByLabelText("Image overlay (optional)") as HTMLInputElement;
+    expect(input.value).toBe("");
+    expect(document.querySelector("[data-banner-overlay]")).toBeNull();
+  });
+
+  it("previews the overlay strip and fills the input when overlay text is set", () => {
+    renderOverlayStep([readySlot({ bannerTextOverride: "£5 PINTS" })]);
+    const input = screen.getByLabelText("Image overlay (optional)") as HTMLInputElement;
+    expect(input.value).toBe("£5 PINTS");
+    expect(document.querySelector("[data-banner-overlay]")).not.toBeNull();
+  });
+
+  it("disables Approve and shows an error when overlay text is invalid", () => {
+    renderOverlayStep([readySlot({ bannerTextOverride: "QUIZ \u{1F389}" })]);
+    expect(screen.getByText(/Overlay text can only use/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Approve this post/i })).toBeDisabled();
+  });
+
+  it("records typed overlay text via onSlotCopiesChange", () => {
+    const onSlotCopiesChange = renderOverlayStep([readySlot()]);
+    fireEvent.change(screen.getByLabelText("Image overlay (optional)"), {
+      target: { value: "quiz night" },
+    });
+    const updated = onSlotCopiesChange.mock.calls.at(-1)?.[0] as SlotGeneratedCopy[];
+    expect(updated[0].bannerTextOverride).toBe("quiz night");
+  });
 });
