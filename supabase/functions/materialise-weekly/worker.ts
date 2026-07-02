@@ -55,22 +55,6 @@ export interface MaterialiseWorkerConfig {
     dedupeWindowMinutes: number;
 }
 
-// Hex map for the legacy four-colour banner palette. Kept in sync with
-// src/lib/scheduling/banner-config.ts for write consistency. The new banner
-// override columns store hex strings, so we resolve here at write time.
-const BANNER_COLOUR_HEX: Record<string, string> = {
-    gold: "#a57626",
-    green: "#005131",
-    black: "#1a1a1a",
-    white: "#ffffff",
-};
-
-function sanitiseCustomMessage(value: unknown): string | null {
-    if (typeof value !== "string") return null;
-    const cleaned = value.replace(/[\n\r\t\x00-\x1f\x7f]/g, "").trim().toUpperCase();
-    return cleaned.length > 0 ? Array.from(cleaned).slice(0, 20).join("") : null;
-}
-
 function readEnv(name: string): string | undefined {
     const denoEnv = (globalThis as typeof globalThis & {
         Deno?: { env?: { get?: (key: string) => string | undefined } };
@@ -158,7 +142,6 @@ export class WeeklyMaterialiser {
             ? metadata.proofPointIntentTags.filter((item) => typeof item === "string")
             : [];
 
-        const bannerDefaults = this.parseBannerDefaults(metadata);
         const cadence = this.parseCadence(metadata.cadence, platforms, dayOfWeek, time);
         const advanced = this.parseAdvanced(metadata.advanced);
         const computedHorizon = new Date(now.getTime() + weeksAhead * 7 * 24 * 60 * 60 * 1000);
@@ -290,17 +273,12 @@ export class WeeklyMaterialiser {
 
         const contentIds: string[] = [];
 
-        const bannerOverride = bannerDefaults
-            ? {
-                  banner_enabled: true,
-                  banner_position: bannerDefaults.position,
-                  banner_bg: BANNER_COLOUR_HEX[bannerDefaults.bgColour] ?? null,
-                  banner_text_colour: BANNER_COLOUR_HEX[bannerDefaults.textColour] ?? null,
-                  ...(bannerDefaults.customMessage
-                      ? { banner_text_override: bannerDefaults.customMessage }
-                      : {}),
-              }
-            : null;
+        // Overlays are opt-in per post. Materialised future weeks are never reviewed by the
+        // owner at creation time, so they default to NO overlay. The owner adds overlay text
+        // per post when that week's drafts surface for approval. Write an explicit `false`
+        // (never NULL) so the banner resolver's account-default fallback cannot silently
+        // re-enable it.
+        const bannerColumns = { banner_enabled: false };
 
         for (const { content, entry } of createdEntries) {
             contentIds.push(content.id);
@@ -310,7 +288,7 @@ export class WeeklyMaterialiser {
                     content_item_id: content.id,
                     body: entry.body,
                     media_ids: entry.mediaIds.length ? entry.mediaIds : null,
-                    ...(bannerOverride ?? {}),
+                    ...bannerColumns,
                 });
 
             if (variantError) {
@@ -434,25 +412,6 @@ export class WeeklyMaterialiser {
                     : DEFAULT_ADVANCED.includeEmojis,
             ctaStyle:
                 typeof source.ctaStyle === "string" ? (source.ctaStyle as string) : DEFAULT_ADVANCED.ctaStyle,
-        };
-    }
-
-    private parseBannerDefaults(
-        metadata: Record<string, unknown>,
-    ): { position: string; bgColour: string; textColour: string; customMessage?: string } | null {
-        const raw = metadata.bannerDefaults;
-        if (!raw || typeof raw !== "object") return null;
-        const source = raw as Record<string, unknown>;
-        const position = typeof source.position === "string" ? source.position : null;
-        const bgColour = typeof source.bgColour === "string" ? source.bgColour : null;
-        const textColour = typeof source.textColour === "string" ? source.textColour : null;
-        if (!position || !bgColour || !textColour) return null;
-        const customMessage = sanitiseCustomMessage(source.customMessage);
-        return {
-            position,
-            bgColour,
-            textColour,
-            ...(customMessage ? { customMessage } : {}),
         };
     }
 

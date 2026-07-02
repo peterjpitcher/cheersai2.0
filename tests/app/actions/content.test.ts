@@ -220,6 +220,13 @@ describe('createScheduledBatch', () => {
         publishBodyOverride: 'FB1 edited final\n\nCustom booking line\n\n#Edited',
       }),
     }));
+    // Overlays are opt-in per post: with no overlay text supplied, every variant must be
+    // written with an explicit banner_enabled=false (never NULL) so it cannot inherit the
+    // account default. banner_text_override must be null.
+    for (const row of variantRows) {
+      expect(row.banner_enabled).toBe(false);
+      expect(row.banner_text_override).toBeNull();
+    }
   });
 
   it('keeps promotion feed and story placements on the same campaign timing', async () => {

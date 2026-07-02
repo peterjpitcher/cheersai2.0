@@ -832,6 +832,12 @@ export async function createScheduledBatch(
         body,
         preview_data: previewData,
         media_ids: slotMedia.length > 0 ? slotMedia : null,
+        // Overlays are opt-in per post. Write an explicit boolean (never NULL) so the
+        // banner resolver's `banner_enabled ?? accountDefaults.banners_enabled` fallback
+        // cannot silently re-enable the account default. Increment 3 replaces the feed
+        // value with the per-post typed-text logic; stories never carry an overlay.
+        banner_enabled: false,
+        banner_text_override: null,
       };
     });
 
