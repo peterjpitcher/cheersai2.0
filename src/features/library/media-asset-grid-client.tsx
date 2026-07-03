@@ -20,6 +20,7 @@ import { Segmented } from "@/components/ui/segmented";
 import { LazyImageRow } from "@/features/library/lazy-image-row";
 import { MediaAssetEditor } from "@/features/library/media-asset-editor";
 import { groupMediaAssetsByTag, UNTITLED_MEDIA_TAG } from "@/features/library/media-groups";
+import { MediaReplaceButton } from "@/features/library/media-replace-button";
 import { generateImageDerivatives } from "@/lib/library/client-derivatives";
 import type { MediaAssetSummary } from "@/lib/library/data";
 
@@ -329,6 +330,22 @@ export function MediaAssetGridClient({
       return next;
     });
     setBanner({ tone: "success", message: "Media deleted" });
+  };
+
+  const handleAssetReplaced = (oldAssetId: string, replacement: MediaAssetSummary) => {
+    setLibrary((prev) => [replacement, ...prev.filter((asset) => asset.id !== oldAssetId && asset.id !== replacement.id)]);
+    setSelectedIds((prev) => {
+      if (!prev.has(oldAssetId)) return prev;
+      const next = new Set(prev);
+      next.delete(oldAssetId);
+      return next;
+    });
+    setOriginalUrls((prev) => {
+      const next = { ...prev };
+      delete next[oldAssetId];
+      return next;
+    });
+    setBanner({ tone: "success", message: "Image replaced" });
   };
 
   /* --- bulk action handlers (preserve existing logic) --- */
@@ -827,6 +844,11 @@ export function MediaAssetGridClient({
                           variant="compact"
                           onAssetUpdated={handleAssetUpdated}
                           onAssetDeleted={handleAssetDeleted}
+                          footerSlot={
+                            asset.mediaType === "image" ? (
+                              <MediaReplaceButton asset={asset} onAssetReplaced={handleAssetReplaced} />
+                            ) : null
+                          }
                         />
 
                         {/* Tag micro-line */}

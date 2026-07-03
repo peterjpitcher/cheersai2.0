@@ -13,7 +13,7 @@ import { createServiceSupabaseClient } from "@/lib/supabase/service";
 import type { MediaAssetSummary } from "@/lib/library/data";
 import { resolvePreviewCandidates, normaliseStoragePath, type PreviewCandidate } from "@/lib/library/data";
 
-const REVALIDATE_PATHS = ["/library", "/create", "/planner"] as const;
+const REVALIDATE_PATHS = ["/library", "/create", "/planner", "/campaigns", "/link-in-bio", "/tournaments"] as const;
 
 interface RequestUploadInput {
   fileName: string;
@@ -24,6 +24,28 @@ interface RequestUploadInput {
 type MediaType = "image" | "video";
 
 type DerivativeKey = "story" | "square" | "landscape";
+
+type ReplacementMediaAssetRow = {
+  id: string;
+  account_id: string;
+  storage_path: string;
+  file_name: string;
+  media_type: MediaType;
+  mime_type: string | null;
+  size_bytes: number | null;
+  tags: string[] | null;
+  processed_status: MediaAssetSummary["processedStatus"] | null;
+  processed_at: string | null;
+  derived_variants: Record<string, string> | null;
+  aspect_class: MediaAssetSummary["aspectClass"] | null;
+};
+
+type ContentVariantMediaRow = {
+  id: string;
+  media_ids: string[] | null;
+};
+
+type IdRow = { id: string };
 
 interface SignedUpload {
   uploadUrl: string;
@@ -408,6 +430,295 @@ export async function hideMediaAssetsByTag(tag: string): Promise<HideByTagResult
   });
 
   return { ...result, tag: normalisedTag, matchedCount: assetIds.size };
+}
+
+export async function replaceMediaAssetEverywhere(input: { oldAssetId: string; newAssetId: string }) {
+  const { accountId } = await requireAuthContext();
+  const supabase = createServiceSupabaseClient();
+
+  const oldAssetId = input.oldAssetId?.trim();
+  const newAssetId = input.newAssetId?.trim();
+
+  if (!oldAssetId || !newAssetId) {
+    throw new Error("Both original and replacement media are required.");
+  }
+  if (oldAssetId === newAssetId) {
+    throw new Error("Choose a different replacement image.");
+  }
+
+  const { data: assetRows, error: assetError } = await supabase
+    .from("media_assets")
+    .select(
+      "id, account_id, storage_path, file_name, media_type, mime_type, size_bytes, tags, processed_status, processed_at, derived_variants, aspect_class",
+    )
+    .eq("account_id", accountId)
+    .in("id", [oldAssetId, newAssetId])
+    .returns<ReplacementMediaAssetRow[]>();
+
+  if (assetError) {
+    throw assetError;
+  }
+
+  const oldAsset = assetRows?.find((asset) => asset.id === oldAssetId) ?? null;
+  const newAsset = assetRows?.find((asset) => asset.id === newAssetId) ?? null;
+
+  if (!oldAsset) {
+    throw new Error("Original media was not found for this account.");
+  }
+  if (!newAsset) {
+    throw new Error("Replacement media was not found for this account.");
+  }
+  if (oldAsset.media_type !== "image" || newAsset.media_type !== "image") {
+    throw new Error("Only image assets can be replaced with this flow.");
+  }
+  if (newAsset.processed_status !== "ready") {
+    throw new Error("Replacement image is still processing. Try again once ready.");
+  }
+
+  await syncReplacementAssetToMediaLibrary({ supabase, accountId, asset: newAsset });
+
+  const nowIso = new Date().toISOString();
+
+  await replaceContentVariantMediaIds({ supabase, accountId, oldAssetId, newAssetId });
+  await replaceContentMediaAttachments({ supabase, accountId, oldAssetId, newAssetId });
+
+  await runMutation(
+    supabase
+      .from("campaigns")
+      .update({ hero_media_id: newAssetId, updated_at: nowIso })
+      .eq("account_id", accountId)
+      .eq("hero_media_id", oldAssetId),
+  );
+
+  await runMutation(
+    supabase
+      .from("link_in_bio_profiles")
+      .update({ hero_media_id: newAssetId, hero_image_url: null, updated_at: nowIso })
+      .eq("account_id", accountId)
+      .eq("hero_media_id", oldAssetId),
+  );
+
+  await runMutation(
+    supabase
+      .from("link_in_bio_tiles")
+      .update({ media_asset_id: newAssetId, image_url: null, updated_at: nowIso })
+      .eq("account_id", accountId)
+      .eq("media_asset_id", oldAssetId),
+  );
+
+  await runMutation(
+    supabase
+      .from("tournaments")
+      .update({ base_image_square_id: newAssetId, updated_at: nowIso })
+      .eq("account_id", accountId)
+      .eq("base_image_square_id", oldAssetId),
+  );
+
+  await runMutation(
+    supabase
+      .from("tournaments")
+      .update({ base_image_story_id: newAssetId, updated_at: nowIso })
+      .eq("account_id", accountId)
+      .eq("base_image_story_id", oldAssetId),
+  );
+
+  await replaceMetaCampaignMediaReferences({ supabase, accountId, oldAssetId, newAssetId });
+
+  await runMutation(
+    supabase
+      .from("media_assets")
+      .update({ hidden_at: nowIso })
+      .eq("account_id", accountId)
+      .eq("id", oldAssetId),
+  );
+
+  for (const path of REVALIDATE_PATHS) {
+    revalidatePath(path);
+  }
+
+  return { status: "replaced" as const, oldAssetId, newAssetId };
+}
+
+async function syncReplacementAssetToMediaLibrary({
+  supabase,
+  accountId,
+  asset,
+}: {
+  supabase: SupabaseClient;
+  accountId: string;
+  asset: ReplacementMediaAssetRow;
+}) {
+  await runMutation(
+    supabase
+      .from("media_library")
+      .upsert(
+        {
+          id: asset.id,
+          account_id: accountId,
+          file_name: asset.file_name,
+          file_url: asset.storage_path,
+          file_type: asset.mime_type ?? "image/jpeg",
+          file_size_bytes: asset.size_bytes,
+          tags: normaliseTags(asset.tags),
+        },
+        { onConflict: "id" },
+      ),
+  );
+}
+
+async function replaceContentVariantMediaIds({
+  supabase,
+  accountId,
+  oldAssetId,
+  newAssetId,
+}: {
+  supabase: SupabaseClient;
+  accountId: string;
+  oldAssetId: string;
+  newAssetId: string;
+}) {
+  const { data, error } = await supabase
+    .from("content_variants")
+    .select("id, media_ids, content_items!inner(account_id)")
+    .eq("content_items.account_id", accountId)
+    .contains("media_ids", [oldAssetId])
+    .returns<ContentVariantMediaRow[]>();
+
+  if (error) {
+    throw error;
+  }
+
+  for (const variant of data ?? []) {
+    const mediaIds = variant.media_ids ?? [];
+    const nextMediaIds = replaceMediaIdList(mediaIds, oldAssetId, newAssetId);
+    if (nextMediaIds === mediaIds) {
+      continue;
+    }
+
+    await runMutation(
+      supabase
+        .from("content_variants")
+        .update({ media_ids: nextMediaIds })
+        .eq("id", variant.id),
+    );
+  }
+}
+
+async function replaceContentMediaAttachments({
+  supabase,
+  accountId,
+  oldAssetId,
+  newAssetId,
+}: {
+  supabase: SupabaseClient;
+  accountId: string;
+  oldAssetId: string;
+  newAssetId: string;
+}) {
+  const { data, error } = await supabase
+    .from("content_media_attachments")
+    .select("id, content_items!inner(account_id)")
+    .eq("media_id", oldAssetId)
+    .eq("content_items.account_id", accountId)
+    .returns<IdRow[]>();
+
+  if (error) {
+    throw error;
+  }
+
+  const attachmentIds = (data ?? []).map((row) => row.id);
+  if (!attachmentIds.length) {
+    return;
+  }
+
+  await runMutation(
+    supabase
+      .from("content_media_attachments")
+      .update({ media_id: newAssetId })
+      .in("id", attachmentIds),
+  );
+}
+
+async function replaceMetaCampaignMediaReferences({
+  supabase,
+  accountId,
+  oldAssetId,
+  newAssetId,
+}: {
+  supabase: SupabaseClient;
+  accountId: string;
+  oldAssetId: string;
+  newAssetId: string;
+}) {
+  const { data: campaignRows, error: campaignError } = await supabase
+    .from("meta_campaigns")
+    .select("id")
+    .eq("account_id", accountId)
+    .returns<IdRow[]>();
+
+  if (campaignError) {
+    throw campaignError;
+  }
+
+  const campaignIds = (campaignRows ?? []).map((row) => row.id);
+  if (!campaignIds.length) {
+    return;
+  }
+
+  const { data: adSetRows, error: adSetError } = await supabase
+    .from("ad_sets")
+    .select("id")
+    .in("campaign_id", campaignIds)
+    .returns<IdRow[]>();
+
+  if (adSetError) {
+    throw adSetError;
+  }
+
+  await runMutation(
+    supabase
+      .from("ad_sets")
+      .update({ adset_media_asset_id: newAssetId, adset_image_url: null })
+      .in("campaign_id", campaignIds)
+      .eq("adset_media_asset_id", oldAssetId),
+  );
+
+  const adSetIds = (adSetRows ?? []).map((row) => row.id);
+  if (!adSetIds.length) {
+    return;
+  }
+
+  await runMutation(
+    supabase
+      .from("ads")
+      .update({ media_asset_id: newAssetId, preview_url: null, updated_at: new Date().toISOString() })
+      .in("adset_id", adSetIds)
+      .eq("media_asset_id", oldAssetId),
+  );
+}
+
+function replaceMediaIdList(mediaIds: string[], oldAssetId: string, newAssetId: string) {
+  let changed = false;
+  const next: string[] = [];
+
+  for (const mediaId of mediaIds) {
+    const replacement = mediaId === oldAssetId ? newAssetId : mediaId;
+    if (replacement !== mediaId) {
+      changed = true;
+    }
+    if (replacement && !next.includes(replacement)) {
+      next.push(replacement);
+    }
+  }
+
+  return changed ? next : mediaIds;
+}
+
+async function runMutation(resultPromise: PromiseLike<{ error?: unknown }>) {
+  const { error } = await resultPromise;
+  if (error) {
+    throw error;
+  }
 }
 
 async function performBulkHide({
