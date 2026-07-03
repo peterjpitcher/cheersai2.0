@@ -26,7 +26,36 @@ ALTER TABLE public.posting_defaults
 
 -- 3. Remove the GBP OAuth connection (cascades to token_vault) and any
 --    transient OAuth state rows.
-DELETE FROM public.social_connections WHERE provider = 'gbp';
+--
+--    social_connections identifies the connection type via a different column
+--    depending on build lineage: the v1->v2 production database carries the
+--    legacy `provider` (text) column, while the v2 baseline migration chain
+--    creates `platform` (enum) and never adds `provider`. Guard on whichever
+--    column actually exists so this migration applies cleanly on both lineages.
+--    On a fresh build the table is empty, so the matching DELETE simply no-ops.
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'social_connections'
+      AND column_name = 'provider'
+  ) THEN
+    DELETE FROM public.social_connections WHERE provider = 'gbp';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'social_connections'
+      AND column_name = 'platform'
+  ) THEN
+    DELETE FROM public.social_connections WHERE platform::text = 'gbp';
+  END IF;
+END $$;
+
+-- oauth_states.provider exists on both lineages (v1 text column; v2 baseline
+-- enum via 00000000000007_provider_integration), so this DELETE is safe as-is.
 DELETE FROM public.oauth_states WHERE provider = 'gbp';
 
 -- NOTE: the 'gbp' value is intentionally left in the public.platform ENUM.
