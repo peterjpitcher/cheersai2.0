@@ -159,7 +159,7 @@ describe("replaceMediaAssetEverywhere", () => {
       adset_media_asset_id: newAssetId,
       adset_image_url: null,
     });
-    expect(calls.find((call) => call.table === "ads" && call.method === "update")?.args[0]).toMatchObject({
+    expect(calls.find((call) => call.table === "ads" && call.method === "update")?.args[0]).toEqual({
       media_asset_id: newAssetId,
       preview_url: null,
     });

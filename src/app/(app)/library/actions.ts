@@ -691,7 +691,7 @@ async function replaceMetaCampaignMediaReferences({
   await runMutation(
     supabase
       .from("ads")
-      .update({ media_asset_id: newAssetId, preview_url: null, updated_at: new Date().toISOString() })
+      .update({ media_asset_id: newAssetId, preview_url: null })
       .in("adset_id", adSetIds)
       .eq("media_asset_id", oldAssetId),
   );
