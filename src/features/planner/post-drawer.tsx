@@ -23,6 +23,7 @@ import {
   updatePlannerContentSchedule,
 } from '@/app/(app)/planner/actions';
 import { BannerOverlay } from '@/features/planner/banner-overlay';
+import { PlannerMediaSwapButton } from '@/features/planner/planner-media-swap-button';
 import { useToast } from '@/components/providers/toast-provider';
 import { useNowMinute } from '@/lib/hooks/use-now-minute';
 import { extractCampaignTiming } from '@/lib/scheduling/campaign-timing';
@@ -163,6 +164,11 @@ function DrawerContent({
     }
   }, [content.bannerConfig.enabled, content.bannerLabel, content.campaign, content.scheduledFor, nowMinute]);
 
+  const handleMediaUpdated = useCallback(async () => {
+    await queryClient.invalidateQueries({ queryKey: ['content-detail', contentId] });
+    router.refresh();
+  }, [contentId, queryClient, router]);
+
   const handleDelete = useCallback(() => {
     startTransition(async () => {
       try {
@@ -240,11 +246,31 @@ function DrawerContent({
       />
 
       {/* Media images — full width */}
-      {content.media.length > 0 && (
-        <div className="space-y-1.5">
+      <div className="space-y-1.5">
+        <div className="flex items-center justify-between gap-3">
           <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
             Media ({content.media.length})
           </h4>
+          {canEdit ? (
+            <PlannerMediaSwapButton
+              contentId={contentId}
+              initialMedia={content.media.map((media) => ({
+                id: media.id,
+                mediaType: media.mediaType,
+                fileName: media.fileName,
+              }))}
+              placement={content.placement}
+              buttonLabel={content.media.length > 0 ? 'Edit' : 'Add'}
+              ariaLabel={content.media.length > 0 ? 'Edit media' : 'Add media'}
+              buttonVariant="ghost"
+              buttonSize="sm"
+              className="h-auto px-1 py-0 text-xs text-primary hover:underline"
+              title={content.campaign?.name ?? 'Planned post'}
+              onUpdated={handleMediaUpdated}
+            />
+          ) : null}
+        </div>
+        {content.media.length > 0 ? (
           <div className="space-y-2">
             {content.media.map((m) => (
               m.mediaType === 'image' ? (
@@ -271,8 +297,10 @@ function DrawerContent({
               )
             ))}
           </div>
-        </div>
-      )}
+        ) : (
+          <p className="text-sm italic text-muted-foreground">No media attached.</p>
+        )}
+      </div>
 
       {/* Body copy — inline editable */}
       <InlineCopyEditor

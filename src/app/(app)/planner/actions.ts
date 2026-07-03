@@ -12,6 +12,8 @@ import { requireAuthContext } from "@/lib/auth/server";
 import { DEFAULT_TIMEZONE } from "@/lib/constants";
 import { BANNER_EDITABLE_STATUSES } from "@/lib/scheduling/banner-config";
 import { validateBannerText } from "@/lib/banner/text";
+import { listMediaAssets } from "@/lib/library/data";
+import { isSchemaMissingError } from "@/lib/supabase/errors";
 
 const approveSchema = z.object({
   contentId: z.string().uuid(),
@@ -64,6 +66,14 @@ const createSchema = z.object({
 
 const SLOT_INCREMENT_MINUTES = 30;
 const MINUTES_PER_DAY = 24 * 60;
+const MEDIA_EDITABLE_STATUSES = new Set<string>(BANNER_EDITABLE_STATUSES);
+
+type PlannerMediaAssetRow = {
+  id: string;
+  media_type: "image" | "video";
+  processed_status: string | null;
+  derived_variants: Record<string, unknown> | null;
+};
 
 function getTournamentContentContext(promptContext: unknown): {
   fixtureId: string;
@@ -392,10 +402,10 @@ export async function updatePlannerContentMedia(payload: unknown) {
 
   const { data: content, error: fetchError } = await supabase
     .from("content_items")
-    .select("id, account_id, placement")
+    .select("id, account_id, placement, status")
     .eq("id", contentId)
     .eq("account_id", accountId)
-    .maybeSingle();
+    .maybeSingle<{ id: string; account_id: string; placement: "feed" | "story"; status: string }>();
 
   if (fetchError) {
     throw fetchError;
@@ -405,24 +415,41 @@ export async function updatePlannerContentMedia(payload: unknown) {
     throw new Error("Content item not found");
   }
 
-  const mediaIds = media.map((item) => item.assetId);
+  if (!MEDIA_EDITABLE_STATUSES.has(content.status)) {
+    throw new Error("This post can no longer be edited.");
+  }
+
+  const mediaIds = Array.from(new Set(media.map((item) => item.assetId)));
+
+  const { data: assets, error: assetError } = await supabase
+    .from("media_assets")
+    .select("id, media_type, processed_status, derived_variants")
+    .eq("account_id", accountId)
+    .in("id", mediaIds)
+    .returns<PlannerMediaAssetRow[]>();
+
+  if (assetError) {
+    throw assetError;
+  }
+
+  const assetById = new Map((assets ?? []).map((asset) => [asset.id, asset]));
+  if (assetById.size !== mediaIds.length) {
+    throw new Error("Some media assets do not belong to this account.");
+  }
+
+  for (const assetId of mediaIds) {
+    const asset = assetById.get(assetId);
+    if (asset?.processed_status !== "ready") {
+      throw new Error("Select ready media assets only.");
+    }
+  }
 
   if (content.placement === "story") {
     if (mediaIds.length !== 1) {
       throw new Error("Stories require exactly one media attachment");
     }
 
-    const { data: assets, error: assetError } = await supabase
-      .from("media_assets")
-      .select("id, media_type, derived_variants")
-      .in("id", mediaIds)
-      .returns<Array<{ id: string; media_type: string; derived_variants: Record<string, unknown> | null }>>();
-
-    if (assetError) {
-      throw assetError;
-    }
-
-    const asset = assets?.[0];
+    const asset = assetById.get(mediaIds[0]);
     if (!asset || asset.media_type !== "image") {
       throw new Error("Stories support images only");
     }
@@ -431,6 +458,26 @@ export async function updatePlannerContentMedia(payload: unknown) {
     if (typeof storyVariant !== "string" || !storyVariant.length) {
       throw new Error("Selected media is still processing story derivatives. Try again once ready.");
     }
+  }
+
+  let canWriteAttachments = true;
+  const { data: libraryRows, error: libraryError } = await supabase
+    .from("media_library")
+    .select("id")
+    .eq("account_id", accountId)
+    .in("id", mediaIds)
+    .returns<Array<{ id: string }>>();
+
+  if (libraryError) {
+    if (isSchemaMissingError(libraryError)) {
+      canWriteAttachments = false;
+    } else {
+      throw libraryError;
+    }
+  }
+
+  if (canWriteAttachments && (libraryRows ?? []).length !== mediaIds.length) {
+    throw new Error("Some media assets are not ready for planner attachments.");
   }
 
   const { error: variantError } = await supabase
@@ -445,6 +492,37 @@ export async function updatePlannerContentMedia(payload: unknown) {
 
   if (variantError) {
     throw variantError;
+  }
+
+  if (canWriteAttachments) {
+    const { error: deleteAttachmentsError } = await supabase
+      .from("content_media_attachments")
+      .delete()
+      .eq("content_item_id", contentId);
+
+    if (deleteAttachmentsError) {
+      if (isSchemaMissingError(deleteAttachmentsError)) {
+        canWriteAttachments = false;
+      } else {
+        throw deleteAttachmentsError;
+      }
+    }
+  }
+
+  if (canWriteAttachments) {
+    const { error: insertAttachmentsError } = await supabase
+      .from("content_media_attachments")
+      .insert(
+        mediaIds.map((mediaId, position) => ({
+          content_item_id: contentId,
+          media_id: mediaId,
+          position,
+        })),
+      );
+
+    if (insertAttachmentsError && !isSchemaMissingError(insertAttachmentsError)) {
+      throw insertAttachmentsError;
+    }
   }
 
   const nowIso = new Date().toISOString();
@@ -468,6 +546,10 @@ export async function updatePlannerContentMedia(payload: unknown) {
     contentId,
     mediaIds,
   };
+}
+
+export async function loadPlannerMediaLibrary() {
+  return listMediaAssets({ excludeTags: ["Tournament"] });
 }
 
 export async function restorePlannerContent(payload: unknown) {

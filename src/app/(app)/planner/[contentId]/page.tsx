@@ -14,6 +14,7 @@ import {
 
 import { PlannerContentScheduleForm } from "@/features/planner/content-schedule-form";
 import { PlannerContentComposer } from "@/features/planner/planner-content-composer";
+import { PlannerMediaSwapButton } from "@/features/planner/planner-media-swap-button";
 import { formatPlatformLabel } from "@/features/planner/utils";
 import { getPlannerContentDetail } from "@/lib/planner/data";
 import { listMediaAssets } from "@/lib/library/data";
@@ -108,6 +109,7 @@ export default async function PlannerContentPage({
   const heroImage = detail.media.length > 0 ? detail.media[0] : null;
   const campaignName = detail.campaign?.name ?? "Instant post";
   const venueName = campaignName !== "Instant post" ? campaignName : "Your Venue";
+  const canEditMedia = ["draft", "scheduled", "queued", "failed"].includes(detail.status);
 
   return (
     <div className="flex flex-col gap-6 h-full font-sans" style={{ color: "var(--c-ink)" }}>
@@ -409,9 +411,22 @@ export default async function PlannerContentPage({
             </p>
           )}
           <div className="mt-3">
-            <Button variant="ghost" size="sm">
-              Swap media
-            </Button>
+            <PlannerMediaSwapButton
+              contentId={detail.id}
+              initialMedia={detail.media.map((media) => ({
+                id: media.id,
+                mediaType: media.mediaType,
+                fileName: media.fileName,
+              }))}
+              placement={detail.placement}
+              disabled={!canEditMedia}
+              buttonLabel="Swap media"
+              ariaLabel="Swap media"
+              buttonVariant="ghost"
+              buttonSize="sm"
+              title={campaignName}
+              initialMediaLibrary={mediaLibrary}
+            />
           </div>
         </div>
 
