@@ -200,6 +200,72 @@ describe('postprocessCopy', () => {
     expect(result.copy.facebook.body).not.toMatch(/reserve your spot now/i);
   });
 
+  describe('deterministic event-date normalisation', () => {
+    const EVENT = '2026-07-17T20:00:00.000+01:00'; // Friday 17th July
+
+    it('rewrites the abbreviated overlay-label leak "this FRI 17 JUL" to the absolute date', () => {
+      const raw = makeRawCopy({
+        facebook: {
+          body: 'We’re excited for Music Bingo Night at The Anchor this FRI 17 JUL! Join us from 8pm.',
+          cta_text: 'Book now',
+          hashtags: [],
+        },
+      });
+      const result = postprocessCopy(raw, makeConfig({ eventStartIso: EVENT }));
+      expect(result.copy.facebook.body).toContain('Friday 17th July');
+      expect(result.copy.facebook.body).not.toMatch(/FRI 17 JUL/i);
+      expect(result.copy.facebook.body).not.toMatch(/\bthis FRI/i);
+    });
+
+    it('collapses "Next Friday, 17th July" to just the absolute date (no relative prefix, no duplicate)', () => {
+      const raw = makeRawCopy({
+        facebook: {
+          body: 'Next Friday, 17th July at 8pm, we’re hosting Music Bingo Night.',
+          cta_text: 'Book now',
+          hashtags: [],
+        },
+      });
+      const result = postprocessCopy(raw, makeConfig({ eventStartIso: EVENT }));
+      expect(result.copy.facebook.body).toContain('Friday 17th July at 8pm');
+      expect(result.copy.facebook.body).not.toMatch(/next friday/i);
+      // no duplicated date
+      expect((result.copy.facebook.body.match(/17th July/gi) ?? []).length).toBe(1);
+    });
+
+    it('replaces a bare "this Friday" referring to the event with the absolute date', () => {
+      const raw = makeRawCopy({
+        facebook: { body: 'Join us this Friday for a proper throwback night.', cta_text: 'Book now', hashtags: [] },
+      });
+      const result = postprocessCopy(raw, makeConfig({ eventStartIso: EVENT }));
+      expect(result.copy.facebook.body).toContain('Join us Friday 17th July for');
+      expect(result.copy.facebook.body).not.toMatch(/this friday/i);
+    });
+
+    it('adds the missing ordinal to "Friday 17 July"', () => {
+      const raw = makeRawCopy({
+        facebook: { body: 'See you on Friday 17 July from 8pm.', cta_text: 'Book now', hashtags: [] },
+      });
+      const result = postprocessCopy(raw, makeConfig({ eventStartIso: EVENT }));
+      expect(result.copy.facebook.body).toContain('Friday 17th July');
+    });
+
+    it('is idempotent on already-correct "Friday 17th July"', () => {
+      const raw = makeRawCopy({
+        facebook: { body: 'Join us Friday 17th July from 8pm.', cta_text: 'Book now', hashtags: [] },
+      });
+      const result = postprocessCopy(raw, makeConfig({ eventStartIso: EVENT }));
+      expect(result.copy.facebook.body).toBe('Join us Friday 17th July from 8pm.');
+    });
+
+    it('leaves unrelated weekday mentions ("every Friday") untouched', () => {
+      const raw = makeRawCopy({
+        facebook: { body: 'Our kitchen is open every Friday until late.', cta_text: 'Book now', hashtags: [] },
+      });
+      const result = postprocessCopy(raw, makeConfig({ eventStartIso: EVENT }));
+      expect(result.copy.facebook.body).toContain('every Friday');
+    });
+  });
+
   it('keeps Instagram booking links out of the body and link-in-bio line', () => {
     const raw = makeRawCopy({
       instagram: {
