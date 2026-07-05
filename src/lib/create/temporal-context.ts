@@ -5,7 +5,7 @@ import { buildCampaignMetadata, mapCampaignType } from '@/lib/publishing/build-c
 import { extractCampaignTiming } from '@/lib/scheduling/campaign-timing';
 import { getProximityLabel } from '@/lib/scheduling/proximity-label';
 import { calendarDayDiff } from '@/lib/scheduling/spread';
-import { formatFriendlyTimeFromZoned } from '@/lib/utils/date';
+import { formatEventDateLong, formatFriendlyTimeFromZoned } from '@/lib/utils/date';
 import type { ContentType } from '@/types/content';
 
 export type TimingCueLabel =
@@ -70,10 +70,6 @@ function formatWeekday(dt: DateTime): string {
 
 function formatDayMonth(dt: DateTime): string {
   return dt.setLocale('en-GB').toFormat('d LLLL');
-}
-
-function formatLongDate(dt: DateTime): string {
-  return dt.setLocale('en-GB').toFormat('cccc d LLLL');
 }
 
 function dayDiff(earlier: DateTime, later: DateTime): number {
@@ -147,14 +143,14 @@ function describeEventTimingCue(
     return {
       temporalProximity: 'building excitement, save the date',
       timingLabel: 'building',
-      temporalInstruction: `The event is this ${weekday} (${dayMonth}). Prefer "this ${weekday}" over vague countdown language where natural.`,
+      temporalInstruction: `The event is on ${formatEventDateLong(eventStart)} at ${timeLabel}. Use this full date in the copy; do not fall back to vague relative or countdown wording.`,
     };
   }
 
   return {
     temporalProximity: 'awareness, curiosity, early-bird appeal',
     timingLabel: 'early_awareness',
-    temporalInstruction: `The event is on ${formatLongDate(eventStart)} at ${timeLabel}. Use the clear calendar date instead of "soon".`,
+    temporalInstruction: `The event is on ${formatEventDateLong(eventStart)} at ${timeLabel}. Use the clear calendar date instead of "soon".`,
   };
 }
 

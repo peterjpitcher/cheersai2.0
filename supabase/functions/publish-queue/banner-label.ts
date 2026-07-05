@@ -133,10 +133,28 @@ const WEEKDAY_NAMES = [
     "", "MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY",
 ];
 
-const MONTH_SHORT = [
-    "JAN", "FEB", "MAR", "APR", "MAY", "JUN",
-    "JUL", "AUG", "SEP", "OCT", "NOV", "DEC",
+const MONTH_LONG = [
+    "JANUARY", "FEBRUARY", "MARCH", "APRIL", "MAY", "JUNE",
+    "JULY", "AUGUST", "SEPTEMBER", "OCTOBER", "NOVEMBER", "DECEMBER",
 ];
+
+// Mirrors src/lib/utils/date.ts:ordinalSuffix — keep in sync.
+function ordinalSuffix(day: number): string {
+    const mod100 = day % 100;
+    if (mod100 >= 11 && mod100 <= 13) {
+        return "th";
+    }
+    switch (day % 10) {
+        case 1:
+            return "st";
+        case 2:
+            return "nd";
+        case 3:
+            return "rd";
+        default:
+            return "th";
+    }
+}
 
 function isEvening(startTime?: string): boolean {
     if (!startTime) return false;
@@ -198,9 +216,10 @@ function getEventLabel(
         return `NEXT ${weekdayName}`;
     }
 
-    const weekdayShort = WEEKDAY_NAMES[targetInTz.weekday].slice(0, 3);
-    const monthShort = MONTH_SHORT[targetInTz.month - 1];
-    return `${weekdayShort} ${targetInTz.day} ${monthShort}`;
+    // weekDiff >= 2 → unambiguous full date, e.g. "FRIDAY 17TH JULY".
+    // Must match src formatEventDateLong(...).toUpperCase() exactly (parity test).
+    const day = targetInTz.day;
+    return `${WEEKDAY_NAMES[targetInTz.weekday]} ${day}${ordinalSuffix(day).toUpperCase()} ${MONTH_LONG[targetInTz.month - 1]}`;
 }
 
 function getPromotionLabel(

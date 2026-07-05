@@ -682,9 +682,29 @@ export function GenerateStep({
           const isExpanded = expandedCards.has(slot.key);
           const status = slotCopy?.status ?? 'pending';
           const isApproved = slotCopy?.approved === true;
-          // Overlays are opt-in per post: the preview shows the banner only when
-          // the user has typed overlay text for this slot (blank = no overlay).
-          const slotOverlayText = normaliseBannerText(slotCopy?.bannerTextOverride);
+          // Overlays: events show a dynamic auto date-label (matching what the
+          // publish worker prints) when no override is typed; other content types
+          // stay opt-in (blank = no overlay). The auto-label is display-only — the
+          // input stays empty so the saved override remains null and the worker
+          // recomputes the label per post date.
+          const typedOverlay = normaliseBannerText(slotCopy?.bannerTextOverride);
+          const autoOverlayLabel =
+            !typedOverlay && !isStorySchedule && contentBrief.contentType === 'event' && slot.key !== 'now'
+              ? (() => {
+                  try {
+                    return (
+                      buildGenerationTemporalContext({
+                        contentType: contentBrief.contentType,
+                        brief: contentBrief as Record<string, unknown>,
+                        scheduledAt: slotToIso(slot),
+                      }).proximityLabel ?? null
+                    );
+                  } catch {
+                    return null;
+                  }
+                })()
+              : null;
+          const slotOverlayText = typedOverlay ?? autoOverlayLabel;
           const slotOverlayInvalid = !validateBannerText(slotCopy?.bannerTextOverride).ok;
           const slotBannerConfig: ResolvedConfig | null = slotOverlayText
             ? bannerConfig
@@ -969,7 +989,11 @@ export function GenerateStep({
                           value={slotCopy?.bannerTextOverride ?? ''}
                           onChange={(e) => handleSlotBannerChange(slot.key, e.target.value)}
                           disabled={isApproved || isBusy}
-                          placeholder="Add overlay text, e.g. £5 PINTS — leave blank for none"
+                          placeholder={
+                            autoOverlayLabel
+                              ? `Auto: ${autoOverlayLabel} — type to override`
+                              : 'Add overlay text, e.g. £5 PINTS — leave blank for none'
+                          }
                           aria-invalid={slotOverlayInvalid}
                           aria-describedby={`overlay-help-${slot.key}`}
                           className="flex w-full rounded-md border border-input bg-card px-3 py-2 text-sm shadow-[0_1px_2px_0_rgb(0_0_0/0.04)] placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:bg-muted/40 disabled:text-muted-foreground"

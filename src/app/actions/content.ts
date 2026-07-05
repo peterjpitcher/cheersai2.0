@@ -846,13 +846,18 @@ export async function createScheduledBatch(
       // and keep the invariant "enabled ⇒ non-empty text". Stories never carry an
       // overlay regardless of typed text.
       const overlay = placement === 'story' ? null : normaliseBannerText(slot.bannerTextOverride);
+      // Events auto-enable a dynamic date overlay even without typed text: the
+      // banner is enabled with a null override so the worker prints the per-post
+      // proximity label (TONIGHT / THIS FRIDAY / FRIDAY 17TH JULY). Other content
+      // types stay opt-in (enabled only when text is typed). Stories never carry one.
+      const autoOverlayForEvent = placement !== 'story' && contentType === 'event';
 
       return {
         content_item_id: item.id,
         body,
         preview_data: previewData,
         media_ids: slotMedia.length > 0 ? slotMedia : null,
-        banner_enabled: overlay !== null,
+        banner_enabled: overlay !== null || autoOverlayForEvent,
         banner_text_override: overlay,
       };
     });

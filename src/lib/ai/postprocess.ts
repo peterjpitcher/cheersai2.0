@@ -42,6 +42,12 @@ const COUNTDOWN_PATTERNS: RegExp[] = [
 const SPACE_BEFORE_PUNCT = /[^\S\r\n]+([,.;!?])/g;
 const LINK_IN_BIO_LANGUAGE_PATTERN = /\b(?:link[-\s]in[-\s](?:our\s+|the\s+)?bio|details? in (?:our\s+|the\s+)?bio)\b/i;
 const BOOKING_INTENT_PATTERN = /\b(book|booking|bookings|reserve|reservation|table|tickets?|seats?|spots?)\b/i;
+// A standalone imperative booking CTA line, e.g. "Book now!", "Reserve your
+// table!", "Book ASAP". Restricted to the unambiguous booking verbs book/reserve
+// (not grab/get/claim, which collide with narrative like "Get comfy and grab a
+// seat"). Ends on a booking object/timing word, tolerating trailing emoji.
+const BARE_BOOKING_CTA_LINE =
+  /^(?:book|reserve)\b[^.\n!?]{0,40}?\b(?:now|today|tonight|table|tables|tickets?|seats?|spots?|places?|online|early|ahead|soon|asap)\b[\s!.…️\p{Extended_Pictographic}]*$/iu;
 
 function normaliseTimes(value: string): string {
   let output = value.replace(AM_PM_CASE, (_, hour: string, mins: string | undefined, suffix: string) => {
@@ -212,11 +218,17 @@ export function postprocessCopy(
 ): PostprocessResult {
   const warnings: string[] = [];
 
-  const facebook = processPlatformBody(
+  const facebookBody = processPlatformBody(
     raw.facebook.body,
     'facebook',
     config,
   );
+  const facebookCtaText = sanitizeCtaText(raw.facebook.cta_text);
+  // Only strip a bare booking CTA from the body when a replacement CTA will
+  // actually be appended at compose time (a cta_text, or a Facebook CTA link).
+  // Otherwise the body's CTA is the only one and must be preserved.
+  const willAppendFacebookCta = Boolean(facebookCtaText) || Boolean(config.ctaLinks?.facebook?.trim());
+  const facebook = willAppendFacebookCta ? stripBareBookingCtaLines(facebookBody) : facebookBody;
   const instagram = processPlatformBody(
     raw.instagram.body,
     'instagram',
@@ -246,7 +258,7 @@ export function postprocessCopy(
     copy: {
       facebook: {
         body: facebook,
-        cta_text: sanitizeCtaText(raw.facebook.cta_text),
+        cta_text: facebookCtaText,
         hashtags: fbHashtags,
       },
       instagram: {
@@ -299,6 +311,23 @@ function processPlatformBody(
   }
 
   return sanitizePublishBody(platform as PublishingPlatform, output);
+}
+
+/**
+ * Remove a standalone bare booking CTA line (e.g. "Book now!") from a Facebook
+ * body. The publish composer appends the canonical linked CTA ("Book now:
+ * {url}") from the cta_text field, so a bare CTA in the body is a duplicate.
+ * Only short (<=6 word) standalone imperative lines are removed; narrative
+ * sentences that merely mention booking are preserved.
+ */
+function stripBareBookingCtaLines(body: string): string {
+  const kept = body.split("\n").filter((line) => {
+    const trimmed = line.trim();
+    if (!trimmed) return true; // keep blanks; collapsed below
+    if (trimmed.split(/\s+/).length > 6) return true; // too long to be a bare CTA
+    return !BARE_BOOKING_CTA_LINE.test(trimmed);
+  });
+  return kept.join("\n").replace(/\n{3,}/g, "\n\n").trim();
 }
 
 function sanitiseInstagramBody(

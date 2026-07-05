@@ -43,7 +43,10 @@ describe('create temporal context', () => {
     });
 
     expect(context.timingLabel).toBe('building');
-    expect(context.temporalInstruction).toContain('this Wednesday');
+    // Body copy uses the full absolute date, never a misleading "this"/"next".
+    expect(context.temporalInstruction).toContain('Wednesday 27th May');
+    expect(context.temporalInstruction).not.toContain('this Wednesday');
+    // The overlay label (image) keeps the relative form.
     expect(context.proximityLabel).toBe('THIS WEDNESDAY');
   });
 
