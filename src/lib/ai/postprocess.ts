@@ -1,6 +1,7 @@
 import { DateTime } from "luxon";
 
 import { DEFAULT_TIMEZONE } from "@/lib/constants";
+import { formatEventDateLong } from "@/lib/utils/date";
 import { collapseWhitespacePreservingBreaks, stripMarkdown } from "@/lib/utils/markdown";
 import { stripDirectLinks, stripDirectLinkSentences } from "@/lib/utils/social-links";
 import {
@@ -199,6 +200,47 @@ export interface PostprocessConfig {
   platformSignatures: Record<string, string>;
   defaultCta: string | null;
   ctaLinks?: PlatformCtaLinks | null;
+  /** Event start ISO (when present, event-date phrasing is normalised in the body). */
+  eventStartIso?: string | null;
+}
+
+/**
+ * Deterministically normalise how the event date is written in body copy so the
+ * output does not depend on the model following instructions. Rewrites relative
+ * ("this/next Friday"), abbreviated ("FRI 17 JUL"), and non-ordinal ("Friday 17
+ * July") references to the event's own weekday/date into the canonical absolute
+ * form, e.g. "Friday 17th July". Only the event's weekday is targeted, so
+ * unrelated mentions ("every Friday") are left untouched.
+ */
+function normaliseEventDatePhrasing(body: string, eventStartIso: string): string {
+  const dt = DateTime.fromISO(eventStartIso, { zone: DEFAULT_TIMEZONE }).setLocale("en-GB");
+  if (!dt.isValid) return body;
+
+  const weekdayLong = dt.toFormat("cccc");
+  const weekdayShort = weekdayLong.slice(0, 3);
+  const monthLong = dt.toFormat("LLLL");
+  const monthShort = monthLong.slice(0, 3);
+  const absolute = formatEventDateLong(dt);
+
+  const esc = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const weekday = `(?:${esc(weekdayLong)}|${esc(weekdayShort)})`;
+  const month = `(?:${esc(monthLong)}|${esc(monthShort)})`;
+  const dayNum = `${dt.day}(?:st|nd|rd|th)?`;
+
+  // Rule 1: a relative qualifier + the event weekday (optionally trailed by the
+  // date itself) collapses to the absolute date — catches "this Friday",
+  // "Next Friday, 17th July", and the "this FRI 17 JUL" overlay-label leak.
+  let out = body.replace(
+    new RegExp(`\\b(?:this|next)\\s+${weekday}\\b(?:[.,\\s]+${dayNum}\\s+${month})?`, "gi"),
+    absolute,
+  );
+
+  // Rule 2: an abbreviated or non-ordinal event date normalises to the ordinal
+  // absolute form — catches "Friday 17 July" and a bare "FRI 17 JUL". Idempotent
+  // on an already-correct "Friday 17th July".
+  out = out.replace(new RegExp(`\\b${weekday}\\s+${dayNum}\\s+${month}\\b`, "gi"), absolute);
+
+  return out;
 }
 
 export interface PostprocessResult {
@@ -254,15 +296,23 @@ export function postprocessCopy(
   const fbHashtags = normalizeHashtags(raw.facebook.hashtags, 'facebook', config.maxHashtags['facebook'] ?? 5) ?? [];
   const igHashtags = normalizeHashtags(raw.instagram.hashtags, 'instagram', config.maxHashtags['instagram'] ?? 10) ?? [];
 
+  // Deterministically fix event-date phrasing so the output does not rely on the
+  // model following the prompt instructions.
+  const eventStartIso = config.eventStartIso;
+  const facebookFinal = eventStartIso ? normaliseEventDatePhrasing(facebook, eventStartIso) : facebook;
+  const instagramFinal = eventStartIso
+    ? normaliseEventDatePhrasing(instagramSanitised.body, eventStartIso)
+    : instagramSanitised.body;
+
   return {
     copy: {
       facebook: {
-        body: facebook,
+        body: facebookFinal,
         cta_text: facebookCtaText,
         hashtags: fbHashtags,
       },
       instagram: {
-        body: instagramSanitised.body,
+        body: instagramFinal,
         hashtags: igHashtags,
         link_in_bio_line: instagramLinkInBioLine,
       },

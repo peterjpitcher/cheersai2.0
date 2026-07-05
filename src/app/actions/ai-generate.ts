@@ -101,6 +101,7 @@ export async function generateContent(
       platformSignatures: voiceConfig.platformSignatures,
       defaultCta: voiceConfig.defaultCta,
       ctaLinks: brief.ctaLinks ?? null,
+      eventStartIso: context?.eventStart ?? null,
     });
 
     // Store generation params and draft copy on content_items
@@ -199,6 +200,7 @@ export async function regenerateWithModifier(
       platformSignatures: voiceConfig.platformSignatures,
       defaultCta: voiceConfig.defaultCta,
       ctaLinks: brief.ctaLinks ?? null,
+      eventStartIso: context?.eventStart ?? null,
     });
 
     // Store generation params with modifier
