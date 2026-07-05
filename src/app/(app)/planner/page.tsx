@@ -76,7 +76,7 @@ export default async function PlannerPage({ searchParams }: PlannerPageProps) {
           month={monthParam}
           view={viewParam}
           showImages={showImagesParam}
-          initialStatus={statusParam}
+          initialStatus={failedFilterActive ? undefined : statusParam}
           dayLine={dayLine}
           displayMonth={effectiveMonth.toFormat('LLLL')}
           accountId={accountId}
