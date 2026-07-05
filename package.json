@@ -18,6 +18,7 @@
     "db:rebuild": "bash scripts/db-local-rebuild.sh",
     "ops:archive-planner-failures": "tsx scripts/ops/archive-planner-failures.ts",
     "ops:backfill-connections": "tsx scripts/ops/backfill-connections.ts",
+    "ops:backfill-event-overlays": "tsx scripts/ops/backfill-event-overlays.ts",
     "ops:backfill-link-in-bio-url": "tsx scripts/ops/backfill-link-in-bio-url.ts",
     "ops:backfill-opt-in-overlays": "tsx scripts/ops/backfill-opt-in-overlays.ts",
     "ops:invoke": "tsx scripts/ops/invoke-function.ts",

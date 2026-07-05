@@ -2,6 +2,7 @@
 import { DateTime } from "luxon";
 import type { CampaignTiming } from "./campaign-timing";
 import { getNextWeeklyOccurrence } from "./campaign-timing";
+import { formatEventDateLong } from "@/lib/utils/date";
 
 // Duplicated in supabase/functions/publish-queue/banner-label.ts — keep in sync
 export type ProximityLabel = string | null;
@@ -15,11 +16,6 @@ const EVENING_THRESHOLD_HOUR = 17;
 
 const WEEKDAY_NAMES = [
   "", "MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY",
-];
-
-const MONTH_SHORT = [
-  "JAN", "FEB", "MAR", "APR", "MAY", "JUN",
-  "JUL", "AUG", "SEP", "OCT", "NOV", "DEC",
 ];
 
 function isEvening(startTime?: string): boolean {
@@ -88,10 +84,8 @@ function getEventLabel(
     return `NEXT ${weekdayName}`;
   }
 
-  // weekDiff >= 2 → unambiguous date format
-  const weekdayShort = WEEKDAY_NAMES[targetInTz.weekday].slice(0, 3);
-  const monthShort = MONTH_SHORT[targetInTz.month - 1];
-  return `${weekdayShort} ${targetInTz.day} ${monthShort}`;
+  // weekDiff >= 2 → unambiguous full date, e.g. "FRIDAY 17TH JULY"
+  return formatEventDateLong(targetInTz, { zone: tz }).toUpperCase();
 }
 
 export function getProximityLabel(input: ProximityLabelInput): ProximityLabel {

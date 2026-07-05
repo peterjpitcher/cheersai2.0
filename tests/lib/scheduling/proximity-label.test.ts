@@ -265,7 +265,7 @@ describe("getProximityLabel — extended bands", () => {
       referenceAt: ref("2026-06-03T10:00:00"),
       campaignTiming: eventTiming("2026-06-19", "19:00"),
     });
-    expect(result).toBe("FRI 19 JUN");
+    expect(result).toBe("FRIDAY 19TH JUNE");
   });
 
   it("uses NEXT [WEEKDAY] for same-weekday-7-days, not THIS [WEEKDAY]", () => {
@@ -283,7 +283,7 @@ describe("getProximityLabel — extended bands", () => {
       referenceAt: ref("2026-12-20T10:00:00"),
       campaignTiming: eventTiming("2027-01-05", "19:00"),
     });
-    expect(result).toBe("TUE 5 JAN");
+    expect(result).toBe("TUESDAY 5TH JANUARY");
   });
 
   it("still returns null for a target in the past", () => {
@@ -299,12 +299,12 @@ describe("getProximityLabel — extended bands", () => {
   // in Wave 2 to use Luxon `startOf("week")` calendar-week bucketing.
 
   it("bug regression: Sun → Sat 13 days returns date format (was NEXT SATURDAY)", () => {
-    // THE BUG. Sun 10 May → Sat 23 May = 13 days, weekDiff = 2 → SAT 23 MAY.
+    // THE BUG. Sun 10 May → Sat 23 May = 13 days, weekDiff = 2 → SATURDAY 23RD MAY.
     const result = getProximityLabel({
       referenceAt: ref("2026-05-10T06:00:00"),
       campaignTiming: eventTiming("2026-05-23", "19:00"),
     });
-    expect(result).toBe("SAT 23 MAY");
+    expect(result).toBe("SATURDAY 23RD MAY");
   });
 
   it("Sat → Sat 14 days exact returns date format (sanity, unchanged)", () => {
@@ -312,7 +312,7 @@ describe("getProximityLabel — extended bands", () => {
       referenceAt: ref("2026-05-09T10:00:00"),
       campaignTiming: eventTiming("2026-05-23", "19:00"),
     });
-    expect(result).toBe("SAT 23 MAY");
+    expect(result).toBe("SATURDAY 23RD MAY");
   });
 
   it("Sun → Mon 8 days returns date format (currently NEXT MONDAY — must change)", () => {
@@ -320,7 +320,7 @@ describe("getProximityLabel — extended bands", () => {
       referenceAt: ref("2026-05-10T10:00:00"),
       campaignTiming: eventTiming("2026-05-18", "19:00"),
     });
-    expect(result).toBe("MON 18 MAY");
+    expect(result).toBe("MONDAY 18TH MAY");
   });
 
   it("Sun → Sat 6 days returns THIS SATURDAY (proximity wins, unchanged)", () => {
@@ -344,7 +344,7 @@ describe("getProximityLabel — extended bands", () => {
       referenceAt: ref("2026-12-22T10:00:00"),
       campaignTiming: eventTiming("2027-01-04", "19:00"),
     });
-    expect(result).toBe("MON 4 JAN");
+    expect(result).toBe("MONDAY 4TH JANUARY");
   });
 
   it("DST spring-forward 7d: Sun 22 Mar → Sun 29 Mar returns NEXT SUNDAY (23h week)", () => {
@@ -360,7 +360,7 @@ describe("getProximityLabel — extended bands", () => {
       referenceAt: ref("2026-03-22T10:00:00"),
       campaignTiming: eventTiming("2026-04-04", "19:00"),
     });
-    expect(result).toBe("SAT 4 APR");
+    expect(result).toBe("SATURDAY 4TH APRIL");
   });
 
   it("DST fall-back 7d: Sun 18 Oct → Sun 25 Oct returns NEXT SUNDAY (25h week)", () => {
@@ -376,7 +376,7 @@ describe("getProximityLabel — extended bands", () => {
       referenceAt: ref("2026-10-18T10:00:00"),
       campaignTiming: eventTiming("2026-10-31", "19:00"),
     });
-    expect(result).toBe("SAT 31 OCT");
+    expect(result).toBe("SATURDAY 31ST OCTOBER");
   });
 });
 

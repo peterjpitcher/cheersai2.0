@@ -5,7 +5,7 @@ import { BANNED_PHRASES, PREFERRED_PHRASES, TONE_PROFILE, type BrandVoiceConfig,
 import { DEFAULT_TIMEZONE } from "@/lib/constants";
 import type { InstantPostInput } from "@/lib/create/schema";
 import type { BrandProfile } from "@/lib/settings/data";
-import { formatFriendlyTimeFromZoned } from "@/lib/utils/date";
+import { formatEventDateLong, formatFriendlyTimeFromZoned } from "@/lib/utils/date";
 
 import type { ContentType, PlatformCtaLinks } from "@/types/content";
 import type { ContentBrief } from "@/features/create/schemas/content-schemas";
@@ -394,7 +394,7 @@ const PUB_WRITING_RULES = [
   'Never put URLs, bare domains, markdown links, source citations, or old booking links in any body copy. The system owns final CTA URLs.',
   'For Instagram, booking/joining instructions must only point people to the link in bio. Never put a URL, bare domain, booking link, or booking website in Instagram copy.',
   'Do not invent operational details. Only mention bookings, limited spaces, walk-ins, arrival rules, food service times, prices, hosts, age rules, or capacity if they are explicitly supplied in the brief.',
-  'If the post has a relative-date overlay label such as TOMORROW, TONIGHT, THIS FRIDAY or NEXT WEDNESDAY, make the copy use the same natural relative timing instead of defaulting to the full calendar date.',
+  'When you state a specific event date, write it in full and properly cased as "Weekday Nth Month" — for example "Friday 17th July". Never abbreviate or upper-case it (never "FRI 17 JUL"), and never put a vague "this" or "next" in front of that specific date, which can wrongly imply the wrong week. Use "tonight" or "tomorrow" only when the post itself publishes on that day. (For a weekly recurring event with no fixed date, natural day-of-week wording like "this Friday" is fine.)',
   'Sound like a real person talking to a regular — warm, local and plain-speaking.',
   'Do not be posh, corporate or salesy. Avoid words like premium, elevated, curated, sophisticated, exclusive and "hidden gem".',
   'Do not over-explain or pad the copy.',
@@ -567,8 +567,9 @@ export function buildUserPrompt(
   if (context?.eventStart) {
     const eventStart = DateTime.fromISO(context.eventStart, { zone: DEFAULT_TIMEZONE });
     if (eventStart.isValid) {
+      const absoluteDate = formatEventDateLong(eventStart);
       sections.push(
-        `Event starts ${eventStart.setLocale('en-GB').toFormat("cccc d LLLL 'at' h:mma")} (${DEFAULT_TIMEZONE}).`
+        `Event date: ${absoluteDate} at ${formatFriendlyTimeFromZoned(eventStart)} (${DEFAULT_TIMEZONE}). When the copy states the date, write it in full exactly as "${absoluteDate}" — never abbreviated or upper-cased, and never prefixed with a vague "this" or "next".`
       );
     }
   }
@@ -600,9 +601,11 @@ export function buildUserPrompt(
     sections.push(`Timing label: ${context.timingLabel}.`);
   }
 
-  if (context?.proximityLabel) {
-    sections.push(`Overlay label: ${context.proximityLabel}. Match the copy's relative date wording to this label when natural, especially in the opening line.`);
-  }
+  // NOTE: context.proximityLabel (e.g. "THIS FRIDAY", "FRIDAY 17TH JULY") is the
+  // uppercase image-overlay label. It is deliberately NOT injected here: telling
+  // the model to echo it leaked abbreviated/relative date styling into the body
+  // copy ("this FRI 17 JUL"). Body copy uses the full absolute date from the
+  // "Event date" line and the temporal instruction below.
 
   if (context?.temporalInstruction) {
     sections.push(`Relative date wording: ${context.temporalInstruction}`);

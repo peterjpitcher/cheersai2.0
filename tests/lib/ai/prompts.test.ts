@@ -289,7 +289,9 @@ describe("buildUserPrompt", () => {
 
     expect(prompt).toContain("Timing tone: anticipation");
     expect(prompt).toContain("Timing label: tomorrow");
-    expect(prompt).toContain("Overlay label: TOMORROW NIGHT");
+    // The uppercase overlay label must NOT be fed into the body prompt — it was
+    // leaking abbreviated/relative date styling ("this FRI 17 JUL") into copy.
+    expect(prompt).not.toContain("Overlay label:");
     expect(prompt).toContain("Relative date wording: The event is tomorrow");
     expect(prompt).toContain("Accuracy guardrails");
     expect(prompt).toContain("do not invent booking requirements");

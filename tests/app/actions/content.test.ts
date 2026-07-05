@@ -220,11 +220,12 @@ describe('createScheduledBatch', () => {
         publishBodyOverride: 'FB1 edited final\n\nCustom booking line\n\n#Edited',
       }),
     }));
-    // Overlays are opt-in per post: with no overlay text supplied, every variant must be
-    // written with an explicit banner_enabled=false (never NULL) so it cannot inherit the
-    // account default. banner_text_override must be null.
+    // Events auto-enable a dynamic date overlay: with no overlay text supplied,
+    // every variant is written with an explicit banner_enabled=true (never NULL)
+    // and banner_text_override=null, so the worker prints the per-post proximity
+    // label (TONIGHT / THIS FRIDAY / FRIDAY 17TH JULY).
     for (const row of variantRows) {
-      expect(row.banner_enabled).toBe(false);
+      expect(row.banner_enabled).toBe(true);
       expect(row.banner_text_override).toBeNull();
     }
   });

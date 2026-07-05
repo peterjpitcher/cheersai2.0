@@ -138,6 +138,68 @@ describe('postprocessCopy', () => {
     expect(result.copy.facebook.body).toContain('\n\n');
   });
 
+  it('strips a bare "Book now!" CTA line from the Facebook body (composer adds the linked one)', () => {
+    const raw = makeRawCopy({
+      facebook: {
+        body: 'Join us Friday 17th July for a cracking night!\n\nBook now!',
+        cta_text: 'Book now',
+        hashtags: [],
+      },
+    });
+    const result = postprocessCopy(raw, makeConfig({
+      ctaLinks: { facebook: 'https://l.the-anchor.pub/fb-event' },
+    }));
+    expect(result.copy.facebook.body).not.toMatch(/book\s+now/i);
+    expect(result.copy.facebook.body).toContain('Join us Friday 17th July for a cracking night!');
+  });
+
+  it('keeps the body CTA when nothing will replace it (no cta_text, no FB link)', () => {
+    const raw = makeRawCopy({
+      facebook: {
+        body: 'Come down Friday 17th July for live music from 8pm.\n\nBook now!',
+        cta_text: null,
+        hashtags: [],
+      },
+    });
+    // No ctaLinks configured → composer would append no CTA, so the body CTA stays.
+    const result = postprocessCopy(raw, makeConfig());
+    expect(result.copy.facebook.body).toMatch(/book now/i);
+  });
+
+  it('does not strip short narrative imperatives like "Get comfy and grab a seat"', () => {
+    const raw = makeRawCopy({
+      facebook: {
+        body: 'Two rounds of bingo tonight.\n\nGet comfy and grab a seat\n\nEyes down at 7.',
+        cta_text: 'Book now',
+        hashtags: [],
+      },
+    });
+    const result = postprocessCopy(raw, makeConfig({
+      ctaLinks: { facebook: 'https://l.the-anchor.pub/fb-event' },
+    }));
+    expect(result.copy.facebook.body).toContain('Get comfy and grab a seat');
+    expect(result.copy.facebook.body).toContain('Eyes down at 7.');
+  });
+
+  it('strips varied bare booking CTAs but keeps narrative booking mentions', () => {
+    const raw = makeRawCopy({
+      facebook: {
+        body: [
+          'Food is served from 4pm, so book your table early to grab a good spot before the fun begins.',
+          '',
+          'Reserve your spot now!',
+        ].join('\n'),
+        cta_text: 'Book now',
+        hashtags: [],
+      },
+    });
+    const result = postprocessCopy(raw, makeConfig());
+    // Narrative sentence that mentions booking is preserved…
+    expect(result.copy.facebook.body).toContain('book your table early');
+    // …but the standalone imperative CTA line is removed.
+    expect(result.copy.facebook.body).not.toMatch(/reserve your spot now/i);
+  });
+
   it('keeps Instagram booking links out of the body and link-in-bio line', () => {
     const raw = makeRawCopy({
       instagram: {
