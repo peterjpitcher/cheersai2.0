@@ -2,6 +2,7 @@
 
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { ReactElement } from "react";
 
 import type { MediaAssetSummary } from "@/lib/library/data";
 
@@ -50,6 +51,32 @@ vi.mock("@/lib/library/client-derivatives", () => ({
 }));
 
 import { MediaAssetGridClient } from "@/features/library/media-asset-grid-client";
+import { ToastProvider } from "@/components/providers/toast-provider";
+
+function renderWithToast(ui: ReactElement) {
+  return render(<ToastProvider>{ui}</ToastProvider>);
+}
+
+const replaceResult = {
+  status: "replaced" as const,
+  oldAssetId: "old-image",
+  newAssetId: "new-image",
+  counts: {
+    variants: 0,
+    attachments: 0,
+    attachmentsDeduped: 0,
+    campaigns: 0,
+    linkInBioProfiles: 0,
+    linkInBioTiles: 0,
+    tournamentsSquare: 0,
+    tournamentsStory: 0,
+    adSets: 0,
+    ads: 0,
+  },
+  hidden: true,
+  updatedReferences: 0,
+  remainingReferences: 0,
+};
 
 function asset(overrides: Partial<MediaAssetSummary> & Pick<MediaAssetSummary, "id" | "fileName">): MediaAssetSummary {
   return {
@@ -75,7 +102,7 @@ describe("MediaAssetGridClient image replacement", () => {
     updateMediaAssetMock.mockResolvedValue(null);
     deleteMediaAssetMock.mockResolvedValue({ status: "deleted" });
     fetchMediaAssetOriginalUrlMock.mockResolvedValue(null);
-    replaceMediaAssetEverywhereMock.mockResolvedValue({ status: "replaced" });
+    replaceMediaAssetEverywhereMock.mockResolvedValue(replaceResult);
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, status: 200 }));
   });
 
@@ -86,7 +113,7 @@ describe("MediaAssetGridClient image replacement", () => {
   });
 
   it("shows replace controls for images only", () => {
-    render(
+    renderWithToast(
       <MediaAssetGridClient
         assets={[
           asset({ id: "image-1", fileName: "Pub event.png", mediaType: "image" }),
@@ -123,7 +150,7 @@ describe("MediaAssetGridClient image replacement", () => {
     });
     finaliseMediaUploadMock.mockResolvedValue(replacement);
 
-    render(
+    renderWithToast(
       <MediaAssetGridClient
         assets={[asset({ id: "old-image", fileName: "Old image.png" })]}
         availableTags={["promo"]}
@@ -145,5 +172,49 @@ describe("MediaAssetGridClient image replacement", () => {
     expect(screen.queryByText("Old image.png")).not.toBeInTheDocument();
     expect(screen.getByText("New image.png")).toBeInTheDocument();
     expect(routerRefreshMock).toHaveBeenCalled();
+  });
+
+  it("keeps the old asset visible when the replacement found no exact references", async () => {
+    const replacement = asset({ id: "new-image", fileName: "New image.png" });
+    replaceMediaAssetEverywhereMock.mockResolvedValue({
+      ...replaceResult,
+      status: "replacement_has_no_references",
+      hidden: false,
+      updatedReferences: 0,
+    });
+    requestMediaUploadMock.mockResolvedValue({
+      assetId: replacement.id,
+      uploadUrl: "https://upload.test/original",
+      storagePath: replacement.storagePath,
+      derivativeUploadUrls: {},
+      mediaType: "image",
+    });
+    generateImageDerivativesMock.mockResolvedValue({
+      aspectClass: "square",
+      blobs: {},
+    });
+    finaliseMediaUploadMock.mockResolvedValue(replacement);
+
+    renderWithToast(
+      <MediaAssetGridClient
+        assets={[asset({ id: "old-image", fileName: "Old image.png" })]}
+        availableTags={["promo"]}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Replace image for Old image.png" }));
+    fireEvent.change(screen.getByLabelText("Replacement image for Old image.png"), {
+      target: { files: [new File(["new"], "new-image.png", { type: "image/png" })] },
+    });
+
+    await waitFor(() => {
+      expect(replaceMediaAssetEverywhereMock).toHaveBeenCalledWith({
+        oldAssetId: "old-image",
+        newAssetId: "new-image",
+      });
+    });
+
+    expect(screen.getByText("Old image.png")).toBeInTheDocument();
+    expect(screen.getByText("New image.png")).toBeInTheDocument();
   });
 });

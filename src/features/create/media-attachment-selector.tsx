@@ -70,39 +70,43 @@ export function MediaAttachmentSelector({
     let cancelled = false;
 
     const ensurePreviews = async () => {
-      const liveAssetIds = new Set(assets.map((asset) => asset.id));
+      // Candidate ids that need a fetched preview: library assets without an
+      // inline preview, plus any currently-selected asset that is NOT in the
+      // (hidden-filtered) library — those are attached-but-hidden and must still
+      // render their thumbnail so the owner can see what is on the post.
+      const candidateIds = new Set<string>();
+      for (const asset of assets) {
+        if (!asset.previewUrl) candidateIds.add(asset.id);
+      }
+      for (const item of selected) {
+        if (!assetById.has(item.assetId)) candidateIds.add(item.assetId);
+      }
+
       attemptedPreviewAssetIdsRef.current.forEach((assetId) => {
-        if (!liveAssetIds.has(assetId)) {
+        if (!candidateIds.has(assetId)) {
           attemptedPreviewAssetIdsRef.current.delete(assetId);
         }
       });
 
-      const missingAssets = assets.filter((asset) => {
-        if (asset.previewUrl) {
-          return false;
-        }
-        if (previewUrlsRef.current.has(asset.id)) {
-          return false;
-        }
-        if (attemptedPreviewAssetIdsRef.current.has(asset.id)) {
-          return false;
-        }
+      const idsToFetch = [...candidateIds].filter((assetId) => {
+        if (previewUrlsRef.current.has(assetId)) return false;
+        if (attemptedPreviewAssetIdsRef.current.has(assetId)) return false;
         return true;
       });
 
-      if (!missingAssets.length) return;
+      if (!idsToFetch.length) return;
 
-      missingAssets.forEach((asset) => {
-        attemptedPreviewAssetIdsRef.current.add(asset.id);
+      idsToFetch.forEach((assetId) => {
+        attemptedPreviewAssetIdsRef.current.add(assetId);
       });
 
       const resolved = await Promise.all(
-        missingAssets.map(async (asset) => {
+        idsToFetch.map(async (assetId) => {
           try {
-            const url = await fetchMediaAssetPreviewUrl(asset.id);
-            return url ? ([asset.id, url] as const) : null;
+            const url = await fetchMediaAssetPreviewUrl(assetId);
+            return url ? ([assetId, url] as const) : null;
           } catch (error) {
-            console.warn("[media-selector] failed to refresh preview", { assetId: asset.id, error });
+            console.warn("[media-selector] failed to refresh preview", { assetId, error });
             return null;
           }
         }),
@@ -129,7 +133,7 @@ export function MediaAttachmentSelector({
     return () => {
       cancelled = true;
     };
-  }, [assets]);
+  }, [assets, selected, assetById]);
 
   const handleAssetUpdated = (updated: MediaAssetSummary) => {
     if (selectedIds.has(updated.id)) {
@@ -322,8 +326,13 @@ export function MediaAttachmentSelector({
       {selected.length ? (
         <div className="flex w-full flex-wrap gap-2">
           {selected.map((item) => {
-            const asset = assets.find((entry) => entry.id === item.assetId);
-            const previewSrc = asset ? asset.previewUrl ?? previewUrls.get(asset.id) : undefined;
+            // Resolve from the library first; for attached-but-hidden media the
+            // asset is absent from the library, so fall back to the selection's
+            // own metadata and the separately-fetched preview url.
+            const asset = assetById.get(item.assetId);
+            const mediaType = asset?.mediaType ?? item.mediaType;
+            const previewSrc = asset?.previewUrl ?? previewUrls.get(item.assetId);
+            const label = asset?.fileName ?? item.fileName ?? item.assetId;
 
             return (
               <div
@@ -332,20 +341,20 @@ export function MediaAttachmentSelector({
               >
                 <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-lg bg-slate-100">
                   {previewSrc ? (
-                    asset?.mediaType === "video" ? (
+                    mediaType === "video" ? (
                       <video src={previewSrc} className="max-h-full max-w-full object-contain" preload="metadata" muted />
                     ) : (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={previewSrc} alt={asset?.fileName ?? item.assetId} className="max-h-full max-w-full object-contain" loading="lazy" />
+                      <img src={previewSrc} alt={label} className="max-h-full max-w-full object-contain" loading="lazy" />
                     )
                   ) : (
                     <div className="flex h-full w-full items-center justify-center text-slate-500">
-                      {asset?.mediaType === "video" ? <Video className="h-4 w-4" /> : <ImageIcon className="h-4 w-4" />}
+                      {mediaType === "video" ? <Video className="h-4 w-4" /> : <ImageIcon className="h-4 w-4" />}
                     </div>
                   )}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate font-semibold text-slate-800">{asset?.fileName ?? item.fileName ?? item.assetId}</p>
+                  <p className="truncate font-semibold text-slate-800">{label}</p>
                   <p className="text-[11px] text-slate-500">{asset ? STATUS_LABEL[asset.processedStatus] : "Attached"}</p>
                 </div>
                 <button

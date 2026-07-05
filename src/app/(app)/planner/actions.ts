@@ -27,6 +27,10 @@ const deleteSchema = z.object({
   contentId: z.string().uuid(),
 });
 
+const archiveFailureSchema = z.object({
+  contentId: z.string().uuid(),
+});
+
 const restoreSchema = z.object({
   contentId: z.string().uuid(),
 });
@@ -48,6 +52,12 @@ const updateMediaSchema = z.object({
     .min(1, "At least one media asset required"),
 });
 
+const loadPlannerMediaLibrarySchema = z
+  .object({
+    includeAssetIds: z.array(z.string().uuid()).optional().default([]),
+  })
+  .optional();
+
 const updateBodySchema = z.object({
   contentId: z.string().uuid(),
   body: z.string().max(10_000, "Keep the post under 10k characters"),
@@ -67,6 +77,13 @@ const createSchema = z.object({
 const SLOT_INCREMENT_MINUTES = 30;
 const MINUTES_PER_DAY = 24 * 60;
 const MEDIA_EDITABLE_STATUSES = new Set<string>(BANNER_EDITABLE_STATUSES);
+const FAILURE_NOTIFICATION_CATEGORIES = [
+  "publish_failed",
+  "story_publish_failed",
+  "publish_retry",
+  "story_publish_retry",
+  "publish_failed_immediate",
+] as const;
 
 type PlannerMediaAssetRow = {
   id: string;
@@ -285,7 +302,7 @@ export async function dismissPlannerNotification(payload: unknown) {
   const nowIso = new Date().toISOString();
   const { error } = await supabase
     .from("notifications")
-    .update({ read_at: nowIso })
+    .update({ read_at: nowIso, dismissed_at: nowIso })
     .eq("id", notificationId)
     .eq("account_id", accountId);
 
@@ -392,6 +409,110 @@ export async function deletePlannerContent(payload: unknown) {
   };
 }
 
+export async function archivePlannerFailure(payload: unknown) {
+  const { contentId } = archiveFailureSchema.parse(payload);
+  const { supabase, accountId } = await requireAuthContext();
+
+  const { data: content, error: contentFetchError } = await supabase
+    .from("content_items")
+    .select("id, account_id, status, deleted_at, prompt_context")
+    .eq("id", contentId)
+    .eq("account_id", accountId)
+    .maybeSingle<{
+      id: string;
+      account_id: string;
+      status: string;
+      deleted_at: string | null;
+      prompt_context: unknown;
+    }>();
+
+  if (contentFetchError) {
+    throw contentFetchError;
+  }
+
+  if (!content) {
+    throw new Error("Content item not found");
+  }
+
+  if (content.status !== "failed") {
+    throw new Error("Only failed posts can be archived from this action.");
+  }
+
+  const nowIso = new Date().toISOString();
+
+  if (!content.deleted_at) {
+    const { error: contentUpdateError } = await supabase
+      .from("content_items")
+      .update({ deleted_at: nowIso, updated_at: nowIso })
+      .eq("id", contentId)
+      .eq("account_id", accountId);
+
+    if (contentUpdateError) {
+      throw contentUpdateError;
+    }
+  }
+
+  const { error: jobUpdateError } = await supabase
+    .from("publish_jobs")
+    .update({
+      resolved_at: nowIso,
+      resolution_kind: "user_archived_failure",
+      resolution_note: "Archived from planner failure review.",
+      next_attempt_at: null,
+      updated_at: nowIso,
+    })
+    .eq("content_item_id", contentId)
+    .eq("account_id", accountId)
+    .eq("status", "failed")
+    .is("resolved_at", null);
+
+  if (jobUpdateError) {
+    throw jobUpdateError;
+  }
+
+  const { error: notificationUpdateError } = await supabase
+    .from("notifications")
+    .update({ read_at: nowIso, dismissed_at: nowIso })
+    .eq("account_id", accountId)
+    .in("category", [...FAILURE_NOTIFICATION_CATEGORIES])
+    .filter("metadata->>contentId", "eq", contentId);
+
+  if (notificationUpdateError) {
+    throw notificationUpdateError;
+  }
+
+  const tournamentId = await syncTournamentFixtureGeneratedState({
+    supabase,
+    accountId,
+    promptContext: content.prompt_context,
+  });
+
+  const { error: insertNotificationError } = await supabase
+    .from("notifications")
+    .insert({
+      account_id: accountId,
+      category: "content_failure_archived",
+      message: "Failed post archived",
+      metadata: { contentId },
+    });
+
+  if (insertNotificationError) {
+    console.error("[planner] failed to insert archive failure notification", insertNotificationError);
+  }
+
+  revalidatePath("/planner");
+  revalidatePath(`/planner/${contentId}`);
+  if (tournamentId) {
+    revalidatePath(`/tournaments/${tournamentId}`);
+  }
+
+  return {
+    ok: true as const,
+    contentId,
+    archivedAt: nowIso,
+  };
+}
+
 export async function updatePlannerContentMedia(payload: unknown) {
   const { contentId, media } = updateMediaSchema.parse(payload);
   if (!media.length) {
@@ -421,6 +542,23 @@ export async function updatePlannerContentMedia(payload: unknown) {
 
   const mediaIds = Array.from(new Set(media.map((item) => item.assetId)));
 
+  // Assets already attached to this post are allowed through validation even if
+  // they were later hidden or are no longer "ready" — the owner must be able to
+  // keep or remove media that is currently on the post. Only newly-added assets
+  // are held to the ready/library checks.
+  const { data: currentVariant, error: currentVariantError } = await supabase
+    .from("content_variants")
+    .select("media_ids")
+    .eq("content_item_id", contentId)
+    .maybeSingle<{ media_ids: string[] | null }>();
+
+  if (currentVariantError) {
+    throw currentVariantError;
+  }
+
+  const alreadyAttachedIds = new Set(currentVariant?.media_ids ?? []);
+  const newlyAttachedIds = mediaIds.filter((id) => !alreadyAttachedIds.has(id));
+
   const { data: assets, error: assetError } = await supabase
     .from("media_assets")
     .select("id, media_type, processed_status, derived_variants")
@@ -438,6 +576,9 @@ export async function updatePlannerContentMedia(payload: unknown) {
   }
 
   for (const assetId of mediaIds) {
+    if (alreadyAttachedIds.has(assetId)) {
+      continue;
+    }
     const asset = assetById.get(assetId);
     if (asset?.processed_status !== "ready") {
       throw new Error("Select ready media assets only.");
@@ -476,7 +617,8 @@ export async function updatePlannerContentMedia(payload: unknown) {
     }
   }
 
-  if (canWriteAttachments && (libraryRows ?? []).length !== mediaIds.length) {
+  const librarySet = new Set((libraryRows ?? []).map((row) => row.id));
+  if (canWriteAttachments && newlyAttachedIds.some((id) => !librarySet.has(id))) {
     throw new Error("Some media assets are not ready for planner attachments.");
   }
 
@@ -513,11 +655,13 @@ export async function updatePlannerContentMedia(payload: unknown) {
     const { error: insertAttachmentsError } = await supabase
       .from("content_media_attachments")
       .insert(
-        mediaIds.map((mediaId, position) => ({
-          content_item_id: contentId,
-          media_id: mediaId,
-          position,
-        })),
+        mediaIds
+          .filter((mediaId) => librarySet.has(mediaId))
+          .map((mediaId, position) => ({
+            content_item_id: contentId,
+            media_id: mediaId,
+            position,
+          })),
       );
 
     if (insertAttachmentsError && !isSchemaMissingError(insertAttachmentsError)) {
@@ -548,8 +692,12 @@ export async function updatePlannerContentMedia(payload: unknown) {
   };
 }
 
-export async function loadPlannerMediaLibrary() {
-  return listMediaAssets({ excludeTags: ["Tournament"] });
+export async function loadPlannerMediaLibrary(input?: unknown) {
+  const options = loadPlannerMediaLibrarySchema.parse(input) ?? { includeAssetIds: [] };
+  return listMediaAssets({
+    excludeTags: ["Tournament"],
+    includeAssetIds: options.includeAssetIds,
+  });
 }
 
 export async function restorePlannerContent(payload: unknown) {
@@ -604,6 +752,7 @@ export async function restorePlannerContent(payload: unknown) {
       .from("publish_jobs")
       .select("id")
       .eq("content_item_id", contentId)
+      .is("resolved_at", null)
       .limit(1)
       .maybeSingle();
 
@@ -1038,6 +1187,9 @@ export async function updatePlannerContentSchedule(payload: unknown) {
       next_attempt_at: scheduledIso,
       last_error: null,
       attempt: 0,
+      resolved_at: null,
+      resolution_kind: null,
+      resolution_note: null,
       updated_at: nowIso,
     })
     .eq("content_item_id", contentId)

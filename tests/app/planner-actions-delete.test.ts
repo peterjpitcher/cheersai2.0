@@ -36,6 +36,8 @@ function createSupabaseMock(results: QueryResult[]) {
       'delete',
       'insert',
       'eq',
+      'in',
+      'filter',
       'contains',
       'is',
       'not',
@@ -168,5 +170,66 @@ describe('planner delete/restore tournament sync', () => {
       updated_at: expect.any(String),
     }));
     expect(revalidatePathMock).toHaveBeenCalledWith(`/tournaments/${tournamentId}`);
+  });
+
+  it('archives a failed post by resolving jobs, trashing content, and dismissing alerts', async () => {
+    const { supabase, calls } = createSupabaseMock([
+      {
+        data: {
+          id: contentId,
+          account_id: 'account-1',
+          status: 'failed',
+          deleted_at: null,
+          prompt_context: null,
+        },
+        error: null,
+      },
+      { error: null },
+      { error: null },
+      { error: null },
+      { error: null },
+    ]);
+
+    requireAuthContextMock.mockResolvedValue({
+      accountId: 'account-1',
+      supabase,
+    });
+
+    const { archivePlannerFailure } = await import('@/app/(app)/planner/actions');
+    await archivePlannerFailure({ contentId });
+
+    const contentUpdate = calls.find(
+      (call) => call.table === 'content_items' && call.method === 'update',
+    );
+    const jobUpdate = calls.find(
+      (call) => call.table === 'publish_jobs' && call.method === 'update',
+    );
+    const notificationUpdate = calls.find(
+      (call) => call.table === 'notifications' && call.method === 'update',
+    );
+
+    expect(contentUpdate?.args[0]).toEqual(expect.objectContaining({
+      deleted_at: expect.any(String),
+      updated_at: expect.any(String),
+    }));
+    expect(jobUpdate?.args[0]).toEqual(expect.objectContaining({
+      resolved_at: expect.any(String),
+      resolution_kind: 'user_archived_failure',
+      next_attempt_at: null,
+    }));
+    expect(notificationUpdate?.args[0]).toEqual(expect.objectContaining({
+      read_at: expect.any(String),
+      dismissed_at: expect.any(String),
+    }));
+    expect(calls).toContainEqual({
+      table: 'publish_jobs',
+      method: 'is',
+      args: ['resolved_at', null],
+    });
+    expect(calls).toContainEqual({
+      table: 'notifications',
+      method: 'filter',
+      args: ['metadata->>contentId', 'eq', contentId],
+    });
   });
 });

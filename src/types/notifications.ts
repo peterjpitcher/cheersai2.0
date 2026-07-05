@@ -50,6 +50,8 @@ export interface PublishJobRow {
   platform: string;
   status: string;
   error_message: string | null;
+  last_error?: string | null;
+  resolved_at?: string | null;
   created_at: string;
   updated_at: string;
 }

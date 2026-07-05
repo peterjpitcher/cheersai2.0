@@ -61,4 +61,67 @@ describe("planner notifications", () => {
     expect(isHeaderBadgeNotification({ urgency: "standard", category: "media_derivative_failed" })).toBe(true);
     expect(isHeaderBadgeNotification({ urgency: "urgent", category: "custom_alert" })).toBe(true);
   });
+
+  it("counts only unresolved failed jobs linked to non-deleted content", async () => {
+    const query = {
+      select: vi.fn(),
+      eq: vi.fn(),
+      is: vi.fn(),
+      then: vi.fn(),
+    };
+    query.select.mockReturnValue(query);
+    query.eq.mockReturnValue(query);
+    query.is.mockReturnValue(query);
+    query.then.mockImplementation((resolve, reject) =>
+      Promise.resolve({ count: 2, error: null }).then(resolve, reject),
+    );
+
+    const from = vi.fn(() => query);
+    requireAuthContextMock.mockResolvedValue({
+      accountId: "account-1",
+      supabase: { from },
+    });
+
+    const { getFailedPublishCount } = await import("@/lib/planner/notifications");
+    const count = await getFailedPublishCount();
+
+    expect(count).toBe(2);
+    expect(from).toHaveBeenCalledWith("publish_jobs");
+    expect(query.select).toHaveBeenCalledWith("id, content_items!inner(id)", { count: "exact", head: true });
+    expect(query.eq).toHaveBeenCalledWith("account_id", "account-1");
+    expect(query.eq).toHaveBeenCalledWith("status", "failed");
+    expect(query.is).toHaveBeenCalledWith("resolved_at", null);
+    expect(query.is).toHaveBeenCalledWith("content_items.deleted_at", null);
+  });
+
+  it("hides dismissed problem notifications from the planner feed", async () => {
+    const query = {
+      select: vi.fn(),
+      eq: vi.fn(),
+      is: vi.fn(),
+      or: vi.fn(),
+      order: vi.fn(),
+      limit: vi.fn(),
+      returns: vi.fn(),
+    };
+    query.select.mockReturnValue(query);
+    query.eq.mockReturnValue(query);
+    query.is.mockReturnValue(query);
+    query.or.mockReturnValue(query);
+    query.order.mockReturnValue(query);
+    query.limit.mockReturnValue(query);
+    query.returns.mockResolvedValue({ data: [], error: null });
+
+    const from = vi.fn(() => query);
+    requireAuthContextMock.mockResolvedValue({
+      accountId: "account-1",
+      supabase: { from },
+    });
+
+    const { listPlannerNotifications } = await import("@/lib/planner/notifications");
+    const notifications = await listPlannerNotifications();
+
+    expect(notifications).toEqual([]);
+    expect(query.is).toHaveBeenCalledWith("dismissed_at", null);
+  });
 });

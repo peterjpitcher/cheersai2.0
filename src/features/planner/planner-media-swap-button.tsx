@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState, useTransition, type Dispatch, type SetStateAction } from "react";
+import { useCallback, useEffect, useMemo, useState, useTransition, type Dispatch, type SetStateAction } from "react";
 import { createPortal } from "react-dom";
 import { Pencil, X } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -52,6 +52,7 @@ export function PlannerMediaSwapButton({
   const [loadError, setLoadError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadPending, startLoadTransition] = useTransition();
+  const attachedAssetIds = useMemo(() => initialMedia.map((media) => media.id), [initialMedia]);
 
   useEffect(() => {
     if (initialMediaLibrary) {
@@ -76,12 +77,14 @@ export function PlannerMediaSwapButton({
   }, [isOpen]);
 
   const loadLibrary = useCallback(() => {
-    if (library || isLoading) return;
+    const hasAttachedAssets =
+      attachedAssetIds.length === 0 || attachedAssetIds.every((assetId) => library?.some((asset) => asset.id === assetId));
+    if ((library && hasAttachedAssets) || isLoading) return;
     setIsLoading(true);
     setLoadError(null);
     startLoadTransition(async () => {
       try {
-        const assets = await loadPlannerMediaLibrary();
+        const assets = await loadPlannerMediaLibrary({ includeAssetIds: attachedAssetIds });
         setLibrary(assets);
       } catch (error) {
         const message = error instanceof Error ? error.message : "Unable to load media library.";
@@ -90,7 +93,7 @@ export function PlannerMediaSwapButton({
         setIsLoading(false);
       }
     });
-  }, [isLoading, library]);
+  }, [attachedAssetIds, isLoading, library]);
 
   const openEditor = () => {
     setIsOpen(true);
@@ -139,15 +142,15 @@ export function PlannerMediaSwapButton({
 
       {isOpen && portalRoot
         ? createPortal(
-            <div className="fixed inset-0 z-[100] flex items-start justify-center overflow-y-auto p-4 sm:items-center" role="dialog" aria-modal="true">
+            <div className="fixed inset-0 z-[100] flex items-start justify-center overflow-hidden p-4" role="dialog" aria-modal="true">
               <button
                 type="button"
                 className="absolute inset-0 z-0 bg-slate-900/60 backdrop-blur-sm"
                 aria-label="Close media editor"
                 onClick={() => setIsOpen(false)}
               />
-              <div className="relative z-10 my-6 w-full max-w-4xl overflow-hidden rounded-3xl border border-white/40 bg-white shadow-2xl">
-                <header className="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4">
+              <div className="relative z-10 flex max-h-[calc(100vh-2rem)] w-full max-w-4xl flex-col overflow-hidden rounded-3xl border border-white/40 bg-white shadow-2xl">
+                <header className="flex shrink-0 items-start justify-between gap-4 border-b border-slate-200 px-5 py-4">
                   <div>
                     <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Media editor</p>
                     <h2 className="text-lg font-semibold text-slate-900">{modalTitle}</h2>
@@ -161,7 +164,7 @@ export function PlannerMediaSwapButton({
                     <X className="h-4 w-4" />
                   </button>
                 </header>
-                <div className="max-h-[80vh] overflow-y-auto p-5">
+                <div className="min-h-0 flex-1 overflow-y-auto p-5">
                   {isLoading || isLoadPending ? (
                     <p className="text-sm text-slate-500">Loading media library...</p>
                   ) : loadError ? (

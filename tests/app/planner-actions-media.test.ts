@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const requireAuthContextMock = vi.fn();
 const revalidatePathMock = vi.fn();
+const listMediaAssetsMock = vi.fn();
 
 vi.mock("@/lib/auth/server", () => ({
   requireAuthContext: requireAuthContextMock,
@@ -15,16 +16,25 @@ vi.mock("next/cache", () => ({
   revalidatePath: revalidatePathMock,
 }));
 
+vi.mock("@/lib/library/data", () => ({
+  listMediaAssets: (...args: unknown[]) => listMediaAssetsMock(...args),
+}));
+
 type QueryResult = { data?: unknown; error?: unknown };
 
-function createSupabaseMock(results: QueryResult[]) {
+/**
+ * Per-table result queues keyed by table name. Robust to added queries: inserting
+ * a new query on one table no longer shifts every later table's results.
+ */
+function createSupabaseMock(plan: Record<string, QueryResult[]>) {
   const calls: Array<{ table: string; method: string; args: unknown[] }> = [];
-  let resultIndex = 0;
+  const cursors: Record<string, number> = {};
 
-  function nextResult(): QueryResult {
-    const result = results[resultIndex] ?? { data: null, error: null };
-    resultIndex += 1;
-    return result;
+  function nextFor(table: string): QueryResult {
+    const queue = plan[table] ?? [];
+    const index = cursors[table] ?? 0;
+    cursors[table] = index + 1;
+    return queue[index] ?? { data: null, error: null };
   }
 
   function createBuilder(table: string): Record<string, unknown> {
@@ -51,10 +61,10 @@ function createSupabaseMock(results: QueryResult[]) {
 
     builder.maybeSingle = vi.fn(() => {
       calls.push({ table, method: "maybeSingle", args: [] });
-      return Promise.resolve(nextResult());
+      return Promise.resolve(nextFor(table));
     });
 
-    builder.then = vi.fn((resolve, reject) => Promise.resolve(nextResult()).then(resolve, reject));
+    builder.then = vi.fn((resolve, reject) => Promise.resolve(nextFor(table)).then(resolve, reject));
 
     return builder;
   }
@@ -78,35 +88,31 @@ describe("updatePlannerContentMedia", () => {
     vi.resetModules();
     requireAuthContextMock.mockReset();
     revalidatePathMock.mockReset();
+    listMediaAssetsMock.mockReset();
   });
 
   it("updates variant media and content media attachments in order", async () => {
-    const { supabase, calls } = createSupabaseMock([
-      {
-        data: {
-          id: contentId,
-          account_id: "account-1",
-          placement: "feed",
-          status: "scheduled",
+    const { supabase, calls } = createSupabaseMock({
+      content_items: [
+        { data: { id: contentId, account_id: "account-1", placement: "feed", status: "scheduled" }, error: null },
+        { error: null }, // updated_at bump
+      ],
+      content_variants: [
+        { data: { media_ids: [] }, error: null }, // currently attached (none)
+        { error: null }, // upsert
+      ],
+      media_assets: [
+        {
+          data: [
+            { id: mediaIdA, media_type: "image", processed_status: "ready", derived_variants: { square: "a.jpg" } },
+            { id: mediaIdB, media_type: "video", processed_status: "ready", derived_variants: null },
+          ],
+          error: null,
         },
-        error: null,
-      },
-      {
-        data: [
-          { id: mediaIdA, media_type: "image", processed_status: "ready", derived_variants: { square: "a.jpg" } },
-          { id: mediaIdB, media_type: "video", processed_status: "ready", derived_variants: null },
-        ],
-        error: null,
-      },
-      {
-        data: [{ id: mediaIdA }, { id: mediaIdB }],
-        error: null,
-      },
-      { error: null },
-      { error: null },
-      { error: null },
-      { error: null },
-    ]);
+      ],
+      media_library: [{ data: [{ id: mediaIdA }, { id: mediaIdB }], error: null }],
+      content_media_attachments: [{ error: null }, { error: null }], // delete, insert
+    });
 
     requireAuthContextMock.mockResolvedValue({ accountId: "account-1", supabase });
 
@@ -132,18 +138,83 @@ describe("updatePlannerContentMedia", () => {
     expect(revalidatePathMock).toHaveBeenCalledWith("/planner");
   });
 
-  it("rejects non-editable posts", async () => {
-    const { supabase, calls } = createSupabaseMock([
-      {
-        data: {
-          id: contentId,
-          account_id: "account-1",
-          placement: "feed",
-          status: "posted",
+  it("loads hidden attached ids when opening the planner media library", async () => {
+    listMediaAssetsMock.mockResolvedValue([{ id: mediaIdA }]);
+
+    const { loadPlannerMediaLibrary } = await import("@/app/(app)/planner/actions");
+    await expect(loadPlannerMediaLibrary({ includeAssetIds: [mediaIdA] })).resolves.toEqual([{ id: mediaIdA }]);
+
+    expect(listMediaAssetsMock).toHaveBeenCalledWith({
+      excludeTags: ["Tournament"],
+      includeAssetIds: [mediaIdA],
+    });
+  });
+
+  it("keeps an already-attached asset that is now hidden and not 'ready'", async () => {
+    const { supabase, calls } = createSupabaseMock({
+      content_items: [
+        { data: { id: contentId, account_id: "account-1", placement: "feed", status: "draft" }, error: null },
+        { error: null }, // updated_at bump
+      ],
+      content_variants: [
+        { data: { media_ids: [mediaIdA] }, error: null }, // already attached
+        { error: null }, // upsert
+      ],
+      media_assets: [
+        {
+          data: [
+            // hidden + no longer "ready", but already attached, so still allowed
+            { id: mediaIdA, media_type: "image", processed_status: "processing", derived_variants: { story: "s" } },
+          ],
+          error: null,
         },
-        error: null,
-      },
-    ]);
+      ],
+      media_library: [{ data: [{ id: mediaIdA }], error: null }],
+      content_media_attachments: [{ error: null }, { error: null }],
+    });
+
+    requireAuthContextMock.mockResolvedValue({ accountId: "account-1", supabase });
+
+    const { updatePlannerContentMedia } = await import("@/app/(app)/planner/actions");
+    await expect(
+      updatePlannerContentMedia({ contentId, media: [{ assetId: mediaIdA }] }),
+    ).resolves.toMatchObject({ ok: true });
+
+    const variantUpsert = calls.find((call) => call.table === "content_variants" && call.method === "upsert");
+    expect(variantUpsert?.args[0]).toMatchObject({ content_item_id: contentId, media_ids: [mediaIdA] });
+  });
+
+  it("still rejects a newly-added asset that is not ready", async () => {
+    const { supabase } = createSupabaseMock({
+      content_items: [
+        { data: { id: contentId, account_id: "account-1", placement: "feed", status: "draft" }, error: null },
+      ],
+      content_variants: [{ data: { media_ids: [mediaIdA] }, error: null }],
+      media_assets: [
+        {
+          data: [
+            { id: mediaIdA, media_type: "image", processed_status: "ready", derived_variants: { story: "s" } },
+            { id: mediaIdB, media_type: "image", processed_status: "processing", derived_variants: {} },
+          ],
+          error: null,
+        },
+      ],
+    });
+
+    requireAuthContextMock.mockResolvedValue({ accountId: "account-1", supabase });
+
+    const { updatePlannerContentMedia } = await import("@/app/(app)/planner/actions");
+    await expect(
+      updatePlannerContentMedia({ contentId, media: [{ assetId: mediaIdA }, { assetId: mediaIdB }] }),
+    ).rejects.toThrow("Select ready media assets only.");
+  });
+
+  it("rejects non-editable posts", async () => {
+    const { supabase, calls } = createSupabaseMock({
+      content_items: [
+        { data: { id: contentId, account_id: "account-1", placement: "feed", status: "posted" }, error: null },
+      ],
+    });
 
     requireAuthContextMock.mockResolvedValue({ accountId: "account-1", supabase });
 
@@ -156,18 +227,13 @@ describe("updatePlannerContentMedia", () => {
   });
 
   it("rejects media that does not belong to the account", async () => {
-    const { supabase } = createSupabaseMock([
-      {
-        data: {
-          id: contentId,
-          account_id: "account-1",
-          placement: "feed",
-          status: "scheduled",
-        },
-        error: null,
-      },
-      { data: [], error: null },
-    ]);
+    const { supabase } = createSupabaseMock({
+      content_items: [
+        { data: { id: contentId, account_id: "account-1", placement: "feed", status: "scheduled" }, error: null },
+      ],
+      content_variants: [{ data: { media_ids: [] }, error: null }],
+      media_assets: [{ data: [], error: null }],
+    });
 
     requireAuthContextMock.mockResolvedValue({ accountId: "account-1", supabase });
 
@@ -178,21 +244,15 @@ describe("updatePlannerContentMedia", () => {
   });
 
   it("rejects story videos", async () => {
-    const { supabase } = createSupabaseMock([
-      {
-        data: {
-          id: contentId,
-          account_id: "account-1",
-          placement: "story",
-          status: "scheduled",
-        },
-        error: null,
-      },
-      {
-        data: [{ id: mediaIdA, media_type: "video", processed_status: "ready", derived_variants: null }],
-        error: null,
-      },
-    ]);
+    const { supabase } = createSupabaseMock({
+      content_items: [
+        { data: { id: contentId, account_id: "account-1", placement: "story", status: "scheduled" }, error: null },
+      ],
+      content_variants: [{ data: { media_ids: [] }, error: null }],
+      media_assets: [
+        { data: [{ id: mediaIdA, media_type: "video", processed_status: "ready", derived_variants: null }], error: null },
+      ],
+    });
 
     requireAuthContextMock.mockResolvedValue({ accountId: "account-1", supabase });
 
@@ -203,21 +263,15 @@ describe("updatePlannerContentMedia", () => {
   });
 
   it("rejects story images without a story derivative", async () => {
-    const { supabase } = createSupabaseMock([
-      {
-        data: {
-          id: contentId,
-          account_id: "account-1",
-          placement: "story",
-          status: "scheduled",
-        },
-        error: null,
-      },
-      {
-        data: [{ id: mediaIdA, media_type: "image", processed_status: "ready", derived_variants: {} }],
-        error: null,
-      },
-    ]);
+    const { supabase } = createSupabaseMock({
+      content_items: [
+        { data: { id: contentId, account_id: "account-1", placement: "story", status: "scheduled" }, error: null },
+      ],
+      content_variants: [{ data: { media_ids: [] }, error: null }],
+      media_assets: [
+        { data: [{ id: mediaIdA, media_type: "image", processed_status: "ready", derived_variants: {} }], error: null },
+      ],
+    });
 
     requireAuthContextMock.mockResolvedValue({ accountId: "account-1", supabase });
 

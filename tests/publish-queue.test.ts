@@ -72,6 +72,77 @@ describe("PublishQueueWorker", () => {
             expect(result.processed).toBe(0);
         });
 
+        it("resolves unsupported GBP jobs without calling a provider", async () => {
+            const job = {
+                id: "job-gbp",
+                content_item_id: "content-gbp",
+                variant_id: "variant-gbp",
+                status: "queued",
+                attempt: 0,
+                placement: "feed",
+            };
+
+            mockSupabase.from.mockReturnValueOnce({
+                select: vi.fn().mockReturnThis(),
+                eq: vi.fn().mockReturnThis(),
+                lte: vi.fn().mockReturnThis(),
+                order: vi.fn().mockReturnThis(),
+                limit: vi.fn().mockResolvedValue({ data: [job], error: null }),
+            });
+            mockSupabase.from.mockReturnValueOnce({
+                update: vi.fn().mockReturnThis(),
+                eq: vi.fn().mockReturnThis(),
+                select: vi.fn().mockReturnThis(),
+                maybeSingle: vi.fn().mockResolvedValue({ data: { id: "job-gbp" }, error: null }),
+            });
+            mockSupabase.from.mockReturnValueOnce({
+                select: vi.fn().mockReturnThis(),
+                eq: vi.fn().mockReturnThis(),
+                maybeSingle: vi.fn().mockResolvedValue({
+                    data: {
+                        id: "content-gbp",
+                        account_id: "acc-1",
+                        platform: "gbp",
+                        placement: "feed",
+                        scheduled_for: new Date().toISOString(),
+                        prompt_context: {},
+                        campaigns: null,
+                    },
+                    error: null,
+                }),
+            });
+
+            const jobUpdate = vi.fn().mockReturnThis();
+            mockSupabase.from.mockReturnValueOnce({
+                update: jobUpdate,
+                eq: vi.fn().mockResolvedValue({ error: null }),
+            });
+            mockSupabase.from.mockReturnValueOnce({
+                update: vi.fn().mockReturnThis(),
+                eq: vi.fn().mockResolvedValue({ error: null }),
+            });
+            const insertNotification = vi.fn().mockResolvedValue({ error: null });
+            mockSupabase.from.mockReturnValueOnce({ insert: insertNotification });
+
+            const publishSpy = vi.spyOn(worker, "publishByPlatform");
+            const result = await worker.processDueJobs();
+
+            expect(result.processed).toBe(1);
+            expect(publishSpy).not.toHaveBeenCalled();
+            expect(jobUpdate).toHaveBeenCalledWith(expect.objectContaining({
+                status: "failed",
+                resolved_at: expect.any(String),
+                resolution_kind: "unsupported_platform",
+            }));
+            expect(insertNotification).toHaveBeenCalledWith(expect.objectContaining({
+                category: "publish_failed",
+                metadata: expect.objectContaining({
+                    platform: "gbp",
+                    error: "Unsupported publishing platform: gbp",
+                }),
+            }));
+        });
+
         it("processes a valid facebook job successfully", async () => {
             // 1. Mock jobs fetch
             const job = {
@@ -768,7 +839,7 @@ describe("PublishQueueWorker", () => {
                 lte: vi.fn().mockReturnThis(),
                 limit: vi.fn().mockReturnThis(),
                 returns: vi.fn().mockResolvedValue({
-                    data: [{ id: "content-missing-job", scheduled_for: nowIso, placement: "feed" }],
+                    data: [{ id: "content-missing-job", account_id: "acc-1", platform: "facebook", scheduled_for: nowIso, placement: "feed" }],
                     error: null
                 }),
             });

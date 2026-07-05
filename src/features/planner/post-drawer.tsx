@@ -4,7 +4,7 @@ import { useCallback, useMemo, useState, useTransition } from 'react';
 import { useQueryClient, useQuery } from '@tanstack/react-query';
 import { DateTime } from 'luxon';
 import { useRouter } from 'next/navigation';
-import { AlertTriangle, Calendar, Check, Clock, Pencil, Trash2, X } from 'lucide-react';
+import { AlertTriangle, Archive, Calendar, Check, Clock, Pencil, Trash2, X } from 'lucide-react';
 import { MediaFrame, MediaFrameVideo, resolveMediaPlacement } from '@/components/media/media-frame';
 import {
   Sheet,
@@ -17,6 +17,7 @@ import { PlatformBadge } from '@/components/ui/platform-badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { DEFAULT_TIMEZONE } from '@/lib/constants';
 import {
+  archivePlannerFailure,
   deletePlannerContent,
   restorePlannerContent,
   updatePlannerContentBody,
@@ -205,6 +206,23 @@ function DrawerContent({
     });
   }, [contentId, onDeleted, queryClient, router, toast]);
 
+  const handleArchiveFailure = useCallback(() => {
+    startTransition(async () => {
+      try {
+        await archivePlannerFailure({ contentId });
+        queryClient.removeQueries({ queryKey: ['content-detail', contentId] });
+        onDeleted();
+        router.refresh();
+        toast.success('Failure archived', {
+          description: 'The post has been removed from active failed posts.',
+        });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Unable to archive failure.';
+        toast.error('Could not archive failure', { description: msg });
+      }
+    });
+  }, [contentId, onDeleted, queryClient, router, toast]);
+
   return (
     <div className="space-y-5">
       {/* Status + Platform */}
@@ -323,7 +341,18 @@ function DrawerContent({
         </div>
       )}
 
-      <div className="border-t border-border pt-4">
+      <div className="space-y-2 border-t border-border pt-4">
+        {content.status === 'failed' ? (
+          <button
+            type="button"
+            onClick={handleArchiveFailure}
+            disabled={isPending}
+            className="inline-flex w-full items-center justify-center gap-2 rounded-md border border-border px-3 py-2 text-sm font-medium text-foreground transition hover:bg-muted/60 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <Archive className="size-4" aria-hidden />
+            {isPending ? 'Archiving...' : 'Archive failure'}
+          </button>
+        ) : null}
         <button
           type="button"
           onClick={handleDelete}

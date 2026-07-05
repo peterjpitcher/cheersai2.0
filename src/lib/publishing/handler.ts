@@ -19,6 +19,7 @@ import type { ContentPayload } from '@/types/providers';
 import type { ProviderPlatform } from '@/types/providers';
 
 const logger = createLogger('publish-handler');
+const SUPPORTED_PUBLISH_PLATFORMS = new Set<string>(['facebook', 'instagram']);
 
 interface PublishJobRow {
   id: string;
@@ -63,6 +64,30 @@ export async function processPublishJob(jobId: string): Promise<ProcessResult> {
   // Step 2: Short-circuit if already published
   if (typedJob.status === 'published') {
     logger.info('Job already published, skipping', { jobId });
+    return { alreadyDone: true };
+  }
+
+  if (!isSupportedPublishPlatform(typedJob.platform)) {
+    const nowIso = new Date().toISOString();
+    const message = `Unsupported publishing platform: ${typedJob.platform}`;
+    await db.from('publish_jobs').update({
+      status: 'failed',
+      error_message: message,
+      last_error: message,
+      resolved_at: nowIso,
+      resolution_kind: 'unsupported_platform',
+      resolution_note: message,
+      completed_at: nowIso,
+    }).eq('id', jobId).single();
+
+    await db.from('content_items').update({
+      status: 'failed',
+    }).eq('id', typedJob.content_item_id).single();
+
+    logger.warn('Unsupported publish platform resolved without provider call', {
+      jobId,
+      platform: typedJob.platform,
+    });
     return { alreadyDone: true };
   }
 
@@ -257,6 +282,10 @@ export async function processPublishJob(jobId: string): Promise<ProcessResult> {
     // Re-throw so webhook returns 500 and QStash retries
     throw error;
   }
+}
+
+function isSupportedPublishPlatform(platform: string): platform is ProviderPlatform {
+  return SUPPORTED_PUBLISH_PLATFORMS.has(platform);
 }
 
 /** Row shape for content_items query in buildContentPayload */

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useTransition, useState, type Dispatch, type SetStateAction } from "react";
+import { useEffect, useMemo, useTransition, useState, type Dispatch, type SetStateAction } from "react";
 import { useRouter } from "next/navigation";
 
 import { updatePlannerContentMedia } from "@/app/(app)/planner/actions";
@@ -49,6 +49,10 @@ export function PlannerContentMediaEditor({
   const [shouldReturnToPlanner, setShouldReturnToPlanner] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const isStory = placement === "story";
+  // Assets already on the post when the editor opened. These may since have been
+  // hidden in the library, so they can be kept without passing the library-based
+  // pre-checks — the server re-validates authoritatively.
+  const initiallyAttachedIds = useMemo(() => new Set(initialMedia.map((media) => media.id)), [initialMedia]);
 
   useEffect(() => {
     setLibrary(mediaLibrary);
@@ -112,16 +116,17 @@ export function PlannerContentMediaEditor({
         setError("Stories require exactly one image.");
         return;
       }
-      const asset = library.find((entry) => entry.id === selection[0]?.assetId);
-      if (!asset) {
+      const selectedId = selection[0]?.assetId;
+      const asset = selectedId ? library.find((entry) => entry.id === selectedId) : undefined;
+      if (!asset && !(selectedId && initiallyAttachedIds.has(selectedId))) {
         setError("Select a processed image from your library.");
         return;
       }
-      if (asset.mediaType !== "image") {
+      if (asset && asset.mediaType !== "image") {
         setError("Stories support images only.");
         return;
       }
-      if (!asset.derivedVariants?.story) {
+      if (asset && !asset.derivedVariants?.story) {
         setError("Story derivative still processing. Try again once ready.");
         return;
       }
@@ -182,7 +187,10 @@ export function PlannerContentMediaEditor({
           : "Posts require at least one attachment before publishing."}
       </p>
       {error ? <p className="text-xs text-rose-500">{error}</p> : null}
-      <div className="flex items-center justify-end">
+      <div
+        className="sticky bottom-0 -mx-5 -mb-5 flex items-center justify-end border-t border-[var(--c-line)] px-5 py-3"
+        style={{ backgroundColor: "var(--c-card)" }}
+      >
         <Button type="button" onClick={handleSave} disabled={isPending} size="sm">
           {isPending ? "Saving…" : "Save media"}
         </Button>

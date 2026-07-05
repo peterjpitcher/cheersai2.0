@@ -7,9 +7,10 @@ import { resolveThumbnails } from '@/lib/media/resolve-thumbnails';
 import { materialiseRecurring } from '@/lib/scheduling/materialise';
 import { PlannerSkeleton } from '@/features/planner/planner-skeleton';
 import { getCurrentUser } from '@/lib/auth/server';
-import { getFailedPublishCount, listPlannerNotifications } from '@/lib/planner/notifications';
+import { getFailedPublishCount, listActiveFailedPosts, listPlannerNotifications, type ActiveFailedPost } from '@/lib/planner/notifications';
 import { AttentionNeededBanner } from '@/features/planner/attention-needed-banner';
 import { PlannerShell } from '@/features/planner/planner-shell';
+import { STATUS_QUERY_ALIASES } from '@/features/planner/status-filter-options';
 import type { PlannerActivityItem } from '@/features/planner/activity-feed';
 
 /** Force dynamic rendering — planner shows personalised data (PERF-01) */
@@ -24,7 +25,9 @@ export default async function PlannerPage({ searchParams }: PlannerPageProps) {
   const monthParam = typeof params.month === 'string' ? params.month.trim() : undefined;
   const viewParam = typeof params.view === 'string' ? params.view : undefined;
   const showImagesParam = params.show_images !== 'false';
-  const statusParam = typeof params.status === 'string' ? params.status : undefined;
+  const rawStatusParam = typeof params.status === 'string' ? params.status : undefined;
+  const statusParam = rawStatusParam ? (STATUS_QUERY_ALIASES[rawStatusParam] ?? rawStatusParam) : undefined;
+  const failedFilterActive = statusParam === 'failed';
 
   // Get accountId for realtime subscriptions (non-blocking — used by client components)
   const user = await getCurrentUser();
@@ -39,9 +42,10 @@ export default async function PlannerPage({ searchParams }: PlannerPageProps) {
   const dayLine = now.toFormat("cccc d LLLL");
 
   // Fetch attention banner count and initial feed events in parallel
-  const [failedCount, notifications] = await Promise.all([
+  const [failedCount, notifications, activeFailedPosts] = await Promise.all([
     getFailedPublishCount().catch(() => 0),
     listPlannerNotifications(20).catch(() => []),
+    failedFilterActive ? listActiveFailedPosts(100).catch(() => []) : Promise.resolve([]),
   ]);
 
   // Map server notifications to PlannerActivityItem[] for the feed
@@ -62,6 +66,10 @@ export default async function PlannerPage({ searchParams }: PlannerPageProps) {
         <AttentionNeededBanner accountId={accountId} initialCount={failedCount} />
       ) : null}
 
+      {failedFilterActive ? (
+        <FailedPostsList posts={activeFailedPosts} />
+      ) : null}
+
       {/* Suspense boundary isolates data-fetching to PlannerCalendarLoader only (PERF-01) */}
       <Suspense fallback={<PlannerSkeleton />}>
         <PlannerCalendarLoader
@@ -76,6 +84,44 @@ export default async function PlannerPage({ searchParams }: PlannerPageProps) {
         />
       </Suspense>
     </div>
+  );
+}
+
+function FailedPostsList({ posts }: { posts: ActiveFailedPost[] }) {
+  if (!posts.length) {
+    return (
+      <section className="rounded-lg border border-dashed p-4 text-sm" style={{ borderColor: 'var(--c-line)', color: 'var(--c-ink-3)' }}>
+        No active failed posts.
+      </section>
+    );
+  }
+
+  return (
+    <section className="rounded-lg border p-4" style={{ borderColor: 'var(--c-line)', backgroundColor: 'var(--c-card)' }}>
+      <h2 className="text-sm font-semibold" style={{ color: 'var(--c-ink)' }}>
+        Active failed posts
+      </h2>
+      <div className="mt-3 divide-y" style={{ borderColor: 'var(--c-line)' }}>
+        {posts.map((post) => (
+          <a
+            key={post.id}
+            href={`/planner/${post.id}`}
+            className="block py-3 text-sm hover:underline"
+            style={{ color: 'var(--c-ink)' }}
+          >
+            <span className="font-medium capitalize">{post.platform} {post.placement}</span>
+            {post.scheduledFor ? (
+              <span style={{ color: 'var(--c-ink-3)' }}> · {new Date(post.scheduledFor).toLocaleString()}</span>
+            ) : null}
+            {post.lastError ? (
+              <span className="mt-1 block truncate" style={{ color: 'var(--c-claret)' }}>
+                {post.lastError}
+              </span>
+            ) : null}
+          </a>
+        ))}
+      </div>
+    </section>
   );
 }
 

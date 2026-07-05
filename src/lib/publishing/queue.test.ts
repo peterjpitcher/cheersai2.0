@@ -54,7 +54,7 @@ vi.mock('@/lib/supabase/service', () => ({
 
 const TEST_JOB_ID = 'test-job-id-abc123';
 
-function baseOptions(overrides: { scheduledAt?: Date; variantId?: string | null } = {}): {
+function baseOptions(overrides: { scheduledAt?: Date; variantId?: string | null; platform?: Platform } = {}): {
   contentItemId: string;
   accountId: string;
   platform: Platform;
@@ -64,7 +64,7 @@ function baseOptions(overrides: { scheduledAt?: Date; variantId?: string | null 
   return {
     contentItemId: 'content-1',
     accountId: 'account-1',
-    platform: 'facebook',
+    platform: overrides.platform ?? 'facebook',
     scheduledAt: overrides.scheduledAt ?? new Date(),
     variantId: Object.prototype.hasOwnProperty.call(overrides, 'variantId')
       ? overrides.variantId
@@ -136,6 +136,17 @@ describe('enqueueAndDispatch()', () => {
     await expect(enqueueAndDispatch(baseOptions({ scheduledAt: new Date() }))).rejects.toThrow(
       'QStash unavailable',
     );
+  });
+
+  it('rejects unsupported GBP publishing before creating a job', async () => {
+    const { enqueueAndDispatch } = await loadQueue();
+
+    await expect(
+      enqueueAndDispatch(baseOptions({ platform: 'gbp' as Platform })),
+    ).rejects.toThrow('Unsupported publishing platform: gbp');
+
+    expect(mockPublishJobsInsert).not.toHaveBeenCalled();
+    expect(mockDispatchToQStash).not.toHaveBeenCalled();
   });
 
   it('should pass correct deduplication key to QStash', async () => {

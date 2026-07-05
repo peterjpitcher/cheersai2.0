@@ -46,6 +46,8 @@ type MediaAssetRow = {
 interface ListMediaAssetsOptions {
   excludeTags?: string[];
   includeSystemAssets?: boolean;
+  /** Account-owned asset ids that must be included even if hidden or outside the newest-page limit. */
+  includeAssetIds?: string[];
   /** Storage path prefixes to exclude (uses SQL LIKE with trailing %) */
   excludeStoragePathPrefixes?: string[];
   /**
@@ -101,11 +103,36 @@ export async function listMediaAssets(
       throw error;
     }
 
-    if (!data?.length) {
+    let rows = data ?? [];
+    const includeAssetIds = Array.from(new Set((options.includeAssetIds ?? []).filter(Boolean)));
+    const returnedIds = new Set(rows.map((row) => row.id));
+    const missingIncludeIds = includeAssetIds.filter((id) => !returnedIds.has(id));
+
+    if (missingIncludeIds.length) {
+      const { data: includedRows, error: includedError } = await supabase
+        .from("media_assets")
+        .select(
+          "id, file_name, media_type, tags, uploaded_at, size_bytes, storage_path, processed_status, processed_at, derived_variants, aspect_class",
+        )
+        .eq("account_id", accountId)
+        .in("id", missingIncludeIds)
+        .returns<MediaAssetRow[]>();
+
+      if (includedError) {
+        if (isSchemaMissingError(includedError)) {
+          return [];
+        }
+        throw includedError;
+      }
+
+      rows = [...rows, ...(includedRows ?? [])];
+    }
+
+    if (!rows.length) {
       return [];
     }
 
-    const summaries: MediaAssetSummary[] = data.map((row) => ({
+    const summaries: MediaAssetSummary[] = rows.map((row) => ({
       id: row.id,
       fileName: row.file_name,
       mediaType: row.media_type,

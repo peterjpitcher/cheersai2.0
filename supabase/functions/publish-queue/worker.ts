@@ -86,6 +86,8 @@ type ContentRow = {
 
 type ScheduledContentRow = {
     id: string;
+    account_id: string;
+    platform: ProviderPlatform;
     scheduled_for: string | null;
     placement: "feed" | "story";
 }
@@ -119,6 +121,16 @@ type NewPublishJobRow = {
     next_attempt_at: string;
     placement: "feed" | "story";
 };
+
+const SUPPORTED_PUBLISH_PLATFORMS = new Set<ProviderPlatform>(["facebook", "instagram"]);
+
+function isSupportedPublishPlatform(platform: ProviderPlatform): platform is "facebook" | "instagram" {
+    return SUPPORTED_PUBLISH_PLATFORMS.has(platform);
+}
+
+function unsupportedPlatformMessage(platform: ProviderPlatform) {
+    return `Unsupported publishing platform: ${platform}`;
+}
 
 function readEnv(name: string): string | undefined {
     const denoEnv = (globalThis as typeof globalThis & {
@@ -543,7 +555,7 @@ export class PublishQueueWorker {
     protected async ensureJobsForScheduledContent(windowIso: string, nowIso: string) {
         const { data: scheduledContent, error } = await this.supabase
             .from("content_items")
-            .select("id, scheduled_for, placement")
+            .select("id, account_id, platform, scheduled_for, placement")
             .in("status", ["scheduled", "queued"])
             .is("deleted_at", null)
             .lte("scheduled_for", windowIso)
@@ -559,7 +571,21 @@ export class PublishQueueWorker {
             return;
         }
 
-        const contentIds = scheduledContent.map((row: ScheduledContentRow) => row.id);
+        const unsupportedContent = scheduledContent.filter(
+            (row: ScheduledContentRow) => !isSupportedPublishPlatform(row.platform),
+        );
+        if (unsupportedContent.length) {
+            await this.resolveUnsupportedScheduledContent(unsupportedContent, nowIso);
+        }
+
+        const supportedContent = scheduledContent.filter(
+            (row: ScheduledContentRow) => isSupportedPublishPlatform(row.platform),
+        );
+        if (!supportedContent.length) {
+            return;
+        }
+
+        const contentIds = supportedContent.map((row: ScheduledContentRow) => row.id);
         const { data: existingJobsRaw, error: existingError } = await this.supabase
             .from("publish_jobs")
             .select("content_item_id")
@@ -572,7 +598,7 @@ export class PublishQueueWorker {
 
         const existingJobs = (existingJobsRaw ?? []) as Array<{ content_item_id: string }>;
         const existingIds = new Set(existingJobs.map((job: { content_item_id: string }) => job.content_item_id));
-        const missingContent = scheduledContent.filter((row: ScheduledContentRow) => !existingIds.has(row.id));
+        const missingContent = supportedContent.filter((row: ScheduledContentRow) => !existingIds.has(row.id));
         if (!missingContent.length) {
             return;
         }
@@ -648,6 +674,11 @@ export class PublishQueueWorker {
         const content = await this.loadContent(job.content_item_id);
         if (!content) {
             await this.markJobMissingContent(job.id, nowIso);
+            return;
+        }
+
+        if (!isSupportedPublishPlatform(content.platform)) {
+            await this.resolveUnsupportedPlatformJob(job.id, content, nowIso);
             return;
         }
 
@@ -1552,6 +1583,67 @@ export class PublishQueueWorker {
         if (error) {
             console.error(`[publish-queue] failed to mark job ${jobId} succeeded`, error);
         }
+    }
+
+    private async resolveUnsupportedScheduledContent(rows: ScheduledContentRow[], nowIso: string) {
+        for (const row of rows) {
+            const message = unsupportedPlatformMessage(row.platform);
+            const { error } = await this.supabase
+                .from("content_items")
+                .update({ status: "failed", updated_at: nowIso })
+                .eq("id", row.id);
+
+            if (error) {
+                console.error(`[publish-queue] failed to mark unsupported content ${row.id} failed`, error);
+            }
+
+            await this.insertNotification(
+                row.account_id,
+                "publish_failed",
+                `Posting to ${row.platform} failed`,
+                {
+                    contentId: row.id,
+                    platform: row.platform,
+                    placement: row.placement ?? "feed",
+                    error: message,
+                },
+            );
+        }
+    }
+
+    private async resolveUnsupportedPlatformJob(jobId: string, content: ContentRow, nowIso: string) {
+        const message = unsupportedPlatformMessage(content.platform);
+
+        const { error: jobError } = await this.supabase
+            .from("publish_jobs")
+            .update({
+                status: "failed",
+                last_error: message,
+                next_attempt_at: null,
+                resolved_at: nowIso,
+                resolution_kind: "unsupported_platform",
+                resolution_note: message,
+                updated_at: nowIso,
+            })
+            .eq("id", jobId);
+
+        if (jobError) {
+            console.error(`[publish-queue] failed to resolve unsupported job ${jobId}`, jobError);
+        }
+
+        await this.markContentStatus(content.id, "failed", nowIso);
+        await this.insertNotification(
+            content.account_id,
+            content.placement === "story" ? "story_publish_failed" : "publish_failed",
+            `Posting to ${content.platform} failed`,
+            {
+                jobId,
+                error: message,
+                contentId: content.id,
+                platform: content.platform,
+                placement: content.placement,
+            },
+        );
     }
 
     private async markContentStatus(contentId: string, status: ContentStatus, nowIso: string) {

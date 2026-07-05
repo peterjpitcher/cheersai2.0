@@ -10,6 +10,7 @@ import type { Platform } from '@/types/content';
 
 /** Jobs due within this window are dispatched immediately instead of waiting for the scheduler cron. */
 const IMMEDIATE_THRESHOLD_MS = 60_000;
+const SUPPORTED_PUBLISH_PLATFORMS = new Set<string>(['facebook', 'instagram']);
 
 interface EnqueuePublishJobOptions {
   contentItemId: string;
@@ -38,6 +39,8 @@ export async function enqueuePublishJob({
   placement = 'feed',
   variantId,
 }: EnqueuePublishJobOptions): Promise<string> {
+  assertSupportedPublishPlatform(platform);
+
   const supabase = createServiceSupabaseClient();
 
   const idempotencyKey = `${contentItemId}:${platform}:${scheduledAt.toISOString()}`;
@@ -85,6 +88,12 @@ export async function enqueuePublishJob({
 
   if (error) throw error;
   return data.id as string;
+}
+
+function assertSupportedPublishPlatform(platform: Platform): void {
+  if (!SUPPORTED_PUBLISH_PLATFORMS.has(platform)) {
+    throw new Error(`Unsupported publishing platform: ${platform}`);
+  }
 }
 
 async function detectQueueSchemaMode(supabase: ReturnType<typeof createServiceSupabaseClient>): Promise<QueueSchemaMode> {

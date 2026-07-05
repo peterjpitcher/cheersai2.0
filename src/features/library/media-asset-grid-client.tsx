@@ -332,8 +332,19 @@ export function MediaAssetGridClient({
     setBanner({ tone: "success", message: "Media deleted" });
   };
 
-  const handleAssetReplaced = (oldAssetId: string, replacement: MediaAssetSummary) => {
-    setLibrary((prev) => [replacement, ...prev.filter((asset) => asset.id !== oldAssetId && asset.id !== replacement.id)]);
+  const handleAssetReplaced = (
+    oldAssetId: string,
+    replacement: MediaAssetSummary,
+    options: { hideOriginal: boolean } = { hideOriginal: true },
+  ) => {
+    setLibrary((prev) => [
+      replacement,
+      ...prev.filter((asset) => asset.id !== replacement.id && (!options.hideOriginal || asset.id !== oldAssetId)),
+    ]);
+    if (!options.hideOriginal) {
+      setBanner({ tone: "info", message: "Replacement uploaded; original kept" });
+      return;
+    }
     setSelectedIds((prev) => {
       if (!prev.has(oldAssetId)) return prev;
       const next = new Set(prev);

@@ -10,6 +10,7 @@ import {
   requestMediaUpload,
 } from "@/app/(app)/library/actions";
 import { Button } from "@/components/ui/button";
+import { useToast } from "@/components/providers/toast-provider";
 import {
   Dialog,
   DialogContent,
@@ -23,13 +24,14 @@ import { validateMediaFile } from "@/lib/media/upload";
 
 interface MediaReplaceButtonProps {
   asset: MediaAssetSummary;
-  onAssetReplaced?: (oldAssetId: string, replacement: MediaAssetSummary) => void;
+  onAssetReplaced?: (oldAssetId: string, replacement: MediaAssetSummary, options?: { hideOriginal: boolean }) => void;
 }
 
 type ProgressState = "idle" | "uploading" | "processing" | "saving";
 
 export function MediaReplaceButton({ asset, onAssetReplaced }: MediaReplaceButtonProps) {
   const router = useRouter();
+  const toast = useToast();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -120,13 +122,45 @@ export function MediaReplaceButton({ asset, onAssetReplaced }: MediaReplaceButto
           throw new Error("Replacement image could not be saved.");
         }
 
-        await replaceMediaAssetEverywhere({
+        const result = await replaceMediaAssetEverywhere({
           oldAssetId: asset.id,
           newAssetId: replacement.id,
         });
 
-        onAssetReplaced?.(asset.id, replacement);
+        const { counts } = result;
+        const totalReferences =
+          counts.variants +
+          counts.attachments +
+          counts.campaigns +
+          counts.linkInBioProfiles +
+          counts.linkInBioTiles +
+          counts.tournamentsSquare +
+          counts.tournamentsStory +
+          counts.adSets +
+          counts.ads;
+
+        onAssetReplaced?.(asset.id, replacement, { hideOriginal: result.hidden });
         setOpen(false);
+
+        if (result.hidden) {
+          toast.success("Image replaced", {
+            description:
+              totalReferences > 0
+                ? `Re-pointed ${totalReferences} reference${totalReferences === 1 ? "" : "s"} across your content.`
+                : "No posts referenced the old image.",
+          });
+        } else if (totalReferences === 0) {
+          toast.info("Replacement uploaded", {
+            description: "No existing references used that exact image, so the old image was kept visible.",
+          });
+        } else {
+          toast.error("Image replaced, but the old one was kept", {
+            description: `${result.remainingReferences} planned-post reference${
+              result.remainingReferences === 1 ? "" : "s"
+            } could not be updated, so the old image stays in your library.`,
+          });
+        }
+
         router.refresh();
       } catch (err) {
         setError(err instanceof Error ? err.message : "Unable to replace image.");

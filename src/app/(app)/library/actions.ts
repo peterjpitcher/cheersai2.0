@@ -45,6 +45,11 @@ type ContentVariantMediaRow = {
   media_ids: string[] | null;
 };
 
+type AttachmentRow = {
+  id: string;
+  content_item_id: string;
+};
+
 type IdRow = { id: string };
 
 interface SignedUpload {
@@ -479,64 +484,111 @@ export async function replaceMediaAssetEverywhere(input: { oldAssetId: string; n
 
   const nowIso = new Date().toISOString();
 
-  await replaceContentVariantMediaIds({ supabase, accountId, oldAssetId, newAssetId });
-  await replaceContentMediaAttachments({ supabase, accountId, oldAssetId, newAssetId });
+  const variants = await replaceContentVariantMediaIds({ supabase, accountId, oldAssetId, newAssetId });
+  const attachments = await replaceContentMediaAttachments({ supabase, accountId, oldAssetId, newAssetId });
 
-  await runMutation(
+  const campaigns = await runMutationReturningCount(
     supabase
       .from("campaigns")
       .update({ hero_media_id: newAssetId, updated_at: nowIso })
       .eq("account_id", accountId)
-      .eq("hero_media_id", oldAssetId),
+      .eq("hero_media_id", oldAssetId)
+      .select("id"),
   );
 
-  await runMutation(
+  const linkInBioProfiles = await runMutationReturningCount(
     supabase
       .from("link_in_bio_profiles")
       .update({ hero_media_id: newAssetId, hero_image_url: null, updated_at: nowIso })
       .eq("account_id", accountId)
-      .eq("hero_media_id", oldAssetId),
+      .eq("hero_media_id", oldAssetId)
+      .select("id"),
   );
 
-  await runMutation(
+  const linkInBioTiles = await runMutationReturningCount(
     supabase
       .from("link_in_bio_tiles")
       .update({ media_asset_id: newAssetId, image_url: null, updated_at: nowIso })
       .eq("account_id", accountId)
-      .eq("media_asset_id", oldAssetId),
+      .eq("media_asset_id", oldAssetId)
+      .select("id"),
   );
 
-  await runMutation(
+  const tournamentsSquare = await runMutationReturningCount(
     supabase
       .from("tournaments")
       .update({ base_image_square_id: newAssetId, updated_at: nowIso })
       .eq("account_id", accountId)
-      .eq("base_image_square_id", oldAssetId),
+      .eq("base_image_square_id", oldAssetId)
+      .select("id"),
   );
 
-  await runMutation(
+  const tournamentsStory = await runMutationReturningCount(
     supabase
       .from("tournaments")
       .update({ base_image_story_id: newAssetId, updated_at: nowIso })
       .eq("account_id", accountId)
-      .eq("base_image_story_id", oldAssetId),
+      .eq("base_image_story_id", oldAssetId)
+      .select("id"),
   );
 
-  await replaceMetaCampaignMediaReferences({ supabase, accountId, oldAssetId, newAssetId });
+  const meta = await replaceMetaCampaignMediaReferences({ supabase, accountId, oldAssetId, newAssetId });
+  const updatedReferences =
+    variants +
+    attachments.updated +
+    attachments.deduped +
+    campaigns +
+    linkInBioProfiles +
+    linkInBioTiles +
+    tournamentsSquare +
+    tournamentsStory +
+    meta.adSets +
+    meta.ads;
 
-  await runMutation(
-    supabase
-      .from("media_assets")
-      .update({ hidden_at: nowIso })
-      .eq("account_id", accountId)
-      .eq("id", oldAssetId),
-  );
+  // Only hide the old asset once we have verified no planned-post surface still
+  // references it, and only after at least one reference was actually changed.
+  // Hiding too early is what made stale references invisible and hard to repair.
+  const remainingReferences = await countRemainingPlannedPostReferences({ supabase, accountId, oldAssetId });
+  const hidden = updatedReferences > 0 && remainingReferences === 0;
+
+  if (hidden) {
+    await runMutation(
+      supabase
+        .from("media_assets")
+        .update({ hidden_at: nowIso })
+        .eq("account_id", accountId)
+        .eq("id", oldAssetId),
+    );
+  }
 
   for (const path of REVALIDATE_PATHS) {
     revalidatePath(path);
   }
 
-  return { status: "replaced" as const, oldAssetId, newAssetId };
+  return {
+    status: hidden
+      ? ("replaced" as const)
+      : updatedReferences > 0
+        ? ("replaced_with_remaining_references" as const)
+        : ("replacement_has_no_references" as const),
+    oldAssetId,
+    newAssetId,
+    counts: {
+      variants,
+      attachments: attachments.updated,
+      attachmentsDeduped: attachments.deduped,
+      campaigns,
+      linkInBioProfiles,
+      linkInBioTiles,
+      tournamentsSquare,
+      tournamentsStory,
+      adSets: meta.adSets,
+      ads: meta.ads,
+    },
+    hidden,
+    updatedReferences,
+    remainingReferences,
+  };
 }
 
 async function syncReplacementAssetToMediaLibrary({
@@ -576,7 +628,7 @@ async function replaceContentVariantMediaIds({
   accountId: string;
   oldAssetId: string;
   newAssetId: string;
-}) {
+}): Promise<number> {
   const { data, error } = await supabase
     .from("content_variants")
     .select("id, media_ids, content_items!inner(account_id)")
@@ -588,6 +640,7 @@ async function replaceContentVariantMediaIds({
     throw error;
   }
 
+  let updated = 0;
   for (const variant of data ?? []) {
     const mediaIds = variant.media_ids ?? [];
     const nextMediaIds = replaceMediaIdList(mediaIds, oldAssetId, newAssetId);
@@ -601,7 +654,10 @@ async function replaceContentVariantMediaIds({
         .update({ media_ids: nextMediaIds })
         .eq("id", variant.id),
     );
+    updated += 1;
   }
+
+  return updated;
 }
 
 async function replaceContentMediaAttachments({
@@ -614,29 +670,97 @@ async function replaceContentMediaAttachments({
   accountId: string;
   oldAssetId: string;
   newAssetId: string;
-}) {
+}): Promise<{ updated: number; deduped: number }> {
   const { data, error } = await supabase
+    .from("content_media_attachments")
+    .select("id, content_item_id, content_items!inner(account_id)")
+    .eq("media_id", oldAssetId)
+    .eq("content_items.account_id", accountId)
+    .returns<AttachmentRow[]>();
+
+  if (error) {
+    throw error;
+  }
+
+  const oldRows = data ?? [];
+  if (!oldRows.length) {
+    return { updated: 0, deduped: 0 };
+  }
+
+  const contentItemIds = Array.from(new Set(oldRows.map((row) => row.content_item_id)));
+
+  // Content items that already have the new asset attached: re-pointing the old
+  // row would violate UNIQUE (content_item_id, media_id), so remove those old
+  // rows instead of updating them. This is the collision that previously threw
+  // mid-sequence and left posts half-migrated.
+  const { data: existingNew, error: existingError } = await supabase
+    .from("content_media_attachments")
+    .select("content_item_id")
+    .eq("media_id", newAssetId)
+    .in("content_item_id", contentItemIds)
+    .returns<{ content_item_id: string }[]>();
+
+  if (existingError) {
+    throw existingError;
+  }
+
+  const collidingItemIds = new Set((existingNew ?? []).map((row) => row.content_item_id));
+  const idsToDelete = oldRows.filter((row) => collidingItemIds.has(row.content_item_id)).map((row) => row.id);
+  const idsToUpdate = oldRows.filter((row) => !collidingItemIds.has(row.content_item_id)).map((row) => row.id);
+
+  if (idsToDelete.length) {
+    await runMutation(
+      supabase
+        .from("content_media_attachments")
+        .delete()
+        .in("id", idsToDelete),
+    );
+  }
+
+  if (idsToUpdate.length) {
+    await runMutation(
+      supabase
+        .from("content_media_attachments")
+        .update({ media_id: newAssetId })
+        .in("id", idsToUpdate),
+    );
+  }
+
+  return { updated: idsToUpdate.length, deduped: idsToDelete.length };
+}
+
+async function countRemainingPlannedPostReferences({
+  supabase,
+  accountId,
+  oldAssetId,
+}: {
+  supabase: SupabaseClient;
+  accountId: string;
+  oldAssetId: string;
+}): Promise<number> {
+  const { data: variantRows, error: variantError } = await supabase
+    .from("content_variants")
+    .select("id, content_items!inner(account_id)")
+    .eq("content_items.account_id", accountId)
+    .contains("media_ids", [oldAssetId])
+    .returns<IdRow[]>();
+
+  if (variantError) {
+    throw variantError;
+  }
+
+  const { data: attachmentRows, error: attachmentError } = await supabase
     .from("content_media_attachments")
     .select("id, content_items!inner(account_id)")
     .eq("media_id", oldAssetId)
     .eq("content_items.account_id", accountId)
     .returns<IdRow[]>();
 
-  if (error) {
-    throw error;
+  if (attachmentError) {
+    throw attachmentError;
   }
 
-  const attachmentIds = (data ?? []).map((row) => row.id);
-  if (!attachmentIds.length) {
-    return;
-  }
-
-  await runMutation(
-    supabase
-      .from("content_media_attachments")
-      .update({ media_id: newAssetId })
-      .in("id", attachmentIds),
-  );
+  return (variantRows?.length ?? 0) + (attachmentRows?.length ?? 0);
 }
 
 async function replaceMetaCampaignMediaReferences({
@@ -649,7 +773,7 @@ async function replaceMetaCampaignMediaReferences({
   accountId: string;
   oldAssetId: string;
   newAssetId: string;
-}) {
+}): Promise<{ adSets: number; ads: number }> {
   const { data: campaignRows, error: campaignError } = await supabase
     .from("meta_campaigns")
     .select("id")
@@ -662,7 +786,7 @@ async function replaceMetaCampaignMediaReferences({
 
   const campaignIds = (campaignRows ?? []).map((row) => row.id);
   if (!campaignIds.length) {
-    return;
+    return { adSets: 0, ads: 0 };
   }
 
   const { data: adSetRows, error: adSetError } = await supabase
@@ -675,26 +799,30 @@ async function replaceMetaCampaignMediaReferences({
     throw adSetError;
   }
 
-  await runMutation(
+  const adSets = await runMutationReturningCount(
     supabase
       .from("ad_sets")
       .update({ adset_media_asset_id: newAssetId, adset_image_url: null })
       .in("campaign_id", campaignIds)
-      .eq("adset_media_asset_id", oldAssetId),
+      .eq("adset_media_asset_id", oldAssetId)
+      .select("id"),
   );
 
   const adSetIds = (adSetRows ?? []).map((row) => row.id);
   if (!adSetIds.length) {
-    return;
+    return { adSets, ads: 0 };
   }
 
-  await runMutation(
+  const ads = await runMutationReturningCount(
     supabase
       .from("ads")
       .update({ media_asset_id: newAssetId, preview_url: null })
       .in("adset_id", adSetIds)
-      .eq("media_asset_id", oldAssetId),
+      .eq("media_asset_id", oldAssetId)
+      .select("id"),
   );
+
+  return { adSets, ads };
 }
 
 function replaceMediaIdList(mediaIds: string[], oldAssetId: string, newAssetId: string) {
@@ -719,6 +847,16 @@ async function runMutation(resultPromise: PromiseLike<{ error?: unknown }>) {
   if (error) {
     throw error;
   }
+}
+
+async function runMutationReturningCount(
+  resultPromise: PromiseLike<{ data?: unknown; error?: unknown }>,
+): Promise<number> {
+  const { data, error } = await resultPromise;
+  if (error) {
+    throw error;
+  }
+  return Array.isArray(data) ? data.length : 0;
 }
 
 async function performBulkHide({

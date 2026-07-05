@@ -22,6 +22,37 @@ type NotificationRow = {
   resource_id: string | null;
   created_at: string;
   read_at: string | null;
+  dismissed_at: string | null;
+};
+
+export interface ActiveFailedPost {
+  id: string;
+  platform: string;
+  placement: string;
+  scheduledFor: string | null;
+  lastError: string | null;
+  lastAttemptedAt: string | null;
+}
+
+type ActiveFailedJobRow = {
+  id: string;
+  last_error: string | null;
+  error_message?: string | null;
+  updated_at: string | null;
+  content_items:
+    | {
+        id: string;
+        platform: string | null;
+        placement: string | null;
+        scheduled_for: string | null;
+      }
+    | Array<{
+        id: string;
+        platform: string | null;
+        placement: string | null;
+        scheduled_for: string | null;
+      }>
+    | null;
 };
 
 const PROBLEM_NOTIFICATION_CATEGORIES = [
@@ -53,8 +84,9 @@ export async function listPlannerNotifications(limit = 50): Promise<PlannerNotif
   try {
     const { data, error } = await supabase
       .from("notifications")
-      .select("id, urgency, title, body, message, category, metadata, resource_type, resource_id, created_at, read_at")
+      .select("id, urgency, title, body, message, category, metadata, resource_type, resource_id, created_at, read_at, dismissed_at")
       .eq("account_id", accountId)
+      .is("dismissed_at", null)
       .or(PROBLEM_NOTIFICATION_FILTER)
       .order("created_at", { ascending: false })
       .limit(limit)
@@ -93,12 +125,16 @@ export async function getFailedPublishCount(): Promise<number> {
   try {
     const { count, error } = await supabase
       .from("publish_jobs")
-      .select("*", { count: "exact", head: true })
+      .select("id, content_items!inner(id)", { count: "exact", head: true })
       .eq("account_id", accountId)
-      .eq("status", "failed");
+      .eq("status", "failed")
+      .is("resolved_at", null)
+      .is("content_items.deleted_at", null);
 
     if (error) {
-      if (isSchemaMissingError(error)) return 0;
+      if (isSchemaMissingError(error)) {
+        return getFailedContentFallbackCount();
+      }
       console.error("[notifications] getFailedPublishCount error:", error.message);
       return 0;
     }
@@ -107,6 +143,65 @@ export async function getFailedPublishCount(): Promise<number> {
     if (isSchemaMissingError(error)) return 0;
     console.error("[notifications] getFailedPublishCount unexpected error:", error);
     return 0;
+  }
+}
+
+async function getFailedContentFallbackCount(): Promise<number> {
+  const { supabase, accountId } = await requireAuthContext();
+
+  const { count, error } = await supabase
+    .from("content_items")
+    .select("*", { count: "exact", head: true })
+    .eq("account_id", accountId)
+    .eq("status", "failed")
+    .is("deleted_at", null);
+
+  if (error) {
+    if (!isSchemaMissingError(error)) {
+      console.error("[notifications] failed content fallback count error:", error.message);
+    }
+    return 0;
+  }
+
+  return count ?? 0;
+}
+
+export async function listActiveFailedPosts(limit = 100): Promise<ActiveFailedPost[]> {
+  const { supabase, accountId } = await requireAuthContext();
+
+  try {
+    const { data, error } = await supabase
+      .from("publish_jobs")
+      .select("id, last_error, error_message, updated_at, content_items!inner(id, platform, placement, scheduled_for)")
+      .eq("account_id", accountId)
+      .eq("status", "failed")
+      .is("resolved_at", null)
+      .eq("content_items.status", "failed")
+      .is("content_items.deleted_at", null)
+      .order("updated_at", { ascending: false })
+      .limit(limit)
+      .returns<ActiveFailedJobRow[]>();
+
+    if (error) {
+      if (isSchemaMissingError(error)) return [];
+      throw error;
+    }
+
+    return (data ?? []).flatMap((row) => {
+      const content = Array.isArray(row.content_items) ? row.content_items[0] : row.content_items;
+      if (!content?.id) return [];
+      return [{
+        id: content.id,
+        platform: content.platform ?? "unknown",
+        placement: content.placement ?? "feed",
+        scheduledFor: content.scheduled_for,
+        lastError: row.last_error ?? row.error_message ?? null,
+        lastAttemptedAt: row.updated_at,
+      }];
+    });
+  } catch (error) {
+    if (isSchemaMissingError(error)) return [];
+    throw error;
   }
 }
 

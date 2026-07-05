@@ -48,7 +48,7 @@ function mapPublishJobToFeedEvent(
     message,
     timestamp: row.updated_at,
     category: type === 'publish_success' ? 'publish_success' : 'publish_failed',
-    metadata: { contentItemId: row.content_item_id, errorMessage: row.error_message },
+    metadata: { contentItemId: row.content_item_id, errorMessage: row.error_message ?? row.last_error ?? null },
     resourceId: row.content_item_id,
     readAt: null,
   };
@@ -191,9 +191,12 @@ export function useFailedPublishCount(
           const newRow = payload.new as PublishJobRow | undefined;
           const oldRow = payload.old as Partial<PublishJobRow> | undefined;
 
-          if (newRow?.status === 'failed') {
+          const oldWasActiveFailed = oldRow?.status === 'failed' && !oldRow.resolved_at;
+          const newIsActiveFailed = newRow?.status === 'failed' && !newRow.resolved_at;
+
+          if (newIsActiveFailed && !oldWasActiveFailed) {
             setCount((prev) => prev + 1);
-          } else if (oldRow?.status === 'failed' && newRow?.status !== 'failed') {
+          } else if (oldWasActiveFailed && !newIsActiveFailed) {
             setCount((prev) => Math.max(0, prev - 1));
           }
         },
