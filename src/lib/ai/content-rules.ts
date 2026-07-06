@@ -1,10 +1,11 @@
 import { DateTime } from "luxon";
 
+import { removeBannedPhraseSentences, removeSentencesMatching } from "@/lib/ai/postprocess";
 import { applyProofPoints, lintProofPoints, type ProofPointUsage } from "@/lib/ai/proof-points";
-import { detectBannedPhrases, reduceHype, scrubBannedPhrases } from "@/lib/ai/voice";
+import { BANNED_PHRASES, detectBannedPhrases, reduceHype, scrubBannedPhrases } from "@/lib/ai/voice";
 import type { InstantPostAdvancedOptions } from "@/lib/create/schema";
 import { DEFAULT_TIMEZONE } from "@/lib/constants";
-import { extractDirectLinks, stripDirectLinks, stripDirectLinkSentences } from "@/lib/utils/social-links";
+import { containsDirectLink, extractDirectLinks, stripDirectLinks, stripDirectLinkSentences } from "@/lib/utils/social-links";
 
 export type Platform = "facebook" | "instagram";
 export type Placement = "feed" | "story";
@@ -206,6 +207,15 @@ export function applyChannelRules({
     repairs.push("banned_phrases_removed");
   }
 
+  // Banned phrases with no inline replacement (e.g. "you won't regret it",
+  // "hidden gem") take their whole sentence with them — deleting only the
+  // phrase leaves broken grammar.
+  const withoutBannedSentences = removeBannedPhraseSentences(output, BANNED_PHRASES);
+  if (withoutBannedSentences !== output) {
+    output = withoutBannedSentences;
+    repairs.push("banned_phrase_sentences_removed");
+  }
+
   const hypeReduced = reduceHype(output);
   if (hypeReduced.adjusted.length) {
     output = hypeReduced.value;
@@ -236,16 +246,26 @@ export function applyChannelRules({
   const withoutUrls =
     platform === "instagram"
       ? stripDirectLinkSentences(output)
-      : stripDirectLinks(output);
+      : containsDirectLink(output)
+        ? stripDirectLinks(output)
+        : output;
   if (withoutUrls !== output) {
     output = withoutUrls;
     repairs.push("urls_removed");
   }
 
   if (!contract.allowLinkInBio) {
-    const before = output;
-    output = output.replace(LINK_IN_BIO_PATTERN, "");
-    if (before !== output) repairs.push("link_in_bio_removed");
+    // Drop the whole sentence, not just the phrase — deleting "link in our bio"
+    // mid-sentence left broken grammar ("Find the to book.").
+    const removal = removeSentencesMatching(output, (text) => {
+      LINK_IN_BIO_PATTERN.lastIndex = 0;
+      return LINK_IN_BIO_PATTERN.test(text);
+    });
+    LINK_IN_BIO_PATTERN.lastIndex = 0;
+    if (removal.removed) {
+      output = removal.value;
+      repairs.push("link_in_bio_removed");
+    }
   }
 
   output = normalizePunctuation(output);
@@ -707,17 +727,45 @@ function formatDayName(date: Date) {
     .toFormat("cccc");
 }
 
+/**
+ * Tidy the fragment left when a disallowed claim is deleted from a body that was
+ * a single sentence — drop an orphaned leading connective/punctuation
+ * (", so book early." -> "Book early.") rather than shipping a broken fragment.
+ */
+function cleanClaimFragment(value: string): string {
+  const trimmed = value
+    .replace(/\s{2,}/g, " ")
+    .replace(/^[\s,;:.–—-]*(?:so|and|but|then|because)\b[\s,]*/i, "")
+    .replace(/^[\s,;:.–—-]+/, "")
+    .trim();
+  return trimmed.replace(/^([a-z])/, (m) => m.toUpperCase());
+}
+
 function stripDisallowedClaims(value: string, allowedCodes: string[] = []) {
   const allowed = new Set(allowedCodes);
   let output = value;
   const removedCodes: string[] = [];
   for (const rule of CLAIM_PATTERNS) {
     if (allowed.has(rule.code)) continue;
-    if (rule.pattern.test(output)) {
-      output = output.replace(rule.pattern, "");
-      removedCodes.push(rule.code);
+    rule.pattern.lastIndex = 0;
+    if (!rule.pattern.test(output)) {
+      rule.pattern.lastIndex = 0;
+      continue;
     }
     rule.pattern.lastIndex = 0;
+    // Unverified claims usually sit mid-sentence ("Spaces are limited, so book
+    // early") — deleting the phrase alone leaves fragments, so the whole
+    // sentence goes. Fall back to phrase deletion if that would empty the copy.
+    const removal = removeSentencesMatching(output, (text) => {
+      rule.pattern.lastIndex = 0;
+      return rule.pattern.test(text);
+    });
+    rule.pattern.lastIndex = 0;
+    output = removal.value.length
+      ? removal.value
+      : cleanClaimFragment(output.replace(rule.pattern, ""));
+    rule.pattern.lastIndex = 0;
+    removedCodes.push(rule.code);
   }
   return { value: output.replace(/\s{2,}/g, " ").trim(), removedCodes };
 }

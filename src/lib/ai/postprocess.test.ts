@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { AiGenerationResponse } from './schemas';
-import { postprocessCopy, type PostprocessConfig } from './postprocess';
+import { postprocessCopy, removeBannedPhraseSentences, type PostprocessConfig } from './postprocess';
 
 function makeConfig(overrides?: Partial<PostprocessConfig>): PostprocessConfig {
   return {
@@ -136,6 +136,146 @@ describe('postprocessCopy', () => {
     });
     const result = postprocessCopy(raw, makeConfig());
     expect(result.copy.facebook.body).toContain('\n\n');
+  });
+
+  it('replaces system clichés with natural alternatives instead of leaving broken sentences', () => {
+    const raw = makeRawCopy({
+      facebook: {
+        body: 'Bring your friends and family for a night to remember. Doors open at 6pm.',
+        cta_text: null,
+        hashtags: [],
+      },
+    });
+    const result = postprocessCopy(raw, makeConfig());
+    // "a night to remember" → "a great night" (BANNED_PHRASE_REPLACEMENTS), so
+    // the sentence stays intact rather than becoming "…for. Doors open at 6pm."
+    expect(result.copy.facebook.body).toContain('for a great night');
+    expect(result.copy.facebook.body).toContain('Doors open at 6pm.');
+    expect(result.copy.facebook.body).not.toMatch(/for\s*[.!]/);
+  });
+
+  it('removes the whole sentence for a banned phrase with no replacement', () => {
+    const raw = makeRawCopy({
+      facebook: {
+        body: 'This place is a proper hidden gem for quiz lovers. Eyes down at 7pm.',
+        cta_text: null,
+        hashtags: [],
+      },
+    });
+    const result = postprocessCopy(raw, makeConfig({ bannedPhrases: ['hidden gem'] }));
+    expect(result.copy.facebook.body).toBe('Eyes down at 7pm.');
+  });
+
+  it('matches banned phrases regardless of apostrophe style', () => {
+    const raw = makeRawCopy({
+      facebook: {
+        body: 'Don’t miss out on the fun. Doors open at 6pm.',
+        cta_text: null,
+        hashtags: [],
+      },
+    });
+    const result = postprocessCopy(raw, makeConfig({ bannedPhrases: ["Don't miss out"] }));
+    expect(result.copy.facebook.body).toBe('Doors open at 6pm.');
+  });
+
+  it('keeps paragraph breaks when truncating over-length copy', () => {
+    const para = Array.from({ length: 100 }, () => 'word').join(' ');
+    const raw = makeRawCopy({
+      instagram: { body: `First line stays.\n\n${para} ${para}`, hashtags: [], link_in_bio_line: null },
+    });
+    const result = postprocessCopy(raw, makeConfig());
+    const wordCount = result.copy.instagram.body.split(/\s+/).filter(Boolean).length;
+    expect(wordCount).toBeLessThanOrEqual(150);
+    expect(result.copy.instagram.body).toContain('\n\n');
+  });
+
+  it('clamps emoji by whole sequences without leaving orphaned joiners', () => {
+    const raw = makeRawCopy({
+      facebook: {
+        body: 'Party time \u{1F389}\u{1F37A}\u{1F355} bring the family \u{1F468}\u200D\u{1F469}\u200D\u{1F467}!',
+        cta_text: null,
+        hashtags: [],
+      },
+    });
+    const result = postprocessCopy(raw, makeConfig());
+    expect(result.copy.facebook.body).not.toContain('\u200D');
+    expect(result.copy.facebook.body).toContain('\u{1F389}');
+  });
+
+  it('strips a trailing bare "Book now!" sentence from a longer closing line (composer appends the linked CTA)', () => {
+    const raw = makeRawCopy({
+      facebook: {
+        body: 'Bring your friends and family for a great night. Book now!',
+        cta_text: 'Book now',
+        hashtags: [],
+      },
+    });
+    const result = postprocessCopy(raw, makeConfig({
+      ctaLinks: { facebook: 'https://l.the-anchor.pub/fb-event' },
+    }));
+    expect(result.copy.facebook.body).toBe('Bring your friends and family for a great night.');
+  });
+
+  it('strips a bare Instagram CTA when a link is configured but the model omitted the link-in-bio line', () => {
+    const raw = makeRawCopy({
+      instagram: {
+        body: 'Live music this weekend.\n\nBook now!',
+        hashtags: [],
+        link_in_bio_line: null,
+      },
+    });
+    const result = postprocessCopy(raw, makeConfig({
+      ctaLinks: { instagram: 'https://l.the-anchor.pub/ig' },
+    }));
+    expect(result.copy.instagram.body).not.toMatch(/book now/i);
+    expect(result.copy.instagram.body).toContain('Live music this weekend.');
+  });
+
+  it('strips a bare Facebook CTA that ends with a skin-tone emoji', () => {
+    const raw = makeRawCopy({
+      facebook: {
+        body: 'Great food and live music.\n\nReserve your table now \u{1F64C}\u{1F3FC}',
+        cta_text: 'Book now',
+        hashtags: [],
+      },
+    });
+    const result = postprocessCopy(raw, makeConfig({
+      ctaLinks: { facebook: 'https://l.the-anchor.pub/fb' },
+    }));
+    expect(result.copy.facebook.body).not.toMatch(/reserve your table now/i);
+    expect(result.copy.facebook.body).toContain('Great food and live music.');
+  });
+
+  it('strips a trailing bare CTA even when a Facebook signature is configured', () => {
+    const raw = makeRawCopy({
+      facebook: {
+        body: 'Bring your crew for a great night. Book now!',
+        cta_text: 'Book now',
+        hashtags: [],
+      },
+    });
+    const result = postprocessCopy(raw, makeConfig({
+      ctaLinks: { facebook: 'https://l.the-anchor.pub/fb' },
+      platformSignatures: { facebook: '-- The Anchor Team' },
+    }));
+    expect(result.copy.facebook.body).not.toMatch(/book now/i);
+    expect(result.copy.facebook.body).toContain('-- The Anchor Team');
+    expect(result.copy.facebook.body).toContain('Bring your crew for a great night.');
+  });
+
+  it('strips a bare booking CTA from the Instagram body when a link-in-bio line is present', () => {
+    const raw = makeRawCopy({
+      instagram: {
+        body: 'Music Bingo is back this month.\n\nBook your spot now!',
+        hashtags: [],
+        link_in_bio_line: 'Link in bio to book.',
+      },
+    });
+    const result = postprocessCopy(raw, makeConfig({
+      ctaLinks: { instagram: 'https://vip-club.uk/bio-music-bingo' },
+    }));
+    expect(result.copy.instagram.body).not.toMatch(/book your spot now/i);
+    expect(result.copy.instagram.body).toContain('Music Bingo is back this month.');
   });
 
   it('strips a bare "Book now!" CTA line from the Facebook body (composer adds the linked one)', () => {
@@ -287,5 +427,30 @@ describe('postprocessCopy', () => {
     expect(result.copy.instagram.body).not.toContain('Link in bio');
     expect(result.copy.instagram.body).not.toContain('the-anchor.pub');
     expect(result.copy.instagram.link_in_bio_line).toBe('Link in bio to book.');
+  });
+});
+
+describe('removeBannedPhraseSentences', () => {
+  it('drops only the sentence containing the phrase and keeps the rest', () => {
+    const result = removeBannedPhraseSentences(
+      "Whether you're a regular or brand new, come along. Kitchen open till 9pm.",
+      ["whether you're"],
+    );
+    expect(result).toBe('Kitchen open till 9pm.');
+  });
+
+  it('falls back to phrase-only deletion when sentence removal would empty the copy', () => {
+    const result = removeBannedPhraseSentences('A proper hidden gem.', ['hidden gem']);
+    expect(result).toBe('A proper.');
+  });
+
+  it('only matches whole words for single-word phrases', () => {
+    const result = removeBannedPhraseSentences('A cart full of treats. Come see us.', ['art']);
+    expect(result).toBe('A cart full of treats. Come see us.');
+  });
+
+  it('strips a banned phrase written with a curly apostrophe in the single-sentence fallback', () => {
+    // Phrase stored with a straight apostrophe, model output uses a curly one.
+    expect(removeBannedPhraseSentences('You won’t regret it.', ["you won't regret it"])).toBe('.');
   });
 });

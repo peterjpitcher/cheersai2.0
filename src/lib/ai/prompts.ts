@@ -381,6 +381,7 @@ const CONTENT_TYPE_CONTEXT: Record<ContentType, string> = {
 
 const PLATFORM_RULES = [
   'Facebook: target 80-140 words for announcements and 50-90 words for reminders. Conversational tone. Put hashtags only in facebook.hashtags and CTA wording only in facebook.cta_text.',
+  'Facebook: where natural, close the body with a short question or opinion prompt that invites comments (e.g. "Who\'s on your team?", "What\'s your go-to order?") — posts that get replies reach more people.',
   'Instagram: target 45-90 words. First line must hook within 125 characters. Use short line breaks. Put hashtags only in instagram.hashtags and booking wording only in instagram.link_in_bio_line.',
   'Do not clone the same caption twice. Facebook can be fuller and conversational, while Instagram should be hook-led and scannable.',
 ].join('\n');
@@ -389,7 +390,8 @@ const PLATFORM_RULES = [
 // and counteracts any "premium/sophisticated" pull from a mis-set tone.
 const PUB_WRITING_RULES = [
   'Keep sentences short and easy to read.',
-  "Lead with why it'll be a good time — the fun, the atmosphere, the reason to come.",
+  "Lead with why it'll be a good time — the fun, the people, the reason to come.",
+  'Open with the most interesting specific detail as the hook — never a generic greeting or a formulaic opener like "Get ready" or "Don\'t miss".',
   'Include the key details clearly: what it is, the date, the time, the price if relevant, and how to book or join.',
   'Never put URLs, bare domains, markdown links, source citations, or old booking links in any body copy. The system owns final CTA URLs.',
   'For Instagram, booking/joining instructions must only point people to the link in bio. Never put a URL, bare domain, booking link, or booking website in Instagram copy.',
@@ -443,17 +445,18 @@ export function buildSystemPrompt(
 
   lines.push('', 'Writing rules:', PUB_WRITING_RULES);
 
-  // Brand-specific voice configured in Settings → Brand Voice
-  if (brand) {
-    const brandLines = [
-      describeToneTargets(brand),
-      formatListLine('Use natural phrases like', brand.keyPhrases),
-      formatListLine('Do not mention', brand.bannedTopics),
-      formatListLine('Never use these phrases', brand.bannedPhrases),
-    ].filter(isNonEmptyString);
-    if (brandLines.length) {
-      lines.push('', 'Brand specifics:', ...brandLines);
-    }
+  // Brand-specific voice configured in Settings → Brand Voice. The banned
+  // phrase list always includes the system clichés — the post-process scrubs
+  // them deterministically, so the model must be steered away from them here
+  // or whole sentences get rewritten/removed after generation.
+  const brandLines = [
+    brand ? describeToneTargets(brand) : null,
+    brand ? formatListLine('Use natural phrases like', brand.keyPhrases) : null,
+    brand ? formatListLine('Do not mention', brand.bannedTopics) : null,
+    formatListLine('Never use these phrases', mergedBannedPhrases(brand?.bannedPhrases ?? [])),
+  ].filter(isNonEmptyString);
+  if (brandLines.length) {
+    lines.push('', 'Brand specifics:', ...brandLines);
   }
 
   lines.push('', 'Examples of the right style:', getFewShotExamples());
