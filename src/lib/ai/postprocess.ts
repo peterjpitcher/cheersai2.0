@@ -1,5 +1,6 @@
 import { DateTime } from "luxon";
 
+import { scrubBannedPhrases } from "@/lib/ai/voice";
 import { DEFAULT_TIMEZONE } from "@/lib/constants";
 import { formatEventDateLong } from "@/lib/utils/date";
 import { collapseWhitespacePreservingBreaks, stripMarkdown } from "@/lib/utils/markdown";
@@ -48,7 +49,7 @@ const BOOKING_INTENT_PATTERN = /\b(book|booking|bookings|reserve|reservation|tab
 // (not grab/get/claim, which collide with narrative like "Get comfy and grab a
 // seat"). Ends on a booking object/timing word, tolerating trailing emoji.
 const BARE_BOOKING_CTA_LINE =
-  /^(?:book|reserve)\b[^.\n!?]{0,40}?\b(?:now|today|tonight|table|tables|tickets?|seats?|spots?|places?|online|early|ahead|soon|asap)\b[\s!.…️\p{Extended_Pictographic}]*$/iu;
+  /^(?:book|reserve)\b[^.\n!?]{0,40}?\b(?:now|today|tonight|table|tables|tickets?|seats?|spots?|places?|online|early|ahead|soon|asap)\b[\s!.…️‍⃣\p{Emoji_Modifier}\p{Extended_Pictographic}]*$/iu;
 
 function normaliseTimes(value: string): string {
   let output = value.replace(AM_PM_CASE, (_, hour: string, mins: string | undefined, suffix: string) => {
@@ -64,6 +65,68 @@ function normaliseTimes(value: string): string {
 
 function normaliseWhitespace(value: string): string {
   return collapseWhitespacePreservingBreaks(value.replace(SPACE_BEFORE_PUNCT, "$1"));
+}
+
+const CURLY_APOSTROPHES = /[‘’]/g;
+
+function normaliseApostrophes(value: string): string {
+  return value.replace(CURLY_APOSTROPHES, "'");
+}
+
+const SENTENCE_BOUNDARY = /(?<=[.!?])\s+/;
+
+/**
+ * Remove whole sentences matched by `shouldRemove`, line by line. If a line
+ * matches but none of its individual sentences do (the match spans a sentence
+ * boundary), the whole line is dropped.
+ */
+export function removeSentencesMatching(
+  value: string,
+  shouldRemove: (text: string) => boolean,
+): { value: string; removed: boolean } {
+  let removed = false;
+  const lines = value.split("\n").map((line) => {
+    if (!line.trim() || !shouldRemove(line)) return line;
+    const sentences = line.split(SENTENCE_BOUNDARY).filter(Boolean);
+    const kept = sentences.filter((sentence) => !shouldRemove(sentence));
+    if (kept.length === sentences.length) {
+      removed = true;
+      return "";
+    }
+    removed = true;
+    return kept.join(" ").trim();
+  });
+  return { value: lines.join("\n").replace(/\n{3,}/g, "\n\n").trim(), removed };
+}
+
+/**
+ * Remove whole sentences containing a banned phrase or topic. Deleting just
+ * the phrase leaves broken grammar ("Bring your friends and family for. Book
+ * now!"), so the containing sentence goes instead. Matching is
+ * apostrophe-insensitive (curly vs straight). If sentence removal would empty
+ * the copy entirely, falls back to phrase-only deletion so something usable
+ * survives.
+ */
+export function removeBannedPhraseSentences(value: string, phrases: readonly string[]): string {
+  const patterns = phrases
+    .map((phrase) => phrase.trim())
+    .filter(Boolean)
+    .map((phrase) => buildBannedTopicPattern(normaliseApostrophes(phrase)))
+    .filter((pattern): pattern is RegExp => Boolean(pattern));
+  if (!patterns.length) return value;
+
+  const matchesAny = (text: string) => {
+    const haystack = normaliseApostrophes(text);
+    return patterns.some((pattern) => {
+      pattern.lastIndex = 0;
+      return pattern.test(haystack);
+    });
+  };
+
+  if (!matchesAny(value)) return value;
+  const result = removeSentencesMatching(value, matchesAny);
+  if (result.value.length) return result.value;
+  return cleanCopyArtifacts(scrubBannedTopics(value, [...phrases]));
 }
 
 function parseIsoDate(input: unknown): Date | null {
@@ -91,17 +154,17 @@ function sanitiseCountdownLanguage(
     return value;
   }
 
-  let updated = value;
-  let matched = false;
-  for (const pattern of COUNTDOWN_PATTERNS) {
-    if (pattern.test(updated)) {
-      matched = true;
-      updated = updated.replace(pattern, "");
-    }
-    pattern.lastIndex = 0;
-  }
+  // Drop whole sentences with premature countdown language — deleting only the
+  // phrase left fragments like " to book!" behind.
+  const removal = removeSentencesMatching(value, (text) =>
+    COUNTDOWN_PATTERNS.some((pattern) => {
+      pattern.lastIndex = 0;
+      return pattern.test(text);
+    }),
+  );
 
-  if (!matched) return updated;
+  if (!removal.removed) return value;
+  let updated = removal.value;
 
   const guidance = `It ends on ${formatCountdownDate(promotionEnd)}.`;
   if (!updated.toLowerCase().includes(guidance.toLowerCase())) {
@@ -138,11 +201,11 @@ export function postProcessGeneratedCopy({
   output = normaliseTimes(output);
 
   if (bannedTopics?.length) {
-    output = scrubBannedTopics(output, bannedTopics);
+    output = removeBannedPhraseSentences(output, bannedTopics);
   }
 
   if (bannedPhrases?.length) {
-    output = scrubBannedTopics(output, bannedPhrases);
+    output = removeBannedPhraseSentences(output, bannedPhrases);
   }
 
   const promotionEnd = parseIsoDate(context?.promotionEnd);
@@ -177,8 +240,14 @@ function escapeRegExp(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+// Collapse apostrophe variants to a class so a phrase stored with a straight
+// apostrophe ("you won't regret it") still matches the model's curly output
+// ("you won’t regret it") and vice-versa — used everywhere banned phrases are
+// matched, including the empty-body fallback in removeBannedPhraseSentences.
+const APOSTROPHE_CLASS = "['‘’]";
+
 function buildBannedTopicPattern(topic: string) {
-  const escaped = escapeRegExp(topic);
+  const escaped = escapeRegExp(topic).replace(/['‘’]/g, APOSTROPHE_CLASS);
   if (!escaped.length) return null;
   if (/\s/.test(topic)) {
     return new RegExp(escaped, "gi");
@@ -190,7 +259,11 @@ function buildBannedTopicPattern(topic: string) {
 // Multi-platform postprocess pipeline (v2 AI generation)
 // ---------------------------------------------------------------------------
 
-const EMOJI_REGEX = /\p{Extended_Pictographic}/gu;
+// Matches a full emoji sequence (base pictograph + skin-tone modifiers,
+// variation selectors, and ZWJ-joined continuations) so clamping counts and
+// removes whole emoji — never leaving orphaned joiners or half a family emoji.
+const EMOJI_REGEX =
+  /\p{Extended_Pictographic}(?:\p{Emoji_Modifier}|\uFE0F|\u20E3)*(?:\u200D\p{Extended_Pictographic}(?:\p{Emoji_Modifier}|\uFE0F)*)*/gu;
 
 export interface PostprocessConfig {
   maxHashtags: Record<string, number>;
@@ -260,24 +333,19 @@ export function postprocessCopy(
 ): PostprocessResult {
   const warnings: string[] = [];
 
-  const facebookBody = processPlatformBody(
-    raw.facebook.body,
-    'facebook',
-    config,
-  );
+  // Whether the publish composer will append a canonical CTA for each platform.
+  // When it will, any bare "Book now!" in the body is a duplicate — stripped
+  // inside processPlatformBody BEFORE the signature, so a trailing signature
+  // line can't hide the CTA from the trailing-sentence strip. Facebook keys off
+  // a cta_text or a Facebook link; Instagram keys off a configured link (the
+  // composer always adds a link-in-bio line when one is set).
   const facebookCtaText = sanitizeCtaText(raw.facebook.cta_text);
-  // Only strip a bare booking CTA from the body when a replacement CTA will
-  // actually be appended at compose time (a cta_text, or a Facebook CTA link).
-  // Otherwise the body's CTA is the only one and must be preserved.
   const willAppendFacebookCta = Boolean(facebookCtaText) || Boolean(config.ctaLinks?.facebook?.trim());
-  const facebook = willAppendFacebookCta ? stripBareBookingCtaLines(facebookBody) : facebookBody;
-  const instagram = processPlatformBody(
-    raw.instagram.body,
-    'instagram',
-    config,
-  );
-
   const hasInstagramLink = Boolean(config.ctaLinks?.instagram?.trim());
+
+  const facebook = processPlatformBody(raw.facebook.body, 'facebook', config, willAppendFacebookCta);
+  const instagram = processPlatformBody(raw.instagram.body, 'instagram', config, hasInstagramLink);
+
   let instagramLinkInBioLine = sanitiseInstagramLinkInBioLine(
     raw.instagram.link_in_bio_line,
     hasInstagramLink,
@@ -291,6 +359,8 @@ export function postprocessCopy(
     instagramLinkInBioLine = defaultInstagramLinkInBioLine(raw.instagram.body);
   }
 
+  const instagramBody = instagramSanitised.body;
+
   // Clamp and normalise hashtags per platform. The publish composer owns final
   // hashtag placement, so body hashtag blocks are removed separately.
   const fbHashtags = normalizeHashtags(raw.facebook.hashtags, 'facebook', config.maxHashtags['facebook'] ?? 5) ?? [];
@@ -301,8 +371,8 @@ export function postprocessCopy(
   const eventStartIso = config.eventStartIso;
   const facebookFinal = eventStartIso ? normaliseEventDatePhrasing(facebook, eventStartIso) : facebook;
   const instagramFinal = eventStartIso
-    ? normaliseEventDatePhrasing(instagramSanitised.body, eventStartIso)
-    : instagramSanitised.body;
+    ? normaliseEventDatePhrasing(instagramBody, eventStartIso)
+    : instagramBody;
 
   return {
     copy: {
@@ -329,17 +399,17 @@ function processPlatformBody(
   body: string,
   platform: string,
   config: PostprocessConfig,
+  stripBareCta = false,
 ): string {
   // Strip markdown the platforms would otherwise render literally (e.g. **bold**)
   let output = stripMarkdown(body);
 
-  // Strip banned phrases (case-insensitive)
-  for (const phrase of config.bannedPhrases) {
-    if (!phrase.trim()) continue;
-    const escaped = escapeRegExp(phrase);
-    const pattern = new RegExp(escaped, 'gi');
-    output = output.replace(pattern, '');
-  }
+  // Replace known clichés with natural alternatives first (keeps the sentence
+  // intact), then drop the whole containing sentence for any banned phrase
+  // left over — deleting just the phrase produces broken grammar ("Bring your
+  // friends and family for. Book now!").
+  output = scrubBannedPhrases(output).value;
+  output = removeBannedPhraseSentences(output, config.bannedPhrases);
 
   // Collapse stray spaces from removals while preserving paragraph breaks
   output = collapseWhitespacePreservingBreaks(output);
@@ -352,6 +422,12 @@ function processPlatformBody(
   const maxWords = config.maxWords[platform];
   if (maxWords) {
     output = truncateAtSentenceBoundary(output, maxWords);
+  }
+
+  // Remove a bare booking CTA the composer will re-append — BEFORE the
+  // signature, so a trailing signature line can't hide the CTA from the strip.
+  if (stripBareCta) {
+    output = stripBareBookingCtaLines(output);
   }
 
   // Append platform signature if provided
@@ -377,7 +453,26 @@ function stripBareBookingCtaLines(body: string): string {
     if (trimmed.split(/\s+/).length > 6) return true; // too long to be a bare CTA
     return !BARE_BOOKING_CTA_LINE.test(trimmed);
   });
-  return kept.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+  return stripTrailingBareBookingCtaSentence(kept.join("\n").replace(/\n{3,}/g, "\n\n").trim());
+}
+
+/**
+ * The model often tacks the bare CTA onto the end of a longer closing line
+ * ("…for a great night. Book now!"), which the line filter above cannot catch
+ * (the line as a whole exceeds six words). Drop that trailing sentence too —
+ * the composer appends the canonical CTA after the body.
+ */
+function stripTrailingBareBookingCtaSentence(body: string): string {
+  const lines = body.split("\n");
+  const lastIndex = lines.length - 1;
+  const lastLine = lines[lastIndex]?.trim() ?? "";
+  if (!lastLine) return body;
+  const sentences = lastLine.split(/(?<=[.!?])\s+/).filter(Boolean);
+  if (sentences.length < 2) return body;
+  const last = sentences[sentences.length - 1].trim();
+  if (last.split(/\s+/).length > 6 || !BARE_BOOKING_CTA_LINE.test(last)) return body;
+  lines[lastIndex] = sentences.slice(0, -1).join(" ").trim();
+  return lines.join("\n").trim();
 }
 
 function sanitiseInstagramBody(
@@ -442,13 +537,18 @@ function clampEmojis(value: string, max: number): string {
   });
 }
 
-/** Truncate text at sentence boundary nearest to word limit. */
+/**
+ * Truncate text at sentence boundary nearest to word limit. Slices the
+ * original string (rather than re-joining split words) so paragraph breaks
+ * survive truncation.
+ */
 function truncateAtSentenceBoundary(value: string, maxWords: number): string {
-  const words = value.split(/\s+/).filter(Boolean);
+  const words = [...value.matchAll(/\S+/g)];
   if (words.length <= maxWords) return value;
 
-  // Take words up to limit
-  const truncated = words.slice(0, maxWords).join(' ');
+  // Slice the original string at the end of the last allowed word
+  const cutoff = words[maxWords - 1];
+  const truncated = value.slice(0, (cutoff.index ?? 0) + cutoff[0].length);
 
   // Try to find a sentence boundary
   const lastSentenceEnd = Math.max(

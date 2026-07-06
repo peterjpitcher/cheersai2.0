@@ -98,11 +98,14 @@ export function stripHashtagsFromBody(value: string): string {
 }
 
 export function cleanCopyArtifacts(value: string): string {
+  // Note: dangling-preposition cleanup after a removed link lives in
+  // stripDirectLinks (which only trims "at/via/on" adjacent to an actual link).
+  // It must not live here — cleanCopyArtifacts runs on every publish body and
+  // CTA, and an unconditional "at/via/on" trim ate legitimate final words
+  // ("the match is on" -> "the match is").
   return collapseWhitespacePreservingBreaks(value)
     .replace(/[ \t]+([,.;:!?])/g, "$1")
     .replace(/\s+([,.;:!?])/g, "$1")
-    .replace(/\b(?:at|via|on)\s*([.!?])/gi, "$1")
-    .replace(/\b(?:at|via|on)$/gi, "")
     .replace(/[^\S\r\n]{2,}/g, " ")
     .trim();
 }
