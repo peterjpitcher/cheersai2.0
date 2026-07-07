@@ -125,6 +125,13 @@ COPY RULES:
 - Do not paste raw URLs into primary text. The Meta button carries the destination URL.
 - Every event ad must include at least one booking-intent word in headline, primary_text, description, or CTA: book, booking, reserve, ticket, tickets, seat, seats, table, spot, secure, buy
 
+CONVERSION COPY PRINCIPLES (booking-optimised campaigns):
+- Offer first: if the brief contains any offer, deal, discount, bundle, or free item, at least one ad per ad set must lead with it, stated concretely with numbers ("2 courses £15", "free glass of fizz").
+- Price anchoring: when the brief gives both a regular price and an offer price, state them together ("Usually £45, £29 this month"). Never invent, estimate, or round prices that are not in the brief.
+- Social proof: when the brief or event context includes ratings, reviews, sell-out history, attendance numbers, or years running, use one as proof in at least one ad. Never fabricate proof.
+- Honest urgency: only claim scarcity ("selling fast", "last few tables") when the context supplies evidence — seats remaining, capacity, or sell-out history. Without evidence, use date-based urgency only ("this Friday", "ends Sunday").
+- Remove friction at the nudge: booking-optimised ads convert better when the final sentence removes a hesitation — booking takes under a minute, it is free to book, or no payment is taken now (only when true per the brief or payment mode).
+
 PHASE STRATEGY (adjust tone per phase):
 - run-up: build awareness and excitement, lead with the strongest hooks
 - day-before: tomorrow urgency — last chance to plan ahead, tables/seats filling, momentum building
@@ -142,6 +149,29 @@ META API VALUES:
 - Return ONLY valid JSON matching the specified schema, no markdown, no code fences
 
 SPECIAL AD CATEGORIES: If the brief relates to housing, employment, credit, or political issues, set special_ad_category accordingly. Otherwise use "NONE".`;
+
+/**
+ * Trim over-length ad copy at a word boundary instead of mid-word. Falls back to a
+ * hard cut when the last space sits in the first 60% of the limit (so very long
+ * words cannot collapse the copy), and strips dangling punctuation left behind.
+ */
+export function trimToLimit(text: string, max: number): string {
+  if (text.length <= max) return text;
+  const hard = text.slice(0, max);
+  let cut = hard;
+  // Only backtrack when the cut lands mid-word (the next original character would
+  // have continued the word). A cut on a space or punctuation keeps the full word.
+  const nextChar = text.charAt(max);
+  if (nextChar && !/[\s.,;:!?—–-]/.test(nextChar)) {
+    const lastSpace = hard.lastIndexOf(' ');
+    if (lastSpace >= Math.floor(max * 0.6)) {
+      cut = hard.slice(0, lastSpace);
+    }
+  }
+  const cleaned = cut.replace(/[\s,;:—–-]+$/u, '');
+  // Punctuation-only input would otherwise collapse to an empty string.
+  return cleaned.length > 0 ? cleaned : cut;
+}
 
 export function enforceAdSetConstraints(
   adSet: AiCampaignPayload['ad_sets'][number],
@@ -169,9 +199,9 @@ export function enforceAdSetConstraints(
   // Enforce character limits
   ads = ads.map((ad) => ({
     ...ad,
-    headline:     ad.headline.length > 40  ? ad.headline.slice(0, 40)       : ad.headline,
-    primary_text: ad.primary_text.length > 300 ? ad.primary_text.slice(0, 300) : ad.primary_text,
-    description:  ad.description.length > 25 ? ad.description.slice(0, 25)  : ad.description,
+    headline:     trimToLimit(ad.headline, 40),
+    primary_text: trimToLimit(ad.primary_text, 300),
+    description:  trimToLimit(ad.description, 25),
   }));
 
   const usedFormats = new Set<string>();
@@ -359,6 +389,7 @@ export function validateCampaignCopy(
 export async function generateCampaign(input: GenerateInput): Promise<AiCampaignPayload> {
   const client = new OpenAI({ apiKey: env.server.OPENAI_API_KEY });
 
+  const bookingOptimised = shouldGenerateForBookingConversions(input);
   const phaseDescriptions = input.phases
     .map((p, i) => {
       const dateRange = p.phaseEnd
@@ -380,6 +411,9 @@ Business brief: ${input.problemBrief}
 Venue: ${input.venueName}, ${input.venueLocation}
 Budget: £${input.budgetAmount} (${input.budgetType})
 Paid CTA URL: ${input.destinationUrl}
+Conversion context: ${bookingOptimised
+    ? 'This campaign optimises for OFFSITE Purchase conversions — completed bookings tracked on the destination site. Meta will show these ads to people likely to BOOK, so every ad must sell the completed booking (apply the CONVERSION COPY PRINCIPLES), not just the click.'
+    : 'No booking-conversion tracking exists for this destination, so the campaign optimises for link clicks. Write copy that earns a high-intent click.'}
 ${cashOnArrival ? `
 PAYMENT MODE: Cash on arrival — every ad primary_text MUST include "No payment now" or "pay on arrival". Ads without this will be rejected.
 ` : ''}${eventContext ? `
@@ -471,7 +505,6 @@ The ads array must contain EXACTLY 3 entries per ad set. Each must have a differ
     payload.media_plan = input.mediaPlan;
   }
 
-  const bookingOptimised = shouldGenerateForBookingConversions(input);
   payload.objective = bookingOptimised ? 'OUTCOME_SALES' : 'OUTCOME_TRAFFIC';
   payload.audience_keywords = normaliseAudienceKeywords(payload.audience_keywords);
 
