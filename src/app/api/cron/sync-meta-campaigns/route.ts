@@ -25,6 +25,7 @@ async function handle(request: Request) {
   }
 
   let synced = 0;
+  const failedCampaignIds: string[] = [];
 
   for (const campaign of campaigns) {
     try {
@@ -32,11 +33,12 @@ async function handle(request: Request) {
       synced++;
     } catch (err) {
       console.error(`[sync-meta-campaigns] Failed for campaign ${campaign.id}:`, err);
+      failedCampaignIds.push(campaign.id);
       // Continue to next campaign on error
     }
   }
 
-  return NextResponse.json({ synced });
+  return NextResponse.json({ synced, failed: failedCampaignIds.length, failedCampaignIds });
 }
 
 export async function GET(request: Request) {

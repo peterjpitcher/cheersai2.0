@@ -18,6 +18,11 @@ export interface BookingConversionForCapi {
   fbp?: string | null;
   fbc?: string | null;
   clientUserAgent?: string | null;
+  // Advanced matching signals. Email/phone must arrive already SHA-256 hashed
+  // (lowercase hex) — raw values are never accepted or stored.
+  emailSha256?: string | null;
+  phoneSha256?: string | null;
+  clientIpAddress?: string | null;
 }
 
 export type CapiForwardResult =
@@ -44,9 +49,17 @@ export async function forwardBookingConversionToMetaCapi(args: {
     fbp: normaliseSignal(conversion.fbp),
     fbc: normaliseSignal(conversion.fbc),
     client_user_agent: normaliseSignal(conversion.clientUserAgent),
+    em: normaliseHashedSignal(conversion.emailSha256),
+    ph: normaliseHashedSignal(conversion.phoneSha256),
+    client_ip_address: normaliseSignal(conversion.clientIpAddress),
   });
 
-  if (Object.keys(userData).length === 0) {
+  // client_user_agent alone cannot identify a person; require at least one
+  // real match key so Meta does not silently drop the event.
+  const hasIdentifyingKey = Boolean(
+    userData.fbp || userData.fbc || userData.em || userData.ph || userData.client_ip_address,
+  );
+  if (!hasIdentifyingKey) {
     return { status: 'skipped', reason: 'missing_match_keys' };
   }
 
@@ -120,6 +133,14 @@ export async function forwardBookingConversionToMetaCapi(args: {
 function normaliseSignal(value: string | null | undefined) {
   const trimmed = value?.trim();
   return trimmed ? trimmed.slice(0, 500) : undefined;
+}
+
+// Meta expects advanced-matching values as SHA-256 hex. Anything that is not a
+// 64-char hex digest is discarded rather than forwarded malformed.
+function normaliseHashedSignal(value: string | null | undefined) {
+  const trimmed = value?.trim().toLowerCase();
+  if (!trimmed || !/^[0-9a-f]{64}$/.test(trimmed)) return undefined;
+  return trimmed;
 }
 
 function removeNullish<T extends Record<string, unknown>>(input: T) {

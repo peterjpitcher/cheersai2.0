@@ -37,6 +37,10 @@ const payloadSchema = z.object({
   fbp: z.string().trim().max(500).optional().nullable(),
   fbc: z.string().trim().max(500).optional().nullable(),
   clientUserAgent: z.string().trim().max(500).optional().nullable(),
+  // Advanced matching: SHA-256 hex digests only — raw email/phone are rejected.
+  emailSha256: z.string().trim().regex(/^[0-9a-fA-F]{64}$/).optional().nullable(),
+  phoneSha256: z.string().trim().regex(/^[0-9a-fA-F]{64}$/).optional().nullable(),
+  clientIpAddress: z.string().trim().max(45).optional().nullable(),
   occurredAt: z.string().datetime().optional().nullable(),
 });
 
@@ -114,6 +118,9 @@ export async function POST(request: Request) {
   const metaEventId = nullIfEmpty(parsedPayload.metaEventId) ?? parsedPayload.bookingId;
   const occurredAt = parsedPayload.occurredAt ?? new Date().toISOString();
   const hasMetaConsent = parsedPayload.metaConsentGranted === true;
+  const emailSha256 = hasMetaConsent ? nullIfEmpty(parsedPayload.emailSha256)?.toLowerCase() ?? null : null;
+  const phoneSha256 = hasMetaConsent ? nullIfEmpty(parsedPayload.phoneSha256)?.toLowerCase() ?? null : null;
+  const clientIpAddress = hasMetaConsent ? nullIfEmpty(parsedPayload.clientIpAddress) : null;
 
   const { error } = await supabase
     .from('booking_conversion_events')
@@ -149,6 +156,12 @@ export async function POST(request: Request) {
       fbp: hasMetaConsent ? nullIfEmpty(parsedPayload.fbp) : null,
       fbc: hasMetaConsent ? nullIfEmpty(parsedPayload.fbc) : null,
       client_user_agent: hasMetaConsent ? nullIfEmpty(parsedPayload.clientUserAgent) : null,
+      // Advanced-matching columns only exist once the match-key migration has been
+      // applied; omit them entirely until the sender actually supplies values so the
+      // insert stays compatible with the pre-migration schema.
+      ...(emailSha256 ? { email_sha256: emailSha256 } : {}),
+      ...(phoneSha256 ? { phone_sha256: phoneSha256 } : {}),
+      ...(clientIpAddress ? { client_ip_address: clientIpAddress } : {}),
       occurred_at: occurredAt,
     }, {
       onConflict: 'account_id,booking_id',
@@ -157,6 +170,20 @@ export async function POST(request: Request) {
   if (error) {
     console.error('[booking-conversions] Failed to store conversion', error);
     return jsonNoStore({ error: 'Could not store booking conversion.' }, { status: 500 });
+  }
+
+  if (!hasMetaConsent) {
+    // Mark why this event will never be forwarded, but never downgrade a row that
+    // already recorded a successful send (idempotent re-posts can change consent).
+    const { error: skipError } = await supabase
+      .from('booking_conversion_events')
+      .update({ capi_status: 'skipped', capi_error: 'no_consent', capi_event_id: metaEventId })
+      .eq('account_id', accountId)
+      .eq('booking_id', parsedPayload.bookingId)
+      .is('capi_status', null);
+    if (skipError) {
+      console.error('[booking-conversions] Failed to record no-consent skip', skipError);
+    }
   }
 
   if (hasMetaConsent) {
@@ -178,6 +205,9 @@ export async function POST(request: Request) {
         fbp: parsedPayload.fbp,
         fbc: parsedPayload.fbc,
         clientUserAgent: parsedPayload.clientUserAgent,
+        emailSha256,
+        phoneSha256,
+        clientIpAddress,
       },
     });
 

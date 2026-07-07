@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   upsert: vi.fn(),
   update: vi.fn(),
   updateEq: vi.fn(),
+  updateIs: vi.fn(),
   select: vi.fn(),
   selectEq: vi.fn(),
   maybeSingle: vi.fn(),
@@ -66,7 +67,8 @@ describe('POST /api/booking-conversions', () => {
     vi.stubEnv('BOOKING_CONVERSION_ACCOUNT_ID', '00000000-0000-0000-0000-000000000123');
     vi.stubGlobal('fetch', vi.fn());
     mocks.update.mockReturnValue({ eq: mocks.updateEq });
-    mocks.updateEq.mockReturnValue({ eq: mocks.updateEq });
+    mocks.updateEq.mockReturnValue({ eq: mocks.updateEq, is: mocks.updateIs });
+    mocks.updateIs.mockResolvedValue({ error: null });
     mocks.select.mockReturnValue({ eq: mocks.selectEq });
     mocks.selectEq.mockReturnValue({ maybeSingle: mocks.maybeSingle });
     mocks.from.mockImplementation((table: string) => {

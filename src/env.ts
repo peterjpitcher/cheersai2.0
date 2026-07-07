@@ -71,6 +71,10 @@ const serverEnv = {
   // materialisation cron's *writes*: when off the cron is a pure no-op (no QStash dispatch,
   // no Meta calls). Flip on per-environment once a few dry-run summaries have been reviewed.
   FOOD_AUTO_MATERIALISE_ENABLED: readOptionalEnv("FOOD_AUTO_MATERIALISE_ENABLED"),
+  // Booking-conversion ingest (the-anchor.pub → /api/booking-conversions). Optional:
+  // the endpoint 500s with a clear message when unset rather than failing the build.
+  BOOKING_CONVERSION_INGEST_SECRET: readOptionalEnv("BOOKING_CONVERSION_INGEST_SECRET"),
+  BOOKING_CONVERSION_ACCOUNT_ID: readOptionalEnv("BOOKING_CONVERSION_ACCOUNT_ID"),
   // Token vault (AES-256-GCM encryption key -- 64 hex chars = 32 bytes)
   TOKEN_VAULT_KEY: readOptionalEnv("TOKEN_VAULT_KEY"),
   TOKEN_VAULT_KEY_VERSION: readOptionalEnv("TOKEN_VAULT_KEY_VERSION", "1"),
