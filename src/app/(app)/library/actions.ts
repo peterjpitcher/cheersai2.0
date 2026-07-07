@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { buildMediaFileName, generateMediaNameAndTags, MAX_MEDIA_TAGS } from "@/lib/ai/media-tagging";
 import { requireAuthContext } from "@/lib/auth/server";
 import { MEDIA_BUCKET } from "@/lib/constants";
 import { normaliseTag, normaliseTags } from "@/lib/library/tags";
@@ -315,6 +316,70 @@ export async function updateMediaAsset(input: UpdateMediaAssetInput) {
   );
 
   return mapToSummary(assetRow, previewUrl, previewShape);
+}
+
+/**
+ * Auto-name and tag an image asset using OpenAI vision, then persist via
+ * {@link updateMediaAsset}. Used by the /library upload flow, which — unlike the
+ * create wizard — has no campaign name to tag with.
+ *
+ * Fails soft: any error (non-image, missing preview, AI/API failure) leaves the
+ * asset untouched and returns `null`, so a failed suggestion never blocks an upload.
+ */
+export async function autoNameAndTagMediaAsset(assetId: string): Promise<MediaAssetSummary | null> {
+  try {
+    const { accountId } = await requireAuthContext();
+    const supabase = createServiceSupabaseClient();
+
+    const { data: assetRow } = await supabase
+      .from("media_assets")
+      .select("id, file_name, media_type, storage_path, derived_variants, aspect_class")
+      .eq("id", assetId)
+      .eq("account_id", accountId)
+      .maybeSingle<{
+        id: string;
+        file_name: string | null;
+        media_type: MediaType;
+        storage_path: string;
+        derived_variants: Record<string, string> | null;
+        aspect_class: MediaAssetSummary["aspectClass"] | null;
+      }>();
+
+    // Only images can be described by vision; videos and missing rows are skipped.
+    if (!assetRow || assetRow.media_type !== "image") {
+      return null;
+    }
+
+    // Prefer the square derivative (smaller) over the original for a cheaper vision call.
+    const { url: imageUrl } = await signPreviewFromCandidates(
+      supabase,
+      resolvePreviewCandidates({
+        storagePath: assetRow.storage_path,
+        derivedVariants: assetRow.derived_variants ?? {},
+        aspectClass: assetRow.aspect_class,
+      }),
+    );
+
+    if (!imageUrl) {
+      return null;
+    }
+
+    const suggestion = await generateMediaNameAndTags({ imageUrl });
+
+    const originalFileName = assetRow.file_name ?? assetId;
+    const fileName = buildMediaFileName(suggestion.name, originalFileName);
+    const tags = normaliseTags(suggestion.tags).slice(0, MAX_MEDIA_TAGS);
+
+    // Nothing worth writing — leave the asset as-is.
+    if (!tags.length && fileName === originalFileName) {
+      return null;
+    }
+
+    return await updateMediaAsset({ assetId, fileName, tags });
+  } catch (error) {
+    console.error("[library] auto name/tag failed", error);
+    return null;
+  }
 }
 
 async function fetchMediaAssetTags({

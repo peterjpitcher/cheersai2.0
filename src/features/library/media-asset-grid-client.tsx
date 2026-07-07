@@ -5,6 +5,7 @@ import { EyeOff, Loader2, Plus, Trash2 } from "lucide-react";
 import { useCallback, useMemo, useRef, useState, useTransition, type DragEvent } from "react";
 
 import {
+  autoNameAndTagMediaAsset,
   bulkDeleteMediaAssets,
   fetchMediaAssetOriginalUrl,
   finaliseMediaUpload,
@@ -59,7 +60,7 @@ type BulkContext = {
 interface UploadingAsset {
   id: string;
   name: string;
-  status: "uploading" | "processing" | "complete" | "error";
+  status: "uploading" | "processing" | "tagging" | "complete" | "error";
   error?: string;
 }
 
@@ -231,10 +232,28 @@ export function MediaAssetGridClient({
           aspectClass,
         });
 
-        updateUploadStatus(tempId, "complete");
         if (summary) {
           setLibrary((prev) => [summary, ...prev]);
+
+          // Auto-name and tag images with AI (mirrors the create flow's auto-tag).
+          // Non-blocking: the asset is already saved, so a failure just leaves it
+          // with its original filename and no tags.
+          if (summary.mediaType === "image") {
+            updateUploadStatus(tempId, "tagging");
+            try {
+              const enriched = await autoNameAndTagMediaAsset(summary.id);
+              if (enriched) {
+                setLibrary((prev) =>
+                  prev.map((asset) => (asset.id === enriched.id ? enriched : asset)),
+                );
+              }
+            } catch (taggingError) {
+              console.error("[library] auto name/tag failed", taggingError);
+            }
+          }
         }
+
+        updateUploadStatus(tempId, "complete");
       } catch (error) {
         console.error("[library] upload failed", error);
         updateUploadStatus(tempId, "error", error instanceof Error ? error.message : "Upload failed");
@@ -701,6 +720,7 @@ export function MediaAssetGridClient({
               <span className="ml-2 shrink-0 text-[11px] font-medium uppercase text-[var(--c-ink-3)]">
                 {item.status === "uploading" && "Requesting slot"}
                 {item.status === "processing" && "Uploading"}
+                {item.status === "tagging" && "Auto-tagging"}
                 {item.status === "complete" && "Ready"}
                 {item.status === "error" && "Failed"}
               </span>
