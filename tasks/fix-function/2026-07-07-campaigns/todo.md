@@ -32,13 +32,16 @@
 - [ ] Adversarial review pass over full diff (2 agents running)
 - [ ] Final discovery pass (Step 8)
 
-## Approval batch (RISKY — needs Peter's go-ahead; I can execute on approval)
-- [ ] FF-001: set 4 production env vars (shared secret generated at execution, never written to disk):
-      cheersai2-0: BOOKING_CONVERSION_INGEST_SECRET, BOOKING_CONVERSION_ACCOUNT_ID=91fda684-2801-4abb-980e-f42cec017cef
-      the-anchor-pub: CHEERSAI_BOOKING_CONVERSIONS_SECRET (same secret), NEXT_PUBLIC_META_PIXEL_ID=757659911002159
-- [ ] Apply CheersAI migration (additive columns + index) to project nbkjciurhvkfpcpatbnt
-- [ ] Commit + push both repos (fresh builds pick up env; NEXT_PUBLIC var needs a real rebuild)
-- [ ] Post-deploy verification: endpoint 401 probe, pixel present on www.the-anchor.pub,
-      synthetic signed test event → row in booking_conversion_events
-- [ ] FF-004 activation note: consent-gated hashed email/phone + client IP start flowing to Meta
-      CAPI once the site deploy lands (bundled in this same batch)
+## Approval batch — APPROVED by Peter and EXECUTED 2026-07-07
+- [x] FF-001: 4 production env vars set via Vercel CLI (shared secret generated at execution,
+      never persisted to disk or transcript)
+- [x] Migration `booking_conversion_match_keys` applied to nbkjciurhvkfpcpatbnt
+- [x] Committed + pushed: CheersAI 0dd9fa9 (3 commits), Anchor 9942b2ce (1 commit)
+- [x] Deploys verified: cheersai2-0 b54xdpcux Ready = current production;
+      the-anchor-pub 34xnyicll Ready, aliased to https://the-anchor.pub (manual deploy —
+      this repo does NOT auto-deploy on push)
+- [x] End-to-end proof: wrong secret → 401; signed synthetic event (consent false) → 200;
+      row stored with capi_status='skipped'/'no_consent' and new columns present; row deleted.
+      Pixel ID 757659911002159 found in deployed chunk /_next/static/chunks/3092-*.js
+- [x] FF-004 activation live: consent-gated hashed email/phone + client IP now flow with
+      real bookings
