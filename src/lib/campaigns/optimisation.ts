@@ -395,6 +395,11 @@ export function evaluateAdSetOptimisation(
 ): OptimisationDecision[] {
   if (activeAds.length < 2) return [];
 
+  // R5/R8: if the campaign has first-party bookings we cannot tie to a specific ad (e.g.
+  // management-app fallback bookings with no utm_content), we don't know which ad earned them —
+  // never pause an ad on the basis of a campaign-level booking it might have produced.
+  if (hasUnattributedFirstPartyBookings(bookingSignal)) return [];
+
   const adsWithBookings = activeAds.filter((ad) => adHasTrackedBooking(ad, bookingSignal));
   if (adsWithBookings.length > 0) {
     return activeAds
@@ -448,9 +453,26 @@ export function buildBlendedBookingSignals(
 ): Map<string, BlendedBookingSignal> {
   const signals = new Map<string, BlendedBookingSignal>();
 
+  // R9: attribute each booking event to exactly ONE owning campaign — the most specific match,
+  // with a deterministic id tiebreak — so a booking shared by several active campaigns (e.g. a
+  // warm and a cold push on the same event) is not double-counted against each of them.
+  const ownerByEvent = bookingEvents.map((event) => {
+    let ownerId: string | null = null;
+    let ownerScore = 0;
+    for (const campaign of campaigns) {
+      const score = bookingEventMatchSpecificity(event, campaign);
+      if (score === 0) continue;
+      if (score > ownerScore || (score === ownerScore && (ownerId === null || campaign.id < ownerId))) {
+        ownerScore = score;
+        ownerId = campaign.id;
+      }
+    }
+    return ownerId;
+  });
+
   for (const campaign of campaigns) {
     const metaBookings = metric(campaign.metrics_conversions);
-    const matchedEvents = bookingEvents.filter((event) => bookingEventMatchesCampaign(event, campaign));
+    const matchedEvents = bookingEvents.filter((_event, index) => ownerByEvent[index] === campaign.id);
     const adBookings: Record<string, number> = {};
     const adBookingValue: Record<string, number> = {};
     const adSetBookings: Record<string, number> = {};
@@ -1078,6 +1100,17 @@ function adHasTrackedBooking(ad: OptimisationAdRow, bookingSignal?: BlendedBooki
   return metric(ad.metrics_conversions) > 0 || (bookingSignal?.adBookings[ad.id] ?? 0) > 0;
 }
 
+/**
+ * True when a campaign's first-party bookings exceed what we could attribute to specific ads — i.e.
+ * some bookings (e.g. management-app fallback with no utm_content) can't be tied to an ad, so
+ * pausing any single ad on the strength of a campaign-level booking would risk killing the earner.
+ */
+function hasUnattributedFirstPartyBookings(signal?: BlendedBookingSignal): boolean {
+  if (!signal) return false;
+  const attributed = Object.values(signal.adBookings).reduce((sum, count) => sum + count, 0);
+  return signal.firstPartyBookings > attributed;
+}
+
 function findAttributedAd(campaign: OptimisationCampaignRow, utmContent: string | null | undefined) {
   if (!utmContent) return null;
 
@@ -1092,6 +1125,19 @@ function findAttributedAd(campaign: OptimisationCampaignRow, utmContent: string 
   return null;
 }
 
+function campaignNameCandidates(campaign: OptimisationCampaignRow): Set<string> {
+  const snapshot = campaign.source_snapshot ?? {};
+  return new Set(
+    [
+      normaliseComparable(campaign.name),
+      normaliseComparable(stringValue(snapshot.utmCampaign)),
+      normaliseComparable(utmValue(campaign.destination_url, 'utm_campaign')),
+      normaliseComparable(utmValue(stringValue(snapshot.utmDestinationUrl), 'utm_campaign')),
+      normaliseComparable(utmValue(stringValue(snapshot.originalDestinationUrl), 'utm_campaign')),
+    ].filter(Boolean),
+  );
+}
+
 function bookingEventMatchesCampaign(
   event: BookingConversionEventForOptimisation,
   campaign: OptimisationCampaignRow,
@@ -1103,19 +1149,28 @@ function bookingEventMatchesCampaign(
   if (campaignEventId && event.event_id === campaignEventId) return true;
   if (campaignEventSlug && event.event_slug === campaignEventSlug) return true;
 
-  const shortCodes = campaignShortCodeCandidates(campaign);
   const eventShortCode = normaliseShortCode(event.short_code);
-  if (eventShortCode && shortCodes.has(eventShortCode)) return true;
+  if (eventShortCode && campaignShortCodeCandidates(campaign).has(eventShortCode)) return true;
 
-  const campaignNames = new Set([
-    normaliseComparable(campaign.name),
-    normaliseComparable(stringValue(snapshot.utmCampaign)),
-    normaliseComparable(utmValue(campaign.destination_url, 'utm_campaign')),
-    normaliseComparable(utmValue(stringValue(snapshot.utmDestinationUrl), 'utm_campaign')),
-    normaliseComparable(utmValue(stringValue(snapshot.originalDestinationUrl), 'utm_campaign')),
-  ].filter(Boolean));
+  return Boolean(event.utm_campaign && campaignNameCandidates(campaign).has(normaliseComparable(event.utm_campaign)));
+}
 
-  return Boolean(event.utm_campaign && campaignNames.has(normaliseComparable(event.utm_campaign)));
+/**
+ * How specifically a booking event ties to THIS campaign, among campaigns it already matches:
+ * 4 = utm_content resolves to one of the campaign's ads, 3 = short_code, 2 = utm_campaign/name,
+ * 1 = event_id/event_slug, 0 = no match. Used to pick a single owner when several active campaigns
+ * match the same event (R9) so one booking is not credited to every campaign that shares an event.
+ */
+function bookingEventMatchSpecificity(
+  event: BookingConversionEventForOptimisation,
+  campaign: OptimisationCampaignRow,
+): number {
+  if (!bookingEventMatchesCampaign(event, campaign)) return 0;
+  if (findAttributedAd(campaign, event.utm_content)) return 4;
+  const eventShortCode = normaliseShortCode(event.short_code);
+  if (eventShortCode && campaignShortCodeCandidates(campaign).has(eventShortCode)) return 3;
+  if (event.utm_campaign && campaignNameCandidates(campaign).has(normaliseComparable(event.utm_campaign))) return 2;
+  return 1;
 }
 
 function hasEnoughSignalForCopyRewrite(campaign: OptimisationCampaignRow, ads: OptimisationAdRow[]) {

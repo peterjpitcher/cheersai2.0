@@ -1200,7 +1200,7 @@ export async function createFoodBookingCampaign(
       bookingConversionIssues: conversionConfig.issues,
       conversionEventName: conversionConfig.eventName,
       metaPixelId: conversionConfig.pixelId,
-      foodSchedule: enabledWindows,
+      foodSchedule: weightedWindows,
       // Store the original brief + per-window toggles so Phase 3 can re-materialise the
       // schedule (the derived foodSchedule alone is not enough to regenerate windows).
       brief,
@@ -1266,7 +1266,7 @@ export async function createFoodBookingCampaign(
 
     // 6. Persist one ad set per enabled window, mapping food fields and the window key.
     for (let index = 0; index < enabledWindows.length; index++) {
-      const window = enabledWindows[index]!;
+      const window = weightedWindows[index]!;
       const adSetInput = payload.ad_sets[index]!;
 
       const { data: adSetRow, error: adSetError } = await supabase
@@ -1398,12 +1398,17 @@ export async function getCampaignWithTree(campaignId: string): Promise<Campaign 
 
   const campaign = dbRowToCampaignWithTree(data);
 
-  // Blend first-party booking conversions into the campaign-level metrics so the detail
-  // page's Bookings / Cost-per-booking / Conv-rate match the /campaigns list, which applies
-  // the same blend. Meta often reports zero Purchase conversions while first-party booking
-  // events exist (pixel/CAPI attribution gap), so without this the detail page shows 0.
-  // Ad-set/ad rows stay Meta-only: first-party events are attributed at campaign level only.
-  const firstPartyBookingStats = await loadDashboardFirstPartyBookingStats(supabase, accountId, [campaign]);
+  // Blend first-party booking conversions into the campaign-level metrics so the detail page's
+  // Bookings / Cost-per-booking / Conv-rate match the /campaigns list, which applies the same
+  // blend. Meta often reports zero Purchase conversions while first-party booking events exist
+  // (pixel/CAPI attribution gap), so without this the detail page shows 0. Ad-set/ad rows stay
+  // Meta-only: first-party events are attributed at campaign level only.
+  //
+  // Dedup context is ALL of the account's campaigns (not just this one) so a booking event shared
+  // by several campaigns is credited to a single campaign consistently on the list and the detail
+  // page (see buildBlendedBookingSignals — R9).
+  const accountCampaigns = await getCampaigns();
+  const firstPartyBookingStats = await loadDashboardFirstPartyBookingStats(supabase, accountId, accountCampaigns);
   const stats = firstPartyBookingStats.get(campaign.id);
   if (!stats) return campaign;
 
