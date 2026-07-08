@@ -12,7 +12,6 @@ import {
 import type { AdSet, Campaign, CampaignObjective, CampaignPerformanceMetrics, CampaignStatus, OptimisationActionSummary } from '@/types/campaigns';
 import { CampaignActions } from '@/features/campaigns/CampaignActions';
 import { applyOptimisationRecommendation, getCampaignOptimisationActions, getCampaignWithTree } from '../actions';
-import { RecurringControls } from './recurring-controls';
 
 interface CampaignDetailPageProps {
   params: Promise<{ id: string }>;
@@ -101,15 +100,6 @@ export default async function CampaignDetailPage({ params }: CampaignDetailPageP
           {campaign.audienceMode === 'local_interests' ? 'Local + interests' : 'Local only'}
         </span>
       </div>
-
-      {['weekly', 'weekly_recurring', 'daily', 'monthly'].includes(campaign.campaignKind) && (
-        <RecurringControls
-          campaignId={campaign.id}
-          campaignType={campaign.campaignType ?? campaign.campaignKind}
-          status={campaign.status}
-          autoConfirm={campaign.autoConfirm}
-        />
-      )}
 
       <PerformanceMatrix campaign={campaign} adSets={adSets} />
       <OptimisationHistory actions={optimisationActions} />

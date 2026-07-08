@@ -67,6 +67,7 @@ interface CampaignRow {
 interface AdRow {
   id: string;
   meta_ad_id: string | null;
+  meta_creative_id: string | null;
   name: string;
   headline: string;
   primary_text: string;
@@ -545,14 +546,38 @@ function allocateAdSetBudgets(campaign: CampaignRow, adSets: AdSetRow[]): Map<st
   const weights = implicitAdSets.map(weightAdSet);
   const totalWeight = weights.reduce((sum, weight) => sum + weight, 0) || implicitAdSets.length;
 
+  // Work entirely in pence so the stored ad-set budgets sum to exactly penceToAllocate and never
+  // exceed the campaign budget, while each ad set still gets Meta's per-ad-set minimum.
+  const MIN_AD_SET_PENCE = 100; // £1 — Meta's documented per-ad-set floor.
+
+  // If the budget can't give every ad set the minimum, fall back to an even split. Meta enforces
+  // its own minimum at create time and surfaces a clear error if the budget is genuinely too small
+  // for this many ad sets.
+  if (penceToAllocate < MIN_AD_SET_PENCE * implicitAdSets.length) {
+    const evenPence = Math.max(MIN_AD_SET_PENCE, Math.floor(penceToAllocate / implicitAdSets.length));
+    for (const adSet of implicitAdSets) {
+      budgets.set(adSet.id, evenPence / 100);
+    }
+    return budgets;
+  }
+
   let allocatedPence = 0;
   implicitAdSets.forEach((adSet, index) => {
     const isLast = index === implicitAdSets.length - 1;
-    const share = isLast
-      ? penceToAllocate - allocatedPence
-      : Math.floor((penceToAllocate * weights[index]!) / totalWeight);
-    allocatedPence += share;
-    budgets.set(adSet.id, Math.max(1, share / 100));
+    if (isLast) {
+      // Remainder — guaranteed >= MIN because earlier shares reserved the minimum for the rest.
+      budgets.set(adSet.id, Math.max(MIN_AD_SET_PENCE, penceToAllocate - allocatedPence) / 100);
+      return;
+    }
+    // Reserve the minimum for every remaining ad set so the last can never underflow, and account
+    // the floored amount actually stored — a raw un-floored share would let the total drift above
+    // the campaign budget once small shares are floored up to £1.
+    const remainingAfterThis = implicitAdSets.length - index - 1;
+    const maxThisPence = penceToAllocate - allocatedPence - remainingAfterThis * MIN_AD_SET_PENCE;
+    const weightedPence = Math.floor((penceToAllocate * weights[index]!) / totalWeight);
+    const sharePence = Math.min(Math.max(MIN_AD_SET_PENCE, weightedPence), maxThisPence);
+    allocatedPence += sharePence;
+    budgets.set(adSet.id, sharePence / 100);
   });
 
   return budgets;
@@ -745,7 +770,7 @@ export async function publishCampaign(
   const adSetsResult = await supabase
     .from('ad_sets')
     .select(
-      'id, meta_adset_id, name, targeting, optimisation_goal, bid_strategy, budget_amount, phase_start, phase_end, adset_media_asset_id, ads_stop_time, ads_start_time, service_key, decision_stage, budget_weight, ads(id, meta_ad_id, name, headline, primary_text, description, cta, media_asset_id, angle, creative_format, creative_variant_key, utm_content_key)',
+      'id, meta_adset_id, name, targeting, optimisation_goal, bid_strategy, budget_amount, phase_start, phase_end, adset_media_asset_id, ads_stop_time, ads_start_time, service_key, decision_stage, budget_weight, ads(id, meta_ad_id, meta_creative_id, name, headline, primary_text, description, cta, media_asset_id, angle, creative_format, creative_variant_key, utm_content_key)',
     )
     .eq('campaign_id', campaignId);
 
@@ -974,68 +999,79 @@ export async function publishCampaign(
         }
 
         try {
-          // Fetch asset storage path.
-          const { data: assetRow } = await supabase
-            .from('media_assets')
-            .select('storage_path')
-            .eq('id', effectiveAssetId)
-            .single<{ storage_path: string }>();
+          // Reuse a creative persisted by a previous attempt. The resume guard above keys only on
+          // meta_ad_id, so without this a retry after createMetaAd fails would build a brand-new
+          // creative (and re-upload the image) every time — leaking an orphaned creative + adimage,
+          // because rollback can't pause creatives (they have no ACTIVE/PAUSED status).
+          let creativeId = ad.meta_creative_id;
 
-          if (!assetRow?.storage_path) {
-            throw new Error(`Creative asset is missing for ad "${ad.name}".`);
+          if (!creativeId) {
+            // Fetch asset storage path.
+            const { data: assetRow } = await supabase
+              .from('media_assets')
+              .select('storage_path')
+              .eq('id', effectiveAssetId)
+              .single<{ storage_path: string }>();
+
+            if (!assetRow?.storage_path) {
+              throw new Error(`Creative asset is missing for ad "${ad.name}".`);
+            }
+
+            // Normalise path — strip leading bucket prefix if present.
+            const storagePath = assetRow.storage_path.startsWith(`${MEDIA_BUCKET}/`)
+              ? assetRow.storage_path.slice(MEDIA_BUCKET.length + 1)
+              : assetRow.storage_path;
+
+            // Create a short-lived signed URL for Meta to fetch the image.
+            const { data: signed, error: signError } = await supabase.storage
+              .from(MEDIA_BUCKET)
+              .createSignedUrl(storagePath, 300);
+
+            if (signError || !signed?.signedUrl) {
+              throw new Error(`Could not prepare creative asset for ad "${ad.name}".`);
+            }
+
+            // Upload image to Meta and retrieve hash.
+            const { hash: imageHash } = await uploadMetaImage(
+              adAccountId,
+              accessToken,
+              signed.signedUrl,
+            );
+
+            // Create ad creative.
+            const fallbackUtmContentKey = ad.utm_content_key ?? buildAdUtmContentKey({
+              campaignName: campaign.name,
+              adSetName: adSet.name,
+              adName: ad.name,
+              angle: ad.angle,
+              creativeFormat: ad.creative_format,
+            });
+            const creative = await createMetaAdCreative({
+              accessToken,
+              adAccountId,
+              name: ad.name,
+              pageId,
+              linkUrl:
+                resolveFoodBookingLinkUrl(campaign, adSet, fallbackUtmContentKey) ??
+                resolveManagementMetaAdVariantShortUrl(campaign.source_snapshot, fallbackUtmContentKey) ??
+                applyAdUtmContent(baseLinkUrl, fallbackUtmContentKey),
+              imageHash,
+              message: ad.primary_text,
+              headline: ad.headline,
+              description: ad.description,
+              callToActionType: forcesBookNowCta(campaign) ? 'BOOK_NOW' : ad.cta,
+            });
+
+            // Deliberately NOT pushed to createdMetaObjects: creatives have no ACTIVE/PAUSED
+            // lifecycle, so the rollback pause loop would only error on them. Persisting the id
+            // lets a retry reuse this creative instead of orphaning it.
+            creativeId = creative.id;
+
+            await supabase
+              .from('ads')
+              .update({ meta_creative_id: creativeId })
+              .eq('id', ad.id);
           }
-
-          // Normalise path — strip leading bucket prefix if present.
-          const storagePath = assetRow.storage_path.startsWith(`${MEDIA_BUCKET}/`)
-            ? assetRow.storage_path.slice(MEDIA_BUCKET.length + 1)
-            : assetRow.storage_path;
-
-          // Create a short-lived signed URL for Meta to fetch the image.
-          const { data: signed, error: signError } = await supabase.storage
-            .from(MEDIA_BUCKET)
-            .createSignedUrl(storagePath, 300);
-
-          if (signError || !signed?.signedUrl) {
-            throw new Error(`Could not prepare creative asset for ad "${ad.name}".`);
-          }
-
-          // Upload image to Meta and retrieve hash.
-          const { hash: imageHash } = await uploadMetaImage(
-            adAccountId,
-            accessToken,
-            signed.signedUrl,
-          );
-
-          // Create ad creative.
-          const fallbackUtmContentKey = ad.utm_content_key ?? buildAdUtmContentKey({
-            campaignName: campaign.name,
-            adSetName: adSet.name,
-            adName: ad.name,
-            angle: ad.angle,
-            creativeFormat: ad.creative_format,
-          });
-          const creative = await createMetaAdCreative({
-            accessToken,
-            adAccountId,
-            name: ad.name,
-            pageId,
-            linkUrl:
-              resolveFoodBookingLinkUrl(campaign, adSet, fallbackUtmContentKey) ??
-              resolveManagementMetaAdVariantShortUrl(campaign.source_snapshot, fallbackUtmContentKey) ??
-              applyAdUtmContent(baseLinkUrl, fallbackUtmContentKey),
-            imageHash,
-            message: ad.primary_text,
-            headline: ad.headline,
-            description: ad.description,
-            callToActionType: forcesBookNowCta(campaign) ? 'BOOK_NOW' : ad.cta,
-          });
-
-          createdMetaObjects.push(creative.id);
-
-          await supabase
-            .from('ads')
-            .update({ meta_creative_id: creative.id })
-            .eq('id', ad.id);
 
           // Create the ad itself.
           const metaAd = await createMetaAd({
@@ -1043,7 +1079,7 @@ export async function publishCampaign(
             adAccountId,
             name: ad.name,
             adsetId: metaAdSetId,
-            creativeId: creative.id,
+            creativeId,
             status: 'ACTIVE',
           });
 

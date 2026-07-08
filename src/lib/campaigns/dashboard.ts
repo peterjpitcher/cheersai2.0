@@ -155,7 +155,7 @@ export function buildCampaignDashboard(
   };
 }
 
-function applyFirstPartyBookingCount(
+export function applyFirstPartyBookingCount(
   campaign: Campaign,
   firstPartyBookings: number,
   firstPartyBookingValue = 0,
@@ -174,8 +174,10 @@ function applyFirstPartyBookingCount(
       blendedBookingValue: firstPartyBookingValue,
       conversions: blendedBookings,
       costPerConversion: blendedBookings > 0 ? campaign.performance.spend / blendedBookings : 0,
+      // Clamp to 100%: first-party bookings can exceed ad clicks (a booking need not follow a
+      // paid click), which would otherwise render a nonsensical >100% conversion rate.
       conversionRate: campaign.performance.clicks > 0
-        ? (blendedBookings / campaign.performance.clicks) * 100
+        ? Math.min(100, (blendedBookings / campaign.performance.clicks) * 100)
         : 0,
     },
   };

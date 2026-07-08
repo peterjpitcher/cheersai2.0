@@ -50,7 +50,7 @@ async function handle(request: Request) {
     .from('booking_conversion_events')
     .select('*')
     .eq('meta_consent_granted', true)
-    .or('capi_status.is.null,capi_status.eq.failed,and(capi_status.eq.skipped,capi_error.eq.not_configured)')
+    .or('capi_status.is.null,capi_status.eq.failed,and(capi_status.eq.skipped,capi_error.eq.not_configured),and(capi_status.eq.skipped,capi_error.eq.missing_match_keys)')
     .gte('occurred_at', windowStart)
     .order('occurred_at', { ascending: true })
     .limit(RETRY_BATCH_LIMIT);
@@ -98,9 +98,16 @@ async function handle(request: Request) {
     if (result.status === 'failed') failed++;
     if (result.status === 'skipped') skipped++;
 
-    // 'not_configured' skips stay retryable (status untouched) so the row heals as
-    // soon as the pixel/CAPI token are configured — within the 7-day window.
-    if (result.status === 'skipped' && result.reason === 'not_configured') continue;
+    // 'not_configured' skips (missing pixel/token) and 'missing_match_keys' skips
+    // (match-key columns not populated at first attempt) stay retryable — status
+    // untouched — so the row heals as soon as the pixel/token are configured or the
+    // match keys arrive, within the 7-day window.
+    if (
+      result.status === 'skipped' &&
+      (result.reason === 'not_configured' || result.reason === 'missing_match_keys')
+    ) {
+      continue;
+    }
 
     const { error: updateError } = await supabase
       .from('booking_conversion_events')

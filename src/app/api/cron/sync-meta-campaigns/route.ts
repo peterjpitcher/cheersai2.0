@@ -38,7 +38,13 @@ async function handle(request: Request) {
     }
   }
 
-  return NextResponse.json({ synced, failed: failedCampaignIds.length, failedCampaignIds });
+  // Return a failure status when there were campaigns to sync but all of them failed, so the
+  // scheduler/monitor sees a broken run instead of an implicit 200.
+  const allFailed = synced === 0 && failedCampaignIds.length > 0;
+  return NextResponse.json(
+    { synced, failed: failedCampaignIds.length, failedCampaignIds },
+    { status: allFailed ? 500 : 200 },
+  );
 }
 
 export async function GET(request: Request) {

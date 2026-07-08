@@ -128,6 +128,7 @@ export interface BookingConversionEventForOptimisation {
   gclid: string | null;
   short_code: string | null;
   value?: number | string | null;
+  meta_consent_granted?: boolean | null;
   occurred_at: string;
 }
 
@@ -454,11 +455,21 @@ export function buildBlendedBookingSignals(
     const adBookingValue: Record<string, number> = {};
     const adSetBookings: Record<string, number> = {};
     const adSetBookingValue: Record<string, number> = {};
+    // Bookings we can tie to one of THIS campaign's ads (utm_content → ad) AND that
+    // carried marketing consent — i.e. bookings Meta genuinely should have counted.
+    // Only these justify the "Meta reports zero conversions" tracking-mismatch alert;
+    // organic, non-attributed, or non-consented bookings can never appear in Meta and
+    // must not raise a false "fix your CAPI attribution" flag.
+    let attributableBookings = 0;
 
     for (const event of matchedEvents) {
       const eventValue = metric(event.value);
       const attributed = findAttributedAd(campaign, event.utm_content);
       if (!attributed) continue;
+
+      if (event.meta_consent_granted === true) {
+        attributableBookings += 1;
+      }
 
       adBookings[attributed.ad.id] = (adBookings[attributed.ad.id] ?? 0) + 1;
       adBookingValue[attributed.ad.id] = (adBookingValue[attributed.ad.id] ?? 0) + eventValue;
@@ -479,7 +490,7 @@ export function buildBlendedBookingSignals(
       adBookingValue,
       adSetBookings,
       adSetBookingValue,
-      trackingMismatch: metaBookings === 0 && firstPartyBookings > 0,
+      trackingMismatch: metaBookings === 0 && attributableBookings > 0,
     });
   }
 
@@ -587,7 +598,7 @@ function evaluateCampaignDiagnostics(
     decisions.push(buildTrackingIssueDecision({
       campaign,
       severity: 'critical',
-      reason: 'First-party booking events exist, but Meta is reporting zero Purchase conversions. Fix pixel/CAPI attribution before judging ad copy.',
+      reason: 'A consented booking attributed to one of this campaign\'s ads was recorded, but Meta is reporting zero Purchase conversions. Fix pixel/CAPI attribution before judging ad copy.',
       category: 'meta_first_party_mismatch',
       bookingSignal,
     }));
@@ -843,7 +854,7 @@ async function loadBlendedBookingSignals(
 
   const { data, error } = await supabase
     .from('booking_conversion_events')
-    .select('booking_id, booking_type, event_id, event_slug, utm_campaign, utm_content, fbclid, gclid, short_code, value, occurred_at')
+    .select('booking_id, booking_type, event_id, event_slug, utm_campaign, utm_content, fbclid, gclid, short_code, value, meta_consent_granted, occurred_at')
     .eq('account_id', accountId)
     .gte('occurred_at', oldestRelevantDate(campaigns));
 
@@ -1024,9 +1035,16 @@ function decisionKey(decision: Pick<OptimisationDecision, 'campaignId' | 'adId' 
   const identity = `${decision.actionType}:${decision.campaignId}:${decision.adId ?? 'campaign'}`;
   // WF-3: creative_fatigue reasons embed drifting metrics (frequency, CTR %), so a
   // reason-based key re-recorded the same warning every nightly run. Identity alone
-  // dedupes it within the lookback window. Other action types keep the reason in the
-  // key because one campaign can legitimately carry several distinct tracking issues.
-  return decision.actionType === 'creative_fatigue' ? identity : `${identity}:${decision.reason}`;
+  // dedupes it within the lookback window.
+  if (decision.actionType === 'creative_fatigue') return identity;
+  // tracking_issue reasons for low_ctr/high_cpc embed live metric values (e.g. "CTR is 0.42%",
+  // "CPC is £1.03 after 12 clicks") that drift every run, so a raw-reason key never dedupes them.
+  // Normalise numbers to a placeholder: the same issue collapses to a stable key while distinct
+  // categories (low_ctr vs high_cpc vs no-bookings) stay separate via their non-numeric text.
+  const reasonKey = decision.actionType === 'tracking_issue'
+    ? decision.reason.replace(/\d+(?:\.\d+)?/g, '#')
+    : decision.reason;
+  return `${identity}:${reasonKey}`;
 }
 
 function dedupeDecisions(decisions: OptimisationDecision[]) {

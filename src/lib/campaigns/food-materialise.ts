@@ -7,7 +7,7 @@ import {
   setMetaObjectStatus,
   uploadMetaImage,
 } from '@/lib/meta/marketing';
-import { computeAdSetSpendCaps } from '@/lib/campaigns/food-budget-weighting';
+import { computeAdSetSpendCaps, withNormalisedBudgetWeights } from '@/lib/campaigns/food-budget-weighting';
 import { calculateFoodBookingPhases } from '@/lib/campaigns/food-booking-phases';
 import { toLondonDateTime } from '@/lib/campaigns/time-utils';
 import { createServiceSupabaseClient } from '@/lib/supabase/service';
@@ -130,7 +130,7 @@ export function selectNextWeekFoodWindows(input: SelectNextWeekInput): FoodAdWin
 
   const allWindows = calculateFoodBookingPhases(horizonBrief, campaignStartDate);
 
-  return allWindows.filter((window) => {
+  const targetWindows = allWindows.filter((window) => {
     const enabled = windowOverrides?.[window.windowKey] ?? window.enabled;
     if (!enabled) return false;
     // Idempotency: never re-create a window occurrence that is already fully materialised.
@@ -138,6 +138,14 @@ export function selectNextWeekFoodWindows(input: SelectNextWeekInput): FoodAdWin
     if (existingWindowKeys.has(key)) return false;
     const serviceDate = DateTime.fromISO(window.serviceDate, { zone: ZONE });
     return serviceDate >= targetWeekStart && serviceDate < targetWeekEndExclusive;
+  });
+
+  // Normalise budget weights across the returned set so they sum to ~100 (the % share the caller
+  // persists to ad_sets.budget_weight and feeds to computeAdSetSpendCaps). Raw template weights do
+  // not sum to 100, which would make the CBO spend-cap preflight overshoot and fail the rollover.
+  return withNormalisedBudgetWeights(targetWindows, {
+    dayWeighting: brief.dayWeighting,
+    manualDayWeights: brief.manualDayWeights,
   });
 }
 

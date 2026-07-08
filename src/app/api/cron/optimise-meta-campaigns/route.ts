@@ -64,10 +64,14 @@ async function handle(request: Request) {
     }
   }
 
-  return NextResponse.json({
-    accounts: results.length,
-    results,
-  });
+  // Surface a failure status to the scheduler/monitor when there was work to do but every
+  // account errored — otherwise a fully-broken run (expired token, schema gap) looks healthy.
+  const erroredAccounts = results.filter((result) => result.error).length;
+  const allFailed = results.length > 0 && erroredAccounts === results.length;
+  return NextResponse.json(
+    { accounts: results.length, results },
+    { status: allFailed ? 500 : 200 },
+  );
 }
 
 export async function GET(request: Request) {

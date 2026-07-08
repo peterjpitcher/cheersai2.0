@@ -117,7 +117,7 @@ describe('retry-capi-conversions cron', () => {
     expect(body).toMatchObject({ attempted: 1, sent: 1, failed: 0, skipped: 0 });
     // Lock the PostgREST eligibility filter — a typo here silently retries nothing.
     expect(captured.orFilter).toBe(
-      'capi_status.is.null,capi_status.eq.failed,and(capi_status.eq.skipped,capi_error.eq.not_configured)',
+      'capi_status.is.null,capi_status.eq.failed,and(capi_status.eq.skipped,capi_error.eq.not_configured),and(capi_status.eq.skipped,capi_error.eq.missing_match_keys)',
     );
     expect(forwardToCapiMock).toHaveBeenCalledTimes(1);
     const conversion = forwardToCapiMock.mock.calls[0]![0].conversion;
@@ -141,13 +141,18 @@ describe('retry-capi-conversions cron', () => {
     expect(captured.updates).toHaveLength(0);
   });
 
-  it('marks permanent skips (missing match keys) so they stop being retried', async () => {
+  it('leaves missing_match_keys rows untouched so they heal when match keys arrive later', async () => {
     createServiceSupabaseClientMock.mockReturnValue(buildSupabaseMock([makeRow()], captured));
     forwardToCapiMock.mockResolvedValue({ status: 'skipped', reason: 'missing_match_keys' });
 
-    await GET(makeRequest());
-    const update = captured.updates[0]!;
-    expect(update.payload).toMatchObject({ capi_status: 'skipped', capi_error: 'missing_match_keys' });
+    const response = await GET(makeRequest());
+    const body = await response.json();
+
+    expect(body).toMatchObject({ attempted: 1, sent: 0, failed: 0, skipped: 1 });
+    // Left retryable (status untouched): a booking whose hashed match keys were not yet
+    // stored at the first attempt should re-forward and send once they are populated,
+    // instead of being permanently stuck as skipped.
+    expect(captured.updates).toHaveLength(0);
   });
 
   it('records failures with the error message', async () => {

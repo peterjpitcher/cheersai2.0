@@ -315,7 +315,9 @@ describe('blended booking signals', () => {
       metaBookings: 0,
       firstPartyBookings: 1,
       blendedBookings: 1,
-      trackingMismatch: true,
+      // Matched to the campaign, but this booking has no ad attribution or consent,
+      // so it cannot appear in Meta and must not raise a tracking-mismatch alert.
+      trackingMismatch: false,
     });
   });
 
@@ -337,7 +339,8 @@ describe('blended booking signals', () => {
       metaBookings: 0,
       firstPartyBookings: 1,
       blendedBookings: 1,
-      trackingMismatch: true,
+      // Short-code match only — no ad attribution or consent, so not a mismatch.
+      trackingMismatch: false,
     });
   });
 
@@ -382,17 +385,61 @@ describe('blended booking signals', () => {
     });
   });
 
-  it('classifies Meta zero with first-party bookings as a tracking mismatch', () => {
-    const campaignRow = campaign({ source_id: 'event-1', metrics_conversions: 0 });
-    const bookingSignals = buildBlendedBookingSignals([campaignRow], [bookingEvent]);
-    const { decisions } = evaluateCampaignOptimisation([campaignRow], { bookingSignals });
+  // A booking we can tie to one of the campaign's own ads (utm_content → utm_content_key)
+  // AND that carried marketing consent — the only kind Meta genuinely should have counted.
+  const attributedConsentedEvent: BookingConversionEventForOptimisation = {
+    ...bookingEvent,
+    utm_content: 'ad__quiz__run_up__people_social',
+    meta_consent_granted: true,
+  };
 
+  function campaignWithAttributableAd(overrides: Partial<OptimisationCampaignRow> = {}) {
+    return campaign({
+      source_id: 'event-1',
+      metrics_conversions: 0,
+      ad_sets: [
+        adSet({ ads: [ad({ id: 'ad-2', utm_content_key: 'ad__quiz__run_up__people_social' })] }),
+      ],
+      ...overrides,
+    });
+  }
+
+  it('classifies Meta zero with a consented, ad-attributed booking as a tracking mismatch', () => {
+    const campaignRow = campaignWithAttributableAd();
+    const bookingSignals = buildBlendedBookingSignals([campaignRow], [attributedConsentedEvent]);
+
+    expect(bookingSignals.get('campaign-1')?.trackingMismatch).toBe(true);
+
+    const { decisions } = evaluateCampaignOptimisation([campaignRow], { bookingSignals });
     expect(decisions).toEqual(expect.arrayContaining([
       expect.objectContaining({
         actionType: 'tracking_issue',
         recommendationPayload: expect.objectContaining({ category: 'meta_first_party_mismatch' }),
       }),
     ]));
+  });
+
+  it('does not raise a mismatch when the ad-attributed booking was not consented', () => {
+    const campaignRow = campaignWithAttributableAd();
+    const signals = buildBlendedBookingSignals(
+      [campaignRow],
+      [{ ...attributedConsentedEvent, meta_consent_granted: false }],
+    );
+
+    expect(signals.get('campaign-1')?.trackingMismatch).toBe(false);
+  });
+
+  it('does not raise a mismatch when a consented booking is not attributed to any ad', () => {
+    const campaignRow = campaignWithAttributableAd();
+    const signals = buildBlendedBookingSignals(
+      [campaignRow],
+      [{ ...attributedConsentedEvent, utm_content: 'facebook_main' }],
+    );
+
+    expect(signals.get('campaign-1')).toMatchObject({
+      firstPartyBookings: 1,
+      trackingMismatch: false,
+    });
   });
 });
 

@@ -1,7 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { useState, type ReactNode } from 'react';
+import { useRouter } from 'next/navigation';
+import { useState, useTransition, type ComponentType, type ReactNode } from 'react';
 import {
   Activity,
   AlertTriangle,
@@ -22,11 +23,12 @@ import {
 
 import { featureFlags } from '@/env';
 import {
-  applyOptimisationRecommendationFormAction,
-  runOptimiserFormAction,
-  syncPerformanceFormAction,
+  applyOptimisationRecommendation,
+  runCampaignDashboardOptimisation,
+  syncCampaignDashboardPerformance,
 } from '@/app/(app)/campaigns/actions';
 import { Btn } from '@/components/ui/button';
+import { useToast } from '@/components/providers/toast-provider';
 import type {
   CampaignDashboardAttentionItem,
   CampaignDashboardDeliveryStatus,
@@ -199,39 +201,98 @@ function CommandCentre({ dashboard }: { dashboard: CampaignDashboardModel }) {
 
       <div className="flex flex-wrap items-center gap-2 lg:justify-end">
         <PrimaryActionButton action={action} />
-        <form action={syncPerformanceFormAction}>
-          <Btn type="submit" variant="outline" size="sm" icon={RefreshCw}>
-            Sync
-          </Btn>
-        </form>
-        <form action={runOptimiserFormAction}>
-          <Btn type="submit" variant="outline" size="sm" icon={Target}>
-            Optimise
-          </Btn>
-        </form>
+        <DashboardActionButton
+          run={() => syncCampaignDashboardPerformance()}
+          label="Sync"
+          icon={RefreshCw}
+          successMessage="Performance synced"
+          errorTitle="Sync failed"
+        />
+        <DashboardActionButton
+          run={() => runCampaignDashboardOptimisation()}
+          label="Optimise"
+          icon={Target}
+          successMessage="Optimisation run complete"
+          errorTitle="Optimise failed"
+        />
       </div>
     </section>
+  );
+}
+
+function DashboardActionButton({
+  run,
+  label,
+  variant = 'outline',
+  icon,
+  successMessage,
+  errorTitle,
+}: {
+  run: () => Promise<{ success?: boolean; error?: string }>;
+  label: string;
+  variant?: 'primary' | 'outline';
+  icon?: ComponentType<{ className?: string }>;
+  successMessage: string;
+  errorTitle: string;
+}) {
+  const toast = useToast();
+  const router = useRouter();
+  const [isPending, startTransition] = useTransition();
+
+  return (
+    <Btn
+      type="button"
+      variant={variant}
+      size="sm"
+      icon={icon}
+      disabled={isPending}
+      onClick={() =>
+        startTransition(async () => {
+          try {
+            const result = await run();
+            if ('error' in result && result.error) {
+              toast.error(errorTitle, { description: result.error });
+              return;
+            }
+            toast.success(successMessage);
+            router.refresh();
+          } catch (error) {
+            toast.error(errorTitle, {
+              description: error instanceof Error ? error.message : 'Unexpected error.',
+            });
+          }
+        })
+      }
+    >
+      {label}
+    </Btn>
   );
 }
 
 function PrimaryActionButton({ action }: { action: PrimaryAction }) {
   if (action.form === 'sync') {
     return (
-      <form action={syncPerformanceFormAction}>
-        <Btn type="submit" size="sm" icon={RefreshCw}>
-          {action.label}
-        </Btn>
-      </form>
+      <DashboardActionButton
+        run={() => syncCampaignDashboardPerformance()}
+        label={action.label}
+        variant="primary"
+        icon={RefreshCw}
+        successMessage="Performance synced"
+        errorTitle="Sync failed"
+      />
     );
   }
 
   if (action.form === 'optimise') {
     return (
-      <form action={runOptimiserFormAction}>
-        <Btn type="submit" size="sm" icon={WandSparkles}>
-          {action.label}
-        </Btn>
-      </form>
+      <DashboardActionButton
+        run={() => runCampaignDashboardOptimisation()}
+        label={action.label}
+        variant="primary"
+        icon={WandSparkles}
+        successMessage="Optimisation run complete"
+        errorTitle="Optimise failed"
+      />
     );
   }
 
@@ -1152,12 +1213,12 @@ function RecommendationPreview({ action }: { action: OptimisationActionSummary }
           </p>
         )}
         {action.status === 'planned' && (
-          <form action={applyOptimisationRecommendationFormAction}>
-            <input type="hidden" name="actionId" value={action.id} />
-            <Btn type="submit" variant="outline" size="sm">
-              Approve replacement
-            </Btn>
-          </form>
+          <DashboardActionButton
+            run={() => applyOptimisationRecommendation(action.id)}
+            label="Approve replacement"
+            successMessage="Replacement ad created"
+            errorTitle="Could not apply recommendation"
+          />
         )}
         {action.replacementAdId && (
           <p className="text-xs" style={{ color: 'var(--c-status-posted-fg)' }}>

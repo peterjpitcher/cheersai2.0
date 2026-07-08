@@ -116,6 +116,24 @@ export function computeFoodWindowWeights(input: FoodWeightInput): FoodWeightResu
 }
 
 /**
+ * Return the windows with each `budgetWeight` replaced by its normalised share (the returned set
+ * sums to ~100), applying the campaign's day-weighting strategy. This is what callers persist to
+ * `ad_sets.budget_weight` and what {@link computeAdSetSpendCaps} expects — the raw decision-stage
+ * template weights do NOT sum to 100, so using them unmodified makes the CBO spend-cap preflight
+ * overshoot the campaign budget and reject the publish/rollover.
+ */
+export function withNormalisedBudgetWeights(
+  windows: FoodAdWindow[],
+  input: Omit<FoodWeightInput, 'windows'>,
+): FoodAdWindow[] {
+  const weights = computeFoodWindowWeights({ windows, ...input });
+  return windows.map((window, index) => ({
+    ...window,
+    budgetWeight: weights[index]?.weight ?? window.budgetWeight,
+  }));
+}
+
+/**
  * Phase 3 (3b) — hybrid CBO per-ad-set spend caps.
  *
  * Under campaign budget optimization the campaign owns one budget; Meta still lets each ad

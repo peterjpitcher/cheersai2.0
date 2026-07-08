@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 
 import { forwardBookingConversionToMetaCapi } from '@/lib/meta/conversions-api';
+import { validateSecret } from '@/lib/security/signing';
 import { createServiceSupabaseClient } from '@/lib/supabase/service';
 
 export const dynamic = 'force-dynamic';
@@ -103,7 +104,8 @@ export async function POST(request: Request) {
   }
 
   const suppliedSecret = normaliseAuthHeader(request.headers.get('authorization'));
-  if (suppliedSecret !== secret) {
+  // Constant-time comparison — a plain !== leaks the secret via response timing.
+  if (!validateSecret(suppliedSecret, secret)) {
     return jsonNoStore({ error: 'Unauthorized' }, { status: 401 });
   }
 
@@ -116,7 +118,18 @@ export async function POST(request: Request) {
 
   const supabase = createServiceSupabaseClient();
   const metaEventId = nullIfEmpty(parsedPayload.metaEventId) ?? parsedPayload.bookingId;
-  const occurredAt = parsedPayload.occurredAt ?? new Date().toISOString();
+
+  // Keep occurredAt inside Meta's ~7-day CAPI acceptance window. A future timestamp is bad data
+  // (reject it); a stale one is clamped so the event stays deliverable and the retry cron (which
+  // only re-sends rows newer than ~6.5 days) can still heal it instead of leaving it stuck.
+  const nowMs = Date.now();
+  const providedMs = parsedPayload.occurredAt ? Date.parse(parsedPayload.occurredAt) : nowMs;
+  if (Number.isFinite(providedMs) && providedMs > nowMs + 5 * 60 * 1000) {
+    return jsonNoStore({ error: 'occurredAt cannot be in the future.' }, { status: 400 });
+  }
+  const MAX_OCCURRED_AGE_MS = 6.5 * 24 * 60 * 60 * 1000;
+  const occurredAtMs = Number.isFinite(providedMs) ? Math.max(providedMs, nowMs - MAX_OCCURRED_AGE_MS) : nowMs;
+  const occurredAt = new Date(occurredAtMs).toISOString();
   const hasMetaConsent = parsedPayload.metaConsentGranted === true;
   const emailSha256 = hasMetaConsent ? nullIfEmpty(parsedPayload.emailSha256)?.toLowerCase() ?? null : null;
   const phoneSha256 = hasMetaConsent ? nullIfEmpty(parsedPayload.phoneSha256)?.toLowerCase() ?? null : null;
@@ -227,7 +240,10 @@ export async function POST(request: Request) {
               : null,
         })
         .eq('account_id', accountId)
-        .eq('booking_id', parsedPayload.bookingId);
+        .eq('booking_id', parsedPayload.bookingId)
+        // Never regress a row a concurrent retry already marked 'sent'. A freshly upserted row
+        // has capi_status NULL, so match NULL-or-not-sent (a bare .neq would skip NULL rows).
+        .or('capi_status.is.null,capi_status.neq.sent');
     } catch (statusError) {
       console.error('[booking-conversions] Failed to update CAPI status', statusError);
     }

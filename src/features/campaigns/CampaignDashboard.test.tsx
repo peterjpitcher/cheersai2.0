@@ -21,9 +21,17 @@ vi.mock('@/env', () => ({
 }));
 
 vi.mock('@/app/(app)/campaigns/actions', () => ({
-  applyOptimisationRecommendationFormAction: vi.fn(),
-  runOptimiserFormAction: vi.fn(),
-  syncPerformanceFormAction: vi.fn(),
+  applyOptimisationRecommendation: vi.fn(),
+  runCampaignDashboardOptimisation: vi.fn(),
+  syncCampaignDashboardPerformance: vi.fn(),
+}));
+
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ refresh: vi.fn() }),
+}));
+
+vi.mock('@/components/providers/toast-provider', () => ({
+  useToast: () => ({ error: vi.fn(), success: vi.fn() }),
 }));
 
 vi.mock('./DeleteCampaignButton', () => ({

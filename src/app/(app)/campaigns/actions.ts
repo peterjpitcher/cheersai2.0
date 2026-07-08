@@ -8,8 +8,9 @@ import { publishCampaign } from '@/app/(app)/campaigns/[id]/actions';
 import { featureFlags } from '@/env';
 import { MEDIA_BUCKET } from '@/lib/constants';
 import { calculateFoodBookingPhases } from '@/lib/campaigns/food-booking-phases';
+import { withNormalisedBudgetWeights } from '@/lib/campaigns/food-budget-weighting';
 import type { CampaignPhase } from '@/lib/campaigns/phases';
-import { buildCampaignDashboard, type CampaignDashboardModel } from '@/lib/campaigns/dashboard';
+import { applyFirstPartyBookingCount, buildCampaignDashboard, type CampaignDashboardModel } from '@/lib/campaigns/dashboard';
 import {
   EMPTY_EVENT_BOOKING_INSIGHTS,
   fetchEventBookingInsights,
@@ -946,6 +947,14 @@ export async function saveAndPublishCampaign(
 // ---------------------------------------------------------------------------
 
 const HHMM_REGEX = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+/** True only for a real YYYY-MM-DD calendar date (rejects malformed/overflow like 2026-13-45). */
+function isValidCalendarDate(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const parsed = new Date(`${value}T00:00:00Z`);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+}
+
 const RUN_DAYS: readonly RunDay[] = [
   'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday',
 ];
@@ -1085,6 +1094,11 @@ export async function createFoodBookingCampaign(
     if (input.budgetAmount <= 0) {
       throw new Error('Budget must be greater than 0.');
     }
+    // Guard the start date up front: calculateFoodBookingPhases does not throw on a malformed
+    // value, it silently yields null-dated windows and a null campaign end_date.
+    if (!isValidCalendarDate(input.startDate)) {
+      throw new Error('Start date must be a valid YYYY-MM-DD date.');
+    }
 
     const destinationUrl = validateDestinationUrl(brief.bookingUrl);
     const serviceBookingUrls = normaliseServiceBookingUrls(brief.serviceBookingUrls, destinationUrl);
@@ -1132,6 +1146,13 @@ export async function createFoodBookingCampaign(
     if (enabledWindows.length === 0) {
       return { error: 'No ad windows are enabled for the selected services and dates.' };
     }
+    // Normalise each window's budget weight to a % of the campaign budget (raw template weights do
+    // not sum to 100). This is what publish persists and feeds to the CBO spend-cap preflight, and
+    // it makes the brief's dayWeighting / manualDayWeights actually shape delivered budget.
+    const weightedWindows = withNormalisedBudgetWeights(enabledWindows, {
+      dayWeighting: brief.dayWeighting,
+      manualDayWeights: brief.manualDayWeights,
+    });
 
     const lastWindow = enabledWindows[enabledWindows.length - 1]!;
     const endDate = lastWindow.runDate;
@@ -1375,7 +1396,19 @@ export async function getCampaignWithTree(campaignId: string): Promise<Campaign 
   if (error) throw error;
   if (!data) return null;
 
-  return dbRowToCampaignWithTree(data);
+  const campaign = dbRowToCampaignWithTree(data);
+
+  // Blend first-party booking conversions into the campaign-level metrics so the detail
+  // page's Bookings / Cost-per-booking / Conv-rate match the /campaigns list, which applies
+  // the same blend. Meta often reports zero Purchase conversions while first-party booking
+  // events exist (pixel/CAPI attribution gap), so without this the detail page shows 0.
+  // Ad-set/ad rows stay Meta-only: first-party events are attributed at campaign level only.
+  const firstPartyBookingStats = await loadDashboardFirstPartyBookingStats(supabase, accountId, [campaign]);
+  const stats = firstPartyBookingStats.get(campaign.id);
+  if (!stats) return campaign;
+
+  // applyFirstPartyBookingCount spreads the campaign, preserving the nested adSets tree.
+  return applyFirstPartyBookingCount(campaign, stats.bookings, stats.value);
 }
 
 export async function getCampaignOptimisationActions(campaignId: string): Promise<OptimisationActionSummary[]> {
@@ -1983,8 +2016,6 @@ interface CampaignDbRow {
   metrics_cost_per_conversion: number | string | null;
   metrics_conversion_rate: number | string | null;
   last_synced_at: string | null;
-  campaign_type: string | null;
-  auto_confirm: boolean | null;
   created_at: string;
 }
 
@@ -2175,8 +2206,10 @@ function dbRowToCampaign(row: CampaignDbRow): Campaign {
     qualityStatus: (row.quality_status ?? null) as Campaign['qualityStatus'],
     qualityIssues: Array.isArray(row.quality_issues) ? row.quality_issues : [],
     audienceStrategy: row.audience_strategy ?? null,
-    campaignType: row.campaign_type ?? row.campaign_kind ?? null,
-    autoConfirm: Boolean(row.auto_confirm ?? false),
+    // meta_campaigns has no campaign_type/auto_confirm columns; campaignType mirrors the kind
+    // and autoConfirm is always false (recurring paid campaigns are not modelled on this table).
+    campaignType: row.campaign_kind ?? null,
+    autoConfirm: false,
     performance: dbRowToPerformance(row),
     lastSyncedAt: row.last_synced_at ? new Date(row.last_synced_at) : null,
     createdAt: new Date(row.created_at),
