@@ -118,7 +118,22 @@ function stripLinkInBioSentences(value: string): string {
 }
 
 function normaliseHashtag(value: string): string | null {
-  const cleaned = value
+  let candidate = value.trim();
+
+  // Models sometimes emit a hashtag as a full platform URL, e.g.
+  // "https://www.facebook.com/hashtag/BarStaff" or
+  // "https://www.instagram.com/explore/tags/BarStaff". Blindly stripping the
+  // punctuation would produce "#httpswwwfacebookcomhashtagBarStaff", so pull the
+  // real tag out of the URL. Any other bare URL is not a hashtag — drop it rather
+  // than turn a link into a garbage tag.
+  const hashtagUrl = candidate.match(/\/(?:hashtag|explore\/tags)\/([^/?#\s]+)/i);
+  if (hashtagUrl) {
+    candidate = hashtagUrl[1];
+  } else if (/^https?:\/\//i.test(candidate)) {
+    return null;
+  }
+
+  const cleaned = candidate
     .replace(/^[#@]+/, "")
     .replace(/[^\p{L}\p{N}_]+/gu, "");
 
