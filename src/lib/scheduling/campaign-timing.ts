@@ -39,8 +39,7 @@ export function extractCampaignTiming(campaign: {
 
   if (campaign.campaign_type === "weekly") {
     // metadata.dayOfWeek is stored in JS getDay() format (0=Sunday..6=Saturday)
-    // — see the weekly_recurring brief (content-schemas.ts) and
-    // supabase/functions/materialise-weekly/utils.ts:clampDay. We translate
+    // — see the weekly_recurring brief (content-schemas.ts). We translate
     // to Luxon weekday (1=Monday..7=Sunday) here so getNextWeeklyOccurrence
     // and downstream banner-label code use the correct weekday math.
     const startAt = typeof meta.startDate === "string"

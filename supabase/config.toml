@@ -1,13 +1,10 @@
 project_id = "cheersai"
 
 # B1: JWT verification enabled -- service-role key satisfies this check.
-# publish-queue and materialise-weekly are only referenced in comments (no active callers).
+# publish-queue is only referenced in comments (no active callers).
 # media-derivatives is called by scripts/ops/regenerate-story-derivatives.ts via
 # service-role client, which passes the service-role key as Authorization header.
 [functions."publish-queue"]
-  verify_jwt = true
-
-[functions."materialise-weekly"]
   verify_jwt = true
 
 [functions."media-derivatives"]
