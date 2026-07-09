@@ -23,6 +23,7 @@ import { MediaPicker } from '@/features/create/media/media-picker';
 import { Skeleton } from '@/components/ui/skeleton';
 import { PlatformBadge } from '@/components/ui/platform-badge';
 import { generateContent, regenerateWithModifier } from '@/app/actions/ai-generate';
+import { GENERATION_BATCH_SIZE, selectNextGenerationBatch } from '@/features/create/steps/generation-batch';
 import { DEFAULT_TIMEZONE } from '@/lib/constants';
 import { useToast } from '@/components/providers/toast-provider';
 import type { ContentBrief } from '@/features/create/schemas/content-schemas';
@@ -286,6 +287,9 @@ export function GenerateStep({
   const approvedCount = generatedSlotCopies.filter(sc => sc.approved && sc.status === 'ready' && sc.copy).length;
   const totalCount = effectiveSlots.length;
   const hasAnyGenerated = generatedSlotCopies.length > 0;
+  const ungeneratedCount = effectiveSlots.filter(
+    (s) => generatedSlotCopies.find((c) => c.slotKey === s.key)?.status !== 'ready',
+  ).length;
 
   // -----------------------------------------------------------------------
   // Toggle card expand/collapse
@@ -307,42 +311,69 @@ export function GenerateStep({
   // Batch generation: generate all slots with bounded concurrency
   // -----------------------------------------------------------------------
 
-  const handleGenerateAll = useCallback(async () => {
+  const runGeneration = useCallback(async (scope: 'all' | 'next') => {
     if (!contentId) return;
     if (isStorySchedule) return;
     // Double-submit guard (F7): bail if a batch is already running so a rapid
     // second click can't fire the generation server action twice.
     if (isGeneratingBatch) return;
+
+    // Work from a slotKey-keyed map so we can generate a subset (one batch) while
+    // preserving copy already produced for other slots. Preserve any existing
+    // *explicit* per-slot media choice; leave mediaIds undefined otherwise so the
+    // slot inherits the live wizard-level selection at submit time (an empty array
+    // would freeze "no media" and defeat the `?? selectedMediaIds` fallback).
+    const byKey = new Map<string, SlotGeneratedCopy>(
+      generatedSlotCopies.map((c) => [c.slotKey, c] as const),
+    );
+    for (const slot of effectiveSlots) {
+      if (!byKey.has(slot.key)) {
+        byKey.set(slot.key, {
+          slotKey: slot.key,
+          scheduledAt: publishMode === 'now' && slot.key === 'now' ? null : slotToIso(slot),
+          label: slot.label,
+          copy: null,
+          warnings: [],
+          status: 'pending',
+        });
+      }
+    }
+
+    // 'all' (Regenerate All) resets and regenerates every slot; 'next' generates
+    // the next page of not-yet-ready slots, up to GENERATION_BATCH_SIZE.
+    let targets: ScheduleSlot[];
+    if (scope === 'all') {
+      for (const slot of effectiveSlots) {
+        const prev = byKey.get(slot.key)!;
+        byKey.set(slot.key, { ...prev, copy: null, warnings: [], status: 'pending', error: undefined, approved: false });
+      }
+      targets = effectiveSlots;
+    } else {
+      const readyKeys = new Set(
+        effectiveSlots.filter((s) => byKey.get(s.key)?.status === 'ready').map((s) => s.key),
+      );
+      const targetKeys = new Set(
+        selectNextGenerationBatch(effectiveSlots.map((s) => s.key), readyKeys, GENERATION_BATCH_SIZE),
+      );
+      targets = effectiveSlots.filter((s) => targetKeys.has(s.key));
+    }
+
+    if (!targets.length) return;
+
     setIsGeneratingBatch(true);
+    const emit = () => onSlotCopiesChange(effectiveSlots.map((s) => byKey.get(s.key)!));
+    // Expand the cards being generated so the user can watch progress.
+    setExpandedCards((prev) => {
+      const next = new Set(prev);
+      for (const slot of targets) next.add(slot.key);
+      return next;
+    });
+    emit();
 
-    // Initialize all slots as pending. Preserve any existing *explicit* per-slot
-    // media choice (kept across "Regenerate All"), otherwise leave mediaIds
-    // undefined so the slot inherits the live wizard-level selection at render and
-    // submit time. Do NOT bake selectedMediaIds in here: doing so freezes an empty
-    // array when media is added after generating, which then defeats the
-    // `?? selectedMediaIds` fallback (an empty array is not nullish) and the post
-    // ends up scheduled with no media. `undefined` = inherit, `[]` = explicit none.
-    const initialCopies: SlotGeneratedCopy[] = effectiveSlots.map(slot => ({
-      slotKey: slot.key,
-      scheduledAt: publishMode === 'now' && slot.key === 'now' ? null : slotToIso(slot),
-      label: slot.label,
-      copy: null,
-      warnings: [],
-      status: 'pending' as const,
-      mediaIds: generatedSlotCopies.find(sc => sc.slotKey === slot.key)?.mediaIds,
-    }));
-    onSlotCopiesChange(initialCopies);
-
-    // Expand all cards so user can watch progress
-    setExpandedCards(new Set(effectiveSlots.map(s => s.key)));
-
-    const results = [...initialCopies];
-
-    const tasks = effectiveSlots.map((slot, index) =>
+    const tasks = targets.map((slot) =>
       async () => {
-        // Mark as generating
-        results[index] = { ...results[index], status: 'generating' };
-        onSlotCopiesChange([...results]);
+        byKey.set(slot.key, { ...byKey.get(slot.key)!, status: 'generating' });
+        emit();
 
         try {
           const slotIso = publishMode === 'now' && slot.key === 'now'
@@ -361,42 +392,38 @@ export function GenerateStep({
             ...temporalContext,
           });
 
+          const prev = byKey.get(slot.key)!;
           if (result.error) {
-            results[index] = {
-              ...results[index],
-              status: 'failed',
-              error: result.error,
-            };
+            byKey.set(slot.key, { ...prev, status: 'failed', error: result.error });
           } else if (result.data) {
-            results[index] = {
-              ...results[index],
+            byKey.set(slot.key, {
+              ...prev,
               status: 'ready',
               copy: toPlatformCopy(result.data.copy),
               warnings: result.data.warnings,
               error: undefined,
-            };
+            });
           }
         } catch (err) {
-          results[index] = {
-            ...results[index],
+          const prev = byKey.get(slot.key)!;
+          byKey.set(slot.key, {
+            ...prev,
             status: 'failed',
             error: err instanceof Error ? err.message : 'Generation failed',
-          };
+          });
         }
 
-        onSlotCopiesChange([...results]);
+        emit();
       },
     );
 
     await limitConcurrency(tasks, 3);
 
     // Surface batch generation failures (F8): allSettled swallows per-slot
-    // errors, so summarise any failed slots via toast without throwing. The
-    // success path is unchanged.
-    const failedCount = results.filter(r => r.status === 'failed').length;
+    // errors, so summarise any failed slots via toast without throwing.
+    const failedCount = targets.filter((s) => byKey.get(s.key)?.status === 'failed').length;
     if (failedCount > 0) {
-      const total = results.length;
-      toast.error(`${failedCount} of ${total} post${total === 1 ? '' : 's'} couldn't be generated`);
+      toast.error(`${failedCount} of ${targets.length} post${targets.length === 1 ? '' : 's'} couldn't be generated`);
     }
 
     // Record generation context
@@ -412,6 +439,9 @@ export function GenerateStep({
 
     setIsGeneratingBatch(false);
   }, [contentId, contentBrief, effectiveSlots, selectedMediaIds, publishMode, onSlotCopiesChange, onGeneratedWithContext, generatedSlotCopies, isStorySchedule, isGeneratingBatch, toast]);
+
+  const handleGenerateAll = useCallback(() => runGeneration('all'), [runGeneration]);
+  const handleGenerateNext = useCallback(() => runGeneration('next'), [runGeneration]);
 
   // -----------------------------------------------------------------------
   // Single-slot regeneration
@@ -609,9 +639,13 @@ export function GenerateStep({
             }
           </p>
         </div>
-        <Button type="button" onClick={handleGenerateAll} disabled={!contentId}>
+        <Button type="button" onClick={handleGenerateNext} disabled={!contentId}>
           <Sparkles className="size-4 mr-1.5" aria-hidden="true" />
-          {totalCount <= 1 ? 'Generate Content' : `Generate All (${totalCount})`}
+          {totalCount <= 1
+            ? 'Generate Content'
+            : totalCount > GENERATION_BATCH_SIZE
+              ? `Generate first ${GENERATION_BATCH_SIZE} of ${totalCount}`
+              : `Generate All (${totalCount})`}
         </Button>
         {!contentId && (
           <p className="text-xs text-muted-foreground">Save your brief first to enable generation.</p>
@@ -671,6 +705,28 @@ export function GenerateStep({
               <RotateCcw className="size-3.5 mr-1.5" aria-hidden="true" />
             )}
             Regenerate All
+          </Button>
+        </div>
+      )}
+
+      {/* Generate next batch — long weekly runs generate a page at a time */}
+      {hasAnyGenerated && !isStorySchedule && ungeneratedCount > 0 && (
+        <div className="flex items-center justify-between gap-3 rounded-lg border border-border bg-muted/40 p-3">
+          <p className="text-sm text-muted-foreground">
+            {ungeneratedCount} of {totalCount} posts not generated yet.
+          </p>
+          <Button
+            type="button"
+            size="sm"
+            onClick={handleGenerateNext}
+            disabled={!contentId || isGeneratingBatch}
+          >
+            {isGeneratingBatch ? (
+              <Loader2 className="size-3.5 mr-1.5 animate-spin" aria-hidden="true" />
+            ) : (
+              <Sparkles className="size-3.5 mr-1.5" aria-hidden="true" />
+            )}
+            Generate next {Math.min(GENERATION_BATCH_SIZE, ungeneratedCount)}
           </Button>
         </div>
       )}
