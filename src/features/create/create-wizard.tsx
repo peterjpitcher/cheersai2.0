@@ -26,7 +26,7 @@ import type {
   ScheduleSlot,
   SlotGeneratedCopy,
 } from '@/types/content';
-import { DEFAULT_TIMEZONE } from '@/lib/constants';
+import { DEFAULT_TIMEZONE, WEEKLY_MAX_OCCURRENCES } from '@/lib/constants';
 
 import { BriefStep } from '@/features/create/steps/brief-step';
 import { GenerateStep } from '@/features/create/steps/generate-step';
@@ -302,8 +302,8 @@ export function CreateWizard({ initialDraftId, accountId, onClose }: CreateWizar
           toast.error('Pick at least one day and an end date that schedules a post.');
           return;
         }
-        if (count > 12) {
-          toast.error('That’s more than 12 posts. Shorten the date range or remove a day.');
+        if (count > WEEKLY_MAX_OCCURRENCES) {
+          toast.error(`That’s more than ${WEEKLY_MAX_OCCURRENCES} posts. Shorten the date range or remove a day.`);
           return;
         }
       }

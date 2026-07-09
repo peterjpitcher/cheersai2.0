@@ -6,7 +6,7 @@ import { DateTime } from 'luxon';
 
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
-import { DEFAULT_TIMEZONE } from '@/lib/constants';
+import { DEFAULT_TIMEZONE, WEEKLY_MAX_OCCURRENCES } from '@/lib/constants';
 import { buildWeeklyMultiDaySuggestions } from '@/features/create/schedule/suggestion-utils';
 
 const DAYS = [
@@ -24,7 +24,7 @@ const PLACEMENTS = [
   { value: 'story', label: 'Story' },
 ] as const;
 
-const MAX_OCCURRENCES = 12;
+const MAX_OCCURRENCES = WEEKLY_MAX_OCCURRENCES;
 
 interface WeeklyRecurringFieldsProps {
   form: UseFormReturn<FieldValues>;
@@ -33,7 +33,7 @@ interface WeeklyRecurringFieldsProps {
 /**
  * Type-specific fields for weekly recurring content: post type, multi-select
  * days of the week, time, and a calendar end date. Shows a live count of how
- * many posts the current settings produce and flags 0 or >12.
+ * many posts the current settings produce and flags 0 or over the cap.
  */
 export function WeeklyRecurringFields({ form }: WeeklyRecurringFieldsProps): React.JSX.Element {
   const { register, watch, setValue, formState: { errors } } = form;

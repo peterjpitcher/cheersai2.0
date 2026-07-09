@@ -5,7 +5,7 @@ import { AlertTriangle } from 'lucide-react';
 import { DateTime } from 'luxon';
 
 import { Label } from '@/components/ui/label';
-import { DEFAULT_TIMEZONE, STORY_POST_TIME } from '@/lib/constants';
+import { DEFAULT_TIMEZONE, STORY_POST_TIME, WEEKLY_MAX_OCCURRENCES } from '@/lib/constants';
 import { ScheduleCalendar } from '@/features/create/schedule/schedule-calendar';
 import type {
   ExistingPlannerItemDisplay,
@@ -219,7 +219,9 @@ export function ScheduleStep({
   // Slot management
   // -------------------------------------------------------------------------
 
-  const maxSlots = MAX_SLOTS_DEFAULT;
+  // Weekly recurring can span a long run (up to WEEKLY_MAX_OCCURRENCES); other
+  // types keep the standard per-campaign slot cap.
+  const maxSlots = isWeeklyRecurring ? WEEKLY_MAX_OCCURRENCES : MAX_SLOTS_DEFAULT;
 
   const handleAddSlot = useCallback(
     ({ date, time }: { date: string; time: string }) => {

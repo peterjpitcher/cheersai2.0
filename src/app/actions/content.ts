@@ -13,7 +13,7 @@ import { composePublishBody, buildPreviewData } from '@/lib/publishing/compose-b
 import { normaliseBannerText, validateBannerText } from '@/lib/banner/text';
 import { readPlatformCtaLinks } from '@/lib/publishing/copy-rules';
 import { logPublishAuditEvent } from '@/lib/publishing/audit';
-import { MEDIA_BUCKET, DEFAULT_TIMEZONE } from '@/lib/constants';
+import { MEDIA_BUCKET, DEFAULT_TIMEZONE, WEEKLY_MAX_OCCURRENCES } from '@/lib/constants';
 import type { ContentItem, ContentType, Platform, PlatformCopy } from '@/types/content';
 
 // ---------------------------------------------------------------------------
@@ -673,11 +673,12 @@ export async function createScheduledBatch(
     }
 
     // Authoritative occurrence cap (the wizard also enforces this client-side).
-    // Each slot is one upfront AI generation the user reviewed; 12 matches the
-    // schedule step's MAX_SLOTS_DEFAULT.
-    const MAX_BATCH_SLOTS = 12;
-    if (slotCopies.length > MAX_BATCH_SLOTS) {
-      return { error: `You can schedule at most ${MAX_BATCH_SLOTS} posts at once. Remove a date or shorten the range.` };
+    // Each slot is one upfront AI generation the user reviewed. Weekly recurring
+    // allows a longer run (WEEKLY_MAX_OCCURRENCES); other types keep the standard
+    // 12-slot cap that matches the schedule step's MAX_SLOTS_DEFAULT.
+    const maxBatchSlots = contentType === 'weekly_recurring' ? WEEKLY_MAX_OCCURRENCES : 12;
+    if (slotCopies.length > maxBatchSlots) {
+      return { error: `You can schedule at most ${maxBatchSlots} posts at once. Remove a date or shorten the range.` };
     }
     if (contentType === 'weekly_recurring' && slotCopies.length < 1) {
       return { error: 'Select at least one date to publish.' };
