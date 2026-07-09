@@ -8,7 +8,7 @@ import {
   type BannerPosition,
   type PostBannerOverrides,
 } from "@/lib/banner/config";
-import { extractCampaignTiming, getNextWeeklyOccurrence } from "@/lib/scheduling/campaign-timing";
+import { extractCampaignTiming, getNextWeeklyOccurrenceForDays } from "@/lib/scheduling/campaign-timing";
 import { getProximityLabel } from "@/lib/scheduling/proximity-label";
 import { tryCreateServiceSupabaseClient } from "@/lib/supabase/service";
 import { isSchemaMissingError } from "@/lib/supabase/errors";
@@ -234,9 +234,12 @@ function resolveCampaignDisplayWindow(aggregate: CampaignAggregate, referenceAt:
         };
       }
 
-      const nextOccurrence = getNextWeeklyOccurrence(
+      const days = timing.weeklyDaysOfWeek?.length
+        ? timing.weeklyDaysOfWeek
+        : [timing.weeklyDayOfWeek];
+      const nextOccurrence = getNextWeeklyOccurrenceForDays(
         referenceAt,
-        timing.weeklyDayOfWeek,
+        days,
         timing.timezone,
         timing.startTime,
       );

@@ -21,7 +21,8 @@ export interface CampaignTiming {
   startAt: DateTime;
   endAt?: DateTime;
   startTime?: string; // "HH:MM"
-  weeklyDayOfWeek?: number; // 1=Mon..7=Sun (Luxon weekday)
+  weeklyDayOfWeek?: number; // 1=Mon..7=Sun (Luxon weekday) — first selected day
+  weeklyDaysOfWeek?: number[]; // 1=Mon..7=Sun (Luxon weekdays) — all selected days
   timezone: string;
 }
 
@@ -52,11 +53,19 @@ export function extractCampaignTiming(campaign: {
         : null;
     const endAt = endAtSource ? DateTime.fromISO(endAtSource, { zone: tz }) : undefined;
 
+    // metadata.daysOfWeek (JS getDay 0=Sun..6=Sat) is written for multi-day weekly
+    // campaigns; dayOfWeek (= first selected day) is kept for back-compat.
+    const weeklyDaysSource = Array.isArray(meta.daysOfWeek) ? (meta.daysOfWeek as unknown[]) : null;
+    const weeklyDaysOfWeek = weeklyDaysSource && weeklyDaysSource.length
+      ? Array.from(new Set(weeklyDaysSource.map((d) => jsDayToLuxonWeekday(d)))).sort((a, b) => a - b)
+      : undefined;
+
     return {
       campaignType: "weekly",
       startAt: startAt.isValid ? startAt : DateTime.now().setZone(tz),
       endAt: endAt?.isValid ? endAt : undefined,
       weeklyDayOfWeek: jsDayToLuxonWeekday(meta.dayOfWeek),
+      weeklyDaysOfWeek,
       startTime: typeof meta.time === "string" ? meta.time : undefined,
       timezone: tz,
     };
@@ -134,4 +143,22 @@ export function getNextWeeklyOccurrence(
   }
 
   return ref.plus({ days: daysUntil });
+}
+
+/**
+ * Return the soonest upcoming weekly occurrence across several weekdays.
+ * Used for multi-day weekly campaigns so proximity/next-occurrence labels reflect
+ * the nearest selected day rather than only the first. `daysOfWeek` must be
+ * non-empty (callers guard); values are Luxon weekdays (1=Mon..7=Sun).
+ */
+export function getNextWeeklyOccurrenceForDays(
+  referenceAt: DateTime,
+  daysOfWeek: number[],
+  timezone: string,
+  startTime?: string
+): DateTime {
+  const occurrences = daysOfWeek.map((day) =>
+    getNextWeeklyOccurrence(referenceAt, day, timezone, startTime)
+  );
+  return occurrences.reduce((soonest, current) => (current < soonest ? current : soonest));
 }

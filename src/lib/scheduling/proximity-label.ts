@@ -1,7 +1,7 @@
 // src/lib/scheduling/proximity-label.ts
 import { DateTime } from "luxon";
 import type { CampaignTiming } from "./campaign-timing";
-import { getNextWeeklyOccurrence } from "./campaign-timing";
+import { getNextWeeklyOccurrenceForDays } from "./campaign-timing";
 import { formatEventDateLong } from "@/lib/utils/date";
 
 // Duplicated in supabase/functions/publish-queue/banner-label.ts — keep in sync
@@ -96,10 +96,15 @@ export function getProximityLabel(input: ProximityLabelInput): ProximityLabel {
       return getEventLabel(referenceAt, campaignTiming);
 
     case "weekly": {
-      if (!campaignTiming.weeklyDayOfWeek) return null;
-      const nextOccurrence = getNextWeeklyOccurrence(
+      const days = campaignTiming.weeklyDaysOfWeek?.length
+        ? campaignTiming.weeklyDaysOfWeek
+        : campaignTiming.weeklyDayOfWeek
+          ? [campaignTiming.weeklyDayOfWeek]
+          : [];
+      if (!days.length) return null;
+      const nextOccurrence = getNextWeeklyOccurrenceForDays(
         referenceAt,
-        campaignTiming.weeklyDayOfWeek,
+        days,
         campaignTiming.timezone,
         campaignTiming.startTime
       );
