@@ -46,6 +46,7 @@ export function WeeklyRecurringFields({ form }: WeeklyRecurringFieldsProps): Rea
   const endDate = (watch('endDate') as string) ?? '';
   const placement = (watch('placement') as 'feed' | 'story') ?? 'feed';
   const ctaLink = (watch('ctaLinks') as { facebook?: string } | undefined)?.facebook ?? '';
+  const ctaLabel = (watch('ctaLabel') as string | undefined) ?? '';
   const isStory = placement === 'story';
 
   const setPlacement = (value: 'feed' | 'story') => {
@@ -53,6 +54,7 @@ export function WeeklyRecurringFields({ form }: WeeklyRecurringFieldsProps): Rea
     if (value === 'story') {
       // Stories can't carry a link (no composed body, feed-only bio card).
       setValue('ctaLinks', undefined, { shouldValidate: true });
+      setValue('ctaLabel', undefined, { shouldValidate: true });
     }
   };
 
@@ -63,6 +65,11 @@ export function WeeklyRecurringFields({ form }: WeeklyRecurringFieldsProps): Rea
     setValue('ctaLinks', url ? { facebook: url, instagram: url } : undefined, {
       shouldValidate: true,
     });
+  };
+
+  const setCtaLabel = (raw: string) => {
+    const label = raw.trim();
+    setValue('ctaLabel', label ? label : undefined, { shouldValidate: true });
   };
 
   const today = DateTime.now().setZone(DEFAULT_TIMEZONE).toFormat('yyyy-MM-dd');
@@ -201,6 +208,30 @@ export function WeeklyRecurringFields({ form }: WeeklyRecurringFieldsProps): Rea
         )}
         {errors.ctaLinks && (
           <p className="text-sm text-destructive">Enter a valid URL (including https://).</p>
+        )}
+      </div>
+
+      <div className="space-y-1.5">
+        <Label htmlFor="ctaLabel">Button text (optional)</Label>
+        <Input
+          id="ctaLabel"
+          type="text"
+          maxLength={40}
+          placeholder="Book a table"
+          value={ctaLabel}
+          disabled={isStory || !ctaLink}
+          onChange={(e) => setCtaLabel(e.target.value)}
+          aria-invalid={!!errors.ctaLabel}
+        />
+        <p className="text-xs text-muted-foreground">
+          {isStory
+            ? 'Not available on story campaigns.'
+            : !ctaLink
+              ? 'Add a campaign link first to customise its button text.'
+              : 'Shown on the Facebook call-to-action and the link-in-bio button. Defaults to “Book a table”.'}
+        </p>
+        {errors.ctaLabel && (
+          <p className="text-sm text-destructive">{String(errors.ctaLabel.message)}</p>
         )}
       </div>
     </fieldset>

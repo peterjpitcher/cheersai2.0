@@ -896,6 +896,10 @@ export function GenerateStep({
                             const finalPreview = composePublishBody(platform, copy, {
                               ctaLinks: contentBrief.ctaLinks,
                               contentType: contentBrief.contentType,
+                              ctaLabel:
+                                contentBrief.contentType === 'weekly_recurring'
+                                  ? contentBrief.ctaLabel
+                                  : undefined,
                             });
 
                             return (

@@ -204,6 +204,24 @@ describe('composePublishBody — weekly CTA link', () => {
     );
     expect(body).toBe('Come down this week.');
   });
+
+  it('uses a custom ctaLabel for the Facebook CTA over the default', () => {
+    const body = composePublishBody(
+      'facebook',
+      { body: 'Come down this week.', hashtags: [] },
+      { ctaLinks: bothKeys, contentType: 'weekly_recurring', ctaLabel: 'Order online' },
+    );
+    expect(body).toBe('Come down this week.\n\nOrder online: https://book.example');
+  });
+
+  it('custom ctaLabel overrides the AI-suggested ctaText too', () => {
+    const body = composePublishBody(
+      'facebook',
+      { body: 'Come down this week.', ctaText: 'Reserve a spot', hashtags: [] },
+      { ctaLinks: bothKeys, contentType: 'weekly_recurring', ctaLabel: 'Order online' },
+    );
+    expect(body).toBe('Come down this week.\n\nOrder online: https://book.example');
+  });
 });
 
 describe('buildPreviewData', () => {

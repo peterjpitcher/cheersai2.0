@@ -854,6 +854,7 @@ export async function createScheduledBatch(
     const resolveSlotMedia = (slot: (typeof slotCopies)[number]): string[] =>
       slot.mediaIds ?? selectedMediaIds;
     const ctaLinks = readPlatformCtaLinks(brief);
+    const ctaLabel = typeof brief.ctaLabel === 'string' ? brief.ctaLabel : undefined;
 
     const variantPayloads = insertedItems.map((item, index) => {
       const { slotIdx, platform, placement } = slotPlatformIndex[index];
@@ -862,7 +863,7 @@ export async function createScheduledBatch(
       const body = placement === 'story'
         ? ''
         : copy
-        ? composePublishBody(platform as Platform, copy, { ctaLinks, contentType })
+        ? composePublishBody(platform as Platform, copy, { ctaLinks, contentType, ctaLabel })
         : '';
       const previewData = placement === 'story'
         ? null

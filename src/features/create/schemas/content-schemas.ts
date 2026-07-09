@@ -129,6 +129,9 @@ export const weeklyCampaignBriefSchema = baseContentSchema.extend({
   endDate: z.string().date(),
   // Whether each occurrence posts to the feed or as a story (Facebook/Instagram only).
   placement: z.enum(['feed', 'story']).default('feed'),
+  // Optional custom CTA button text (e.g. "Order online"). Used for the Facebook
+  // copy CTA and the link-in-bio card button; defaults to "Book a table" when unset.
+  ctaLabel: z.string().max(40, 'Keep the button text under 40 characters').optional(),
 });
 
 // ---------------------------------------------------------------------------

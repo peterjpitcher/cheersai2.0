@@ -67,6 +67,8 @@ export function buildCampaignMetadata(
       time: brief.time as string,
       // Consumed by extractCampaignTiming (endAt) so the link-in-bio card expires.
       endDate: (brief.endDate as string | undefined) ?? null,
+      // Read by the link-in-bio card (resolveCampaignCtaLabel) for the button text.
+      ctaLabel: (brief.ctaLabel as string | undefined) ?? null,
     };
   }
 
