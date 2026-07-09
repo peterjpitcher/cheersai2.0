@@ -372,9 +372,9 @@ describe('createScheduledBatch', () => {
       brief: {
         title: 'Friday Specials',
         prompt: 'Weekly food special',
-        dayOfWeek: 5,
+        daysOfWeek: [5],
         time: '18:00',
-        weeksAhead: 1,
+        endDate: '2026-08-31',
         placement: 'story',
         platforms: ['facebook', 'instagram'],
       },
@@ -536,7 +536,7 @@ describe('createScheduledBatch', () => {
     const result = await createScheduledBatch({
       draftContentId: 'draft-1',
       contentType: 'weekly_recurring',
-      brief: { title: 'Friday Specials', prompt: 'Weekly food special', dayOfWeek: 5, time: '18:00', weeksAhead: 1, placement: 'story', platforms: ['facebook', 'instagram'] },
+      brief: { title: 'Friday Specials', prompt: 'Weekly food special', daysOfWeek: [5], time: '18:00', endDate: '2026-08-31', placement: 'story', platforms: ['facebook', 'instagram'] },
       selectedMediaIds: ['media-1'],
       slotCopies: [
         {
@@ -572,9 +572,9 @@ describe('createScheduledBatch', () => {
       brief: {
         title: 'Friday Specials',
         prompt: 'Weekly food special',
-        dayOfWeek: 5,
+        daysOfWeek: [5],
         time: '18:00',
-        weeksAhead: 1,
+        endDate: '2026-08-31',
         placement: 'story',
         platforms: ['facebook', 'instagram'],
       },

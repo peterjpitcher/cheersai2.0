@@ -104,12 +104,21 @@ export const promotionBriefSchema = baseContentSchema.extend({
 
 export const weeklyCampaignBriefSchema = baseContentSchema.extend({
   contentType: z.literal('weekly_recurring'),
-  dayOfWeek: z.number().int().min(0).max(6),
+  // Days to post on each week, JS getDay() convention (0=Sunday..6=Saturday).
+  // Multi-select; at least one, at most seven, no duplicates.
+  daysOfWeek: z
+    .array(z.number().int().min(0).max(6))
+    .min(1, 'Pick at least one day')
+    .max(7, 'Pick at most seven days')
+    .refine((days) => new Set(days).size === days.length, 'Days must be unique'),
   time: z
     .string()
     .regex(/^\d{2}:\d{2}$/, 'Time must be HH:MM format'),
-  // Number of weekly occurrences to repeat (not a calendar end date).
-  weeksAhead: z.number().int().min(1).max(12).default(4),
+  // Calendar end date (YYYY-MM-DD, Europe/London). Occurrences are generated up
+  // to and including this date. The occurrence-count bound (1-12) is enforced in
+  // the wizard and server-side in createScheduledBatch, not here, because the
+  // count depends on the current date and must stay out of the pure schema.
+  endDate: z.string().date(),
   // Whether each occurrence posts to the feed or as a story (Facebook/Instagram only).
   placement: z.enum(['feed', 'story']).default('feed'),
 });

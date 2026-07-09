@@ -14,7 +14,7 @@ import type {
 import {
   buildEventSuggestions,
   buildPromotionSuggestions,
-  buildWeeklySuggestions,
+  buildWeeklyMultiDaySuggestions,
   deconflictSuggestions,
 } from '@/features/create/schedule/suggestion-utils';
 import type { ContentBrief } from '@/features/create/schemas/content-schemas';
@@ -156,11 +156,11 @@ export function ScheduleStep({
       });
     }
     if (contentBrief.contentType === 'weekly_recurring') {
-      return buildWeeklySuggestions({
+      return buildWeeklyMultiDaySuggestions({
         startDate: today,
-        dayOfWeek: contentBrief.dayOfWeek,
+        daysOfWeek: contentBrief.daysOfWeek,
         time: contentBrief.time,
-        weeksAhead: contentBrief.weeksAhead,
+        endDate: contentBrief.endDate,
         timezone,
       });
     }

@@ -129,7 +129,9 @@ export async function createDraft(
       row.coupon_code = brief.couponCode ?? null;
     }
     if (brief.contentType === 'weekly_recurring') {
-      row.recurring_day_of_week = brief.dayOfWeek;
+      // Single-int column (CHECK 0-6) drives only the mid-wizard planner ghost;
+      // store the first selected day. The full day set lives in body_draft.
+      row.recurring_day_of_week = brief.daysOfWeek[0] ?? 1;
       row.auto_confirm = true; // weekly recurring auto-publishes once approved
     }
     if (brief.contentType === 'instant_post' && brief.publishMode === 'schedule' && brief.scheduledFor) {
@@ -668,6 +670,17 @@ export async function createScheduledBatch(
     const briefValidation = contentBriefSchema.safeParse({ ...brief, contentType });
     if (!briefValidation.success) {
       return { error: briefValidation.error.issues[0]?.message ?? 'Invalid content brief' };
+    }
+
+    // Authoritative occurrence cap (the wizard also enforces this client-side).
+    // Each slot is one upfront AI generation the user reviewed; 12 matches the
+    // schedule step's MAX_SLOTS_DEFAULT.
+    const MAX_BATCH_SLOTS = 12;
+    if (slotCopies.length > MAX_BATCH_SLOTS) {
+      return { error: `You can schedule at most ${MAX_BATCH_SLOTS} posts at once. Remove a date or shorten the range.` };
+    }
+    if (contentType === 'weekly_recurring' && slotCopies.length < 1) {
+      return { error: 'Select at least one date to publish.' };
     }
 
     // Validate per-post overlay text before any writes (all-or-nothing, like the

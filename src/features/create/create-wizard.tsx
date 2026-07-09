@@ -17,6 +17,7 @@ import type { MediaAssetSummary } from '@/lib/library/data';
 import type { AccountBannerDefaults } from '@/lib/banner/config';
 import { contentBriefSchema } from '@/features/create/schemas/content-schemas';
 import type { ContentBrief, ContentBriefInput } from '@/features/create/schemas/content-schemas';
+import { buildWeeklyMultiDaySuggestions } from '@/features/create/schedule/suggestion-utils';
 import type {
   ContentType,
   DraftState,
@@ -262,7 +263,12 @@ export function CreateWizard({ initialDraftId, accountId, onClose }: CreateWizar
         story: {},
         event: { eventName: '', eventDate: '', eventTime: '', venue: DEFAULT_EVENT_VENUE, placements: ['feed'] },
         promotion: { offerSummary: '', endDate: '', placements: ['feed'] },
-        weekly_recurring: { dayOfWeek: 1, time: '12:00', weeksAhead: 4, placement: 'feed' },
+        weekly_recurring: {
+          daysOfWeek: [1],
+          time: '12:00',
+          endDate: DateTime.now().setZone(DEFAULT_TIMEZONE).plus({ weeks: 4 }).toFormat('yyyy-MM-dd'),
+          placement: 'feed',
+        },
       };
 
       form.reset({
@@ -279,6 +285,28 @@ export function CreateWizard({ initialDraftId, accountId, onClose }: CreateWizar
     if (currentStep === 0) {
       const valid = await form.trigger();
       if (!valid) return;
+
+      // Weekly recurring: block progression when the day/end-date settings
+      // produce zero occurrences or more than the 12-post cap (the pure Zod
+      // schema can't check this because the count depends on "now").
+      if (form.getValues('contentType') === 'weekly_recurring') {
+        const v = form.getValues() as unknown as Record<string, unknown>;
+        const count = buildWeeklyMultiDaySuggestions({
+          startDate: DateTime.now().setZone(DEFAULT_TIMEZONE).toFormat('yyyy-MM-dd'),
+          daysOfWeek: (v.daysOfWeek as number[]) ?? [],
+          time: (v.time as string) ?? '12:00',
+          endDate: (v.endDate as string) ?? '',
+          timezone: DEFAULT_TIMEZONE,
+        }).length;
+        if (count < 1) {
+          toast.error('Pick at least one day and an end date that schedules a post.');
+          return;
+        }
+        if (count > 12) {
+          toast.error('That’s more than 12 posts. Shorten the date range or remove a day.');
+          return;
+        }
+      }
 
       if (!draftId) {
         setIsCreatingDraft(true);

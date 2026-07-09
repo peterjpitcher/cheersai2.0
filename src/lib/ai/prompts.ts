@@ -552,7 +552,8 @@ export function buildUserPrompt(
 
   if (brief.contentType === 'weekly_recurring') {
     const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-    sections.push(`Day of week: ${dayNames[brief.dayOfWeek] ?? brief.dayOfWeek}`);
+    const days = brief.daysOfWeek.map((d) => dayNames[d] ?? String(d));
+    sections.push(`Days of week: ${days.join(', ')}`);
     sections.push(`Time: ${brief.time}`);
   }
 

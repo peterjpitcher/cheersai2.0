@@ -87,43 +87,72 @@ describe('Content Zod Schemas', () => {
     });
   });
 
-  describe('weeklyCampaignBriefSchema', () => {
-    it('should require dayOfWeek 0-6 and time HH:MM', () => {
-      const input = {
-        ...baseFields,
-        contentType: 'weekly_recurring' as const,
-        dayOfWeek: 3,
-        time: '18:00',
-      };
-      const result = weeklyCampaignBriefSchema.safeParse(input);
+  describe('weeklyCampaignBriefSchema (multi-day + end date)', () => {
+    const weeklyBase = {
+      ...baseFields,
+      contentType: 'weekly_recurring' as const,
+      time: '19:00',
+      endDate: '2026-08-31',
+    };
+
+    it('accepts a single day', () => {
+      const result = weeklyCampaignBriefSchema.safeParse({ ...weeklyBase, daysOfWeek: [3] });
       expect(result.success).toBe(true);
     });
 
-    it('should default placement to feed when omitted', () => {
-      const result = weeklyCampaignBriefSchema.safeParse({
-        ...baseFields,
-        contentType: 'weekly_recurring' as const,
-        dayOfWeek: 1,
-        time: '12:00',
-      });
+    it('accepts multiple unique days', () => {
+      const result = weeklyCampaignBriefSchema.safeParse({ ...weeklyBase, daysOfWeek: [1, 4] });
+      expect(result.success).toBe(true);
+    });
+
+    it('rejects an empty days array', () => {
+      const result = weeklyCampaignBriefSchema.safeParse({ ...weeklyBase, daysOfWeek: [] });
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects duplicate days', () => {
+      const result = weeklyCampaignBriefSchema.safeParse({ ...weeklyBase, daysOfWeek: [2, 2] });
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects a day outside 0-6', () => {
+      const result = weeklyCampaignBriefSchema.safeParse({ ...weeklyBase, daysOfWeek: [7] });
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects a malformed end date', () => {
+      const result = weeklyCampaignBriefSchema.safeParse({ ...weeklyBase, daysOfWeek: [1], endDate: '31/08/2026' });
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects a malformed time', () => {
+      const result = weeklyCampaignBriefSchema.safeParse({ ...weeklyBase, daysOfWeek: [1], time: '7pm' });
+      expect(result.success).toBe(false);
+    });
+
+    it('defaults placement to feed when omitted', () => {
+      const result = weeklyCampaignBriefSchema.safeParse({ ...weeklyBase, daysOfWeek: [1] });
       expect(result.success).toBe(true);
       if (result.success) {
         expect(result.data.placement).toBe('feed');
       }
     });
 
-    it('should accept a story placement for weekly recurring posts', () => {
-      const result = weeklyCampaignBriefSchema.safeParse({
-        ...baseFields,
-        contentType: 'weekly_recurring' as const,
-        dayOfWeek: 5,
-        time: '19:00',
-        placement: 'story',
-      });
+    it('accepts a story placement', () => {
+      const result = weeklyCampaignBriefSchema.safeParse({ ...weeklyBase, daysOfWeek: [5], placement: 'story' });
       expect(result.success).toBe(true);
       if (result.success) {
         expect(result.data.placement).toBe('story');
       }
+    });
+
+    it('carries the optional ctaLinks field', () => {
+      const result = weeklyCampaignBriefSchema.safeParse({
+        ...weeklyBase,
+        daysOfWeek: [1],
+        ctaLinks: { facebook: 'https://book.example', instagram: 'https://book.example' },
+      });
+      expect(result.success).toBe(true);
     });
   });
 
