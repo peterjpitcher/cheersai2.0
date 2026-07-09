@@ -58,7 +58,6 @@ Provide procedures for monitoring, incident response, and routine maintenance of
 - `npm run ops:link-auth-user -- --email you@example.com --account <uuid>` – sets the Supabase auth `user_metadata.account_id`, ensures the `accounts` row exists, and seeds posting defaults for a new operator.
 - `npm run ops:invoke -- publish-queue '{"leadWindowMinutes":5}'` – trigger the publish worker immediately (payload optional).
 - `npm run ops:invoke -- media-derivatives '{"assetId":"<uuid>"}'` – force reprocessing for a specific media asset.
-- `npm run ops:invoke -- materialise-weekly` – run weekly cadence expansion on demand.
 
 ## 9. Communication Plan
 - For incidents lasting >30 minutes, send status email describing issue, impact, mitigation steps, and ETA.
@@ -72,7 +71,6 @@ Provide procedures for monitoring, incident response, and routine maintenance of
 ## 11. Scheduled Jobs
 - **Primary bridge**: Vercel Cron calls `/api/cron/publish` every minute (see `vercel.json`). The endpoint validates `CRON_SECRET` and forwards the request to the Supabase `publish-queue` function using the service role key.
 - **Supabase Scheduler**: Keep the native scheduler **disabled** for `publish-queue` during normal ops so the queue is processed exactly once per minute. Re-enable only for emergencies by creating a schedule in the Supabase dashboard and remember to remove it afterwards.
-- `materialise-weekly` runs daily at 05:00 Europe/London via Supabase Scheduler.
 - `media-derivatives` runs every 15 minutes as a safety net; uploads also invoke it directly after finalisation.
 
 > **Deploy notes:** Scheduler cadences are currently managed via the Supabase dashboard / CLI commands (`supabase functions schedule create`). `supabase/config.toml` retains `verify_jwt` flags only.
