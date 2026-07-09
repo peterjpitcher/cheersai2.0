@@ -746,13 +746,25 @@ export async function createScheduledBatch(
       // Build timing-compatible metadata for extractCampaignTiming() and
       // map weekly_recurring -> 'weekly' for campaign_type compatibility
       const metadata = buildCampaignMetadata(contentType, brief, slotCopies.length);
+      // Bound the link-in-bio card to the actual posts: derive the weekly end date
+      // from the last real occurrence rather than trusting the client's brief.endDate.
+      if (contentType === 'weekly_recurring' && slotCopies.length > 0) {
+        const lastSlotIso = slotCopies
+          .map((s) => s.scheduledAt)
+          .filter((v): v is string => typeof v === 'string' && v.length > 0)
+          .sort()
+          .at(-1);
+        if (lastSlotIso) {
+          metadata.endDate = lastSlotIso.slice(0, 10); // YYYY-MM-DD of the final occurrence
+        }
+      }
       const campaignType = mapCampaignType(contentType);
 
       // Weekly campaigns surface their CTA on the link-in-bio page for the run.
       // readPlatformCtaLinks only returns http(s) URLs. First entry in the card's
       // link resolution chain (campaigns.link_in_bio_url -> metadata.*).
       const linkInBioUrl =
-        contentType === 'weekly_recurring'
+        contentType === 'weekly_recurring' && brief.placement !== 'story'
           ? (readPlatformCtaLinks(brief).facebook ?? null)
           : null;
 

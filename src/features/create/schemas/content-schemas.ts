@@ -51,8 +51,16 @@ const baseContentSchema = z.object({
   proofPoints: z.array(z.string()).default([]),
   ctaLinks: z
     .object({
-      facebook: z.string().url().optional(),
-      instagram: z.string().url().optional(),
+      facebook: z
+        .string()
+        .url()
+        .refine((u) => /^https?:\/\//i.test(u), 'Link must start with http:// or https://')
+        .optional(),
+      instagram: z
+        .string()
+        .url()
+        .refine((u) => /^https?:\/\//i.test(u), 'Link must start with http:// or https://')
+        .optional(),
     })
     .partial()
     .optional(),

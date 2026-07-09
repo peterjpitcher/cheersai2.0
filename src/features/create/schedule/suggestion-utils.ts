@@ -37,7 +37,7 @@ function safeIsoDate(dateTime: DateTime): string | null {
 
 interface WeeklyMultiDaySuggestionInput {
   startDate: string | undefined;
-  daysOfWeek: number[];
+  daysOfWeek: number[] | undefined;
   time: string;
   endDate: string;
   timezone: string;
@@ -57,7 +57,7 @@ export function buildWeeklyMultiDaySuggestions({
   endDate,
   timezone,
 }: WeeklyMultiDaySuggestionInput): SuggestedSlotDisplay[] {
-  if (!daysOfWeek.length) return [];
+  if (!daysOfWeek?.length) return [];
 
   const selected = new Set(daysOfWeek.map((d) => ((d % 7) + 7) % 7));
   const start = parseDate(startDate, timezone); // startOf('day')

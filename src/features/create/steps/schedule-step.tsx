@@ -173,6 +173,9 @@ export function ScheduleStep({
   }, [contentBrief, today, timezone]);
 
   const suggestions = useMemo(() => {
+    // Weekly clashes stay visible and every derived occurrence remains re-addable,
+    // so weekly is not deconflicted (unlike event/promotion).
+    if (isWeeklyRecurring) return rawSuggestions;
     if (!rawSuggestions.length || !existingItems.length) return rawSuggestions;
     return deconflictSuggestions(
       rawSuggestions,
@@ -184,7 +187,7 @@ export function ScheduleStep({
       })),
       timezone,
     );
-  }, [rawSuggestions, existingItems, timezone]);
+  }, [rawSuggestions, existingItems, timezone, isWeeklyRecurring]);
 
   // -------------------------------------------------------------------------
   // Weekly recurring: seed the calendar once, then hand control to the user
@@ -194,8 +197,10 @@ export function ScheduleStep({
   // overwritten when the brief is unchanged. Re-seeding resumes only if the
   // derived set itself changes (user went back and edited the brief).
   const weeklySeedRef = useRef<string | null>(null);
+  const weeklyDirtyRef = useRef(false);
   useEffect(() => {
     if (!isWeeklyRecurring) return;
+    if (weeklyDirtyRef.current) return; // user has manually edited — never overwrite their picks
     const signature = rawSuggestions.map((s) => `${s.date}:${s.time}`).join('|');
     if (weeklySeedRef.current === signature) return; // already seeded this exact set
     weeklySeedRef.current = signature;
@@ -255,16 +260,18 @@ export function ScheduleStep({
         suggestionId: matchedSuggestion?.id,
       };
 
+      if (isWeeklyRecurring) weeklyDirtyRef.current = true;
       onSlotsChange([...selectedSlots, newSlot]);
     },
-    [selectedSlots, suggestions, maxSlots, contentBrief, onSlotsChange, timezone],
+    [selectedSlots, suggestions, maxSlots, contentBrief, onSlotsChange, timezone, isWeeklyRecurring],
   );
 
   const handleRemoveSlot = useCallback(
     (slotKey: string) => {
+      if (isWeeklyRecurring) weeklyDirtyRef.current = true;
       onSlotsChange(selectedSlots.filter((s) => s.key !== slotKey));
     },
-    [selectedSlots, onSlotsChange],
+    [selectedSlots, onSlotsChange, isWeeklyRecurring],
   );
 
   // -------------------------------------------------------------------------
