@@ -68,8 +68,7 @@ export function WeeklyRecurringFields({ form }: WeeklyRecurringFieldsProps): Rea
   };
 
   const setCtaLabel = (raw: string) => {
-    const label = raw.trim();
-    setValue('ctaLabel', label ? label : undefined, { shouldValidate: true });
+    setValue('ctaLabel', raw.length ? raw : undefined, { shouldValidate: true });
   };
 
   const today = DateTime.now().setZone(DEFAULT_TIMEZONE).toFormat('yyyy-MM-dd');

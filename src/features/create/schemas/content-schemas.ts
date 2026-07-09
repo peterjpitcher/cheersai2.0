@@ -131,7 +131,11 @@ export const weeklyCampaignBriefSchema = baseContentSchema.extend({
   placement: z.enum(['feed', 'story']).default('feed'),
   // Optional custom CTA button text (e.g. "Order online"). Used for the Facebook
   // copy CTA and the link-in-bio card button; defaults to "Book a table" when unset.
-  ctaLabel: z.string().max(40, 'Keep the button text under 40 characters').optional(),
+  ctaLabel: z
+    .string()
+    .max(40, 'Keep the button text under 40 characters')
+    .transform((value) => value.trim() || undefined)
+    .optional(),
 });
 
 // ---------------------------------------------------------------------------

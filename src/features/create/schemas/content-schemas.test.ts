@@ -154,6 +154,30 @@ describe('Content Zod Schemas', () => {
       });
       expect(result.success).toBe(true);
     });
+
+    it('trims optional ctaLabel only when parsed', () => {
+      const result = weeklyCampaignBriefSchema.safeParse({
+        ...weeklyBase,
+        daysOfWeek: [1],
+        ctaLabel: '  Book a table  ',
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.ctaLabel).toBe('Book a table');
+      }
+    });
+
+    it('treats a blank ctaLabel as unset', () => {
+      const result = weeklyCampaignBriefSchema.safeParse({
+        ...weeklyBase,
+        daysOfWeek: [1],
+        ctaLabel: '   ',
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.ctaLabel).toBeUndefined();
+      }
+    });
   });
 
   describe('contentBriefSchema (discriminated union)', () => {
