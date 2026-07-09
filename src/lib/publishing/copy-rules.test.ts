@@ -1,6 +1,44 @@
 import { describe, expect, it } from 'vitest';
 
-import { cleanCopyArtifacts, sanitizeCtaText, sanitizePublishBody } from './copy-rules';
+import { cleanCopyArtifacts, normalizeHashtags, sanitizeCtaText, sanitizePublishBody } from './copy-rules';
+
+describe('normalizeHashtags — URL-form hashtags', () => {
+  it('salvages the tag from a Facebook hashtag URL instead of mangling it', () => {
+    // Regression: model emitted "https://www.facebook.com/hashtag/BarStaff",
+    // which previously became "#httpswwwfacebookcomhashtagBarStaff".
+    const result = normalizeHashtags(['https://www.facebook.com/hashtag/BarStaff'], 'facebook');
+    expect(result).toEqual(['#BarStaff']);
+  });
+
+  it('salvages the tag from an Instagram explore/tags URL', () => {
+    const result = normalizeHashtags(['https://www.instagram.com/explore/tags/KitchenTeam'], 'instagram');
+    expect(result).toEqual(['#KitchenTeam']);
+  });
+
+  it('handles a whole mangle-prone set from one post', () => {
+    const result = normalizeHashtags(
+      [
+        '#Hiring',
+        'https://www.facebook.com/hashtag/BarStaff',
+        'https://www.facebook.com/hashtag/KitchenTeam',
+        'https://www.facebook.com/hashtag/JoinOurTeam',
+        'https://www.facebook.com/hashtag/StanwellMoor',
+      ],
+      'facebook',
+    );
+    expect(result).toEqual(['#Hiring', '#BarStaff', '#KitchenTeam', '#JoinOurTeam', '#StanwellMoor']);
+  });
+
+  it('drops a bare non-hashtag URL rather than turning it into a tag', () => {
+    const result = normalizeHashtags(['https://l.the-anchor.pub/jobs', '#Hiring'], 'facebook');
+    expect(result).toEqual(['#Hiring']);
+  });
+
+  it('leaves ordinary hashtags untouched', () => {
+    const result = normalizeHashtags(['#PubJobs', 'StanwellMoor'], 'facebook');
+    expect(result).toEqual(['#PubJobs', '#StanwellMoor']);
+  });
+});
 
 describe('cleanCopyArtifacts', () => {
   // Regression: cleanCopyArtifacts runs on every publish body and CTA, so an
