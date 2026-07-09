@@ -1,21 +1,30 @@
-# Task: Auto name + tag library uploads (AI vision)
+# TODO — Weekly recurrence: CTA link, multi-day + end date, planner overlay
 
-Replicate the create flow's "auto-tag on upload" for the /library page. On /library there is
-no campaign to borrow a tag from, so uploads are named + tagged by OpenAI vision instead.
+Plan: `tasks/PLAN-weekly-recurrence-cta-and-date-controls.md`
+Branch: `feat/weekly-recurrence-cta-date-controls`
+Execution: implement-plan orchestration (agents edit files; orchestrator owns git).
 
-Scope: images uploaded via `/library` only. Videos and the create flow are untouched.
+## Wave 1 — PR1 recurrence model (Agent A, sequential)
+- [ ] Task 1: weekly schema daysOfWeek + endDate (+ tests)
+- [ ] Task 2: buildWeeklyMultiDaySuggestions (+ tests)
+- [ ] Task 3: weekly form checkboxes + end date + live counter
+- [ ] Task 4: wizard defaults + Brief→Media occurrence gate
+- [ ] Task 5: schedule-step uses multi-day builder; delete old builder
+- [ ] Task 6: createDraft stores first day
+- [ ] Task 7: buildCampaignMetadata weekly shape (+ tests)
+- [ ] Task 8: prompts.ts renders all days
+- [ ] Task 9: createScheduledBatch server slot cap
+- [ ] Task 10: runbook fix
 
-## Steps
-- [x] 1. `src/lib/ai/media-tagging.ts` — `generateMediaNameAndTags({ imageUrl })` (vision, structured output)
-        plus pure helpers `buildMediaFileName()` / `deriveExtension()` / `MAX_MEDIA_TAGS`.
-- [x] 2. `src/app/(app)/library/actions.ts` — new server action `autoNameAndTagMediaAsset(assetId)`:
-        sign a preview URL, call the AI helper, persist via existing `updateMediaAsset`. Fails soft.
-- [x] 3. `src/features/library/media-asset-grid-client.tsx` — after finalise (images only), call the
-        action, show an "Auto-tagging" status, swap in the enriched asset.
-- [x] 4. `src/lib/ai/media-tagging.test.ts` — happy path + edge cases (mock OpenAI client). 12 tests pass.
-- [x] 5. Verify: typecheck ✓ lint ✓ test (1665 pass) ✓ build ✓.
+## Wave 2 — PR2 overlay (Agent B) ∥ PR3 CTA (Agent C)
+- [ ] Task 12: ScheduleCalendar onMonthChange
+- [ ] Task 13: schedule-step routes weekly through calendar (seed-once)
+- [ ] Task 14: wizard requires ≥1 slot for weekly
+- [ ] Task 16: weekly form CTA link field (feed only)
+- [ ] Task 17: createScheduledBatch writes link_in_bio_url
+- [ ] Task 18: compose-body weekly CTA tests
 
-## Assumptions
-- Model: `process.env.OPENAI_MODEL ?? 'gpt-4o-mini'` (vision-capable), matching `generate.ts`. No new env var.
-- Graceful failure: if AI errors, the asset keeps its original filename and no tags (no user-facing error).
-- Reuses `updateMediaAsset`, the same persistence path the create flow uses for its campaign tag.
+## Verification
+- [ ] Orchestrator: npm run ci:verify green
+- [ ] Adversarial review (codex-qa-review)
+- [ ] Git: commit per PR on feature branch
