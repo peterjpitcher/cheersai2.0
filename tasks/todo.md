@@ -30,10 +30,17 @@ Execution: implement-plan orchestration (agents edit files; orchestrator owns gi
 - [x] Re-verify after fixes: typecheck clean, 1722 tests pass, lint clean, build exit 0
 - [x] Git: 5 commits on feature branch (docs + PR1 + PR2 + PR3 + review fixes)
 
-## Known limitations / deliberate descopes (flagged to user)
-- Multi-day timing/label readers unchanged: bio-card "next occurrence" label + banner proximity use the FIRST selected day (cosmetic; posts themselves are correct).
+## Follow-ups from user Q&A — DONE
+- [x] Cap raised to 52 (commit 66c507d)
+- [x] Exact multi-day next-occurrence labels — bio card + banner (commit ec5e8cb); Deno banner-label needs redeploy
+- [x] Custom CTA button label (commit 39317b1)
+- [x] Re-verify: typecheck clean, lint clean, 1728 tests pass, build exit 0
+- [x] Pushed + PR #19 opened (single PR): https://github.com/peterjpitcher/cheersai2.0/pull/19
+
+## Remaining known limitations (deliberate descopes)
 - materialiseRecurring draft-ghost preview shows first day only (cosmetic; self-corrects on submit).
 - No old-draft preprocess upgrade: a weekly draft in flight at deploy shows empty day/end-date fields and must be re-picked (crash-guarded, self-heals).
 
 ## Not done (needs user)
-- [ ] Push branch + open PR(s) — held (outward-facing); user to trigger.
+- [ ] Deploy: redeploy supabase/functions/publish-queue edge function separately (Vercel deploy won't cover it).
+- [ ] Recommended follow-up if you go big on cap: batched/progressive copy generation (52 upfront drafts is a lot to review at once).
