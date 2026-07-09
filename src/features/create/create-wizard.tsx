@@ -344,15 +344,10 @@ export function CreateWizard({ initialDraftId, accountId, onClose }: CreateWizar
         form.getValues('contentType') === 'instant_post' &&
         (form.watch('publishMode') ?? 'now') === 'now';
 
-      // Weekly recurring has no manual date selection — the schedule step derives
-      // and auto-selects its occurrences, so it must not be gated on selectedSlots
-      // (which the child effect may populate a tick after this handler reads it).
-      const isWeeklyRecurring = form.getValues('contentType') === 'weekly_recurring';
-
-      if (!isInstantNow && !isWeeklyRecurring) {
+      if (!isInstantNow) {
         // Validate at least one slot selected for schedule mode
         if (selectedSlots.length === 0) {
-          toast.error('Select at least one schedule slot');
+          toast.error('Select at least one date to schedule');
           return;
         }
       }

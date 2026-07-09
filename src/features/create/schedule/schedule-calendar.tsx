@@ -47,6 +47,12 @@ interface ScheduleCalendarProps {
   onAddSlot: (slot: { date: string; time: string }) => void;
   showTimes?: boolean;
   onRemoveSlot: (slotKey: string) => void;
+  /**
+   * Called whenever the visible month changes (yyyy-MM). Lets the parent fetch
+   * existing planner items for months the user pages to. Also fired once for
+   * the initial month on mount.
+   */
+  onMonthChange?: (monthKey: string) => void;
   readOnly?: boolean;
   /**
    * Default time (HH:MM) to use when the user clicks "Add custom slot" on a day
@@ -125,6 +131,7 @@ export function ScheduleCalendar({
   existingItems = [],
   onAddSlot,
   onRemoveSlot,
+  onMonthChange,
   showTimes = true,
   readOnly = false,
   defaultSlotTime = DEFAULT_POST_TIME,
@@ -134,6 +141,10 @@ export function ScheduleCalendar({
   useEffect(() => {
     setActiveMonth(buildMonthFromIso(initialMonth, timezone));
   }, [initialMonth, timezone]);
+
+  useEffect(() => {
+    onMonthChange?.(activeMonth.toFormat("yyyy-MM"));
+  }, [activeMonth, onMonthChange]);
 
   const today = DateTime.now().setZone(timezone).startOf("day");
 
