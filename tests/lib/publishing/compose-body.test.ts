@@ -165,6 +165,47 @@ describe('composePublishBody', () => {
   });
 });
 
+describe('composePublishBody — weekly CTA link', () => {
+  const bothKeys = { facebook: 'https://book.example', instagram: 'https://book.example' };
+
+  it('appends "Book a table: <url>" to Facebook copy', () => {
+    const body = composePublishBody(
+      'facebook',
+      { body: 'Come down this week.', hashtags: [] },
+      { ctaLinks: bothKeys, contentType: 'weekly_recurring' },
+    );
+    expect(body).toBe('Come down this week.\n\nBook a table: https://book.example');
+  });
+
+  it('adds an Instagram link-in-bio line (no URL) when the instagram key is set', () => {
+    const body = composePublishBody(
+      'instagram',
+      { body: 'Come down this week.', hashtags: [] },
+      { ctaLinks: bothKeys, contentType: 'weekly_recurring' },
+    );
+    expect(body).toBe('Come down this week.\n\nLink in bio to book a table');
+    expect(body).not.toContain('http');
+  });
+
+  it('adds NO Instagram line when only the facebook key is set (why Task 16 sets both)', () => {
+    const body = composePublishBody(
+      'instagram',
+      { body: 'Come down this week.', hashtags: [] },
+      { ctaLinks: { facebook: 'https://book.example' }, contentType: 'weekly_recurring' },
+    );
+    expect(body).toBe('Come down this week.');
+  });
+
+  it('appends nothing extra to Facebook when no CTA link is set', () => {
+    const body = composePublishBody(
+      'facebook',
+      { body: 'Come down this week.', hashtags: [] },
+      { ctaLinks: {}, contentType: 'weekly_recurring' },
+    );
+    expect(body).toBe('Come down this week.');
+  });
+});
+
 describe('buildPreviewData', () => {
   it('stores structured copy and platform', () => {
     const copy = { body: 'Test', hashtags: ['#test'] };

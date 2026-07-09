@@ -748,6 +748,14 @@ export async function createScheduledBatch(
       const metadata = buildCampaignMetadata(contentType, brief, slotCopies.length);
       const campaignType = mapCampaignType(contentType);
 
+      // Weekly campaigns surface their CTA on the link-in-bio page for the run.
+      // readPlatformCtaLinks only returns http(s) URLs. First entry in the card's
+      // link resolution chain (campaigns.link_in_bio_url -> metadata.*).
+      const linkInBioUrl =
+        contentType === 'weekly_recurring'
+          ? (readPlatformCtaLinks(brief).facebook ?? null)
+          : null;
+
       const { data: campaignRow, error: campaignError } = await supabase
         .from('campaigns')
         .insert({
@@ -756,6 +764,7 @@ export async function createScheduledBatch(
           campaign_type: campaignType,
           status: 'scheduled',
           metadata,
+          link_in_bio_url: linkInBioUrl,
         })
         .select('id')
         .single();

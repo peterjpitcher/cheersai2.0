@@ -45,6 +45,25 @@ export function WeeklyRecurringFields({ form }: WeeklyRecurringFieldsProps): Rea
   const time = (watch('time') as string) ?? '12:00';
   const endDate = (watch('endDate') as string) ?? '';
   const placement = (watch('placement') as 'feed' | 'story') ?? 'feed';
+  const ctaLink = (watch('ctaLinks') as { facebook?: string } | undefined)?.facebook ?? '';
+  const isStory = placement === 'story';
+
+  const setPlacement = (value: 'feed' | 'story') => {
+    setValue('placement', value, { shouldValidate: true });
+    if (value === 'story') {
+      // Stories can't carry a link (no composed body, feed-only bio card).
+      setValue('ctaLinks', undefined, { shouldValidate: true });
+    }
+  };
+
+  const setCtaLink = (raw: string) => {
+    const url = raw.trim();
+    // Map to both platforms: Facebook appends the URL to copy; Instagram gets the
+    // "link in bio" line (the bio card holds the actual link).
+    setValue('ctaLinks', url ? { facebook: url, instagram: url } : undefined, {
+      shouldValidate: true,
+    });
+  };
 
   const today = DateTime.now().setZone(DEFAULT_TIMEZONE).toFormat('yyyy-MM-dd');
 
@@ -89,7 +108,7 @@ export function WeeklyRecurringFields({ form }: WeeklyRecurringFieldsProps): Rea
                   ? 'border-primary bg-primary text-primary-foreground'
                   : 'border-border bg-card text-foreground hover:border-ring/40 hover:bg-muted'
               }`}
-              onClick={() => setValue('placement', option.value, { shouldValidate: true })}
+              onClick={() => setPlacement(option.value)}
             >
               {option.label}
             </button>
@@ -157,6 +176,32 @@ export function WeeklyRecurringFields({ form }: WeeklyRecurringFieldsProps): Rea
               ? `${occurrenceCount} posts — that’s over the limit of ${MAX_OCCURRENCES}. Shorten the range or remove a day.`
               : `${occurrenceCount} ${occurrenceCount === 1 ? 'post' : 'posts'} will be scheduled, one per selected day each week.`}
         </p>
+      </div>
+
+      <div className="space-y-1.5">
+        <Label htmlFor="ctaLink">Campaign link (optional)</Label>
+        <Input
+          id="ctaLink"
+          type="url"
+          inputMode="url"
+          placeholder="https://your-booking-link.com"
+          value={ctaLink}
+          disabled={isStory}
+          onChange={(e) => setCtaLink(e.target.value)}
+          aria-invalid={!!(errors.ctaLinks as unknown)}
+        />
+        {isStory ? (
+          <p className="text-xs text-muted-foreground">
+            Links aren’t available on story campaigns — switch to Feed to use one.
+          </p>
+        ) : (
+          <p className="text-xs text-muted-foreground">
+            Added to your Facebook posts and shown on your link-in-bio page for the whole run.
+          </p>
+        )}
+        {errors.ctaLinks && (
+          <p className="text-sm text-destructive">Enter a valid URL (including https://).</p>
+        )}
       </div>
     </fieldset>
   );
