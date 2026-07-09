@@ -13,7 +13,7 @@ import { composePublishBody, buildPreviewData } from '@/lib/publishing/compose-b
 import { normaliseBannerText, validateBannerText } from '@/lib/banner/text';
 import { readPlatformCtaLinks } from '@/lib/publishing/copy-rules';
 import { logPublishAuditEvent } from '@/lib/publishing/audit';
-import { MEDIA_BUCKET, DEFAULT_TIMEZONE } from '@/lib/constants';
+import { MEDIA_BUCKET, DEFAULT_TIMEZONE, WEEKLY_MAX_OCCURRENCES } from '@/lib/constants';
 import type { ContentItem, ContentType, Platform, PlatformCopy } from '@/types/content';
 
 // ---------------------------------------------------------------------------
@@ -129,7 +129,9 @@ export async function createDraft(
       row.coupon_code = brief.couponCode ?? null;
     }
     if (brief.contentType === 'weekly_recurring') {
-      row.recurring_day_of_week = brief.dayOfWeek;
+      // Single-int column (CHECK 0-6) drives only the mid-wizard planner ghost;
+      // store the first selected day. The full day set lives in body_draft.
+      row.recurring_day_of_week = brief.daysOfWeek[0] ?? 1;
       row.auto_confirm = true; // weekly recurring auto-publishes once approved
     }
     if (brief.contentType === 'instant_post' && brief.publishMode === 'schedule' && brief.scheduledFor) {
@@ -670,6 +672,18 @@ export async function createScheduledBatch(
       return { error: briefValidation.error.issues[0]?.message ?? 'Invalid content brief' };
     }
 
+    // Authoritative occurrence cap (the wizard also enforces this client-side).
+    // Each slot is one upfront AI generation the user reviewed. Weekly recurring
+    // allows a longer run (WEEKLY_MAX_OCCURRENCES); other types keep the standard
+    // 12-slot cap that matches the schedule step's MAX_SLOTS_DEFAULT.
+    const maxBatchSlots = contentType === 'weekly_recurring' ? WEEKLY_MAX_OCCURRENCES : 12;
+    if (slotCopies.length > maxBatchSlots) {
+      return { error: `You can schedule at most ${maxBatchSlots} posts at once. Remove a date or shorten the range.` };
+    }
+    if (contentType === 'weekly_recurring' && slotCopies.length < 1) {
+      return { error: 'Select at least one date to publish.' };
+    }
+
     // Validate per-post overlay text before any writes (all-or-nothing, like the
     // brief gate above). Blank is valid (= no overlay); non-blank must match the
     // shared banner-text charset so we never persist text the renderer would 400 on.
@@ -733,7 +747,27 @@ export async function createScheduledBatch(
       // Build timing-compatible metadata for extractCampaignTiming() and
       // map weekly_recurring -> 'weekly' for campaign_type compatibility
       const metadata = buildCampaignMetadata(contentType, brief, slotCopies.length);
+      // Bound the link-in-bio card to the actual posts: derive the weekly end date
+      // from the last real occurrence rather than trusting the client's brief.endDate.
+      if (contentType === 'weekly_recurring' && slotCopies.length > 0) {
+        const lastSlotIso = slotCopies
+          .map((s) => s.scheduledAt)
+          .filter((v): v is string => typeof v === 'string' && v.length > 0)
+          .sort()
+          .at(-1);
+        if (lastSlotIso) {
+          metadata.endDate = lastSlotIso.slice(0, 10); // YYYY-MM-DD of the final occurrence
+        }
+      }
       const campaignType = mapCampaignType(contentType);
+
+      // Weekly campaigns surface their CTA on the link-in-bio page for the run.
+      // readPlatformCtaLinks only returns http(s) URLs. First entry in the card's
+      // link resolution chain (campaigns.link_in_bio_url -> metadata.*).
+      const linkInBioUrl =
+        contentType === 'weekly_recurring' && brief.placement !== 'story'
+          ? (readPlatformCtaLinks(brief).facebook ?? null)
+          : null;
 
       const { data: campaignRow, error: campaignError } = await supabase
         .from('campaigns')
@@ -743,6 +777,7 @@ export async function createScheduledBatch(
           campaign_type: campaignType,
           status: 'scheduled',
           metadata,
+          link_in_bio_url: linkInBioUrl,
         })
         .select('id')
         .single();
@@ -819,6 +854,7 @@ export async function createScheduledBatch(
     const resolveSlotMedia = (slot: (typeof slotCopies)[number]): string[] =>
       slot.mediaIds ?? selectedMediaIds;
     const ctaLinks = readPlatformCtaLinks(brief);
+    const ctaLabel = typeof brief.ctaLabel === 'string' ? brief.ctaLabel : undefined;
 
     const variantPayloads = insertedItems.map((item, index) => {
       const { slotIdx, platform, placement } = slotPlatformIndex[index];
@@ -827,7 +863,7 @@ export async function createScheduledBatch(
       const body = placement === 'story'
         ? ''
         : copy
-        ? composePublishBody(platform as Platform, copy, { ctaLinks, contentType })
+        ? composePublishBody(platform as Platform, copy, { ctaLinks, contentType, ctaLabel })
         : '';
       const previewData = placement === 'story'
         ? null

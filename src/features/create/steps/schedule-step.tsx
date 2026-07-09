@@ -5,7 +5,7 @@ import { AlertTriangle } from 'lucide-react';
 import { DateTime } from 'luxon';
 
 import { Label } from '@/components/ui/label';
-import { DEFAULT_TIMEZONE, STORY_POST_TIME } from '@/lib/constants';
+import { DEFAULT_TIMEZONE, STORY_POST_TIME, WEEKLY_MAX_OCCURRENCES } from '@/lib/constants';
 import { ScheduleCalendar } from '@/features/create/schedule/schedule-calendar';
 import type {
   ExistingPlannerItemDisplay,
@@ -14,7 +14,7 @@ import type {
 import {
   buildEventSuggestions,
   buildPromotionSuggestions,
-  buildWeeklySuggestions,
+  buildWeeklyMultiDaySuggestions,
   deconflictSuggestions,
 } from '@/features/create/schedule/suggestion-utils';
 import type { ContentBrief } from '@/features/create/schemas/content-schemas';
@@ -72,7 +72,8 @@ export function ScheduleStep({
   const timezone = DEFAULT_TIMEZONE;
   const today = DateTime.now().setZone(timezone).toFormat('yyyy-MM-dd');
 
-  // Weekly recurring is a pure occurrence count, not a calendar of chosen dates.
+  // Weekly recurring seeds the calendar with its derived occurrences, then the
+  // user can add/remove/move dates like any other scheduled content type.
   const isWeeklyRecurring = contentBrief.contentType === 'weekly_recurring';
 
   // -------------------------------------------------------------------------
@@ -132,10 +133,14 @@ export function ScheduleStep({
     return DateTime.now().setZone(timezone).toFormat('yyyy-MM');
   }, [timezone]);
 
-  // Fetch existing items on mount
-  useEffect(() => {
-    void loadExistingItems(initialMonth);
-  }, [initialMonth, loadExistingItems]);
+  // The calendar fires onMonthChange on mount and on Previous/Next navigation,
+  // so each visible month is fetched on demand (no separate mount effect).
+  const handleMonthChange = useCallback(
+    (monthKey: string) => {
+      void loadExistingItems(monthKey);
+    },
+    [loadExistingItems],
+  );
 
   // -------------------------------------------------------------------------
   // Build suggestions based on content type
@@ -156,11 +161,11 @@ export function ScheduleStep({
       });
     }
     if (contentBrief.contentType === 'weekly_recurring') {
-      return buildWeeklySuggestions({
+      return buildWeeklyMultiDaySuggestions({
         startDate: today,
-        dayOfWeek: contentBrief.dayOfWeek,
+        daysOfWeek: contentBrief.daysOfWeek,
         time: contentBrief.time,
-        weeksAhead: contentBrief.weeksAhead,
+        endDate: contentBrief.endDate,
         timezone,
       });
     }
@@ -168,6 +173,9 @@ export function ScheduleStep({
   }, [contentBrief, today, timezone]);
 
   const suggestions = useMemo(() => {
+    // Weekly clashes stay visible and every derived occurrence remains re-addable,
+    // so weekly is not deconflicted (unlike event/promotion).
+    if (isWeeklyRecurring) return rawSuggestions;
     if (!rawSuggestions.length || !existingItems.length) return rawSuggestions;
     return deconflictSuggestions(
       rawSuggestions,
@@ -179,16 +187,23 @@ export function ScheduleStep({
       })),
       timezone,
     );
-  }, [rawSuggestions, existingItems, timezone]);
+  }, [rawSuggestions, existingItems, timezone, isWeeklyRecurring]);
 
   // -------------------------------------------------------------------------
-  // Weekly recurring: auto-select every derived occurrence
+  // Weekly recurring: seed the calendar once, then hand control to the user
   // -------------------------------------------------------------------------
-  // The user picks day-of-week, time and a count — they never choose specific
-  // dates. We materialise exactly `weeksAhead` occurrences (no deconfliction,
-  // so the count is honoured) and keep them in sync if the brief changes.
+  // Seed the calendar once with every derived occurrence, then hand control to
+  // the user. After any manual add/remove we stop re-seeding so edits are not
+  // overwritten when the brief is unchanged. Re-seeding resumes only if the
+  // derived set itself changes (user went back and edited the brief).
+  const weeklySeedRef = useRef<string | null>(null);
+  const weeklyDirtyRef = useRef(false);
   useEffect(() => {
     if (!isWeeklyRecurring) return;
+    if (weeklyDirtyRef.current) return; // user has manually edited — never overwrite their picks
+    const signature = rawSuggestions.map((s) => `${s.date}:${s.time}`).join('|');
+    if (weeklySeedRef.current === signature) return; // already seeded this exact set
+    weeklySeedRef.current = signature;
     const desired: ScheduleSlot[] = rawSuggestions.map((s) => ({
       key: `suggestion:${s.id}:${s.date}:${s.time}`,
       date: s.date,
@@ -197,18 +212,16 @@ export function ScheduleStep({
       source: 'suggestion',
       suggestionId: s.id,
     }));
-    const desiredKeys = desired.map((s) => s.key).join('|');
-    const currentKeys = selectedSlots.map((s) => s.key).join('|');
-    if (desiredKeys !== currentKeys) {
-      onSlotsChange(desired);
-    }
-  }, [isWeeklyRecurring, rawSuggestions, selectedSlots, onSlotsChange]);
+    onSlotsChange(desired);
+  }, [isWeeklyRecurring, rawSuggestions, onSlotsChange]);
 
   // -------------------------------------------------------------------------
   // Slot management
   // -------------------------------------------------------------------------
 
-  const maxSlots = MAX_SLOTS_DEFAULT;
+  // Weekly recurring can span a long run (up to WEEKLY_MAX_OCCURRENCES); other
+  // types keep the standard per-campaign slot cap.
+  const maxSlots = isWeeklyRecurring ? WEEKLY_MAX_OCCURRENCES : MAX_SLOTS_DEFAULT;
 
   const handleAddSlot = useCallback(
     ({ date, time }: { date: string; time: string }) => {
@@ -249,16 +262,18 @@ export function ScheduleStep({
         suggestionId: matchedSuggestion?.id,
       };
 
+      if (isWeeklyRecurring) weeklyDirtyRef.current = true;
       onSlotsChange([...selectedSlots, newSlot]);
     },
-    [selectedSlots, suggestions, maxSlots, contentBrief, onSlotsChange, timezone],
+    [selectedSlots, suggestions, maxSlots, contentBrief, onSlotsChange, timezone, isWeeklyRecurring],
   );
 
   const handleRemoveSlot = useCallback(
     (slotKey: string) => {
+      if (isWeeklyRecurring) weeklyDirtyRef.current = true;
       onSlotsChange(selectedSlots.filter((s) => s.key !== slotKey));
     },
-    [selectedSlots, onSlotsChange],
+    [selectedSlots, onSlotsChange, isWeeklyRecurring],
   );
 
   // -------------------------------------------------------------------------
@@ -280,8 +295,7 @@ export function ScheduleStep({
   // -------------------------------------------------------------------------
 
   const showCalendar =
-    !isWeeklyRecurring &&
-    (contentBrief.contentType !== 'instant_post' || publishMode === 'schedule');
+    contentBrief.contentType !== 'instant_post' || publishMode === 'schedule';
 
   // -------------------------------------------------------------------------
   // Render
@@ -347,34 +361,6 @@ export function ScheduleStep({
         </p>
       )}
 
-      {/* Weekly recurring: read-only occurrence summary (no date picking) */}
-      {isWeeklyRecurring && (
-        <div className="space-y-3">
-          <p className="text-sm text-muted-foreground">
-            This will publish {rawSuggestions.length}{' '}
-            {rawSuggestions.length === 1 ? 'post' : 'posts'}, one each week at the
-            same time. You don’t need to pick dates — change the day, time or count
-            on the previous step.
-          </p>
-          <ul className="divide-y divide-border rounded-lg border border-border">
-            {rawSuggestions.map((slot) => {
-              const dt = DateTime.fromISO(`${slot.date}T${slot.time}`, { zone: timezone });
-              return (
-                <li
-                  key={slot.id}
-                  className="flex items-center justify-between px-3 py-2 text-sm"
-                >
-                  <span className="font-medium text-foreground">{slot.label}</span>
-                  <span className="text-muted-foreground">
-                    {dt.isValid ? dt.toFormat('ccc d LLL, HH:mm') : `${slot.date} ${slot.time}`}
-                  </span>
-                </li>
-              );
-            })}
-          </ul>
-        </div>
-      )}
-
       {/* Calendar */}
       {showCalendar && (
         <>
@@ -400,6 +386,7 @@ export function ScheduleStep({
             existingItems={existingItems}
             onAddSlot={handleAddSlot}
             onRemoveSlot={handleRemoveSlot}
+            onMonthChange={handleMonthChange}
             defaultSlotTime={contentBrief.contentType === 'story' ? STORY_POST_TIME : undefined}
           />
           <p className="text-xs text-muted-foreground text-center">

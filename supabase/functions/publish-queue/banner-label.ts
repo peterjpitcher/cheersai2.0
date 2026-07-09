@@ -29,7 +29,8 @@ export interface CampaignTiming {
     startAt: DateTime;
     endAt?: DateTime;
     startTime?: string; // "HH:MM"
-    weeklyDayOfWeek?: number; // 1=Mon..7=Sun (Luxon weekday)
+    weeklyDayOfWeek?: number; // 1=Mon..7=Sun (Luxon weekday) — first selected day
+    weeklyDaysOfWeek?: number[]; // 1=Mon..7=Sun (Luxon weekdays) — all selected days
     timezone: string;
 }
 
@@ -47,10 +48,17 @@ export function extractCampaignTiming(campaign: {
     if (campaign.campaign_type === "weekly") {
         // metadata.dayOfWeek is JS getDay() (0=Sun..6=Sat). Translate to
         // Luxon weekday (1=Mon..7=Sun) so getNextWeeklyOccurrence works.
+        // metadata.daysOfWeek carries all selected days for multi-day campaigns;
+        // dayOfWeek (= first day) is kept for back-compat.
+        const weeklyDaysSource = Array.isArray(meta.daysOfWeek) ? (meta.daysOfWeek as unknown[]) : null;
+        const weeklyDaysOfWeek = weeklyDaysSource && weeklyDaysSource.length
+            ? Array.from(new Set(weeklyDaysSource.map((d) => jsDayToLuxonWeekday(d)))).sort((a, b) => a - b)
+            : undefined;
         return {
             campaignType: "weekly",
             startAt: DateTime.now().setZone(tz),
             weeklyDayOfWeek: jsDayToLuxonWeekday(meta.dayOfWeek),
+            weeklyDaysOfWeek,
             startTime: typeof meta.time === "string" ? meta.time : undefined,
             timezone: tz,
         };
@@ -118,6 +126,22 @@ export function getNextWeeklyOccurrence(
     }
 
     return ref.plus({ days: daysUntil });
+}
+
+/**
+ * Soonest upcoming weekly occurrence across several weekdays (Luxon 1=Mon..7=Sun).
+ * Mirrors src/lib/scheduling/campaign-timing.ts:getNextWeeklyOccurrenceForDays.
+ */
+export function getNextWeeklyOccurrenceForDays(
+    referenceAt: DateTime,
+    daysOfWeek: number[],
+    timezone: string,
+    startTime?: string,
+): DateTime {
+    const occurrences = daysOfWeek.map((day) =>
+        getNextWeeklyOccurrence(referenceAt, day, timezone, startTime)
+    );
+    return occurrences.reduce((soonest, current) => (current < soonest ? current : soonest));
 }
 
 export type ProximityLabel = string | null;
@@ -274,10 +298,15 @@ export function getProximityLabel(input: ProximityLabelInput): ProximityLabel {
             return getEventLabel(referenceAt, campaignTiming);
 
         case "weekly": {
-            if (!campaignTiming.weeklyDayOfWeek) return null;
-            const nextOccurrence = getNextWeeklyOccurrence(
+            const days = campaignTiming.weeklyDaysOfWeek?.length
+                ? campaignTiming.weeklyDaysOfWeek
+                : campaignTiming.weeklyDayOfWeek
+                    ? [campaignTiming.weeklyDayOfWeek]
+                    : [];
+            if (!days.length) return null;
+            const nextOccurrence = getNextWeeklyOccurrenceForDays(
                 referenceAt,
-                campaignTiming.weeklyDayOfWeek,
+                days,
                 campaignTiming.timezone,
                 campaignTiming.startTime,
             );

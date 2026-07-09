@@ -86,8 +86,9 @@ describe('create temporal context', () => {
       contentType: 'weekly_recurring',
       brief: {
         title: 'Fish Friday',
-        dayOfWeek: 5,
+        daysOfWeek: [5],
         time: '18:00',
+        endDate: '2026-06-30',
       },
       scheduledAt: '2026-05-27T10:00:00.000+01:00',
     });

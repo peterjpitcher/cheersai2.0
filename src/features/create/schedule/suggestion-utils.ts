@@ -4,14 +4,6 @@ import type { SuggestedSlotDisplay } from "@/features/create/schedule/schedule-c
 import { buildEventCadenceSlots } from "@/lib/create/event-cadence";
 import { DEFAULT_POST_TIME } from "@/lib/constants";
 
-interface WeeklySuggestionInput {
-  startDate: string | undefined;
-  dayOfWeek: number;
-  time: string;
-  weeksAhead: number;
-  timezone: string;
-}
-
 interface EventSuggestionInput {
   startDate: string | undefined;
   startTime: string;
@@ -43,40 +35,71 @@ function safeIsoDate(dateTime: DateTime): string | null {
   return dateTime.toISODate() ?? dateTime.toFormat("yyyy-LL-dd");
 }
 
-export function buildWeeklySuggestions({
+interface WeeklyMultiDaySuggestionInput {
+  startDate: string | undefined;
+  daysOfWeek: number[] | undefined;
+  time: string;
+  endDate: string;
+  timezone: string;
+}
+
+/**
+ * Build one suggestion per selected weekday, from today up to and including
+ * `endDate`. Days use JS getDay() convention (0=Sunday..6=Saturday). Slots
+ * earlier than now + 15 minutes are skipped. Ids are date-unique
+ * ("weekly-YYYY-MM-DD"); labels are "<Weekday> · Week <n>" with the week counted
+ * from the first emitted occurrence.
+ */
+export function buildWeeklyMultiDaySuggestions({
   startDate,
-  dayOfWeek,
+  daysOfWeek,
   time,
-  weeksAhead,
+  endDate,
   timezone,
-}: WeeklySuggestionInput): SuggestedSlotDisplay[] {
-  const baseDate = parseDate(startDate, timezone);
-  const minimumSlot = DateTime.now().setZone(timezone).plus({ minutes: 15 }).startOf("minute");
-  const [hourStr, minuteStr] = normaliseTime(time, DEFAULT_POST_TIME).split(":");
-  let occurrence = baseDate.set({ hour: Number(hourStr), minute: Number(minuteStr), second: 0, millisecond: 0 });
+}: WeeklyMultiDaySuggestionInput): SuggestedSlotDisplay[] {
+  if (!daysOfWeek?.length) return [];
 
-  const jsWeekday = occurrence.weekday % 7; // luxon: Monday=1 … Sunday=7 -> 0
-  let diff = (dayOfWeek - jsWeekday + 7) % 7;
-  if (diff === 0 && occurrence < baseDate) {
-    diff = 7;
+  const selected = new Set(daysOfWeek.map((d) => ((d % 7) + 7) % 7));
+  const start = parseDate(startDate, timezone); // startOf('day')
+  const end = parseDate(endDate, timezone).endOf('day');
+  if (!end.isValid || end < start) return [];
+
+  const minimumSlot = DateTime.now().setZone(timezone).plus({ minutes: 15 }).startOf('minute');
+  const [hourStr, minuteStr] = normaliseTime(time, DEFAULT_POST_TIME).split(':');
+  const hour = Number(hourStr);
+  const minute = Number(minuteStr);
+
+  const occurrences: DateTime[] = [];
+  let cursor = start;
+  // Hard stop well beyond any realistic end date to guarantee termination.
+  let guard = 0;
+  while (cursor <= end && guard < 800) {
+    guard += 1;
+    const jsWeekday = cursor.weekday % 7; // Luxon 1..7 (Sun=7) → JS 0..6 (Sun=0)
+    if (selected.has(jsWeekday)) {
+      const slot = cursor.set({ hour, minute, second: 0, millisecond: 0 });
+      if (slot.isValid && slot >= minimumSlot && slot <= end) {
+        occurrences.push(slot);
+      }
+    }
+    cursor = cursor.plus({ days: 1 });
   }
-  occurrence = occurrence.plus({ days: diff });
 
-  while (occurrence < minimumSlot) {
-    occurrence = occurrence.plus({ weeks: 1 });
-  }
+  occurrences.sort((a, b) => a.toMillis() - b.toMillis());
+  const anchorWeekStart = occurrences.length ? occurrences[0].startOf('week') : null;
 
-  const total = Math.max(1, Math.min(weeksAhead, 12));
-
-  return Array.from({ length: total })
-    .map((_, index) => occurrence.plus({ weeks: index }))
-    .filter((slot) => slot.isValid)
-    .map((slot, index) => ({
-      id: `week-${index + 1}`,
-      date: safeIsoDate(slot) ?? slot.toFormat("yyyy-LL-dd"),
-      time: slot.toFormat("HH:mm"),
-      label: `Week ${index + 1}`,
-    } satisfies SuggestedSlotDisplay));
+  return occurrences.map((slot) => {
+    const weekNum = anchorWeekStart
+      ? Math.floor(slot.startOf('week').diff(anchorWeekStart, 'weeks').weeks) + 1
+      : 1;
+    const dateIso = safeIsoDate(slot) ?? slot.toFormat('yyyy-LL-dd');
+    return {
+      id: `weekly-${dateIso}`,
+      date: dateIso,
+      time: slot.toFormat('HH:mm'),
+      label: `${slot.toFormat('cccc')} · Week ${weekNum}`,
+    } satisfies SuggestedSlotDisplay;
+  });
 }
 
 export function buildEventSuggestions({ startDate, startTime, timezone }: EventSuggestionInput): SuggestedSlotDisplay[] {

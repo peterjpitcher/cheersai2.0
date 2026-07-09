@@ -21,6 +21,8 @@ type PlatformCopyEntry = PlatformCopy[Platform];
 interface ComposeOptions {
   ctaLinks?: PlatformCtaLinks | null;
   contentType?: ContentType;
+  /** Custom CTA button text (overrides the AI-suggested and default CTA text). */
+  ctaLabel?: string | null;
 }
 
 /**
@@ -44,7 +46,10 @@ export function composePublishBody(
 
   if (platform === 'facebook') {
     const fb = copy as PlatformCopy['facebook'];
-    const ctaText = sanitizeCtaText(fb.ctaText?.trim() || (ctaUrl ? defaultCtaText(options.contentType) : ''));
+    // Custom campaign CTA label wins over the AI-suggested text and the default.
+    const ctaText = sanitizeCtaText(
+      options.ctaLabel?.trim() || fb.ctaText?.trim() || (ctaUrl ? defaultCtaText(options.contentType) : ''),
+    );
     if (ctaText && ctaUrl) {
       parts.push(`${ctaText.replace(/[:.!?]+$/g, '')}: ${ctaUrl}`);
     } else if (ctaText) {

@@ -54,30 +54,33 @@ describe('buildCampaignMetadata', () => {
     });
   });
 
-  it('builds weekly metadata with dayOfWeek and time', () => {
+  it('builds weekly metadata with daysOfWeek, back-compat dayOfWeek and endDate', () => {
     const result = buildCampaignMetadata('weekly_recurring', {
       title: 'Wine Wednesday',
-      dayOfWeek: 3,
+      daysOfWeek: [3, 5],
       time: '17:00',
-      weeksAhead: 4,
+      endDate: '2026-08-31',
     }, 4);
 
     expect(result).toMatchObject({
+      daysOfWeek: [3, 5],
       dayOfWeek: 3,
       time: '17:00',
-      weeksAhead: 4,
+      endDate: '2026-08-31',
       slotCount: 4,
     });
+    expect('weeksAhead' in result).toBe(false);
   });
 
-  it('falls back to defaults for weekly with missing weeksAhead', () => {
+  it('falls back to defaults for weekly with missing daysOfWeek/endDate', () => {
     const result = buildCampaignMetadata('weekly_recurring', {
       title: 'Friday Quiz',
-      dayOfWeek: 5,
       time: '19:00',
     }, 4);
 
-    expect(result.weeksAhead).toBe(4);
+    expect(result.dayOfWeek).toBe(1);
+    expect(result.daysOfWeek).toEqual([]);
+    expect(result.endDate).toBeNull();
   });
 
   it('returns base metadata for instant_post', () => {
@@ -112,11 +115,12 @@ describe('buildCampaignMetadata', () => {
   it('produces metadata compatible with extractCampaignTiming for weekly', () => {
     const metadata = buildCampaignMetadata('weekly_recurring', {
       title: 'Wine Wednesday',
-      dayOfWeek: 3,
+      daysOfWeek: [3, 5],
       time: '17:00',
+      endDate: '2026-08-31',
     }, 4);
 
-    // extractCampaignTiming reads dayOfWeek and time from metadata
+    // extractCampaignTiming reads dayOfWeek (first selected day) and time from metadata
     expect(metadata.dayOfWeek).toBe(3);
     expect(metadata.time).toBe('17:00');
   });

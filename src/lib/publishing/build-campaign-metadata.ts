@@ -4,7 +4,9 @@
  * extractCampaignTiming() in src/lib/scheduling/campaign-timing.ts expects
  * top-level startDate, eventStart, endDate, dayOfWeek, and time fields.
  * The wizard previously wrote { brief, slotCount } which broke planner
- * banner labels and publish-time proximity calculations.
+ * banner labels and publish-time proximity calculations. Weekly recurring
+ * now carries daysOfWeek plus a back-compat dayOfWeek (first day) and an
+ * endDate so the link-in-bio card expires with the campaign run.
  */
 
 import { DateTime } from 'luxon';
@@ -55,11 +57,18 @@ export function buildCampaignMetadata(
   }
 
   if (contentType === 'weekly_recurring') {
+    const daysOfWeek = Array.isArray(brief.daysOfWeek) ? (brief.daysOfWeek as number[]) : [];
     return {
       ...base,
-      dayOfWeek: brief.dayOfWeek as number,
+      daysOfWeek,
+      // Back-compat: extractCampaignTiming, the link-in-bio card, and the
+      // publish-worker banner label all read a single top-level dayOfWeek.
+      dayOfWeek: daysOfWeek[0] ?? 1,
       time: brief.time as string,
-      weeksAhead: (brief.weeksAhead as number | undefined) ?? 4,
+      // Consumed by extractCampaignTiming (endAt) so the link-in-bio card expires.
+      endDate: (brief.endDate as string | undefined) ?? null,
+      // Read by the link-in-bio card (resolveCampaignCtaLabel) for the button text.
+      ctaLabel: (brief.ctaLabel as string | undefined) ?? null,
     };
   }
 

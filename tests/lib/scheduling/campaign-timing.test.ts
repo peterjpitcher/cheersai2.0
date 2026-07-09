@@ -4,9 +4,46 @@ import { DateTime } from "luxon";
 import {
   extractCampaignTiming,
   getNextWeeklyOccurrence,
+  getNextWeeklyOccurrenceForDays,
 } from "@/lib/scheduling/campaign-timing";
 
 const TZ = "Europe/London";
+
+describe("multi-day weekly timing", () => {
+  it("exposes weeklyDaysOfWeek (Luxon weekdays) from metadata.daysOfWeek", () => {
+    // JS days Mon(1), Thu(4), Sun(0) → Luxon Mon(1), Thu(4), Sun(7), sorted
+    const result = extractCampaignTiming({
+      campaign_type: "weekly",
+      metadata: { daysOfWeek: [4, 1, 0], dayOfWeek: 4, time: "19:00", endDate: "2026-08-31" },
+    });
+    expect(result.weeklyDaysOfWeek).toEqual([1, 4, 7]);
+    expect(result.weeklyDayOfWeek).toBe(4); // back-compat: first-day mapping still present
+  });
+
+  it("leaves weeklyDaysOfWeek undefined for legacy single-day metadata", () => {
+    const result = extractCampaignTiming({
+      campaign_type: "weekly",
+      metadata: { dayOfWeek: 3, time: "19:00" },
+    });
+    expect(result.weeklyDaysOfWeek).toBeUndefined();
+    expect(result.weeklyDayOfWeek).toBe(3);
+  });
+
+  it("returns the soonest occurrence across selected days", () => {
+    // Reference: Wed 2026-07-01 09:00. Days = Mon(1) + Thu(4) at 18:00.
+    // Soonest is Thu 2026-07-02, not the following Monday.
+    const ref = DateTime.fromISO("2026-07-01T09:00:00", { zone: TZ });
+    const next = getNextWeeklyOccurrenceForDays(ref, [1, 4], TZ, "18:00");
+    expect(next.toISODate()).toBe("2026-07-02");
+  });
+
+  it("matches single-day getNextWeeklyOccurrence when only one day is given", () => {
+    const ref = DateTime.fromISO("2026-07-01T09:00:00", { zone: TZ });
+    const single = getNextWeeklyOccurrence(ref, 1, TZ, "18:00");
+    const viaDays = getNextWeeklyOccurrenceForDays(ref, [1], TZ, "18:00");
+    expect(viaDays.toISO()).toBe(single.toISO());
+  });
+});
 
 describe("extractCampaignTiming", () => {
   it("should extract event campaign timing", () => {

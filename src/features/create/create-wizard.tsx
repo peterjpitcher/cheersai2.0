@@ -17,6 +17,7 @@ import type { MediaAssetSummary } from '@/lib/library/data';
 import type { AccountBannerDefaults } from '@/lib/banner/config';
 import { contentBriefSchema } from '@/features/create/schemas/content-schemas';
 import type { ContentBrief, ContentBriefInput } from '@/features/create/schemas/content-schemas';
+import { buildWeeklyMultiDaySuggestions } from '@/features/create/schedule/suggestion-utils';
 import type {
   ContentType,
   DraftState,
@@ -25,7 +26,7 @@ import type {
   ScheduleSlot,
   SlotGeneratedCopy,
 } from '@/types/content';
-import { DEFAULT_TIMEZONE } from '@/lib/constants';
+import { DEFAULT_TIMEZONE, WEEKLY_MAX_OCCURRENCES } from '@/lib/constants';
 
 import { BriefStep } from '@/features/create/steps/brief-step';
 import { GenerateStep } from '@/features/create/steps/generate-step';
@@ -262,7 +263,12 @@ export function CreateWizard({ initialDraftId, accountId, onClose }: CreateWizar
         story: {},
         event: { eventName: '', eventDate: '', eventTime: '', venue: DEFAULT_EVENT_VENUE, placements: ['feed'] },
         promotion: { offerSummary: '', endDate: '', placements: ['feed'] },
-        weekly_recurring: { dayOfWeek: 1, time: '12:00', weeksAhead: 4, placement: 'feed' },
+        weekly_recurring: {
+          daysOfWeek: [1],
+          time: '12:00',
+          endDate: DateTime.now().setZone(DEFAULT_TIMEZONE).plus({ weeks: 4 }).toFormat('yyyy-MM-dd'),
+          placement: 'feed',
+        },
       };
 
       form.reset({
@@ -279,6 +285,28 @@ export function CreateWizard({ initialDraftId, accountId, onClose }: CreateWizar
     if (currentStep === 0) {
       const valid = await form.trigger();
       if (!valid) return;
+
+      // Weekly recurring: block progression when the day/end-date settings
+      // produce zero occurrences or more than the 12-post cap (the pure Zod
+      // schema can't check this because the count depends on "now").
+      if (form.getValues('contentType') === 'weekly_recurring') {
+        const v = form.getValues() as unknown as Record<string, unknown>;
+        const count = buildWeeklyMultiDaySuggestions({
+          startDate: DateTime.now().setZone(DEFAULT_TIMEZONE).toFormat('yyyy-MM-dd'),
+          daysOfWeek: (v.daysOfWeek as number[]) ?? [],
+          time: (v.time as string) ?? '12:00',
+          endDate: (v.endDate as string) ?? '',
+          timezone: DEFAULT_TIMEZONE,
+        }).length;
+        if (count < 1) {
+          toast.error('Pick at least one day and an end date that schedules a post.');
+          return;
+        }
+        if (count > WEEKLY_MAX_OCCURRENCES) {
+          toast.error(`That’s more than ${WEEKLY_MAX_OCCURRENCES} posts. Shorten the date range or remove a day.`);
+          return;
+        }
+      }
 
       if (!draftId) {
         setIsCreatingDraft(true);
@@ -316,15 +344,10 @@ export function CreateWizard({ initialDraftId, accountId, onClose }: CreateWizar
         form.getValues('contentType') === 'instant_post' &&
         (form.watch('publishMode') ?? 'now') === 'now';
 
-      // Weekly recurring has no manual date selection — the schedule step derives
-      // and auto-selects its occurrences, so it must not be gated on selectedSlots
-      // (which the child effect may populate a tick after this handler reads it).
-      const isWeeklyRecurring = form.getValues('contentType') === 'weekly_recurring';
-
-      if (!isInstantNow && !isWeeklyRecurring) {
+      if (!isInstantNow) {
         // Validate at least one slot selected for schedule mode
         if (selectedSlots.length === 0) {
-          toast.error('Select at least one schedule slot');
+          toast.error('Select at least one date to schedule');
           return;
         }
       }
