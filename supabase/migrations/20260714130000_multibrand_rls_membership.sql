@@ -832,13 +832,12 @@ alter table public.accounts drop constraint if exists accounts_auth_user_id_key;
 -- ============================================================================
 -- STEP 5 -- Canonical, non-blank business_name for brand display.
 -- ============================================================================
+-- Reference only business_name (guaranteed present). display_name/email are
+-- prod-only columns absent from the clean v2 baseline schema, so we cannot
+-- coalesce through them here; any blank name becomes a placeholder the admin
+-- renames in the UI (the existing live accounts already carry a name).
 update public.accounts
-   set business_name = coalesce(
-     nullif(btrim(business_name), ''),
-     nullif(btrim(display_name), ''),
-     nullif(btrim(email), ''),
-     'Brand'
-   )
+   set business_name = 'Brand'
  where business_name is null or btrim(business_name) = '';
 
 alter table public.accounts alter column business_name set not null;
