@@ -1,7 +1,7 @@
 ---
 title: Content Creation & Campaigns
 created: 2026-03-14
-last_updated: 2026-05-02
+last_updated: 2026-07-11
 status: current
 tags:
   - type/reference
@@ -12,6 +12,7 @@ related:
   - "[[Media Library]]"
   - "[[Settings & Brand Voice]]"
   - "[[Server Actions]]"
+  - "[[Meta Paid Campaigns]]"
 typescript: src/lib/create/service.ts
 ---
 
@@ -121,3 +122,5 @@ The schema supports a `proofPointMode` option (`off`, `auto`, `selected`) with `
 - `src/app/(app)/campaigns/[id]/page.tsx` — campaign detail with content items
 
 Server actions in `src/app/(app)/campaigns/actions.ts` and `src/app/(app)/campaigns/[id]/actions.ts`.
+
+Paid advertising under `/campaigns` is a separate Meta Marketing API workflow from organic social content publishing. It can also be used by Codex for approved one-off ad needs that the UI does not support. See [[Meta Paid Campaigns]].

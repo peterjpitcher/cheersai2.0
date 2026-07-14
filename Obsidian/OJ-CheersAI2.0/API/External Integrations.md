@@ -1,7 +1,7 @@
 ---
 title: External Integrations
 created: 2026-03-14
-last_updated: 2026-03-14
+last_updated: 2026-07-11
 status: current
 tags:
   - type/reference
@@ -23,7 +23,8 @@ related:
 graph LR
   App[CheersAI 2.0]
   App -->|Content generation| OAI[OpenAI API\nGPT-4o]
-  App -->|OAuth + Publishing| FB[Meta Graph API\nfacebook.com/graph]
+  App -->|OAuth + Organic Publishing| FB[Meta Graph API\nfacebook.com/graph]
+  App -->|Paid Campaign Management| MetaAds[Meta Marketing API\ncampaigns + ad sets + ads]
   App -->|Reviews + Publishing| GBP[Google Business Profile\nmybusinessreviews + mybusiness]
   App -->|Data prefill| MgmtApp[Management App\nexternal system]
   FB -->|publish posts| FBPage[Facebook Page]
@@ -61,6 +62,12 @@ User auth code
 ```
 
 The Page access token is what's stored. Facebook Page tokens effectively do not expire unless the user revokes access or changes their password.
+
+## Meta Marketing API (`src/lib/meta/marketing.ts`)
+
+The paid `/campaigns` feature already uses Meta's Marketing API directly. It creates campaigns, ad sets, uploaded images, creatives, and ads; changes object status; searches targeting; and reads insights. The orchestration is in `src/app/(app)/campaigns/[id]/actions.ts`.
+
+The connected ad account and token come from `meta_ad_accounts`; the Facebook Page ID used by creatives comes from `social_connections.metadata.pageId`. This existing connection can also support user-approved one-off campaigns created directly with Codex when the standard UI cannot express the brief. No extra MCP or third-party ads connector is required. See [[Meta Paid Campaigns]] for the operational flow and safety rules.
 
 ## Google Business Profile API
 
