@@ -6,6 +6,7 @@ import {
   Trophy,
   Link2,
   Settings,
+  ShieldCheck,
   MoreHorizontal,
   type LucideIcon,
 } from 'lucide-react';
@@ -31,6 +32,9 @@ export const APP_NAV_ITEMS: NavItem[] = [
   { id: 'connections', label: 'Connections',   href: '/connections',  icon: Link2 },
   { id: 'settings',    label: 'Settings',     href: '/settings',     icon: Settings },
 ];
+
+/** Super-admin-only nav item, appended for global admins (see TopRail). */
+export const ADMIN_NAV_ITEM: NavItem = { id: 'admin', label: 'Admin', href: '/admin', icon: ShieldCheck };
 
 export const MOBILE_NAV_ITEMS: MobileNavItem[] = [
   { id: 'planner',     label: 'Planner',     href: '/planner',     icon: CalendarDays },

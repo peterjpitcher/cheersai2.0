@@ -7,7 +7,8 @@ import { useFormStatus } from 'react-dom';
 
 import { BrandSwitcher } from '@/components/layout/brand-switcher';
 import { formatBadgeCount } from '@/components/layout/format-badge-count';
-import { APP_NAV_ITEMS, isNavActive } from '@/config/app-nav';
+import { useAuth } from '@/components/providers/auth-provider';
+import { ADMIN_NAV_ITEM, APP_NAV_ITEMS, isNavActive } from '@/config/app-nav';
 import { cn } from '@/lib/utils';
 import type { ConnectionHealthSummary } from '@/types/providers';
 
@@ -50,6 +51,8 @@ function TopRailSignOutButton() {
  */
 export function TopRail({ notificationCount = 0, signOutAction }: TopRailProps) {
   const pathname = usePathname();
+  const auth = useAuth();
+  const navItems = auth?.isSuperAdmin ? [...APP_NAV_ITEMS, ADMIN_NAV_ITEM] : APP_NAV_ITEMS;
 
   return (
     <header
@@ -76,7 +79,7 @@ export function TopRail({ notificationCount = 0, signOutAction }: TopRailProps) 
 
         {/* Desktop nav items -- hidden on mobile */}
         <nav className="hidden items-center gap-1 sm:flex" aria-label="Main navigation">
-          {APP_NAV_ITEMS.map((item) => {
+          {navItems.map((item) => {
             const active = isNavActive(item.href, pathname);
 
             return (
