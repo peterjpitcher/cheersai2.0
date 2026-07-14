@@ -1,11 +1,14 @@
-export function formatPlatformLabel(platform: "facebook" | "instagram") {
+export function formatPlatformLabel(
+  platform: "facebook" | "instagram" | null | undefined,
+): string {
   switch (platform) {
     case "facebook":
       return "Facebook";
     case "instagram":
       return "Instagram";
     default:
-      return platform;
+      // Multi-platform drafts / legacy rows can have a null platform column.
+      return "No platform";
   }
 }
 

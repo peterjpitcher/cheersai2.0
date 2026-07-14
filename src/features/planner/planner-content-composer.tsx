@@ -44,7 +44,7 @@ const EDITABLE_STATUSES = new Set<PlannerContentDetail["status"]>([
 ]);
 
 const PLATFORM_THEME: Record<
-  PlannerContentDetail["platform"],
+  "facebook" | "instagram",
   {
     shell: string;
     badge: string;
@@ -64,6 +64,14 @@ const PLATFORM_THEME: Record<
     frame: "border-[#F5D8EA] bg-white",
     subheader: "text-[#C2338B]/75",
   },
+};
+
+/** Neutral theme for posts with no (or an unrecognised) platform, e.g. multi-platform drafts. */
+const NEUTRAL_THEME = {
+  shell: "border-slate-200 bg-slate-50",
+  badge: "bg-slate-100 text-slate-600",
+  frame: "border-slate-200 bg-white",
+  subheader: "text-slate-500",
 };
 
 interface PlannerContentComposerProps {
@@ -98,7 +106,7 @@ export function PlannerContentComposer({ detail, ownerTimezone, mediaLibrary }: 
     };
   }, [isMediaModalOpen]);
 
-  const theme = PLATFORM_THEME[detail.platform];
+  const theme = detail.platform ? PLATFORM_THEME[detail.platform] : NEUTRAL_THEME;
   const status = detail.status;
   const isStory = detail.placement === "story";
   const canEdit = EDITABLE_STATUSES.has(status);

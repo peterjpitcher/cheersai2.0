@@ -142,7 +142,7 @@ export interface PlannerOverview {
 
 export interface PlannerContentDetail {
   id: string;
-  platform: "facebook" | "instagram";
+  platform: "facebook" | "instagram" | null;
   placement: ContentPlacement;
   status: PlannerItem["status"];
   scheduledFor: string | null;
@@ -209,7 +209,7 @@ type ContentDetailVariantRow = {
 
 type ContentDetailRow = {
   id: string;
-  platform: "facebook" | "instagram";
+  platform: string | null;
   placement: ContentPlacement;
   scheduled_for: string | null;
   status: PlannerItem["status"];
@@ -748,6 +748,18 @@ async function loadPrimaryMediaPreviewsByContent({
   return previewByContent;
 }
 
+/**
+ * Coerce a raw DB platform value to a known Platform, or null.
+ * content_items.platform is nullable (multi-platform drafts, legacy rows), so the
+ * detail view must never assume it is facebook/instagram — that assumption crashes
+ * the platform-keyed render components (PlatformDot / PlatformBadge / theme lookup).
+ */
+function normalisePlatform(
+  value: string | null | undefined,
+): "facebook" | "instagram" | null {
+  return value === "facebook" || value === "instagram" ? value : null;
+}
+
 export async function getPlannerContentDetail(contentId: string): Promise<PlannerContentDetail | null> {
   const { supabase, accountId } = await requireAuthContext();
 
@@ -819,7 +831,7 @@ export async function getPlannerContentDetail(contentId: string): Promise<Planne
 
     return {
       id: data.id,
-      platform: data.platform,
+      platform: normalisePlatform(data.platform),
       placement: data.placement,
       status: data.status as PlannerItem["status"],
       scheduledFor: data.scheduled_for,

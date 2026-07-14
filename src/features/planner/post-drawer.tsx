@@ -29,7 +29,6 @@ import { useToast } from '@/components/providers/toast-provider';
 import { useNowMinute } from '@/lib/hooks/use-now-minute';
 import { extractCampaignTiming } from '@/lib/scheduling/campaign-timing';
 import { getProximityLabel } from '@/lib/scheduling/proximity-label';
-import type { Platform } from '@/types/content';
 import type { PlannerContentDetail } from '@/lib/planner/data';
 
 interface PostDrawerProps {
@@ -238,7 +237,7 @@ function DrawerContent({
           />
           {STATUS_LABELS[content.status] ?? content.status}
         </span>
-        <PlatformBadge platform={content.platform as Platform} showLabel />
+        <PlatformBadge platform={content.platform} showLabel />
         {content.placement === 'story' && (
           <span className="rounded-md bg-accent px-2 py-0.5 text-xs font-medium text-accent-foreground">
             Story

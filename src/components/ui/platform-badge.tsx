@@ -1,6 +1,6 @@
 'use client';
 
-import { Facebook, Instagram } from 'lucide-react';
+import { Facebook, Globe, Instagram } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Platform } from '@/types/content';
 
@@ -14,7 +14,7 @@ const platformConfig: Record<
 };
 
 interface PlatformBadgeProps {
-  platform: Platform;
+  platform: Platform | null | undefined;
   showLabel?: boolean;
   className?: string;
 }
@@ -22,15 +22,20 @@ interface PlatformBadgeProps {
 /**
  * Renders a small badge with a platform-specific Lucide icon and optional label.
  * Colours are driven by CSS custom properties defined in globals.css.
+ * Falls back to a neutral "No platform" badge when the platform is missing or
+ * unrecognised (e.g. multi-platform drafts whose scalar platform column is null)
+ * so the component never destructures undefined and crashes the page.
  */
 export function PlatformBadge({
   platform,
   showLabel = false,
   className,
 }: PlatformBadgeProps): React.JSX.Element {
-  const { token, icon: Icon, label } = platformConfig[platform];
-  const fg = `var(--platform-${token})`;
-  const bg = `var(--platform-${token}-bg)`;
+  const config = platform ? platformConfig[platform] : undefined;
+  const Icon = config?.icon ?? Globe;
+  const label = config?.label ?? 'No platform';
+  const fg = config ? `var(--platform-${config.token})` : 'var(--c-ink-3)';
+  const bg = config ? `var(--platform-${config.token}-bg)` : 'var(--c-paper-2)';
 
   return (
     <span

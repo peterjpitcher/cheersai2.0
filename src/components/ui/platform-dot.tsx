@@ -1,15 +1,15 @@
 'use client';
 
-import { Facebook, Instagram } from 'lucide-react';
+import { Facebook, Globe, Instagram } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export type PlatformKey = 'fb' | 'ig' | 'facebook' | 'instagram';
 
-/** Normalise production keys to design tokens */
-function toDesignKey(key: PlatformKey): 'fb' | 'ig' {
-  if (key === 'facebook') return 'fb';
-  if (key === 'instagram') return 'ig';
-  return key as 'fb' | 'ig';
+/** Normalise production keys to design tokens; null for unknown/missing platforms. */
+function toDesignKey(key: PlatformKey | null | undefined): 'fb' | 'ig' | null {
+  if (key === 'facebook' || key === 'fb') return 'fb';
+  if (key === 'instagram' || key === 'ig') return 'ig';
+  return null;
 }
 
 const platformIcons: Record<'fb' | 'ig', typeof Facebook> = {
@@ -18,7 +18,7 @@ const platformIcons: Record<'fb' | 'ig', typeof Facebook> = {
 };
 
 interface PlatformDotProps {
-  platform: PlatformKey;
+  platform: PlatformKey | null | undefined;
   /** Circle diameter in pixels. Default 18. */
   size?: number;
   className?: string;
@@ -27,6 +27,9 @@ interface PlatformDotProps {
 /**
  * Circular badge with platform tint background and solid-colour icon.
  * Colours driven by --c-{token}-bg (background) and --c-{token} (icon).
+ * Falls back to a neutral dot when the platform is missing or unrecognised
+ * (e.g. multi-platform drafts whose scalar platform column is null) so the
+ * component never renders an undefined icon and crashes the page.
  */
 export function PlatformDot({
   platform,
@@ -34,8 +37,10 @@ export function PlatformDot({
   className,
 }: PlatformDotProps): React.JSX.Element {
   const token = toDesignKey(platform);
-  const Icon = platformIcons[token];
+  const Icon = token ? platformIcons[token] : Globe;
   const iconSize = Math.round(size * 0.6);
+  const backgroundColor = token ? `var(--c-${token}-bg)` : 'var(--c-paper-2)';
+  const iconColor = token ? `var(--c-${token})` : 'var(--c-ink-3)';
 
   return (
     <span
@@ -46,11 +51,11 @@ export function PlatformDot({
       style={{
         width: size,
         height: size,
-        backgroundColor: `var(--c-${token}-bg)`,
+        backgroundColor,
       }}
     >
       <Icon
-        style={{ color: `var(--c-${token})`, width: iconSize, height: iconSize }}
+        style={{ color: iconColor, width: iconSize, height: iconSize }}
         aria-hidden="true"
       />
     </span>
