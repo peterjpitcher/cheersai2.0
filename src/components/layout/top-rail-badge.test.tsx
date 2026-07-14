@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-import { formatBadgeCount } from './top-rail';
+import { formatBadgeCount } from './format-badge-count';
 
 describe('formatBadgeCount', () => {
   it('should return "99+" when count is 100', () => {

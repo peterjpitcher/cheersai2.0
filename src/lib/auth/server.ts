@@ -113,34 +113,6 @@ export async function requireAuthContext(): Promise<AuthContext> {
 // Internal helpers
 // ---------------------------------------------------------------------------
 
-/**
- * Resolve an account id from user metadata, falling back to user.id.
- *
- * Retained for the streaming API route which has only the auth user in context;
- * it is NOT used for active-brand resolution (that is cookie + membership based,
- * see getCurrentUser). Slated for replacement by a request-aware resolver when
- * the streaming route is migrated to requireApiAuthContext.
- */
-export function resolveAccountId(user: {
-  id: string;
-  user_metadata?: Record<string, unknown>;
-  app_metadata?: Record<string, unknown>;
-}): string {
-  const appMetadataAccountId = readAccountId(user.app_metadata);
-  if (appMetadataAccountId) return appMetadataAccountId;
-  return user.id;
-}
-
-function readAccountId(
-  metadata: Record<string, unknown> | undefined,
-): string | null {
-  if (!metadata) return null;
-  const candidate = metadata['account_id'] ?? metadata['accountId'];
-  if (typeof candidate !== 'string') return null;
-  const trimmed = candidate.trim();
-  return trimmed.length ? trimmed : null;
-}
-
 function isSessionError(
   error: { name?: string; status?: number; message?: string; code?: string } | null | undefined,
 ): boolean {

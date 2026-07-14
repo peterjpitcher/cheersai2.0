@@ -31,12 +31,14 @@ process.env.SUPABASE_SERVICE_ROLE_KEY =
 // --- Hoisted mocks -----------------------------------------------------------
 const {
   createServerSupabaseClientMock,
+  getCurrentUserMock,
   getOwnerSettingsMock,
   getOpenAIClientMock,
   createInstantPostMock,
   responsesStreamMock,
 } = vi.hoisted(() => ({
   createServerSupabaseClientMock: vi.fn(),
+  getCurrentUserMock: vi.fn(),
   getOwnerSettingsMock: vi.fn(),
   getOpenAIClientMock: vi.fn(),
   createInstantPostMock: vi.fn(),
@@ -45,6 +47,12 @@ const {
 
 vi.mock("@/lib/supabase/server", () => ({
   createServerSupabaseClient: createServerSupabaseClientMock,
+}));
+
+// The route resolves the active brand via getCurrentUser(); mock it directly
+// so the test does not need to wire the full membership query chain.
+vi.mock("@/lib/auth/server", () => ({
+  getCurrentUser: getCurrentUserMock,
 }));
 
 vi.mock("@/lib/settings/data", () => ({
@@ -222,6 +230,16 @@ describe("POST /api/create/generate-stream — Bug B regression suite", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     createServerSupabaseClientMock.mockResolvedValue(buildAuthSupabaseMock());
+    getCurrentUserMock.mockResolvedValue({
+      id: "user-1",
+      email: "owner@pub.com",
+      accountId: "account-1",
+      activeAccountId: "account-1",
+      businessName: "Test",
+      timezone: "Europe/London",
+      brands: [{ accountId: "account-1", name: "Test", timezone: "Europe/London" }],
+      isSuperAdmin: false,
+    });
     getOwnerSettingsMock.mockResolvedValue({
       brand: buildBrandFixture(),
       posting: buildPostingFixture(),
