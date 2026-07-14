@@ -52,16 +52,20 @@ export async function initiateOAuthConnect(
   providerInput: string,
 ): Promise<{ success: boolean; redirectUrl?: string; error?: string }> {
   const provider = providerSchema.parse(providerInput);
-  await requireAuthContext();
+  const { accountId } = await requireAuthContext();
   const supabase = createServiceSupabaseClient();
 
   const state = randomUUID();
   const expiresAt = new Date(Date.now() + OAUTH_STATE_EXPIRY_MS).toISOString();
 
+  // Bind the INITIATING brand into the state so the callback attributes the
+  // connection to the brand that started the flow -- not whichever brand happens
+  // to be active at callback time (multi-brand: the user may switch mid-flow).
   const { error } = await supabase.from("oauth_states").insert({
     state,
     provider,
     expires_at: expiresAt,
+    account_id: accountId,
   });
 
   if (error) {
@@ -88,13 +92,15 @@ export async function completeOAuthConnect(
   stateParam: string,
 ): Promise<{ success: boolean; error?: string }> {
   const provider = providerSchema.parse(providerInput);
-  const { accountId } = await requireAuthContext();
+  const ctx = await requireAuthContext();
   const supabase = createServiceSupabaseClient();
 
-  // 1. Validate state: must exist, unused, and not expired
+  // 1. Validate state: must exist, unused, and not expired. Read the brand that
+  //    STARTED the flow (account_id), which is what the connection is attributed
+  //    to -- never the callback-time active brand.
   const { data: oauthState, error: stateError } = await supabase
     .from("oauth_states")
-    .select("id, provider, used_at, expires_at")
+    .select("id, provider, used_at, expires_at, account_id")
     .eq("state", stateParam)
     .eq("provider", provider)
     .is("used_at", null)
@@ -109,6 +115,19 @@ export async function completeOAuthConnect(
   if (!oauthState) {
     return { success: false, error: "Invalid or expired OAuth state" };
   }
+
+  // Attribute to the initiating brand, and fail safe if the caller is no longer
+  // a member of it (e.g. access revoked during the OAuth round-trip).
+  const initiatingAccountId = (oauthState as { account_id: string | null }).account_id;
+  if (!initiatingAccountId) {
+    return { success: false, error: "This connection is missing its brand. Please start it again." };
+  }
+  const isMember =
+    ctx.isSuperAdmin || ctx.brands.some((brand) => brand.accountId === initiatingAccountId);
+  if (!isMember) {
+    return { success: false, error: "You no longer have access to the brand that started this connection." };
+  }
+  const accountId = initiatingAccountId;
 
   // 2. Mark state as used before proceeding (prevents replay)
   const { error: markError } = await supabase
