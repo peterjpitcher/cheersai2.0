@@ -165,8 +165,8 @@ async function PlannerCalendarLoader({
 
   // Fetch scheduled items and recurring campaigns in parallel
   const [calendarItems, recurringItems] = await Promise.all([
-    getContentForCalendar(startDate, endDate),
-    getContentByAccount({ status: ['scheduled', 'approved', 'draft'] }),
+    getContentForCalendar(accountId, startDate, endDate),
+    getContentByAccount(accountId, { status: ['scheduled', 'approved', 'draft'] }),
   ]);
 
   // Resolve thumbnails for all content items via signed Storage URLs

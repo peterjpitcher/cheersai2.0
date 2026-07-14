@@ -2,7 +2,11 @@
  * Content data access functions for server components and page.tsx files.
  *
  * These are NOT server actions -- they run in Server Components or layouts.
- * Uses the anon-key client (respects RLS) for account-scoped queries.
+ * Uses the anon-key client (respects RLS). Under multi-brand tenancy, RLS is a
+ * membership CEILING (it authorises every brand the user belongs to), so these
+ * reads MUST additionally scope to the caller's ACTIVE brand via an explicit
+ * account_id filter -- otherwise a multi-brand user would see other brands'
+ * content. Callers pass the verified active accountId from the auth context.
  */
 
 import { createServerSupabaseClient } from '@/lib/supabase/server';
@@ -46,11 +50,11 @@ function isPlatform(value: unknown): value is Platform {
 // ---------------------------------------------------------------------------
 
 /**
- * Fetch a single content item by ID.
- * RLS enforces account scope -- no explicit account_id filter needed.
+ * Fetch a single content item by ID, scoped to the active brand.
  */
 export async function getContentById(
   id: string,
+  accountId: string,
 ): Promise<ContentItem | null> {
   const supabase = await createServerSupabaseClient();
 
@@ -58,6 +62,7 @@ export async function getContentById(
     .from('content_items')
     .select('*')
     .eq('id', id)
+    .eq('account_id', accountId)
     .is('deleted_at', null)
     .single();
 
@@ -73,24 +78,28 @@ export async function getContentById(
 // ---------------------------------------------------------------------------
 
 /**
- * Fetch content items for the current account with optional filters.
- * RLS enforces account scope automatically via the anon-key client.
+ * Fetch content items for the active brand with optional filters.
  *
+ * @param accountId        - The active brand id to scope to (required)
  * @param options.status  - Filter by one or more statuses (default: all)
  * @param options.limit   - Max rows to return (default: 50)
  * @param options.offset  - Pagination offset (default: 0)
  */
-export async function getContentByAccount(options?: {
-  status?: ContentStatus[];
-  limit?: number;
-  offset?: number;
-}): Promise<ContentItem[]> {
+export async function getContentByAccount(
+  accountId: string,
+  options?: {
+    status?: ContentStatus[];
+    limit?: number;
+    offset?: number;
+  },
+): Promise<ContentItem[]> {
   const supabase = await createServerSupabaseClient();
   const { status, limit = 50, offset = 0 } = options ?? {};
 
   let query = supabase
     .from('content_items')
     .select('*')
+    .eq('account_id', accountId)
     .is('deleted_at', null)
     .order('updated_at', { ascending: false })
     .range(offset, offset + limit - 1);
@@ -113,13 +122,15 @@ export async function getContentByAccount(options?: {
 // ---------------------------------------------------------------------------
 
 /**
- * Fetch content items scheduled within a date range (for planner calendar).
- * Only returns items that have a scheduled_at timestamp.
+ * Fetch content items scheduled within a date range (for planner calendar),
+ * scoped to the active brand. Only returns items with a scheduled_at timestamp.
  *
+ * @param accountId - The active brand id to scope to (required)
  * @param startDate - ISO date string (inclusive)
  * @param endDate   - ISO date string (inclusive)
  */
 export async function getContentForCalendar(
+  accountId: string,
   startDate: string,
   endDate: string,
 ): Promise<ContentItem[]> {
@@ -128,6 +139,7 @@ export async function getContentForCalendar(
   const { data, error } = await supabase
     .from('content_items')
     .select('*')
+    .eq('account_id', accountId)
     .is('deleted_at', null)
     .gte('scheduled_at', startDate)
     .lte('scheduled_at', endDate)
