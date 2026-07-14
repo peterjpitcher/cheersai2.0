@@ -71,18 +71,20 @@ describe('content queries', () => {
     const query = createQueryMock({ data: makeContentRow(), error: null });
     vi.mocked(createServerSupabaseClient).mockResolvedValue(query.client as never);
 
-    await getContentById('content-1');
+    await getContentById('content-1', 'account-1');
 
     expect(query.calls).toContainEqual({ method: 'is', args: ['deleted_at', null] });
+    expect(query.calls).toContainEqual({ method: 'eq', args: ['account_id', 'account-1'] });
   });
 
   it('does not return soft-deleted rows when fetching account content', async () => {
     const query = createQueryMock({ data: [makeContentRow()], error: null });
     vi.mocked(createServerSupabaseClient).mockResolvedValue(query.client as never);
 
-    await getContentByAccount({ status: ['scheduled', 'draft'] });
+    await getContentByAccount('account-1', { status: ['scheduled', 'draft'] });
 
     expect(query.calls).toContainEqual({ method: 'is', args: ['deleted_at', null] });
+    expect(query.calls).toContainEqual({ method: 'eq', args: ['account_id', 'account-1'] });
     expect(query.calls).toContainEqual({ method: 'in', args: ['status', ['scheduled', 'draft']] });
   });
 
@@ -90,9 +92,10 @@ describe('content queries', () => {
     const query = createQueryMock({ data: [makeContentRow()], error: null });
     vi.mocked(createServerSupabaseClient).mockResolvedValue(query.client as never);
 
-    await getContentForCalendar('2026-06-01T00:00:00.000Z', '2026-06-30T23:59:59.999Z');
+    await getContentForCalendar('account-1', '2026-06-01T00:00:00.000Z', '2026-06-30T23:59:59.999Z');
 
     expect(query.calls).toContainEqual({ method: 'is', args: ['deleted_at', null] });
+    expect(query.calls).toContainEqual({ method: 'eq', args: ['account_id', 'account-1'] });
     expect(query.calls).toContainEqual({
       method: 'gte',
       args: ['scheduled_at', '2026-06-01T00:00:00.000Z'],

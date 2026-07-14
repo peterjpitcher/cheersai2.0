@@ -1,18 +1,17 @@
 'use client';
 
-import { Bell, ChevronDown, LogOut } from 'lucide-react';
+import { Bell, LogOut } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useFormStatus } from 'react-dom';
 
+import { BrandSwitcher } from '@/components/layout/brand-switcher';
+import { formatBadgeCount } from '@/components/layout/format-badge-count';
 import { APP_NAV_ITEMS, isNavActive } from '@/config/app-nav';
 import { cn } from '@/lib/utils';
 import type { ConnectionHealthSummary } from '@/types/providers';
 
-/** Cap notification badge display at 99+ for large counts. */
-export function formatBadgeCount(count: number): string {
-  return count > 99 ? '99+' : String(count);
-}
+export { formatBadgeCount };
 
 interface TopRailProps {
   healthSummaries?: ConnectionHealthSummary[];
@@ -152,35 +151,8 @@ export function TopRail({ notificationCount = 0, signOutAction }: TopRailProps) 
           )}
         </Link>
 
-        {/* Venue / account chip */}
-        <Link
-          href="/settings"
-          className={cn(
-            'flex items-center gap-2 rounded-full py-1 pl-1 pr-3',
-            'focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none',
-          )}
-          style={{ border: '1px solid var(--c-line)' }}
-        >
-          <div
-            className="flex h-6 w-6 items-center justify-center rounded-full text-xs font-medium"
-            style={{
-              background: 'var(--c-paper-2)',
-              color: 'var(--c-ink-2)',
-            }}
-          >
-            TA
-          </div>
-          <span
-            className="hidden text-sm font-medium sm:inline"
-            style={{ color: 'var(--c-ink)' }}
-          >
-            The Anchor
-          </span>
-          <ChevronDown
-            size={14}
-            style={{ color: 'var(--c-ink-3)' }}
-          />
-        </Link>
+        {/* Active-brand switcher */}
+        <BrandSwitcher />
 
         {signOutAction ? (
           <form action={signOutAction}>

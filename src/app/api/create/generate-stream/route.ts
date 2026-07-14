@@ -15,8 +15,7 @@
 import { NextRequest } from "next/server";
 import { DateTime } from "luxon";
 
-import { createServerSupabaseClient } from "@/lib/supabase/server";
-import { resolveAccountId } from "@/lib/auth/server";
+import { getCurrentUser } from "@/lib/auth/server";
 import { getRateLimitKey, isRateLimited } from "@/lib/auth/rate-limit";
 import { getOpenAIClient } from "@/lib/ai/client";
 import { buildInstantPostPrompt } from "@/lib/ai/prompts";
@@ -46,24 +45,21 @@ function encode(event: StreamEvent): string {
 }
 
 export async function POST(request: NextRequest): Promise<Response> {
-  // --- Auth ---
-  const supabase = await createServerSupabaseClient();
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser();
+  // --- Auth (active brand, membership-verified) ---
+  const user = await getCurrentUser();
 
-  if (authError || !user) {
+  if (!user) {
     return new Response(JSON.stringify({ error: "Unauthorized" }), {
       status: 401,
       headers: { "Content-Type": "application/json" },
     });
   }
 
-  const accountId = resolveAccountId(user);
+  // Authenticated but with no active brand -> distinct from unauthenticated.
+  const accountId = user.activeAccountId;
   if (!accountId) {
-    return new Response(JSON.stringify({ error: "Account not found" }), {
-      status: 401,
+    return new Response(JSON.stringify({ error: "No active brand" }), {
+      status: 403,
       headers: { "Content-Type": "application/json" },
     });
   }

@@ -302,8 +302,8 @@ export async function getScheduledContentAction(
   endDate: string,
 ): Promise<{ data?: ContentItem[]; error?: string }> {
   try {
-    await requireAuthContext();
-    const items = await getContentForCalendar(startDate, endDate);
+    const { accountId } = await requireAuthContext();
+    const items = await getContentForCalendar(accountId, startDate, endDate);
     return { data: items };
   } catch (err) {
     return { error: err instanceof Error ? err.message : String(err) };

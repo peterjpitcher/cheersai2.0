@@ -27,6 +27,12 @@ export default async function AppLayout({ children }: AppLayoutProps) {
     redirect('/auth/login');
   }
 
+  // Authenticated but with no accessible brand -> dedicated empty state, not
+  // the brand-scoped shell (whose queries all assume an active brand).
+  if (!user.activeAccountId) {
+    redirect('/no-access');
+  }
+
   // Fetch connection health for sidebar dots and toast — silent fallback on error
   let healthSummaries: ConnectionHealthSummary[] = [];
   try {

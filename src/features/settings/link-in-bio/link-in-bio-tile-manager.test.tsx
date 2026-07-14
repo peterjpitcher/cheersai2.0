@@ -83,8 +83,11 @@ function renderManager() {
         id: "user-1",
         email: "owner@example.test",
         accountId: "account-1",
+        activeAccountId: "account-1",
         businessName: "The Anchor",
         timezone: "Europe/London",
+        brands: [{ accountId: "account-1", name: "The Anchor", timezone: "Europe/London" }],
+        isSuperAdmin: false,
       }}
     >
       <ToastProvider>
