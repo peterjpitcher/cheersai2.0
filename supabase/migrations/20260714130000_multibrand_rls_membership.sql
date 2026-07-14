@@ -124,6 +124,22 @@ begin
 end $$;
 
 -- ============================================================================
+-- STEP 2 prerequisites -- grants required for the rewritten policies to work
+-- under the roles that actually hit RLS.
+--   * anon needs EXECUTE on the membership helpers, otherwise anonymous reads
+--     of `to public` tables raise "permission denied for function" (a 500)
+--     instead of returning an empty set. For anon (auth.uid() is null) both
+--     helpers return false, so this grants no access -- only clean fail-closed.
+--   * authenticated needs SELECT on account_members because the storage.objects
+--     media policies run as the authenticated user and read account_members
+--     directly. account_members RLS still restricts rows to the caller's own
+--     memberships, so this exposes nothing beyond the user's own access list.
+-- ============================================================================
+grant execute on function public.is_account_member(uuid) to anon;
+grant execute on function public.is_super_admin() to anon;
+grant select on public.account_members to authenticated;
+
+-- ============================================================================
 -- STEP 2 -- RLS policy rewrites (buckets A, B, C, D, E), grouped by table.
 -- Command, roles, and any service_role OR branch are preserved verbatim; only
 -- the tenant predicate is replaced. `with_check` is left null where it was null
@@ -143,12 +159,10 @@ drop policy if exists "Accounts updatable by owner"  on public.accounts;
 drop policy if exists accounts_select on public.accounts;
 create policy accounts_select on public.accounts
   for select to public
-  using (
-    accounts.id in (select account_members.account_id
-                      from public.account_members
-                     where account_members.user_id = auth.uid())
-    or public.is_super_admin()
-  );
+  -- Use the SECURITY DEFINER helper (super-admin OR membership). Inlining the
+  -- account_members subquery here would evaluate with the CALLER's privileges,
+  -- which PR1 revoked from authenticated/anon -> permission-denied for members.
+  using (public.is_account_member(accounts.id));
 
 drop policy if exists accounts_insert on public.accounts;
 create policy accounts_insert on public.accounts
@@ -817,6 +831,9 @@ update public.accounts
 
 alter table public.accounts alter column business_name set not null;
 
+-- Guarded add (Postgres has no ADD CONSTRAINT IF NOT EXISTS) so a re-run after a
+-- partial failure does not abort on "constraint already exists".
+alter table public.accounts drop constraint if exists accounts_business_name_not_blank;
 alter table public.accounts
   add constraint accounts_business_name_not_blank check (btrim(business_name) <> '');
 
