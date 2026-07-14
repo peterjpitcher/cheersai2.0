@@ -21,6 +21,7 @@
     "ops:backfill-event-overlays": "tsx scripts/ops/backfill-event-overlays.ts",
     "ops:backfill-link-in-bio-url": "tsx scripts/ops/backfill-link-in-bio-url.ts",
     "ops:backfill-opt-in-overlays": "tsx scripts/ops/backfill-opt-in-overlays.ts",
+    "ops:bootstrap-super-admin": "tsx scripts/ops/bootstrap-super-admin.ts",
     "ops:invoke": "tsx scripts/ops/invoke-function.ts",
     "ops:link-auth-user": "tsx scripts/ops/link-auth-user.ts",
     "ops:regenerate-story-derivatives": "tsx scripts/ops/regenerate-story-derivatives.ts",
