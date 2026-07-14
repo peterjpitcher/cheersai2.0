@@ -72,18 +72,21 @@ describe('POST /api/booking-conversions', () => {
     mocks.select.mockReturnValue({ eq: mocks.selectEq });
     mocks.selectEq.mockReturnValue({ maybeSingle: mocks.maybeSingle });
     mocks.from.mockImplementation((table: string) => {
-      if (table === 'meta_ad_accounts') return { select: mocks.select };
+      if (table === 'meta_ad_accounts' || table === 'accounts') return { select: mocks.select };
       return { upsert: mocks.upsert, update: mocks.update };
     });
     mocks.upsert.mockResolvedValue({ error: null });
     mocks.maybeSingle.mockResolvedValue({ data: null, error: null });
   });
 
-  it('rejects requests without the bearer secret', async () => {
+  it('rejects requests with an unrecognised secret', async () => {
+    // A wrong secret no longer matches the env path; it is looked up as a
+    // possible per-brand ingest key (no match here) and rejected. No event row
+    // is written.
     const response = await POST(makeRequest(validPayload, 'wrong-secret'));
 
     expect(response.status).toBe(401);
-    expect(mocks.from).not.toHaveBeenCalled();
+    expect(mocks.upsert).not.toHaveBeenCalled();
   });
 
   it('rejects invalid payloads', async () => {

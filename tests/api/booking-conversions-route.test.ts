@@ -34,6 +34,11 @@ interface CapturedCalls {
 function buildSupabaseMock(captured: CapturedCalls) {
   return {
     from: vi.fn(() => ({
+      select: vi.fn(() => ({
+        eq: vi.fn(() => ({
+          maybeSingle: vi.fn(() => Promise.resolve({ data: null, error: null })),
+        })),
+      })),
       upsert: vi.fn((payload: Record<string, unknown>, options: unknown) => {
         captured.upserts.push({ payload, options });
         return Promise.resolve({ error: null });
@@ -83,12 +88,13 @@ describe('POST /api/booking-conversions', () => {
     forwardToCapiMock.mockResolvedValue({ status: 'sent', eventId: 'TB-1' });
   });
 
-  it('returns 500 with a clear message when the ingest secret is not configured', async () => {
+  it('rejects with 401 when no legacy env secret and no matching per-brand key', async () => {
+    // The legacy env path is now optional (per-brand ingest keys). With no env
+    // secret and no brand whose booking_ingest_secret matches, the request is
+    // simply unauthorized -- not a 500 misconfiguration.
     delete process.env.BOOKING_CONVERSION_INGEST_SECRET;
     const response = await POST(makeRequest({ bookingId: 'TB-1' }));
-    expect(response.status).toBe(500);
-    const body = await response.json();
-    expect(body.error).toContain('BOOKING_CONVERSION_INGEST_SECRET');
+    expect(response.status).toBe(401);
   });
 
   it('rejects a wrong bearer secret with 401', async () => {

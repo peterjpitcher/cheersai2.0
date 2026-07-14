@@ -48,10 +48,14 @@ vi.mock('next/cache', () => ({
 // ---------------------------------------------------------------------------
 
 function authContext(overrides: Partial<{ accountId: string; user: { id: string } }> = {}) {
+  const accountId = overrides.accountId ?? 'acc-1';
   return {
-    accountId: overrides.accountId ?? 'acc-1',
+    accountId,
+    activeAccountId: accountId,
     user: overrides.user ?? { id: 'user-1' },
     supabase: { from: mockFrom },
+    brands: [{ accountId, name: 'Test', timezone: 'Europe/London' }],
+    isSuperAdmin: false,
   };
 }
 
@@ -116,7 +120,13 @@ function mockCompleteOAuthFrom({
   mockFrom.mockImplementation((table: string) => {
     if (table === 'oauth_states') {
       oauthCalls++;
-      return oauthCalls === 1 ? mockQueryChain(oauthStateRow) : mockUpdateChain();
+      // The state row now carries the initiating brand; inject a default so
+      // existing fixtures (which predate account_id binding) resolve to acc-1.
+      const row =
+        oauthStateRow && typeof oauthStateRow === 'object' && !('account_id' in (oauthStateRow as object))
+          ? { ...(oauthStateRow as object), account_id: 'acc-1' }
+          : oauthStateRow;
+      return oauthCalls === 1 ? mockQueryChain(row) : mockUpdateChain();
     }
     if (table === 'social_connections') {
       socialCalls++;

@@ -60,14 +60,6 @@ function normaliseAuthHeader(value: string | null) {
   return value.replace(/^Bearer\s+/i, '').trim();
 }
 
-function requiredEnv(key: string) {
-  const value = process.env[key]?.trim();
-  if (!value) {
-    throw new Error(`${key} is not configured`);
-  }
-  return value;
-}
-
 function nullIfEmpty(value: string | null | undefined) {
   if (typeof value !== 'string') return null;
   const trimmed = value.trim();
@@ -90,22 +82,36 @@ function normaliseDateTime(value: string | null | undefined) {
 }
 
 export async function POST(request: Request) {
-  let secret: string;
-  let accountId: string;
-
-  try {
-    secret = requiredEnv('BOOKING_CONVERSION_INGEST_SECRET');
-    accountId = requiredEnv('BOOKING_CONVERSION_ACCOUNT_ID');
-  } catch (error) {
-    return jsonNoStore(
-      { error: error instanceof Error ? error.message : 'Booking conversion ingest is not configured.' },
-      { status: 500 },
-    );
+  const suppliedSecret = normaliseAuthHeader(request.headers.get('authorization'));
+  if (!suppliedSecret) {
+    return jsonNoStore({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const suppliedSecret = normaliseAuthHeader(request.headers.get('authorization'));
-  // Constant-time comparison — a plain !== leaks the secret via response timing.
-  if (!validateSecret(suppliedSecret, secret)) {
+  const supabase = createServiceSupabaseClient();
+
+  // Resolve the target brand from the supplied ingest secret (no free-form
+  // account id is ever trusted from the caller).
+  let accountId: string | null = null;
+
+  // 1. Legacy single-brand env path (constant-time), kept for the original
+  //    brand's existing integration. Optional -- absent in per-brand-only setups.
+  const legacySecret = process.env.BOOKING_CONVERSION_INGEST_SECRET;
+  const legacyAccountId = process.env.BOOKING_CONVERSION_ACCOUNT_ID;
+  if (legacySecret && legacyAccountId && validateSecret(suppliedSecret, legacySecret)) {
+    accountId = legacyAccountId;
+  }
+
+  // 2. Per-brand ingest key -> the owning brand.
+  if (!accountId) {
+    const { data: brand } = await supabase
+      .from('accounts')
+      .select('id')
+      .eq('booking_ingest_secret', suppliedSecret)
+      .maybeSingle<{ id: string }>();
+    if (brand) accountId = brand.id;
+  }
+
+  if (!accountId) {
     return jsonNoStore({ error: 'Unauthorized' }, { status: 401 });
   }
 
@@ -115,8 +121,6 @@ export async function POST(request: Request) {
   } catch {
     return jsonNoStore({ error: 'Invalid booking conversion payload.' }, { status: 400 });
   }
-
-  const supabase = createServiceSupabaseClient();
   const metaEventId = nullIfEmpty(parsedPayload.metaEventId) ?? parsedPayload.bookingId;
 
   // Keep occurredAt inside Meta's ~7-day CAPI acceptance window. A future timestamp is bad data
