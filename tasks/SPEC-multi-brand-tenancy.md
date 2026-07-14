@@ -68,10 +68,10 @@ RLS never selects the active brand (Postgres cannot see the app cookie — revie
 - **Only `current_account_id()`** encodes the 1:1 assumption. Verified live: `sync_user_auth_snapshot()`, `purge_user_auth_snapshot()` (maintain `public.user_auth_snapshot`, a mirror of auth.users), and `inspect_worker_db_context()` **do not** reference `accounts`/`auth_user_id`. No trigger references the constraint being dropped.
 - `public.user_auth_snapshot` exists and can back the admin user-list without paging `auth.admin.listUsers`.
 
-### 3.5 Meta/paid-ads cluster (F-06 corrected)
-- **Live prod:** these tables exist with RLS; **none has any `account_id` FK** (verified). `ad_sets`/`ads` have **no `account_id` column** (scoped via parent).
-- **CI/local baseline** (`supabase/baseline/v1_baseline.sql`, staged into the migration chain by `.github/workflows/ci.yml`): **5 tables declare `account_id REFERENCES auth.users(id)`** — `booking_conversion_events:563`, `meta_ad_accounts:590`, `meta_campaigns:593`, `meta_optimisation_actions:596`, `meta_optimisation_runs:614` — and `20260609092541_ad_metrics_history.sql:11` creates the same on a new table.
-- **Therefore:** prod has no FK, but a clean rebuild has `auth.users` FKs. The Meta migration must be **catalog-driven and idempotent** (detect+drop any `auth.users` FK, backfill, add named `accounts(id)` FK, assert the target) and tested on **both** a clean-baseline rebuild and a prod-shaped upgrade. The baseline generator should also be corrected so CI stops recreating the wrong FK.
+### 3.5 Meta/paid-ads cluster (F-06 — CORRECTED via `pg_constraint`, 2026-07-14)
+- **Live prod (authoritative `pg_constraint` check):** **6 tables + `oauth_states` DO have an `account_id` FK, and every one targets `auth.users(id)`** — `meta_campaigns`, `meta_ad_accounts`, `meta_optimisation_actions`, `meta_optimisation_runs`, `ad_metrics_history`, `booking_conversion_events`, and `oauth_states`. So `account_id` on these currently stores an **auth user id**, not `accounts.id`. `ad_sets`/`ads` have **no `account_id` column** (scoped via `campaign_id`/`adset_id`). *(An earlier `information_schema.constraint_column_usage` check wrongly reported no FK — that view under-reports cross-schema FKs. `pg_constraint` is authoritative and the reviewer's F-06 was correct that these FKs exist.)*
+- **CI/local baseline** (`supabase/baseline/v1_baseline.sql`, staged into the chain by `.github/workflows/ci.yml`) declares the same `auth.users(id)` FKs (`:563/:590/:593/:596/:614`), and `20260609092541_ad_metrics_history.sql:11` creates one on its new table — so prod and clean-rebuild agree here.
+- **Therefore (mandatory, before the Bucket-B RLS rewrite):** the migration must be **catalog-driven and idempotent** per table — detect+drop the `account_id → auth.users` FK, backfill `account_id = accounts.id` via the `auth_user_id` join (an identity no-op on today's data, but must run explicitly), add a named `accounts(id)` FK, and assert the target. If skipped, `is_account_member(account_id)` matches **zero rows** for any brand whose `accounts.id ≠ auth_user_id`. `oauth_states.account_id` must also be repointed for the F-05 OAuth-binding work. Test on **both** a clean-baseline rebuild and a prod-shaped upgrade.
 
 ### 3.6 OAuth binding (F-05 confirmed)
 - Normal FB/IG flow: `initiateOAuthConnect` writes **no `account_id`** into `oauth_states` (`connections/actions.ts:61-65`); `completeOAuthConnect` attributes the token to the **session's active brand** at callback (`:91`, state lookup `:96-98` omits `account_id`). The Facebook **Ads** flow already binds `account_id` in state and reads it back (`actions-ads.ts:59-63`, `facebook-ads/callback/route.ts`).
@@ -219,7 +219,7 @@ Single shared constant + options: `HttpOnly`, `Secure` in production, `SameSite=
 | `storage.objects` media bucket | `(storage.foldername(name))[1] = (SELECT id::text …)` | **text compare, no UUID cast** (F-24): `(storage.foldername(name))[1] IN (SELECT account_id::text FROM account_members WHERE user_id = auth.uid())` (+ `OR is_super_admin()`) |
 | `oauth_states` (`created_by = auth.uid()`), public insert `WITH CHECK (true)` | — | **No change.** Listed explicitly. |
 
-**Meta prerequisite (F-06):** catalog-driven per table — detect+drop any `account_id → auth.users` FK (present in CI baseline), backfill (`SET account_id = a.id FROM accounts a WHERE t.account_id = a.auth_user_id`), assert no orphans, add named `accounts(id)` FK, assert target. Test clean-rebuild **and** prod-shaped upgrade.
+**Meta prerequisite (F-06):** catalog-driven per table — detect+drop the `account_id → auth.users` FK (present in **prod AND the CI baseline** — 6 Meta tables + `oauth_states`; confirmed via `pg_constraint` 2026-07-14), backfill (`SET account_id = a.id FROM accounts a WHERE t.account_id = a.auth_user_id`), assert no orphans, add named `accounts(id)` FK, assert target. Test clean-rebuild **and** prod-shaped upgrade.
 
 ---
 
@@ -277,7 +277,7 @@ Structured events + alerts for: membership denial, invalid active cookie, switch
 
 ## Appendix A — Review disposition (`REVIEW-SPEC-multi-brand-tenancy.md`)
 
-**Verified against code/DB (all confirmed):** F-01, F-03, F-05, F-06 (mechanism confirmed; table list corrected — `ad_sets`/`ads` have no `account_id`, 5 Meta tables carry the CI-baseline `auth.users` FK), F-12, F-15, F-21.
+**Verified against code/DB (all confirmed):** F-01, F-03, F-05, F-06 (mechanism confirmed; **correction 2026-07-14 via `pg_constraint`:** the `account_id → auth.users` FK exists in **prod** as well as the CI baseline, on the 6 Meta tables + `oauth_states` — my earlier `information_schema` "no FK" reading was wrong; `ad_sets`/`ads` have no `account_id`), F-12, F-15, F-21.
 
 | Finding | Disposition | Where |
 |---|---|---|
