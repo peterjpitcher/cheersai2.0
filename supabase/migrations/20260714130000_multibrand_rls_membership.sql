@@ -728,10 +728,18 @@ create policy "Tournaments accessible by account owner" on public.tournaments
 -- redundant, multi-account-broken JWT duplicate of the media SELECT path and is
 -- dropped (folded into media_select). Folder segment 1 is compared as TEXT to
 -- the caller's memberships (no uuid cast).
+--
+-- storage.objects is owned by supabase_storage_admin. Where the migration role
+-- cannot alter it (e.g. the local CI stack), this block skips with a warning
+-- instead of failing the whole migration: storage RLS is defence-in-depth (the
+-- app serves media via service-role signed URLs). In that case apply these
+-- policies manually as supabase_storage_admin.
 -- ---------------------------------------------------------------------------
-drop policy if exists media_read_by_account on storage.objects;
+do $$
+begin
+  drop policy if exists media_read_by_account on storage.objects;
 
-drop policy if exists media_select on storage.objects;
+  drop policy if exists media_select on storage.objects;
 create policy media_select on storage.objects
   for select to authenticated
   using (
@@ -776,20 +784,24 @@ create policy media_update on storage.objects
     )
   );
 
-drop policy if exists media_delete on storage.objects;
-create policy media_delete on storage.objects
-  for delete to authenticated
-  using (
-    bucket_id = 'media'::text
-    and (
-      (storage.foldername(name))[1] in (
-        select account_members.account_id::text
-          from public.account_members
-         where account_members.user_id = auth.uid()
+  drop policy if exists media_delete on storage.objects;
+  create policy media_delete on storage.objects
+    for delete to authenticated
+    using (
+      bucket_id = 'media'::text
+      and (
+        (storage.foldername(name))[1] in (
+          select account_members.account_id::text
+            from public.account_members
+           where account_members.user_id = auth.uid()
+        )
+        or public.is_super_admin()
       )
-      or public.is_super_admin()
-    )
-  );
+    );
+exception
+  when insufficient_privilege then
+    raise warning 'multibrand PR2: skipped storage.objects media policy rewrite (insufficient privilege on storage.objects). Apply as supabase_storage_admin. Detail: %', sqlerrm;
+end $$;
 
 -- ============================================================================
 -- STEP 3 -- Bucket F: intentionally NOT touched.
