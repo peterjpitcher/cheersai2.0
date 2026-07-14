@@ -78,15 +78,19 @@ alter table public.accounts
   add column if not exists archived_at timestamptz;
 update public.accounts
   set created_by_user_id = auth_user_id
-  where created_by_user_id is null and auth_user_id is not null;
+  where created_by_user_id is null and auth_user_id is not null
+    and exists (select 1 from auth.users u where u.id = accounts.auth_user_id);
 
 -- 5) Backfill one membership per existing account --------------------------
 --    Runs while accounts.auth_user_id is still UNIQUE NOT NULL, so exactly
---    one clean membership row per account.
+--    one clean membership row per account. Guarded against dormant placeholder
+--    accounts (e.g. OWNER_ACCOUNT_ID) whose auth_user_id is not a real user --
+--    those would violate the FK to auth.users and cannot be a member anyway.
 insert into public.account_members (account_id, user_id)
-select id, auth_user_id
-from public.accounts
-where auth_user_id is not null
+select a.id, a.auth_user_id
+from public.accounts a
+where a.auth_user_id is not null
+  and exists (select 1 from auth.users u where u.id = a.auth_user_id)
 on conflict (account_id, user_id) do nothing;
 
 commit;
