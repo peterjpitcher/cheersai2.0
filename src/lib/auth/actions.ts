@@ -1,10 +1,14 @@
 'use server';
 
+import { cookies } from 'next/headers';
+import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { z } from 'zod';
 
 import { env } from '@/env';
+import { ACTIVE_BRAND_COOKIE, activeBrandCookieOptions } from '@/lib/auth/active-brand';
 import { checkAuthRateLimit } from '@/lib/auth/rate-limit';
+import { getCurrentUser } from '@/lib/auth/server';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 
 const emailSchema = z.string().email('Please enter a valid email address');
@@ -105,10 +109,42 @@ export async function signInWithPassword(
 }
 
 /**
- * Sign out the current user and redirect to login.
+ * Sign out the current user, clear the active-brand cookie, and redirect.
  */
 export async function signOut(): Promise<void> {
   const supabase = await createServerSupabaseClient();
   await supabase.auth.signOut();
+  const store = await cookies();
+  store.delete(ACTIVE_BRAND_COOKIE);
   redirect('/login');
+}
+
+/**
+ * Switch the active brand. Re-verifies the user is a member of the target brand
+ * server-side (never trusts the client value), sets the active-brand cookie,
+ * and revalidates the layout so every server component re-renders for the new
+ * brand.
+ */
+export async function switchActiveBrand(
+  accountId: string,
+): Promise<{ success?: boolean; error?: string }> {
+  const parsed = z.string().uuid().safeParse(accountId);
+  if (!parsed.success) {
+    return { error: 'Invalid brand.' };
+  }
+
+  const user = await getCurrentUser();
+  if (!user) {
+    return { error: 'Not authenticated.' };
+  }
+
+  const isMember = user.brands.some((brand) => brand.accountId === parsed.data);
+  if (!isMember) {
+    return { error: 'You do not have access to that brand.' };
+  }
+
+  const store = await cookies();
+  store.set(ACTIVE_BRAND_COOKIE, parsed.data, activeBrandCookieOptions());
+  revalidatePath('/', 'layout');
+  return { success: true };
 }

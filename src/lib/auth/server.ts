@@ -1,16 +1,24 @@
 import { redirect } from 'next/navigation';
 
+import { readActiveBrandCookie } from '@/lib/auth/active-brand';
+import { AuthDependencyError } from '@/lib/auth/errors';
+import { isSuperAdmin, loadBrands, resolveActiveBrand } from '@/lib/auth/membership';
 import type { AppUser, AuthContext } from '@/lib/auth/types';
 import { DEFAULT_TIMEZONE } from '@/lib/constants';
-import { isSchemaMissingError } from '@/lib/supabase/errors';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { createServiceSupabaseClient } from '@/lib/supabase/service';
 
 /**
- * Get the current authenticated user, or null if not signed in.
+ * Get the current authenticated user (with their brands + active brand), or
+ * null if not signed in.
  *
  * Critical: uses getUser() (NOT getSession()) to validate the JWT server-side.
  * See RESEARCH.md Pitfall 2 -- getSession() does not re-validate the JWT.
+ *
+ * Error taxonomy (multi-brand): a NULL return means "not authenticated". A
+ * dependency failure (membership/account/admin query error) is THROWN as
+ * AuthDependencyError so it surfaces as a service error, rather than silently
+ * logging an authenticated user out.
  */
 export async function getCurrentUser(): Promise<AppUser | null> {
   try {
@@ -21,7 +29,7 @@ export async function getCurrentUser(): Promise<AppUser | null> {
     } = await supabase.auth.getUser();
 
     if (authError) {
-      // session_not_found or refresh_token_not_found -- user is not authenticated
+      // session_not_found / refresh_token_not_found -- user is not authenticated
       if (isSessionError(authError)) {
         return null;
       }
@@ -33,54 +41,34 @@ export async function getCurrentUser(): Promise<AppUser | null> {
       return null;
     }
 
-    // Query accounts table for the user's account
-    const accountId = resolveAccountId(user);
-
-    const { data: account, error: accountError } = await supabase
-      .from('accounts')
-      .select('id, email, business_name, timezone')
-      .eq('auth_user_id', user.id)
-      .maybeSingle<{
-        id: string;
-        email: string;
-        business_name: string | null;
-        timezone: string | null;
-      }>();
-
-    if (accountError && !isSchemaMissingError(accountError)) {
-      console.error('[auth] account query error:', accountError.message);
-      // Fall back to auto-provision below
-    }
-
-    if (account) {
-      return {
-        id: user.id,
-        email: user.email ?? account.email,
-        accountId: account.id,
-        businessName: account.business_name,
-        timezone: account.timezone ?? DEFAULT_TIMEZONE,
-      };
-    }
-
-    // Auto-provision account on first login
-    const provisionedAccount = await autoProvisionAccount(
-      accountId,
-      user.id,
-      user.email ?? `${user.id}@placeholder.local`,
-    );
+    // Resolve brands + active brand via the service-role client. Query errors
+    // here throw AuthDependencyError (see catch below) rather than returning
+    // null, so an outage is not mistaken for a logout.
+    const service = createServiceSupabaseClient();
+    const superAdmin = await isSuperAdmin(service, user.id);
+    const brands = await loadBrands(service, user.id, superAdmin);
+    const cookieValue = await readActiveBrandCookie();
+    const active = resolveActiveBrand(brands, cookieValue);
 
     return {
       id: user.id,
-      email: user.email ?? provisionedAccount.email,
-      accountId: provisionedAccount.id,
-      businessName: provisionedAccount.businessName,
-      timezone: provisionedAccount.timezone,
+      email: user.email ?? '',
+      accountId: active?.accountId ?? null,
+      activeAccountId: active?.accountId ?? null,
+      businessName: active?.name ?? null,
+      timezone: active?.timezone ?? DEFAULT_TIMEZONE,
+      brands,
+      isSuperAdmin: superAdmin,
     };
   } catch (error) {
     // Next.js throws "Dynamic server usage" during static generation for pages
-    // that call cookies()/headers(). This is a control-flow signal, not an auth
-    // error -- re-throw so Next.js handles it properly.
+    // that read cookies()/headers(). This is a control-flow signal -- re-throw.
     if (error instanceof Error && error.message.includes('Dynamic server usage')) {
+      throw error;
+    }
+    // A genuine dependency failure must surface as an error, not a logout.
+    if (error instanceof AuthDependencyError) {
+      console.error('[auth] getCurrentUser dependency error:', error.message, error.cause);
       throw error;
     }
     console.error('[auth] getCurrentUser unexpected error:', error);
@@ -89,8 +77,9 @@ export async function getCurrentUser(): Promise<AppUser | null> {
 }
 
 /**
- * Require an authenticated user, redirecting to login if not signed in.
- * Returns an AuthContext with the user and a service-role Supabase client.
+ * Require an authenticated user WITH an active brand, redirecting otherwise.
+ * Returns an AuthContext with a service-role Supabase client and the verified
+ * active brand.
  *
  * Per AUTH-07: server actions must re-verify auth server-side.
  */
@@ -101,10 +90,23 @@ export async function requireAuthContext(): Promise<AuthContext> {
     redirect('/auth/login');
   }
 
-  // Service-role client for writes -- bypasses RLS
+  // Authenticated but assigned no brand -> a distinct state from "logged out".
+  if (!user.activeAccountId) {
+    redirect('/no-access');
+  }
+
+  // Service-role client for writes -- bypasses RLS. Tenant isolation is enforced
+  // by the verified active-brand accountId, never a caller-supplied value.
   const supabase = createServiceSupabaseClient();
 
-  return { user, supabase, accountId: user.accountId };
+  return {
+    user,
+    supabase,
+    accountId: user.activeAccountId,
+    activeAccountId: user.activeAccountId,
+    brands: user.brands,
+    isSuperAdmin: user.isSuperAdmin,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -112,7 +114,12 @@ export async function requireAuthContext(): Promise<AuthContext> {
 // ---------------------------------------------------------------------------
 
 /**
- * Resolve account ID from user metadata, falling back to user.id.
+ * Resolve an account id from user metadata, falling back to user.id.
+ *
+ * Retained for the streaming API route which has only the auth user in context;
+ * it is NOT used for active-brand resolution (that is cookie + membership based,
+ * see getCurrentUser). Slated for replacement by a request-aware resolver when
+ * the streaming route is migrated to requireApiAuthContext.
  */
 export function resolveAccountId(user: {
   id: string;
@@ -132,93 +139,6 @@ function readAccountId(
   if (typeof candidate !== 'string') return null;
   const trimmed = candidate.trim();
   return trimmed.length ? trimmed : null;
-}
-
-/**
- * Auto-provision an account record on first login.
- * Uses service-role client to bypass RLS for the initial insert.
- */
-async function autoProvisionAccount(
-  accountId: string,
-  authUserId: string,
-  email: string,
-): Promise<{ id: string; email: string; businessName: string | null; timezone: string }> {
-  const defaults = {
-    id: accountId,
-    auth_user_id: authUserId,
-    email,
-    business_name: null as string | null,
-    timezone: DEFAULT_TIMEZONE,
-  };
-
-  try {
-    const service = createServiceSupabaseClient();
-
-    // Check if account already exists (race condition guard)
-    const { data: existing } = await service
-      .from('accounts')
-      .select('id, email, business_name, timezone')
-      .eq('auth_user_id', authUserId)
-      .maybeSingle<{
-        id: string;
-        email: string;
-        business_name: string | null;
-        timezone: string | null;
-      }>();
-
-    if (existing) {
-      return {
-        id: existing.id,
-        email: existing.email,
-        businessName: existing.business_name,
-        timezone: existing.timezone ?? DEFAULT_TIMEZONE,
-      };
-    }
-
-    const { data: inserted, error: insertError } = await service
-      .from('accounts')
-      .insert(defaults)
-      .select('id, email, business_name, timezone')
-      .single<{
-        id: string;
-        email: string;
-        business_name: string | null;
-        timezone: string | null;
-      }>();
-
-    if (insertError) {
-      if (isSchemaMissingError(insertError)) {
-        // Schema not yet deployed -- return fallback
-        return {
-          id: accountId,
-          email,
-          businessName: null,
-          timezone: DEFAULT_TIMEZONE,
-        };
-      }
-      console.error('[auth] auto-provision insert error:', insertError.message);
-      // Fall through to return defaults
-    }
-
-    if (inserted) {
-      return {
-        id: inserted.id,
-        email: inserted.email,
-        businessName: inserted.business_name,
-        timezone: inserted.timezone ?? DEFAULT_TIMEZONE,
-      };
-    }
-  } catch (error) {
-    console.error('[auth] auto-provision error:', error);
-  }
-
-  // Fallback: return a minimal AppUser even if DB provisioning fails
-  return {
-    id: accountId,
-    email,
-    businessName: null,
-    timezone: DEFAULT_TIMEZONE,
-  };
 }
 
 function isSessionError(

@@ -101,7 +101,10 @@ describe('createScheduledBatch', () => {
     vi.mocked(requireAuthContext).mockResolvedValue({
       supabase: supabaseMock.mock as never,
       accountId: 'acc-1',
-      user: { id: 'user-1', email: 'test@test.com', accountId: 'acc-1', businessName: 'Test', timezone: 'Europe/London' } as never,
+      activeAccountId: 'acc-1',
+      brands: [{ accountId: 'acc-1', name: 'Test', timezone: 'Europe/London' }],
+      isSuperAdmin: false,
+      user: { id: 'user-1', email: 'test@test.com', accountId: 'acc-1', activeAccountId: 'acc-1', businessName: 'Test', timezone: 'Europe/London', brands: [{ accountId: 'acc-1', name: 'Test', timezone: 'Europe/London' }], isSuperAdmin: false } as never,
     });
   });
 
@@ -739,7 +742,10 @@ describe('getCalendarItemsAction', () => {
     vi.mocked(requireAuthContext).mockResolvedValue({
       supabase: supabaseMock.mock as never,
       accountId: 'acc-1',
-      user: { id: 'user-1', email: 'test@test.com', accountId: 'acc-1', businessName: 'Test', timezone: 'Europe/London' } as never,
+      activeAccountId: 'acc-1',
+      brands: [{ accountId: 'acc-1', name: 'Test', timezone: 'Europe/London' }],
+      isSuperAdmin: false,
+      user: { id: 'user-1', email: 'test@test.com', accountId: 'acc-1', activeAccountId: 'acc-1', businessName: 'Test', timezone: 'Europe/London', brands: [{ accountId: 'acc-1', name: 'Test', timezone: 'Europe/London' }], isSuperAdmin: false } as never,
     });
   });
 
@@ -893,7 +899,10 @@ describe('getDraft', () => {
     vi.mocked(requireAuthContext).mockResolvedValue({
       supabase: supabaseMock.mock as never,
       accountId: 'acc-1',
-      user: { id: 'user-1', email: 'test@test.com', accountId: 'acc-1', businessName: 'Test', timezone: 'Europe/London' } as never,
+      activeAccountId: 'acc-1',
+      brands: [{ accountId: 'acc-1', name: 'Test', timezone: 'Europe/London' }],
+      isSuperAdmin: false,
+      user: { id: 'user-1', email: 'test@test.com', accountId: 'acc-1', activeAccountId: 'acc-1', businessName: 'Test', timezone: 'Europe/London', brands: [{ accountId: 'acc-1', name: 'Test', timezone: 'Europe/London' }], isSuperAdmin: false } as never,
     });
   });
 
@@ -931,7 +940,10 @@ describe('listDrafts', () => {
     vi.mocked(requireAuthContext).mockResolvedValue({
       supabase: supabaseMock.mock as never,
       accountId: 'acc-1',
-      user: { id: 'user-1', email: 'test@test.com', accountId: 'acc-1', businessName: 'Test', timezone: 'Europe/London' } as never,
+      activeAccountId: 'acc-1',
+      brands: [{ accountId: 'acc-1', name: 'Test', timezone: 'Europe/London' }],
+      isSuperAdmin: false,
+      user: { id: 'user-1', email: 'test@test.com', accountId: 'acc-1', activeAccountId: 'acc-1', businessName: 'Test', timezone: 'Europe/London', brands: [{ accountId: 'acc-1', name: 'Test', timezone: 'Europe/London' }], isSuperAdmin: false } as never,
     });
   });
 
