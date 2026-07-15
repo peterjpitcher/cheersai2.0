@@ -22,6 +22,7 @@ const state = {
 function buildSupabase() {
   const b: Record<string, unknown> = {};
   b.insert = () => b;
+  b.update = () => b;
   b.upsert = () => Promise.resolve({ error: state.mutationError });
   b.select = (_cols?: string, opts?: { head?: boolean }) => {
     if (opts?.head) return Promise.resolve(state.appAdminsCount);
@@ -113,6 +114,45 @@ describe('setSuperAdmin — last-admin protection', () => {
     expect(result).toEqual({ success: true });
     expect(mockLogAdminEvent).toHaveBeenCalledWith(
       expect.objectContaining({ action: 'grant_admin', targetUserId: A_USER }),
+    );
+  });
+});
+
+describe('booking-conversion ingest key', () => {
+  it('returns Forbidden when the caller is not a super-admin', async () => {
+    mockRequireAuthContext.mockResolvedValue({ ...SUPER_ADMIN_CTX, isSuperAdmin: false, supabase: buildSupabase() });
+    const { generateBookingIngestKey, clearBookingIngestKey } = await import('./actions');
+    expect(await generateBookingIngestKey(A_BRAND)).toEqual({ error: 'Forbidden.' });
+    expect(await clearBookingIngestKey(A_BRAND)).toEqual({ error: 'Forbidden.' });
+  });
+
+  it('rejects a non-uuid brand id', async () => {
+    const { generateBookingIngestKey } = await import('./actions');
+    expect(await generateBookingIngestKey('not-a-uuid')).toEqual({ error: 'Invalid brand.' });
+  });
+
+  it('generates a prefixed key, returns it once, and audits it', async () => {
+    const { generateBookingIngestKey } = await import('./actions');
+    const result = await generateBookingIngestKey(A_BRAND);
+    expect(result.success).toBe(true);
+    expect(result.key).toMatch(/^bce_[A-Za-z0-9_-]{43}$/);
+    expect(mockLogAdminEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'set_booking_key', targetAccountId: A_BRAND }),
+    );
+  });
+
+  it('never logs the generated key', async () => {
+    const { generateBookingIngestKey } = await import('./actions');
+    const result = await generateBookingIngestKey(A_BRAND);
+    expect(JSON.stringify(mockLogAdminEvent.mock.calls)).not.toContain(result.key);
+  });
+
+  it('disables ingestion and audits it', async () => {
+    const { clearBookingIngestKey } = await import('./actions');
+    const result = await clearBookingIngestKey(A_BRAND);
+    expect(result).toEqual({ success: true });
+    expect(mockLogAdminEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'clear_booking_key', targetAccountId: A_BRAND }),
     );
   });
 });

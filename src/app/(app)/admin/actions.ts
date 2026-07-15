@@ -9,6 +9,7 @@ import { logAdminEvent } from '@/lib/admin/audit';
 import { requireAuthContext } from '@/lib/auth/server';
 import type { AuthContext } from '@/lib/auth/types';
 import { DEFAULT_TIMEZONE } from '@/lib/constants';
+import { generateIngestSecret } from '@/lib/security/signing';
 
 type ActionResult = { success?: boolean; error?: string };
 
@@ -160,6 +161,64 @@ export async function setSuperAdmin(userId: string, makeAdmin: boolean): Promise
   const { error } = await ctx.supabase.from('app_admins').delete().eq('user_id', userId);
   if (error) return { error: 'Could not revoke admin.' };
   await logAdminEvent({ actorUserId: ctx.user.id, action: 'revoke_admin', targetUserId: userId });
+  revalidatePath('/admin');
+  return { success: true };
+}
+
+// ---------------------------------------------------------------------------
+// booking-conversion ingest key (per-brand)
+// ---------------------------------------------------------------------------
+
+/**
+ * Generate (or rotate) a brand's booking-conversion ingest key. The plaintext
+ * key is returned ONCE for the admin to hand to the brand's booking site; it is
+ * stored plaintext in a service-role-only column and matched by the webhook as a
+ * routing key. The key is never logged. Rotating invalidates the previous key.
+ */
+export async function generateBookingIngestKey(
+  accountId: string,
+): Promise<ActionResult & { key?: string }> {
+  const ctx = await requireSuperAdmin();
+  if (!ctx) return { error: 'Forbidden.' };
+  if (!uuid.safeParse(accountId).success) return { error: 'Invalid brand.' };
+
+  const key = generateIngestSecret();
+  const { data, error } = await ctx.supabase
+    .from('accounts')
+    .update({ booking_ingest_secret: key })
+    .eq('id', accountId)
+    .select('id')
+    .single<{ id: string }>();
+
+  if (error || !data) return { error: 'Could not set the booking key.' };
+
+  await logAdminEvent({
+    actorUserId: ctx.user.id,
+    action: 'set_booking_key',
+    targetAccountId: accountId,
+  });
+  revalidatePath('/admin');
+  return { success: true, key };
+}
+
+/** Disable a brand's booking-conversion ingestion by clearing its ingest key. */
+export async function clearBookingIngestKey(accountId: string): Promise<ActionResult> {
+  const ctx = await requireSuperAdmin();
+  if (!ctx) return { error: 'Forbidden.' };
+  if (!uuid.safeParse(accountId).success) return { error: 'Invalid brand.' };
+
+  const { error } = await ctx.supabase
+    .from('accounts')
+    .update({ booking_ingest_secret: null })
+    .eq('id', accountId);
+
+  if (error) return { error: 'Could not disable booking ingestion.' };
+
+  await logAdminEvent({
+    actorUserId: ctx.user.id,
+    action: 'clear_booking_key',
+    targetAccountId: accountId,
+  });
   revalidatePath('/admin');
   return { success: true };
 }

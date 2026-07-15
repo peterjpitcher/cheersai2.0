@@ -14,7 +14,9 @@ export type AdminAction =
   | 'assign_member'
   | 'revoke_member'
   | 'grant_admin'
-  | 'revoke_admin';
+  | 'revoke_admin'
+  | 'set_booking_key'
+  | 'clear_booking_key';
 
 interface AdminAuditParams {
   actorUserId: string;

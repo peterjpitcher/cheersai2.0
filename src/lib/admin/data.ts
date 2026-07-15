@@ -11,6 +11,8 @@ export interface AdminBrand {
   name: string | null;
   timezone: string;
   archivedAt: string | null;
+  /** Whether a per-brand booking-conversion ingest key is set (secret never exposed here). */
+  bookingIngestConfigured: boolean;
 }
 
 export interface AdminUser {
@@ -24,7 +26,7 @@ export async function getAdminOverview(): Promise<{ brands: AdminBrand[]; users:
   const db = createServiceSupabaseClient();
 
   const [accounts, snapshots, members, admins] = await Promise.all([
-    db.from('accounts').select('id, business_name, timezone, archived_at').order('business_name', { ascending: true }),
+    db.from('accounts').select('id, business_name, timezone, archived_at, booking_ingest_secret').order('business_name', { ascending: true }),
     db.from('user_auth_snapshot').select('user_id, email').order('email', { ascending: true }),
     db.from('account_members').select('account_id, user_id'),
     db.from('app_admins').select('user_id'),
@@ -40,12 +42,19 @@ export async function getAdminOverview(): Promise<{ brands: AdminBrand[]; users:
   }
 
   const brands: AdminBrand[] = (
-    (accounts.data ?? []) as { id: string; business_name: string | null; timezone: string; archived_at: string | null }[]
+    (accounts.data ?? []) as {
+      id: string;
+      business_name: string | null;
+      timezone: string;
+      archived_at: string | null;
+      booking_ingest_secret: string | null;
+    }[]
   ).map((a) => ({
     accountId: a.id,
     name: a.business_name,
     timezone: a.timezone,
     archivedAt: a.archived_at,
+    bookingIngestConfigured: Boolean(a.booking_ingest_secret),
   }));
 
   const users: AdminUser[] = (
