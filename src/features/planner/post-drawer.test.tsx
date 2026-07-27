@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import type { ReactNode } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { PostDrawer } from "@/features/planner/post-drawer";
@@ -154,5 +154,47 @@ describe("<PostDrawer /> media editing", () => {
       expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["content-detail", "content-1"] });
     });
     expect(routerRefresh).toHaveBeenCalled();
+  });
+});
+
+/*
+ * Pinning tests for the `canEdit={canEdit && content.placement !== 'story'}`
+ * guard in post-drawer.tsx. That guard is on <InlineCopyEditor>, so it gates
+ * the caption, NOT the image overlay. Do not "fix" it by dropping the placement
+ * check to make story overlays editable: overlays are edited through
+ * <BannerControls> in planner-content-composer.tsx, which has no placement
+ * guard and already allows it, gated only by BANNER_EDITABLE_STATUSES.
+ *
+ * Removing the check here would introduce a silent-discard bug.
+ * updatePlannerContentBody (src/app/(app)/planner/actions.ts:1000-1005) forces
+ * an empty body when placement is "story", so a user could type a story
+ * caption, save it, see a "Copy updated" toast, and lose the text.
+ *
+ * Both cases below use status "scheduled", which IS editable, so a failure here
+ * points at the placement guard rather than at status gating.
+ */
+describe("<PostDrawer /> story caption gating", () => {
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+    vi.clearAllMocks();
+  });
+
+  it("keeps the caption read-only on a scheduled story", async () => {
+    renderDrawer(makeContent({ placement: "story", status: "scheduled", body: "" }));
+
+    const copyHeading = await screen.findByText("Copy");
+    const copySection = copyHeading.parentElement!;
+    expect(within(copySection).queryByRole("button", { name: /edit/i })).toBeNull();
+    expect(screen.getByText(/stories publish without captions/i)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /add copy/i })).toBeNull();
+  });
+
+  it("keeps the caption editable on a feed post at the same status", async () => {
+    renderDrawer(makeContent({ placement: "feed", status: "scheduled" }));
+
+    const copyHeading = await screen.findByText("Copy");
+    const copySection = copyHeading.parentElement!;
+    expect(within(copySection).getByRole("button", { name: /edit/i })).toBeInTheDocument();
   });
 });

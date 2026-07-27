@@ -16,6 +16,8 @@ type Props = {
   config: ResolvedConfig;
   label: string | null;
   className?: string;
+  /** Meaningful description of the image. Omit for decorative use. */
+  alt?: string;
 };
 
 const positionClasses: Record<ResolvedConfig['position'], string> = {
@@ -35,7 +37,7 @@ const verticalTextStyle: Record<'left' | 'right', CSSProperties> = {
   right: { writingMode: 'vertical-rl' },
 };
 
-export function BannerOverlay({ mediaUrl, config, label, className }: Props) {
+export function BannerOverlay({ mediaUrl, config, label, className, alt }: Props) {
   const position = FIXED_BANNER_POSITION;
   const text =
     config.textOverride && config.textOverride.length > 0
@@ -60,7 +62,7 @@ export function BannerOverlay({ mediaUrl, config, label, className }: Props) {
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src={mediaUrl}
-        alt=""
+        alt={alt ?? ''}
         loading="lazy"
         className="block w-full h-full object-contain"
       />

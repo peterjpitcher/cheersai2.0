@@ -128,6 +128,31 @@ describe('<BannerOverlay />', () => {
     expect(span.getAttribute('style') ?? '').toMatch(/writing-mode:\s*vertical-rl/);
   });
 
+  // The component used to hardcode alt="", so any post rendered through it
+  // lost its image description. Callers can now supply one.
+  it('uses the supplied alt text on the image', () => {
+    render(
+      <BannerOverlay
+        mediaUrl="/x.jpg"
+        config={{ ...baseConfig, textOverride: 'QUIZ' }}
+        label="QUIZ"
+        alt="Post media"
+      />,
+    );
+    expect(screen.getByAltText('Post media')).toBeInTheDocument();
+  });
+
+  it('defaults to decorative when no alt is given', () => {
+    const { container } = render(
+      <BannerOverlay
+        mediaUrl="/x.jpg"
+        config={{ ...baseConfig, textOverride: 'QUIZ' }}
+        label="QUIZ"
+      />,
+    );
+    expect(container.querySelector('img')?.getAttribute('alt')).toBe('');
+  });
+
   // AB-007 perf bonus: img must be lazy-loaded so calendar/list grids don't
   // download every banner upfront.
   it('lazy-loads the underlying image', () => {
