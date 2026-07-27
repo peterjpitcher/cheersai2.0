@@ -130,3 +130,34 @@ describe("listMediaAssets", () => {
     expect(mockNot).toHaveBeenCalledTimes(5);
   });
 });
+
+describe("orderPreviewCandidatesForPlacement", () => {
+  it("puts the story-shaped candidate first for story placement", async () => {
+    const { orderPreviewCandidatesForPlacement } = await import("./data");
+
+    const candidates = [
+      { path: "orig/a.jpg", shape: "square" as const },
+      { path: "derived/a/story.jpg", shape: "story" as const },
+    ];
+    const ordered = orderPreviewCandidatesForPlacement({
+      candidates,
+      storagePath: "orig/a.jpg",
+      placement: "story",
+    });
+
+    expect(ordered[0].path).toBe("derived/a/story.jpg");
+  });
+
+  it("has no story candidate when the asset has no story derivative", async () => {
+    const { orderPreviewCandidatesForPlacement } = await import("./data");
+
+    const candidates = [{ path: "orig/a.jpg", shape: "square" as const }];
+    const ordered = orderPreviewCandidatesForPlacement({
+      candidates,
+      storagePath: "orig/a.jpg",
+      placement: "story",
+    });
+
+    expect(ordered.find((candidate) => candidate.shape === "story")).toBeUndefined();
+  });
+});

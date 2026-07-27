@@ -26,6 +26,13 @@ export interface MediaAssetSummary {
   derivedVariants: Record<string, string>;
   aspectClass: "square" | "story" | "landscape";
   previewUrl?: string;
+  /**
+   * Signed URL for the 1080x1920 story crop, when one exists. The wizard needs
+   * this to preview a story overlay against the image that will actually
+   * publish: previewUrl resolves with feed ordering, which hoists the original
+   * upload ahead of every derivative.
+   */
+  storyPreviewUrl?: string;
   previewShape: "square" | "story";
 }
 
@@ -196,10 +203,23 @@ export async function listMediaAssets(
         }
       }
 
+      // Re-order the same already-signed candidates for story placement and keep
+      // the first genuinely story-shaped hit. No extra storage round trip: every
+      // candidate path was in the batch createSignedUrls call above. Falling back
+      // to a square crop would defeat the purpose, so leave it undefined instead.
+      const storyOrdered = orderPreviewCandidatesForPlacement({
+        candidates,
+        storagePath: asset.storagePath,
+        placement: "story",
+      });
+      const storyCandidate = storyOrdered.find((candidate) => candidate.shape === "story");
+      const storyPreviewUrl = storyCandidate ? signedUrlMap.get(storyCandidate.path) : undefined;
+
       return {
         ...asset,
         previewUrl,
         previewShape,
+        storyPreviewUrl,
       } satisfies MediaAssetSummary;
     });
   } catch (error) {
