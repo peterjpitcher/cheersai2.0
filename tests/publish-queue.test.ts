@@ -1430,5 +1430,215 @@ describe("PublishQueueWorker", () => {
             }
         });
 
+        // Pins the story overlay path end to end: the worker must render onto the
+        // story derivative (not the original), label it with the override text,
+        // upload under banners/{contentId}/{variantId}.jpg, and hand that rendered
+        // image to the provider. Characterises existing worker behaviour so a
+        // future change cannot quietly break story overlays.
+        it("renders a banner onto the story derivative and publishes that rendered image", async () => {
+            const job = {
+                id: "job-story-banner",
+                content_item_id: "content-story-banner",
+                variant_id: "variant-story-banner",
+                status: "queued",
+                attempt: 0,
+                placement: "story" as const,
+            };
+            // Within the story grace window so the job is not failed as late.
+            const scheduledFor = new Date().toISOString();
+
+            // 1. Jobs fetch
+            mockSupabase.from.mockReturnValueOnce({
+                select: vi.fn().mockReturnThis(),
+                eq: vi.fn().mockReturnThis(),
+                lte: vi.fn().mockReturnThis(),
+                order: vi.fn().mockReturnThis(),
+                limit: vi.fn().mockResolvedValue({ data: [job], error: null }),
+            });
+            // 2. Lock
+            mockSupabase.from.mockReturnValueOnce({
+                update: vi.fn().mockReturnThis(),
+                eq: vi.fn().mockReturnThis(),
+                select: vi.fn().mockReturnThis(),
+                maybeSingle: vi.fn().mockResolvedValue({ data: { id: "job-story-banner" }, error: null }),
+            });
+            // 3. Content: instagram story. campaigns is null so the label comes
+            //    solely from the variant override, keeping the assertion exact.
+            mockSupabase.from.mockReturnValueOnce({
+                select: vi.fn().mockReturnThis(),
+                eq: vi.fn().mockReturnThis(),
+                maybeSingle: vi.fn().mockResolvedValue({
+                    data: {
+                        id: "content-story-banner",
+                        account_id: "acc-story-banner",
+                        platform: "instagram",
+                        placement: "story",
+                        scheduled_for: scheduledFor,
+                        prompt_context: {},
+                        campaigns: null,
+                    },
+                    error: null,
+                }),
+            });
+            // 4. Variant: banner explicitly enabled with an override label
+            mockSupabase.from.mockReturnValueOnce({
+                select: vi.fn().mockReturnThis(),
+                eq: vi.fn().mockReturnThis(),
+                maybeSingle: vi.fn().mockResolvedValue({
+                    data: {
+                        id: "variant-story-banner",
+                        content_item_id: "content-story-banner",
+                        body: "",
+                        media_ids: ["media-story-1"],
+                        banner_enabled: true,
+                        banner_text_override: "QUIZ",
+                        banner_position: null,
+                        banner_bg: null,
+                        banner_text_colour: null,
+                    },
+                    error: null,
+                }),
+            });
+            // 5. Connection
+            mockSupabase.from.mockReturnValueOnce({
+                select: vi.fn().mockReturnThis(),
+                eq: vi.fn().mockReturnThis(),
+                maybeSingle: vi.fn().mockResolvedValue({
+                    data: {
+                        id: "conn-story-banner",
+                        provider: "instagram",
+                        status: "active",
+                        access_token: "token",
+                        metadata: { igBusinessId: "ig-123" },
+                    },
+                    error: null,
+                }),
+            });
+            // 6. markContentStatus (publishing)
+            mockSupabase.from.mockReturnValueOnce({
+                update: vi.fn().mockReturnThis(),
+                eq: vi.fn().mockResolvedValue({ error: null }),
+            });
+            // 7. Posting defaults lookup (resolveAndRenderBanner)
+            mockSupabase.from.mockReturnValueOnce({
+                select: vi.fn().mockReturnThis(),
+                eq: vi.fn().mockReturnThis(),
+                maybeSingle: vi.fn().mockResolvedValue({
+                    data: {
+                        banners_enabled: true,
+                        banner_position: "bottom",
+                        banner_bg: "#000000",
+                        banner_text_colour: "#FFFFFF",
+                    },
+                    error: null,
+                }),
+            });
+            // 8. media_assets single lookup (resolveSourceMediaPath). Story
+            //    placement must pick derived_variants.story, not storage_path.
+            mockSupabase.from.mockReturnValueOnce({
+                select: vi.fn().mockReturnThis(),
+                eq: vi.fn().mockReturnThis(),
+                maybeSingle: vi.fn().mockResolvedValue({
+                    data: {
+                        id: "media-story-1",
+                        storage_path: "media/original.jpg",
+                        media_type: "image",
+                        derived_variants: { story: "derived/media-story-1/story.jpg" },
+                    },
+                    error: null,
+                }),
+            });
+            // 9. media_assets bulk fetch (loadMedia)
+            mockSupabase.from.mockReturnValueOnce({
+                select: vi.fn().mockReturnThis(),
+                in: vi.fn().mockReturnThis(),
+                returns: vi.fn().mockResolvedValue({
+                    data: [{
+                        id: "media-story-1",
+                        storage_path: "media/original.jpg",
+                        media_type: "image",
+                        mime_type: "image/jpeg",
+                        derived_variants: { story: "derived/media-story-1/story.jpg" },
+                        processed_status: null,
+                    }],
+                    error: null,
+                }),
+            });
+
+            // Storage: echo whichever path is signed, and record every upload.
+            const uploadedPaths: string[] = [];
+            const upload = vi.fn().mockImplementation((path: string) => {
+                uploadedPaths.push(path);
+                return Promise.resolve({ data: null, error: null });
+            });
+            const createSignedUrls = vi.fn().mockImplementation((paths: string[]) => Promise.resolve({
+                data: paths.map((path) => ({
+                    signedUrl: `https://example.com/${path}`,
+                    path,
+                    error: null,
+                })),
+                error: null,
+            }));
+            mockSupabase.storage.from.mockReturnValue({ createSignedUrls, upload });
+
+            // Render endpoint: capture the request body, return JPEG-ish bytes.
+            const renderRequests: Array<{ url: string; body: { label?: string; sourceMediaUrl?: string } }> = [];
+            const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(
+                async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+                    const rawBody = typeof init?.body === "string" ? init.body : "{}";
+                    renderRequests.push({
+                        url: String(input),
+                        body: JSON.parse(rawBody) as { label?: string; sourceMediaUrl?: string },
+                    });
+                    return new Response(new Uint8Array([1, 2, 3]), { status: 200 });
+                },
+            );
+
+            // Capture the media URLs actually handed to the provider.
+            const providerMedia: string[] = [];
+            const publishSpy = vi.spyOn(worker, "publishByPlatform").mockImplementation(async (_platform, request) => {
+                for (const item of request.payload.media) {
+                    providerMedia.push(item.url);
+                }
+                return {
+                    platform: "instagram",
+                    externalId: "story-123",
+                    payloadPreview: "",
+                    publishedAt: new Date().toISOString(),
+                };
+            });
+
+            // markJobSucceeded, markContentStatus(posted), notification
+            mockSupabase.from.mockReturnValueOnce({
+                update: vi.fn().mockReturnThis(),
+                eq: vi.fn().mockResolvedValue({ error: null }),
+            });
+            mockSupabase.from.mockReturnValueOnce({
+                update: vi.fn().mockReturnThis(),
+                eq: vi.fn().mockResolvedValue({ error: null }),
+            });
+            mockSupabase.from.mockReturnValueOnce({ insert: vi.fn().mockResolvedValue({ error: null }) });
+
+            const result = await worker.processDueJobs();
+            expect(result.processed).toBe(1);
+            expect(publishSpy).toHaveBeenCalledTimes(1);
+
+            expect(renderRequests).toHaveLength(1);
+            expect(renderRequests[0].url).toBe("http://localhost/api/internal/render-banner");
+            // 1. The render source is the story derivative, not the original.
+            expect(renderRequests[0].body.sourceMediaUrl).toContain("derived/media-story-1/story.jpg");
+            expect(renderRequests[0].body.sourceMediaUrl).not.toContain("original.jpg");
+            // 2. The overlay text is the label sent to the renderer.
+            expect(renderRequests[0].body.label).toBe("QUIZ");
+            // 3. The rendered JPEG lands at banners/{contentId}/{variantId}.jpg.
+            expect(uploadedPaths).toContain("banners/content-story-banner/variant-story-banner.jpg");
+            // 4. That bannered path is what the provider publishes, not the source.
+            expect(providerMedia).toHaveLength(1);
+            expect(providerMedia[0]).toContain("banners/content-story-banner/variant-story-banner.jpg");
+            expect(providerMedia[0]).not.toContain("derived/media-story-1/story.jpg");
+
+            fetchSpy.mockRestore();
+        });
+
     });
 });
