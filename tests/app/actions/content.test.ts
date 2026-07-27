@@ -827,6 +827,165 @@ describe('createScheduledBatch', () => {
     expect(result.error).toContain('Stories only support images.');
   });
 
+  it('gives the feed variant every image and the story variant only the first', async () => {
+    supabaseMock.enqueueResult({ data: { id: 'draft-1' }, error: null }); // draft lookup
+    supabaseMock.enqueueResult({ data: [{ id: 'media-1' }, { id: 'media-2' }], error: null }); // ownership
+    supabaseMock.enqueueResult({
+      data: [{ id: 'media-1', media_type: 'image', derived_variants: { story: 'derived/media-1/story.jpg' } }],
+      error: null,
+    }); // story readiness: only the first asset reaches the story row
+    supabaseMock.enqueueResult({ data: { id: 'camp-1' }, error: null }); // campaign insert
+
+    (supabaseMock.mock as Record<string, unknown>).select = vi.fn((...args: unknown[]) => {
+      supabaseMock.calls.push({ method: 'select', args });
+      if (args[0] === 'id, platform') {
+        return {
+          data: [
+            { id: 'ci-feed-ig', platform: 'instagram' },
+            { id: 'ci-story-ig', platform: 'instagram' },
+          ],
+          error: null,
+        };
+      }
+      return supabaseMock.mock;
+    });
+    (supabaseMock.mock as Record<string, unknown>).upsert = vi.fn((...args: unknown[]) => {
+      supabaseMock.calls.push({ method: 'upsert', args });
+      return Promise.resolve({ error: null });
+    });
+    (supabaseMock.mock as Record<string, unknown>).delete = vi.fn((...args: unknown[]) => {
+      supabaseMock.calls.push({ method: 'delete', args });
+      return supabaseMock.mock;
+    });
+
+    const { createScheduledBatch } = await import('@/app/actions/content');
+
+    const result = await createScheduledBatch({
+      draftContentId: 'draft-1',
+      contentType: 'promotion',
+      brief: {
+        title: 'Two for one',
+        offerSummary: 'Two for one on all cocktails.',
+        startDate: '2026-05-01',
+        endDate: '2026-05-31',
+        platforms: ['instagram'],
+        placements: ['feed', 'story'],
+      },
+      selectedMediaIds: ['media-1', 'media-2'],
+      slotCopies: [
+        {
+          slotKey: 'slot-1',
+          scheduledAt: '2026-05-23T10:00:00.000Z',
+          label: 'Promo reminder',
+          copy: { facebook: { body: 'FB promo' }, instagram: { body: 'IG promo' } },
+        },
+      ],
+      platforms: ['instagram'],
+      mode: 'schedule',
+    });
+
+    expect(result.error).toBeUndefined();
+    expect(result.success).toBe(true);
+
+    const contentRows = supabaseMock.calls.find((call) => {
+      if (call.method !== 'insert') return false;
+      const payload = call.args[0];
+      return Array.isArray(payload) && Boolean((payload[0] as Record<string, unknown> | undefined)?.prompt_context);
+    })?.args[0] as Array<Record<string, unknown>>;
+    expect(contentRows.map((row) => row.placement)).toEqual(['feed', 'story']);
+
+    const variantRows = supabaseMock.calls.find((call) => call.method === 'upsert')?.args[0] as Array<Record<string, unknown>>;
+    expect(variantRows[0]?.media_ids).toEqual(['media-1', 'media-2']);
+    expect(variantRows[1]?.media_ids).toEqual(['media-1']);
+
+    // Attachments are per content item, so the story item's attachments must
+    // mirror its variant rather than the whole batch selection.
+    const attachmentRows = supabaseMock.calls.find((call) => {
+      if (call.method !== 'insert') return false;
+      const payload = call.args[0];
+      return Array.isArray(payload) && Boolean((payload[0] as Record<string, unknown> | undefined)?.media_id);
+    })?.args[0] as Array<Record<string, unknown>>;
+    expect(attachmentRows).toEqual([
+      { content_item_id: 'ci-feed-ig', media_id: 'media-1', position: 0 },
+      { content_item_id: 'ci-feed-ig', media_id: 'media-2', position: 1 },
+      { content_item_id: 'ci-story-ig', media_id: 'media-1', position: 0 },
+    ]);
+  });
+
+  it('rejects a mixed batch whose first asset is a video', async () => {
+    supabaseMock.enqueueResult({ data: { id: 'draft-1' }, error: null }); // draft lookup
+    supabaseMock.enqueueResult({ data: [{ id: 'video-1' }, { id: 'media-2' }], error: null }); // ownership
+    supabaseMock.enqueueResult({
+      data: [{ id: 'video-1', media_type: 'video', derived_variants: { story: 'derived/video-1/story.mp4' } }],
+      error: null,
+    }); // story readiness for the first asset only
+
+    const { createScheduledBatch } = await import('@/app/actions/content');
+
+    const result = await createScheduledBatch({
+      draftContentId: 'draft-1',
+      contentType: 'promotion',
+      brief: {
+        title: 'Two for one',
+        offerSummary: 'Two for one on all cocktails.',
+        startDate: '2026-05-01',
+        endDate: '2026-05-31',
+        platforms: ['instagram'],
+        placements: ['feed', 'story'],
+      },
+      selectedMediaIds: ['video-1', 'media-2'],
+      slotCopies: [
+        {
+          slotKey: 'slot-1',
+          scheduledAt: '2026-05-23T10:00:00.000Z',
+          copy: { facebook: { body: 'FB promo' }, instagram: { body: 'IG promo' } },
+        },
+      ],
+      platforms: ['instagram'],
+      mode: 'schedule',
+    });
+
+    expect(result.error).toBe('Stories only support images.');
+    expect(enqueueAndDispatch).not.toHaveBeenCalled();
+  });
+
+  it('rejects a mixed batch whose first asset has no story derivative', async () => {
+    supabaseMock.enqueueResult({ data: { id: 'draft-1' }, error: null }); // draft lookup
+    supabaseMock.enqueueResult({ data: [{ id: 'media-1' }, { id: 'media-2' }], error: null }); // ownership
+    supabaseMock.enqueueResult({
+      data: [{ id: 'media-1', media_type: 'image', derived_variants: {} }],
+      error: null,
+    }); // story readiness for the first asset only
+
+    const { createScheduledBatch } = await import('@/app/actions/content');
+
+    const result = await createScheduledBatch({
+      draftContentId: 'draft-1',
+      contentType: 'promotion',
+      brief: {
+        title: 'Two for one',
+        offerSummary: 'Two for one on all cocktails.',
+        startDate: '2026-05-01',
+        endDate: '2026-05-31',
+        platforms: ['instagram'],
+        placements: ['feed', 'story'],
+      },
+      selectedMediaIds: ['media-1', 'media-2'],
+      slotCopies: [
+        {
+          slotKey: 'slot-1',
+          scheduledAt: '2026-05-23T10:00:00.000Z',
+          copy: { facebook: { body: 'FB promo' }, instagram: { body: 'IG promo' } },
+        },
+      ],
+      platforms: ['instagram'],
+      mode: 'schedule',
+    });
+
+    expect(result.error).toBe('Story image is still processing. Wait for derivatives or choose another image.');
+    expect(enqueueAndDispatch).not.toHaveBeenCalled();
+  });
+
   it('rejects event campaigns that request both post and story placements', async () => {
     supabaseMock.enqueueResult({ data: { id: 'draft-1' }, error: null });
 

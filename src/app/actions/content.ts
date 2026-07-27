@@ -758,17 +758,27 @@ export async function createScheduledBatch(
     // preflight errors. Preflight itself cannot be reused here: it keys every
     // check off a content_items id, and on this path the content rows do not
     // exist yet.
+    //
+    // Scope matters on a mixed batch. When the brief asks for a feed post AND a
+    // story, the story row carries only the first asset (see variantMedia below),
+    // so the strict "exactly one" count would reject a perfectly valid two-image
+    // feed post and write nothing at all. Story-only batches keep the count check:
+    // there the extra images have nowhere to go, so the user must be told rather
+    // than silently truncated.
     if (placements.includes('story')) {
+      const storyOnlyBatch = !placements.includes('feed');
       const storySlotMedia = slotCopies.map((slot) => slot.mediaIds ?? selectedMediaIds);
 
       if (storySlotMedia.some((mediaIds) => mediaIds.length === 0)) {
         return { error: 'Stories require one processed image. Add a story image before scheduling.' };
       }
-      if (storySlotMedia.some((mediaIds) => mediaIds.length !== 1)) {
+      if (storyOnlyBatch && storySlotMedia.some((mediaIds) => mediaIds.length !== 1)) {
         return { error: 'Stories can only include one image.' };
       }
 
-      const storyMediaIds = Array.from(new Set(storySlotMedia.flat()));
+      // Validate exactly what the story row will publish: the first asset of each
+      // slot. On a story-only batch that is the slot's single asset anyway.
+      const storyMediaIds = Array.from(new Set(storySlotMedia.map((mediaIds) => mediaIds[0])));
       const { data: storyAssets, error: storyAssetsError } = await supabase
         .from('media_assets')
         .select('id, media_type, derived_variants')
@@ -921,6 +931,14 @@ export async function createScheduledBatch(
     // wizard-level selection when a slot carries no media field at all.
     const resolveSlotMedia = (slot: (typeof slotCopies)[number]): string[] =>
       slot.mediaIds ?? selectedMediaIds;
+    // Media is chosen per slot but written per placement. Stories publish exactly
+    // one asset (the worker throws on anything else), so a story row takes only
+    // the first asset while the feed row keeps the whole selection. This is the
+    // same first-asset rule the wizard's mixed-placement story preview shows.
+    const resolvePlacementMedia = (
+      slotMedia: string[],
+      placement: 'feed' | 'story',
+    ): string[] => (placement === 'story' ? slotMedia.slice(0, 1) : slotMedia);
     const ctaLinks = readPlatformCtaLinks(brief);
     const ctaLabel = typeof brief.ctaLabel === 'string' ? brief.ctaLabel : undefined;
 
@@ -942,7 +960,7 @@ export async function createScheduledBatch(
             brief,
           }, { ctaLinks, contentType })
         : null;
-      const slotMedia = resolveSlotMedia(slot);
+      const variantMedia = resolvePlacementMedia(resolveSlotMedia(slot), placement);
 
       // Overlays are opt-in per post. Derive the overlay once per slot; it applies
       // to every platform variant of that slot. Write an explicit banner_enabled
@@ -961,7 +979,7 @@ export async function createScheduledBatch(
         content_item_id: item.id,
         body,
         preview_data: previewData,
-        media_ids: slotMedia.length > 0 ? slotMedia : null,
+        media_ids: variantMedia.length > 0 ? variantMedia : null,
         banner_enabled: overlay !== null || autoOverlayForEvent,
         banner_text_override: overlay,
       };
@@ -984,12 +1002,16 @@ export async function createScheduledBatch(
       return { error: `Variant insert failed: ${variantError.message}` };
     }
 
-    // Insert content_media_attachments for v2 compatibility (per-slot media)
+    // Insert content_media_attachments for v2 compatibility. Attachments are keyed
+    // per content item and every content item has a placement, so they follow the
+    // same per-placement media as the variant above. Otherwise a story item's
+    // planner thumbnail and library reference count would claim images the story
+    // will never publish.
     const attachmentRows: Record<string, unknown>[] = [];
     insertedItems.forEach((item, index) => {
-      const { slotIdx } = slotPlatformIndex[index];
-      const slotMedia = resolveSlotMedia(slotCopies[slotIdx]);
-      slotMedia.forEach((mediaId, mi) => {
+      const { slotIdx, placement } = slotPlatformIndex[index];
+      const itemMedia = resolvePlacementMedia(resolveSlotMedia(slotCopies[slotIdx]), placement);
+      itemMedia.forEach((mediaId, mi) => {
         attachmentRows.push({
           content_item_id: item.id,
           media_id: mediaId,
