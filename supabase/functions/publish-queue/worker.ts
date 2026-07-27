@@ -202,6 +202,19 @@ const BANNER_TIMEZONE = "Europe/London";
 const META_GRAPH_VERSION = readEnv("META_GRAPH_VERSION") ?? "v24.0";
 const META_GRAPH_BASE = `https://graph.facebook.com/${META_GRAPH_VERSION}`;
 
+/** Query parameters whose values are credentials and must never be logged. */
+const SECRET_QUERY_PARAM_PATTERN = /\b(access_token|refresh_token|token|signature|api_key|apikey)=[^&\s"'`)\]]+/gi;
+
+/**
+ * Strip credential-bearing query parameter values out of arbitrary text before
+ * it is logged or persisted. Runtime fetch failures embed the full request URL
+ * in their error message, so any error string derived from a token-bearing URL
+ * has to pass through here first.
+ */
+export function redactUrlSecrets(value: string): string {
+    return value.replace(SECRET_QUERY_PARAM_PATTERN, (match) => `${match.split("=")[0]}=[redacted]`);
+}
+
 /**
  * Account-level banner defaults used when posting_defaults has no row for the
  * account. Mirrors the SQL DEFAULTs declared in
@@ -1120,11 +1133,14 @@ export class PublishQueueWorker {
             };
         } catch (error) {
             const reason = error instanceof Error ? error.message : this.extractErrorMessage(error);
+            // Deno embeds the full request URL in network-level fetch errors, and the
+            // probe URL carries the access token as a query parameter. Redact before
+            // this reason is logged or written to publish_jobs.last_error.
             return {
                 ok: false,
                 healthy: false,
                 needsAction: false,
-                reason: `Instagram connection probe inconclusive: ${reason}`,
+                reason: `Instagram connection probe inconclusive: ${redactUrlSecrets(reason)}`,
             };
         }
     }
@@ -1352,7 +1368,12 @@ export class PublishQueueWorker {
         const urlMap = new Map<string, string>();
         for (const entry of signed ?? []) {
             if (entry.error || !entry.signedUrl || !entry.path) {
-                console.error("[publish-queue] missing signed URL", entry);
+                // Log the path and failure only. The entry can carry a signed URL
+                // whose ?token= grants read access to the media object.
+                console.error("[publish-queue] missing signed URL", {
+                    path: entry.path ?? null,
+                    error: entry.error ?? null,
+                });
                 continue;
             }
             urlMap.set(entry.path, entry.signedUrl);

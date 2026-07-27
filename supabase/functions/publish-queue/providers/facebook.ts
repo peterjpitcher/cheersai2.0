@@ -58,11 +58,14 @@ export async function publishToFacebook({
     const fileName = extractFileName(media.url);
     const file = new File([new Uint8Array(arrayBuffer)], fileName, { type: contentType });
 
-    // Step 1: upload the photo as unpublished content
-    const uploadUrl = `${GRAPH_BASE}/${pageId}/photos?access_token=${auth.accessToken}`;
+    // Step 1: upload the photo as unpublished content.
+    // The access token goes in the request body, never the query string, so it
+    // cannot reach function logs or Graph error text via the request URL.
+    const uploadUrl = `${GRAPH_BASE}/${pageId}/photos`;
     const uploadForm = new FormData();
     uploadForm.set("published", "false");
     uploadForm.set("source", file);
+    uploadForm.set("access_token", auth.accessToken);
 
     const uploadResponse = await fetch(uploadUrl, {
       method: "POST",
@@ -71,7 +74,6 @@ export async function publishToFacebook({
     const uploadTraceId = uploadResponse.headers.get("x-fb-trace-id") ?? null;
     const uploadText = await uploadResponse.text();
     console.info("[facebook] story upload payload", {
-      uploadUrl,
       status: uploadResponse.status,
       traceId: uploadTraceId,
       body: uploadText.slice(0, 500),
@@ -94,10 +96,12 @@ export async function publishToFacebook({
       throw new Error("Facebook story upload response missing photo id");
     }
 
-    // Step 2: publish the story referencing the uploaded photo
-    const publishUrl = `${GRAPH_BASE}/${pageId}/photo_stories?access_token=${auth.accessToken}`;
+    // Step 2: publish the story referencing the uploaded photo.
+    // Token in the body for the same reason as the upload step above.
+    const publishUrl = `${GRAPH_BASE}/${pageId}/photo_stories`;
     const publishForm = new FormData();
     publishForm.set("photo_id", photoId);
+    publishForm.set("access_token", auth.accessToken);
 
     const response = await fetch(publishUrl, {
       method: "POST",
@@ -106,7 +110,6 @@ export async function publishToFacebook({
     const traceId = response.headers.get("x-fb-trace-id") ?? null;
     const responseText = await response.text();
     console.info("[facebook] story publish payload", {
-      publishUrl,
       status: response.status,
       traceId,
       body: responseText.slice(0, 500),

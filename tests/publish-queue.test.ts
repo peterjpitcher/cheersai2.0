@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
-import { PublishQueueWorker, createDefaultConfig } from "../supabase/functions/publish-queue/worker";
+import { PublishQueueWorker, createDefaultConfig, redactUrlSecrets } from "../supabase/functions/publish-queue/worker";
 import { MetaGraphApiError } from "../supabase/functions/publish-queue/providers/meta-error";
 import type { ProviderPlatform, ProviderPublishRequest, ProviderPublishResult } from "../supabase/functions/publish-queue/providers/types";
 
@@ -1640,5 +1640,31 @@ describe("PublishQueueWorker", () => {
             fetchSpy.mockRestore();
         });
 
+    });
+});
+
+describe("redactUrlSecrets", () => {
+    it("strips access tokens out of runtime fetch error messages", () => {
+        // Deno embeds the full request URL in network-level fetch failures, and the
+        // Instagram connection probe URL carries the access token.
+        const raw =
+            "error sending request for url (https://graph.facebook.com/v24.0/ig-1?fields=id,username&access_token=EAAlivetoken): client error";
+
+        const redacted = redactUrlSecrets(raw);
+
+        expect(redacted).not.toContain("EAAlivetoken");
+        expect(redacted).toContain("access_token=[redacted]");
+    });
+
+    it("strips signed storage URL tokens and refresh tokens", () => {
+        expect(redactUrlSecrets("https://x.supabase.co/storage/v1/object/sign/media/a.jpg?token=eyJhbGciOi"))
+            .toBe("https://x.supabase.co/storage/v1/object/sign/media/a.jpg?token=[redacted]");
+        expect(redactUrlSecrets("refresh_token=abc123&other=1")).toBe("refresh_token=[redacted]&other=1");
+    });
+
+    it("leaves text without credentials untouched", () => {
+        expect(redactUrlSecrets("Instagram connection probe inconclusive: timeout")).toBe(
+            "Instagram connection probe inconclusive: timeout",
+        );
     });
 });

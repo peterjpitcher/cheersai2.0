@@ -1,11 +1,17 @@
 # Facebook Story Publish Investigation
 
+> **Note:** the story publish path used to log the full request URL with the Page
+> access token in its query string. That is fixed: the token is now sent in the
+> request body and the URL is no longer logged. Tokens and signed-URL tokens in
+> this document are redacted. Any Page token that appeared in function logs
+> before the fix must be treated as compromised.
+
 ## Context
 - Page ID: `628953850871830`
 - Asset ID: `496a8a29-7bf7-4f88-be1b-f28c6c39c3a7`
 - Story derivative: `derived/496a8a29-7bf7-4f88-be1b-f28c6c39c3a7/story.jpg`
 - Signed file URL (valid until Oct 2026):
-  `https://nbkjciurhvkfpcpatbnt.supabase.co/storage/v1/object/sign/media/derived/496a8a29-7bf7-4f88-be1b-f28c6c39c3a7/story.jpg?token=…`
+  `https://<project-ref>.supabase.co/storage/v1/object/sign/media/derived/496a8a29-7bf7-4f88-be1b-f28c6c39c3a7/story.jpg?token=<redacted>`
 - Supabase function `publish-queue` (version 9) logs payload/status for story publishes.
 - Access token confirmed via Graph Explorer (`GET /me/accounts`, `GET /628953850871830?fields=id,name`).
 
@@ -23,8 +29,8 @@
    {
      "publishUrl": "https://graph.facebook.com/v24.0/628953850871830/photo_stories",
      "params": {
-       "file_url": "…story.jpg?token=…",
-       "access_token": "EAA…"
+       "file_url": "…story.jpg?token=<redacted>",
+       "access_token": "<redacted>"
      },
      "status": 500,
      "body": {
@@ -42,7 +48,7 @@
 ## Steps to Reproduce
 1. Verify media availability:
    ```bash
-   curl -I "https://…story.jpg?token=…"  # returns 200 OK
+   curl -I "https://…story.jpg?token=<redacted>"  # returns 200 OK
    ```
 2. Generate Page token (Graph Explorer → Get Page Access Token).
 3. Call `/photo_stories` as shown above.
