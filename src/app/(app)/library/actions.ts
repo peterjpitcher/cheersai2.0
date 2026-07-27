@@ -14,7 +14,7 @@ import { createServiceSupabaseClient } from "@/lib/supabase/service";
 import type { MediaAssetSummary } from "@/lib/library/data";
 import {
   resolvePreviewCandidates,
-  orderPreviewCandidatesForPlacement,
+  resolveStoryDerivativePath,
   normaliseStoragePath,
   type PreviewCandidate,
   type PreviewPlacement,
@@ -231,8 +231,9 @@ export async function finaliseMediaUpload(input: FinaliseUploadInput) {
     return null;
   }
 
-  // Resolve once and share the list: the feed preview takes the first signable
-  // candidate, the story preview takes the story-shaped one from the same list.
+  // The feed preview takes the first signable candidate; the story preview is
+  // resolved separately from the story derivative, which is the only thing the
+  // publish worker will accept for a story.
   const candidates = resolvePreviewCandidates({
     storagePath: assetRow.storage_path,
     derivedVariants: assetRow.derived_variants ?? {},
@@ -241,7 +242,7 @@ export async function finaliseMediaUpload(input: FinaliseUploadInput) {
   });
 
   const { url: previewUrl, shape: previewShape } = await signPreviewFromCandidates(supabase, candidates);
-  const storyPreviewUrl = await signStoryPreview(supabase, candidates, assetRow.storage_path);
+  const storyPreviewUrl = await signStoryPreview(supabase, assetRow.derived_variants);
 
   return mapToSummary(assetRow, previewUrl, previewShape, storyPreviewUrl);
 }
@@ -313,8 +314,9 @@ export async function updateMediaAsset(input: UpdateMediaAssetInput) {
     return null;
   }
 
-  // Resolve once and share the list: the feed preview takes the first signable
-  // candidate, the story preview takes the story-shaped one from the same list.
+  // The feed preview takes the first signable candidate; the story preview is
+  // resolved separately from the story derivative, which is the only thing the
+  // publish worker will accept for a story.
   const candidates = resolvePreviewCandidates({
     storagePath: assetRow.storage_path,
     derivedVariants: assetRow.derived_variants ?? {},
@@ -323,7 +325,7 @@ export async function updateMediaAsset(input: UpdateMediaAssetInput) {
   });
 
   const { url: previewUrl, shape: previewShape } = await signPreviewFromCandidates(supabase, candidates);
-  const storyPreviewUrl = await signStoryPreview(supabase, candidates, assetRow.storage_path);
+  const storyPreviewUrl = await signStoryPreview(supabase, assetRow.derived_variants);
 
   return mapToSummary(assetRow, previewUrl, previewShape, storyPreviewUrl);
 }
@@ -1216,39 +1218,33 @@ async function signPreviewFromCandidates(
 }
 
 /**
- * Sign the story-shaped candidate specifically. signPreviewFromCandidates
- * returns on the first success, which under feed ordering is the original
- * upload, so it never reaches the story derivative. Candidates are re-ordered
- * for story placement first so a real 1080x1920 derivative wins over a
- * story-shaped original. Returns undefined when no story-shaped candidate
- * exists: falling back to a square or original crop would silently show the
- * wrong geometry.
+ * Sign the 1080x1920 story derivative specifically. Resolved from
+ * derived_variants.story, never from a candidate's shape: shape marks a
+ * portrait-looking original as "story" too, and the publish worker requires the
+ * derivative itself. Returns undefined when there is no derivative, because
+ * falling back to an original or square crop would silently promise a story
+ * crop that does not exist.
  */
 async function signStoryPreview(
   supabase: SupabaseClient,
-  candidates: PreviewCandidate[],
-  storagePath: string,
+  derivedVariants: Record<string, string> | null | undefined,
 ): Promise<string | undefined> {
-  const storyCandidate = orderPreviewCandidatesForPlacement({
-    candidates,
-    storagePath,
-    placement: "story",
-  }).find((candidate) => candidate.shape === "story");
+  const storyPath = resolveStoryDerivativePath(derivedVariants);
 
-  if (!storyCandidate) {
+  if (!storyPath) {
     return undefined;
   }
 
   try {
     const { data, error } = await supabase.storage
       .from(MEDIA_BUCKET)
-      .createSignedUrl(storyCandidate.path, 600);
+      .createSignedUrl(storyPath, 600);
     if (!error && data?.signedUrl) {
       return data.signedUrl;
     }
   } catch (error) {
     console.error("[library] failed to sign story preview", {
-      path: storyCandidate.path,
+      path: storyPath,
       error,
     });
   }

@@ -20,6 +20,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { MediaFrame, resolveMediaPlacement } from '@/components/media/media-frame';
 import { MediaPicker } from '@/features/create/media/media-picker';
+import { isStoryAssetSelectable } from '@/features/create/media-attachment-selector';
 import { Skeleton } from '@/components/ui/skeleton';
 import { PlatformBadge } from '@/components/ui/platform-badge';
 import { generateContent, regenerateWithModifier } from '@/app/actions/ai-generate';
@@ -126,6 +127,53 @@ function storyCopySignature(copies: SlotGeneratedCopy[]): string {
 function formatSlotHeader(slot: ScheduleSlot): string {
   const dt = DateTime.fromISO(`${slot.date}T${slot.time}`, { zone: DEFAULT_TIMEZONE });
   return dt.toFormat('EEE d MMM, HH:mm');
+}
+
+/** Resolve a slot's attached media ids against the loaded library. */
+function resolveSlotAssets(mediaIds: string[], libraryItems?: MediaAssetSummary[]): MediaAssetSummary[] {
+  return mediaIds
+    .map((id) => libraryItems?.find((item) => item.id === id))
+    .filter((item): item is MediaAssetSummary => Boolean(item));
+}
+
+// ---------------------------------------------------------------------------
+// Story readiness
+// ---------------------------------------------------------------------------
+
+type StoryReadiness = { ready: true } | { ready: false; message: string };
+
+const STORY_READY: StoryReadiness = { ready: true };
+
+/**
+ * Mirror of the contract the server enforces when saving a story: exactly one
+ * attachment, an image, with a 1080x1920 derivative. Evaluated per slot so the
+ * card can name the actual problem instead of claiming ready and failing on the
+ * final click. The per-asset half reuses isStoryAssetSelectable, the same
+ * predicate the media picker gates selection on.
+ */
+function evaluateStoryReadiness(mediaIds: string[], assets: MediaAssetSummary[]): StoryReadiness {
+  if (mediaIds.length === 0) {
+    return { ready: false, message: 'Add an image before scheduling this story.' };
+  }
+  if (mediaIds.length > 1) {
+    return { ready: false, message: 'A story publishes a single image. Remove the extra media.' };
+  }
+
+  const [asset] = assets;
+  if (!asset) {
+    return { ready: false, message: 'This image is not available. Pick another image.' };
+  }
+  if (asset.mediaType !== 'image') {
+    return { ready: false, message: 'Stories need an image. Swap the video for a photo.' };
+  }
+  if (asset.processedStatus !== 'ready') {
+    return { ready: false, message: 'This image is still processing. Try again in a moment.' };
+  }
+  if (!isStoryAssetSelectable(asset)) {
+    return { ready: false, message: 'This image has no 9:16 story crop. Pick another image.' };
+  }
+
+  return STORY_READY;
 }
 
 // ---------------------------------------------------------------------------
@@ -357,6 +405,23 @@ export function GenerateStep({
     publishMode,
     selectedMediaIds,
   ]);
+
+  // Per-slot story readiness, keyed by slotKey. Computed for every slot so the
+  // card and the final action button read the same verdict, and so a brief that
+  // is not story-only still costs nothing to evaluate.
+  const storyReadinessBySlot = useMemo(() => {
+    const byKey = new Map<string, StoryReadiness>();
+    for (const slot of effectiveSlots) {
+      const mediaIds = generatedSlotCopies.find((sc) => sc.slotKey === slot.key)?.mediaIds ?? selectedMediaIds;
+      byKey.set(slot.key, evaluateStoryReadiness(mediaIds, resolveSlotAssets(mediaIds, libraryItems)));
+    }
+    return byKey;
+  }, [effectiveSlots, generatedSlotCopies, libraryItems, selectedMediaIds]);
+
+  // Stop the user at the button rather than after the final click: the server
+  // hard-rejects any story slot that misses the media contract.
+  const blockStoryScheduling =
+    isStorySchedule && Array.from(storyReadinessBySlot.values()).some((readiness) => !readiness.ready);
 
   const isBusy = isSubmitting || isSavingDraft || isScheduling || isQueueing || isGeneratingBatch;
 
@@ -853,9 +918,8 @@ export function GenerateStep({
                 }
             : null;
           const slotMediaIds = slotCopy?.mediaIds ?? selectedMediaIds;
-          const slotMedia = slotMediaIds
-            .map((id) => libraryItems?.find((item) => item.id === id))
-            .filter((item): item is MediaAssetSummary => Boolean(item));
+          const slotMedia = resolveSlotAssets(slotMediaIds, libraryItems);
+          const storyReadiness = storyReadinessBySlot.get(slot.key) ?? STORY_READY;
           const primary = slotMedia[0] ?? null;
           const extraCount = slotMedia.length - 1;
 
@@ -1034,9 +1098,25 @@ export function GenerateStep({
                         disabled={isBusy}
                         onChange={handleSlotBannerChange}
                       />
-                      <div className="flex items-center justify-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700">
-                        <Check className="size-4" aria-hidden="true" /> Story media ready to schedule
-                      </div>
+                      {/*
+                        Only claim ready when the slot actually satisfies the
+                        server's story media contract. Otherwise say which part
+                        fails, because the alternative is a green badge on a
+                        post that cannot be saved.
+                      */}
+                      {storyReadiness.ready ? (
+                        <div className="flex items-center justify-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700">
+                          <Check className="size-4" aria-hidden="true" /> Story media ready to schedule
+                        </div>
+                      ) : (
+                        <div
+                          role="status"
+                          className="flex items-start justify-center gap-1.5 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm font-medium text-destructive"
+                        >
+                          <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+                          <span>{storyReadiness.message}</span>
+                        </div>
+                      )}
                     </div>
                   )}
 
@@ -1293,7 +1373,13 @@ export function GenerateStep({
               setIsQueueing(true);
               try { await onQueueAll(); } finally { setIsQueueing(false); }
             }}
-            disabled={isBusy || !contentId || approvedCount === 0 || (!isStorySchedule && isContextStale)}
+            disabled={
+              isBusy ||
+              !contentId ||
+              approvedCount === 0 ||
+              blockStoryScheduling ||
+              (!isStorySchedule && isContextStale)
+            }
             size="lg"
           >
             {isQueueing ? (
@@ -1312,7 +1398,13 @@ export function GenerateStep({
               setIsScheduling(true);
               try { await onScheduleAll(); } finally { setIsScheduling(false); }
             }}
-            disabled={isBusy || !contentId || approvedCount === 0 || (!isStorySchedule && isContextStale)}
+            disabled={
+              isBusy ||
+              !contentId ||
+              approvedCount === 0 ||
+              blockStoryScheduling ||
+              (!isStorySchedule && isContextStale)
+            }
             size="lg"
           >
             {isScheduling ? (

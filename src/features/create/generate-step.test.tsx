@@ -664,6 +664,54 @@ describe("<GenerateStep />", () => {
     expect(screen.queryByRole("img")).not.toBeInTheDocument();
   });
 
+  // -------------------------------------------------------------------------
+  // Story readiness: the card must not claim ready in states the server rejects
+  // -------------------------------------------------------------------------
+
+  it("shows the ready badge and enables scheduling when the story crop exists", () => {
+    renderStoryWizard();
+
+    expect(screen.getByText(/Story media ready to schedule/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Schedule stories/i })).toBeEnabled();
+  });
+
+  it("blocks scheduling and names the problem when the image has no story crop", () => {
+    renderStoryWizard({ libraryItems: [mediaAsset("media-1")] });
+
+    expect(screen.queryByText(/Story media ready to schedule/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/no 9:16 story crop/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Schedule stories/i })).toBeDisabled();
+  });
+
+  it("blocks scheduling when the attached media is a video", () => {
+    renderStoryWizard({ libraryItems: [mediaAsset("media-1", { mediaType: "video" })] });
+
+    expect(screen.queryByText(/Story media ready to schedule/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/Stories need an image/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Schedule stories/i })).toBeDisabled();
+  });
+
+  it("blocks scheduling when more than one image is attached", () => {
+    renderStoryWizard({
+      slotCopies: [storySlotCopy({ mediaIds: ["media-1", "media-2"] })],
+      libraryItems: [storyReadyAsset("media-1"), storyReadyAsset("media-2")],
+    });
+
+    expect(screen.queryByText(/Story media ready to schedule/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/single image/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Schedule stories/i })).toBeDisabled();
+  });
+
+  it("blocks scheduling when no media is attached", () => {
+    renderStoryWizard({
+      slotCopies: [storySlotCopy({ mediaIds: [] })],
+      libraryItems: [],
+    });
+
+    expect(screen.queryByText(/Story media ready to schedule/i)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Schedule stories/i })).toBeDisabled();
+  });
+
   it("keeps story overlay text when the auto-seed effect rebuilds the slot", async () => {
     const onSlotCopiesChange = vi.fn();
     render(

@@ -203,17 +203,14 @@ export async function listMediaAssets(
         }
       }
 
-      // Re-order the same already-signed candidates for story placement and keep
-      // the first genuinely story-shaped hit. No extra storage round trip: every
-      // candidate path was in the batch createSignedUrls call above. Falling back
-      // to a square crop would defeat the purpose, so leave it undefined instead.
-      const storyOrdered = orderPreviewCandidatesForPlacement({
-        candidates,
-        storagePath: asset.storagePath,
-        placement: "story",
-      });
-      const storyCandidate = storyOrdered.find((candidate) => candidate.shape === "story");
-      const storyPreviewUrl = storyCandidate ? signedUrlMap.get(storyCandidate.path) : undefined;
+      // Resolve the story preview from the actual story derivative, never from a
+      // candidate's shape: shape marks a portrait-looking original as "story"
+      // too, and the publish worker requires derived_variants.story specifically.
+      // No extra storage round trip: the derivative path was in the batch
+      // createSignedUrls call above. Undefined when there is no derivative,
+      // because a square or portrait original is not a 1080x1920 crop.
+      const storyPath = resolveStoryDerivativePath(asset.derivedVariants);
+      const storyPreviewUrl = storyPath ? signedUrlMap.get(storyPath) : undefined;
 
       return {
         ...asset,
@@ -309,6 +306,22 @@ export function resolvePreviewInfo({
 }): PreviewInfo | null {
   const [first] = resolvePreviewCandidates({ storagePath, derivedVariants });
   return first ?? null;
+}
+
+/**
+ * Normalised storage path of the 1080x1920 story crop, or null when the asset
+ * has no story derivative. Single source of truth for "does this asset have a
+ * story crop", matching the publish worker, which requires
+ * derived_variants.story and accepts nothing else in its place.
+ */
+export function resolveStoryDerivativePath(
+  derivedVariants: Record<string, string> | null | undefined,
+): string | null {
+  const path = derivedVariants?.story;
+  if (typeof path !== "string" || !path.length) {
+    return null;
+  }
+  return normaliseStoragePath(path) || null;
 }
 
 export function normaliseStoragePath(path: string) {
