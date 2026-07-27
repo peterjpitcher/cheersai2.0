@@ -1351,58 +1351,63 @@ The backfill enables the automatic label on **pending event stories only**. Non-
 
 ## Task 16: Backfill pending event stories
 
-- [ ] **Step 1: Confirm the discriminator**
+**Do not hand-write SQL for this.** `scripts/ops/backfill-event-overlays.ts` already exists, is wired as `npm run ops:backfill-event-overlays`, and does exactly this job for feed posts: it is paged, chunked, dry-run by default, and correctly scoped to event campaigns with an unpublished status, a NULL `banner_text_override` and `banner_enabled` currently false. It excluded stories only because overlays were switched off for them at creation time.
 
-Read `supabase/functions/publish-queue/banner-label.ts` and check how `extractCampaignTiming` decides a campaign is an event. Confirm `campaigns.campaign_type = 'event'` is the right predicate before running anything. If content type lives elsewhere, adjust the queries below.
+That exclusion has been removed as part of this branch. The script is now the backfill vehicle.
 
-- [ ] **Step 2: Count and inspect before changing anything**
+Its `UNPUBLISHED_STATUSES` is `draft, review, approved, scheduled, queued`, which is broader than a hand-written `draft/scheduled/queued` filter and is the correct scope.
+
+- [ ] **Step 1: Confirm the discriminator (already verified 2026-07-27)**
+
+`campaigns.campaign_type = 'event'` is correct: `extractCampaignTiming` in `supabase/functions/publish-queue/banner-label.ts:41-48` branches on `campaign_type`, and `getProximityLabel` handles the `"event"` case. The script already uses this predicate. Re-confirm only if the campaign schema has changed.
+
+- [ ] **Step 2: Dry run**
+
+```bash
+npm run ops:backfill-event-overlays
+```
+
+This changes nothing. It prints the affected count and a sample.
+
+- [ ] **Step 3: Capture the affected ids for rollback**
+
+The dry run prints a sample, not the full set. Before applying, run this read-only query and save the complete result, so the change can be reversed exactly:
 
 ```sql
-select ci.id, ci.status, ci.scheduled_for, c.campaign_type,
-       cv.banner_enabled, cv.banner_text_override
+select cv.id as variant_id, cv.content_item_id, ci.placement, ci.status, ci.scheduled_for
 from content_variants cv
 join content_items ci on ci.id = cv.content_item_id
 join campaigns c on c.id = ci.campaign_id
-where ci.placement = 'story'
-  and ci.status in ('draft','scheduled','queued')
-  and c.campaign_type = 'event'
+where c.campaign_type = 'event'
+  and ci.status in ('draft','review','approved','scheduled','queued')
+  and cv.banner_text_override is null
   and coalesce(cv.banner_enabled, false) = false
-order by ci.scheduled_for;
+order by ci.placement, ci.scheduled_for;
 ```
 
-- [ ] **Step 3: Show the list to Peter and get explicit approval**
+- [ ] **Step 4: Show the list to Peter and get explicit approval**
 
-This changes what already-scheduled posts will publish. Report the row count and the earliest `scheduled_for`. Do not proceed without a clear yes.
+This changes what already-scheduled posts will publish. Report the row count, the split between feed and story, and the earliest `scheduled_for`. Do not proceed without a clear yes.
 
-- [ ] **Step 4: Export the current values**
-
-Save the full result of the Step 2 query, including ids, so the change can be reversed exactly.
+Note the script is not story-only: removing the exclusion means any feed post still matching its criteria is also picked up. Report both numbers separately so the decision is informed.
 
 - [ ] **Step 5: Apply**
 
-```sql
-update content_variants cv
-set banner_enabled = true
-from content_items ci, campaigns c
-where cv.content_item_id = ci.id
-  and ci.campaign_id = c.id
-  and ci.placement = 'story'
-  and ci.status in ('draft','scheduled','queued')
-  and c.campaign_type = 'event'
-  and coalesce(cv.banner_enabled, false) = false;
+```bash
+npm run ops:backfill-event-overlays -- --apply
 ```
 
-`banner_text_override` stays NULL on purpose: that is what makes the worker compute the proximity label instead of printing fixed text.
+`banner_text_override` stays NULL on purpose: that is what makes the worker compute the proximity label per post date at publish, so nothing is frozen and the 20-character limit never applies.
 
 - [ ] **Step 6: Verify**
 
-Re-run the Step 2 query. Expected: zero rows. Confirm the affected count matches Step 2's original count.
+Re-run the dry run. Expected: nothing left to do. Confirm the applied count matches Step 3's row count.
 
-- [ ] **Step 7: Spot-check one post in the planner**
+- [ ] **Step 7: Spot-check one post**
 
-Open one backfilled story in the planner drawer and confirm the overlay preview shows the expected date label.
+Open one backfilled story at `/planner/[contentId]` and confirm the overlay preview shows the expected date label.
 
-**Rollback:** set `banner_enabled = false` for exactly the ids exported in Step 4. Never run an unscoped update against `content_variants`.
+**Rollback:** set `banner_enabled = false` for exactly the `variant_id` values captured in Step 3. Never run an unscoped update against `content_variants`.
 
 ---
 
