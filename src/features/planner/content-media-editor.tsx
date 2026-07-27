@@ -180,6 +180,7 @@ export function PlannerContentMediaEditor({
         description="Select the assets this post should publish with."
         onLibraryUpdate={handleLibraryUpdate}
         emptyHint="Upload media to your Library and attach it here."
+        placement={placement}
       />
       <p className="text-xs text-muted-foreground">
         {isStory

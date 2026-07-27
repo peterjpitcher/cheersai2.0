@@ -25,6 +25,30 @@ interface MediaAttachmentSelectorProps {
   description?: string;
   emptyHint?: string;
   onLibraryUpdate?: Dispatch<SetStateAction<MediaAssetSummary[]>>;
+  /**
+   * Placement the attachments will publish to. Story placement narrows both
+   * what can be picked and how many, because the publish worker will only
+   * accept a single ready image with a 1080x1920 derivative.
+   */
+  placement?: "feed" | "story";
+}
+
+/**
+ * Story placement has a hard media contract the publish worker enforces: one
+ * ready image with a 1080x1920 derivative. Gate selection on it so a user
+ * cannot attach media that could never publish as a story.
+ */
+export function isStoryAssetSelectable(asset: MediaAssetSummary): boolean {
+  return (
+    asset.processedStatus === "ready" &&
+    asset.mediaType === "image" &&
+    typeof asset.derivedVariants?.story === "string" &&
+    asset.derivedVariants.story.length > 0
+  );
+}
+
+function isFeedAssetSelectable(asset: MediaAssetSummary): boolean {
+  return asset.processedStatus === "ready";
 }
 
 function mergeSelections(existing: MediaAssetInput[], additions: MediaAssetInput[]) {
@@ -52,7 +76,9 @@ export function MediaAttachmentSelector({
   description,
   emptyHint = "Upload media in the Library to attach it here.",
   onLibraryUpdate,
+  placement = "feed",
 }: MediaAttachmentSelectorProps) {
+  const isStoryPlacement = placement === "story";
   const selectedIds = useMemo(() => new Set(selected.map((item) => item.assetId)), [selected]);
   const assetById = useMemo(() => new Map(assets.map((asset) => [asset.id, asset])), [assets]);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -154,7 +180,11 @@ export function MediaAttachmentSelector({
   const handleSelectionChange = useCallback(
     (nextIds: string[]) => {
       const existingById = new Map(selected.map((item) => [item.assetId, item]));
-      const next = nextIds.flatMap((assetId) => {
+      // A story publishes exactly one image, and the grid appends each new pick,
+      // so keep the most recent one rather than silently building a selection
+      // the publish worker would reject.
+      const effectiveIds = isStoryPlacement ? nextIds.slice(-1) : nextIds;
+      const next = effectiveIds.flatMap((assetId) => {
         const asset = assetById.get(assetId);
         const existing = existingById.get(assetId);
         if (!asset) {
@@ -170,7 +200,7 @@ export function MediaAttachmentSelector({
       });
       onChange(next);
     },
-    [assetById, onChange, selected],
+    [assetById, isStoryPlacement, onChange, selected],
   );
 
   const removeAsset = (assetId: string) => {
@@ -275,7 +305,11 @@ export function MediaAttachmentSelector({
     }
 
     if (selectionAdditions.length) {
-      const nextSelection = mergeSelections(selected, selectionAdditions);
+      // A story carries one image, so an upload replaces the selection rather
+      // than adding to it.
+      const nextSelection = isStoryPlacement
+        ? selectionAdditions.slice(-1)
+        : mergeSelections(selected, selectionAdditions);
       if (nextSelection !== selected) {
         onChange(nextSelection);
       }
@@ -313,8 +347,8 @@ export function MediaAttachmentSelector({
           <input
             ref={fileInputRef}
             type="file"
-            accept="image/*,video/*"
-            multiple
+            accept={isStoryPlacement ? "image/*" : "image/*,video/*"}
+            multiple={!isStoryPlacement}
             onChange={(event) => void handleFiles(event.target.files)}
             className="hidden"
           />
@@ -383,10 +417,12 @@ export function MediaAttachmentSelector({
         selectLabel="Attach"
         selectedLabel="Selected"
         getPreviewUrl={(asset) => asset.previewUrl ?? previewUrls.get(asset.id)}
-        isAssetSelectable={(asset) => asset.processedStatus === "ready"}
+        isAssetSelectable={isStoryPlacement ? isStoryAssetSelectable : isFeedAssetSelectable}
         getUnavailableLabel={(asset) => {
           if (asset.processedStatus === "skipped") return "Unsupported";
           if (asset.processedStatus !== "ready") return "Processing";
+          if (isStoryPlacement && asset.mediaType !== "image") return "Not for stories";
+          if (isStoryPlacement && !isStoryAssetSelectable(asset)) return "No story crop";
           return null;
         }}
       />

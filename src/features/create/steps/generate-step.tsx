@@ -115,6 +115,7 @@ function storyCopySignature(copies: SlotGeneratedCopy[]): string {
       status: copy.status,
       approved: copy.approved === true,
       mediaIds: copy.mediaIds ?? null,
+      bannerTextOverride: copy.bannerTextOverride ?? null,
       facebookBody: copy.copy?.facebook.body ?? null,
       instagramBody: copy.copy?.instagram.body ?? null,
     })),
@@ -125,6 +126,70 @@ function storyCopySignature(copies: SlotGeneratedCopy[]): string {
 function formatSlotHeader(slot: ScheduleSlot): string {
   const dt = DateTime.fromISO(`${slot.date}T${slot.time}`, { zone: DEFAULT_TIMEZONE });
   return dt.toFormat('EEE d MMM, HH:mm');
+}
+
+// ---------------------------------------------------------------------------
+// Per-slot overlay input
+// ---------------------------------------------------------------------------
+
+interface SlotOverlayInputProps {
+  slotKey: string;
+  value: string;
+  /** Label the worker would print with no typed override (events only). */
+  autoLabel: string | null;
+  invalid: boolean;
+  disabled: boolean;
+  onChange: (slotKey: string, value: string) => void;
+}
+
+/**
+ * Optional free-text overlay for one slot. Extracted so feed and story cards
+ * share one control: the two placements follow the same overlay rule, and the
+ * story card previews the same text over its 9:16 crop.
+ */
+function SlotOverlayInput({
+  slotKey,
+  value,
+  autoLabel,
+  invalid,
+  disabled,
+  onChange,
+}: SlotOverlayInputProps): React.JSX.Element {
+  return (
+    <div className="mx-auto w-full max-w-6xl space-y-1.5">
+      <label
+        htmlFor={`overlay-${slotKey}`}
+        className="text-xs font-medium text-muted-foreground"
+      >
+        Image overlay (optional)
+      </label>
+      <input
+        id={`overlay-${slotKey}`}
+        type="text"
+        maxLength={MAX_BANNER_TEXT_LENGTH}
+        value={value}
+        onChange={(e) => onChange(slotKey, e.target.value)}
+        disabled={disabled}
+        placeholder={
+          autoLabel
+            ? `Auto: ${autoLabel}, type to override`
+            : 'Add overlay text, e.g. £5 PINTS, leave blank for none'
+        }
+        aria-invalid={invalid}
+        aria-describedby={`overlay-help-${slotKey}`}
+        className="flex w-full rounded-md border border-input bg-card px-3 py-2 text-sm shadow-[0_1px_2px_0_rgb(0_0_0/0.04)] placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:bg-muted/40 disabled:text-muted-foreground"
+      />
+      {invalid ? (
+        <p id={`overlay-help-${slotKey}`} className="text-xs text-destructive">
+          Overlay text can only use letters, numbers, spaces, £ and basic punctuation.
+        </p>
+      ) : (
+        <p id={`overlay-help-${slotKey}`} className="text-xs text-muted-foreground">
+          Shows as a strip on the image. Leave blank for no overlay.
+        </p>
+      )}
+    </div>
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -193,6 +258,15 @@ export function GenerateStep({
         ? "story"
       : null;
   const isStorySchedule = contentBrief.contentType === 'story' || contentPlacement === 'story';
+  // A brief carrying both placements resolves contentPlacement to null and takes
+  // the feed branch, so without this the user would approve a story overlay they
+  // never saw at 9:16.
+  const hasStoryPlacement =
+    contentPlacement === 'story' ||
+    ('placements' in contentBrief &&
+      Array.isArray(contentBrief.placements) &&
+      contentBrief.placements.includes('story'));
+  const isMixedPlacement = hasStoryPlacement && !isStorySchedule;
   const previewPlacement = resolveMediaPlacement({
     placement: contentPlacement,
     contentType: contentBrief.contentType,
@@ -252,6 +326,10 @@ export function GenerateStep({
         status: 'ready',
         approved: true,
         mediaIds: existing?.mediaIds,
+        // Carry typed overlay text through the rebuild. Without this, any change
+        // that shifts the signature (a retimed slot, replaced media) silently
+        // discards text the user has already typed.
+        bannerTextOverride: existing?.bannerTextOverride,
       };
     });
 
@@ -740,12 +818,13 @@ export function GenerateStep({
           const isApproved = slotCopy?.approved === true;
           // Overlays: events show a dynamic auto date-label (matching what the
           // publish worker prints) when no override is typed; other content types
-          // stay opt-in (blank = no overlay). The auto-label is display-only — the
+          // stay opt-in (blank = no overlay). The auto-label is display-only: the
           // input stays empty so the saved override remains null and the worker
-          // recomputes the label per post date.
+          // recomputes the label per post date. Placement is not consulted, so an
+          // event story gets the same automatic label as an event feed post.
           const typedOverlay = normaliseBannerText(slotCopy?.bannerTextOverride);
           const autoOverlayLabel =
-            !typedOverlay && !isStorySchedule && contentBrief.contentType === 'event' && slot.key !== 'now'
+            !typedOverlay && contentBrief.contentType === 'event' && slot.key !== 'now'
               ? (() => {
                   try {
                     return (
@@ -881,13 +960,37 @@ export function GenerateStep({
                           size="preview"
                           className="rounded-md border-border bg-muted"
                         >
-                          {primary && primary.mediaType === 'image' && primary.previewUrl ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img
-                              src={primary.previewUrl}
-                              alt={primary.fileName ?? ''}
-                              className="size-full object-contain"
-                            />
+                          {/*
+                            Preview the 1080x1920 crop, not previewUrl: previewUrl
+                            resolves with feed ordering, which hoists the original
+                            upload, so the overlay strip would sit on a different
+                            edge from the image that actually publishes. With no
+                            story crop there is nothing honest to draw over, so say
+                            so rather than preview the feed image.
+                          */}
+                          {primary && primary.mediaType === 'image' && !primary.storyPreviewUrl ? (
+                            <div className="flex size-full items-center justify-center p-3 text-center">
+                              <span className="text-xs text-muted-foreground">
+                                Story crop not ready. Pick another image.
+                              </span>
+                            </div>
+                          ) : primary && primary.mediaType === 'image' && primary.storyPreviewUrl ? (
+                            slotBannerConfig ? (
+                              <BannerOverlay
+                                mediaUrl={primary.storyPreviewUrl}
+                                config={slotBannerConfig}
+                                label={slotOverlayText}
+                                alt="Story media"
+                                className="size-full"
+                              />
+                            ) : (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                src={primary.storyPreviewUrl}
+                                alt={primary.fileName ?? ''}
+                                className="size-full object-contain"
+                              />
+                            )
                           ) : primary && primary.mediaType === 'video' ? (
                             <div className="flex size-full items-center justify-center">
                               <span className="text-xs text-muted-foreground">Video attached — no preview</span>
@@ -918,6 +1021,19 @@ export function GenerateStep({
                           <PlatformBadge key={platform} platform={platform} showLabel />
                         ))}
                       </div>
+                      {/*
+                        Story slots are force-approved by the auto-seed effect above,
+                        so this input is gated on isBusy alone. Including isApproved
+                        would leave it permanently read-only.
+                      */}
+                      <SlotOverlayInput
+                        slotKey={slot.key}
+                        value={slotCopy?.bannerTextOverride ?? ''}
+                        autoLabel={autoOverlayLabel}
+                        invalid={slotOverlayInvalid}
+                        disabled={isBusy}
+                        onChange={handleSlotBannerChange}
+                      />
                       <div className="flex items-center justify-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700">
                         <Check className="size-4" aria-hidden="true" /> Story media ready to schedule
                       </div>
@@ -971,6 +1087,7 @@ export function GenerateStep({
                                         mediaUrl={primary.previewUrl}
                                         config={slotBannerConfig}
                                         label={slotOverlayText}
+                                        alt="Post media"
                                         className="size-full"
                                       />
                                     ) : (
@@ -1034,40 +1151,55 @@ export function GenerateStep({
                         </div>
                       </div>
 
-                      {/* Per-post image overlay (opt-in, non-story only) */}
-                      <div className="mx-auto w-full max-w-6xl space-y-1.5">
-                        <label
-                          htmlFor={`overlay-${slot.key}`}
-                          className="text-xs font-medium text-muted-foreground"
-                        >
-                          Image overlay (optional)
-                        </label>
-                        <input
-                          id={`overlay-${slot.key}`}
-                          type="text"
-                          maxLength={MAX_BANNER_TEXT_LENGTH}
-                          value={slotCopy?.bannerTextOverride ?? ''}
-                          onChange={(e) => handleSlotBannerChange(slot.key, e.target.value)}
-                          disabled={isApproved || isBusy}
-                          placeholder={
-                            autoOverlayLabel
-                              ? `Auto: ${autoOverlayLabel} — type to override`
-                              : 'Add overlay text, e.g. £5 PINTS — leave blank for none'
-                          }
-                          aria-invalid={slotOverlayInvalid}
-                          aria-describedby={`overlay-help-${slot.key}`}
-                          className="flex w-full rounded-md border border-input bg-card px-3 py-2 text-sm shadow-[0_1px_2px_0_rgb(0_0_0/0.04)] placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:bg-muted/40 disabled:text-muted-foreground"
-                        />
-                        {slotOverlayInvalid ? (
-                          <p id={`overlay-help-${slot.key}`} className="text-xs text-destructive">
-                            Overlay text can only use letters, numbers, spaces, £ and basic punctuation.
-                          </p>
-                        ) : (
-                          <p id={`overlay-help-${slot.key}`} className="text-xs text-muted-foreground">
-                            Shows as a strip on the image. Leave blank for no overlay.
-                          </p>
-                        )}
-                      </div>
+                      {/*
+                        Mixed feed and story brief: one overlay input drives both
+                        previews, so show the 9:16 crop the story will publish.
+                      */}
+                      {isMixedPlacement && (
+                        <div className="mx-auto w-full max-w-6xl">
+                          <p className="mb-2 text-xs font-medium text-muted-foreground">Story preview</p>
+                          <div className="mx-auto w-full max-w-[200px]" data-testid="story-preview">
+                            <MediaFrame
+                              placement="story"
+                              size="preview"
+                              className="rounded-md border-border bg-muted"
+                            >
+                              {primary?.storyPreviewUrl ? (
+                                slotBannerConfig ? (
+                                  <BannerOverlay
+                                    mediaUrl={primary.storyPreviewUrl}
+                                    config={slotBannerConfig}
+                                    label={slotOverlayText}
+                                    alt="Story media"
+                                    className="size-full"
+                                  />
+                                ) : (
+                                  // eslint-disable-next-line @next/next/no-img-element
+                                  <img
+                                    src={primary.storyPreviewUrl}
+                                    alt={primary.fileName ?? ''}
+                                    className="size-full object-contain"
+                                  />
+                                )
+                              ) : (
+                                <div className="flex size-full items-center justify-center p-3 text-center">
+                                  <span className="text-xs text-muted-foreground">Story crop not ready</span>
+                                </div>
+                              )}
+                            </MediaFrame>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Per-post image overlay (opt-in) */}
+                      <SlotOverlayInput
+                        slotKey={slot.key}
+                        value={slotCopy?.bannerTextOverride ?? ''}
+                        autoLabel={autoOverlayLabel}
+                        invalid={slotOverlayInvalid}
+                        disabled={isApproved || isBusy}
+                        onChange={handleSlotBannerChange}
+                      />
 
                       {/* Refine + approve controls */}
                       {isApproved ? (
