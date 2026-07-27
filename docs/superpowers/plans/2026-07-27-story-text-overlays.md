@@ -546,8 +546,17 @@ In `src/app/(app)/library/actions.ts`, directly after `signPreviewFromCandidates
 async function signStoryPreview(
   supabase: SupabaseClient,
   candidates: PreviewCandidate[],
+  storagePath: string,
 ): Promise<string | undefined> {
-  const storyCandidate = candidates.find((candidate) => candidate.shape === "story");
+  // Re-order for story placement first. The candidate list handed in is ordered
+  // for FEED, which hoists the original upload to the front, so a plain
+  // find(shape === "story") would sign the original rather than the derivative
+  // for an asset whose original is itself 9:16.
+  const storyCandidate = orderPreviewCandidatesForPlacement({
+    candidates,
+    storagePath,
+    placement: "story",
+  }).find((candidate) => candidate.shape === "story");
   if (!storyCandidate) return undefined;
   try {
     const { data, error } = await supabase.storage
@@ -1108,56 +1117,41 @@ git add src/features/create/steps/generate-step.tsx src/features/create/generate
 git commit -m "fix(create): preserve story overlay text across slot rebuilds"
 ```
 
-## Task 11: Allow story overlay editing in the planner drawer
+## Task 11: Pin story captions as read-only (CORRECTED, no source change)
+
+**This task was wrong in the first draft of the plan and has been rewritten.** The original instruction was to drop a `content.placement !== 'story'` clause at `post-drawer.tsx:326` so story overlays could be edited. Three things were wrong with that:
+
+1. `post-drawer.tsx:322-328` renders `<InlineCopyEditor>`. That `canEdit` gates the **body copy** editor, not the overlay. `post-drawer.tsx` contains no overlay editing UI at all; `BannerOverlay` at line 299 is a read-only preview that already renders for stories.
+2. The overlay editor is `BannerControls`, rendered only at `planner-content-composer.tsx:273`. It receives no placement, so a story's overlay is **already editable**, gated only by `BANNER_EDITABLE_STATUSES`. Spec acceptance criterion 11 is satisfied today with no code change.
+3. Making the flip would have shipped a silent data-loss bug. `updatePlannerContentBody` (`planner/actions.ts:1000-1005`) forces `resolvedBody = ""` for stories, so a user could type a story caption, save, see a success toast, and lose the text.
 
 **Files:**
-- Modify: `src/features/planner/post-drawer.tsx:326`
-- Test: `src/features/planner/post-drawer.test.tsx`
+- Modify: `src/features/planner/post-drawer.test.tsx` only. `post-drawer.tsx` must end up unmodified relative to HEAD.
 
-- [ ] **Step 1: Write the failing test**
+- [ ] **Step 1: Add the regression test**
 
-```tsx
-it('allows editing the overlay on a scheduled story', () => {
-  renderDrawer({ content: { ...baseContent, placement: 'story', status: 'scheduled' } });
-  expect(screen.getByLabelText(/overlay text/i)).toBeEnabled();
-});
-
-it('keeps the overlay read-only on a published story', () => {
-  renderDrawer({ content: { ...baseContent, placement: 'story', status: 'posted' } });
-  expect(screen.getByLabelText(/overlay text/i)).toBeDisabled();
-});
-```
-
-Read the existing tests in this file for the correct render helper and the real label text used by `BannerControls`.
-
-- [ ] **Step 2: Run and watch the first fail**
-
-Run: `npx vitest run src/features/planner/post-drawer.test.tsx -t 'story'`
-Expected: the scheduled-story case FAILS.
-
-- [ ] **Step 3: Implement**
-
-At line 326, change:
+Pin that a story-placement post has a read-only caption editor. Use the render helper already in the file. Above the test, add a comment naming the reason:
 
 ```tsx
-        canEdit={canEdit && content.placement !== 'story'}
+// Story captions are intentionally read-only: stories have no caption, and
+// updatePlannerContentBody (planner/actions.ts:1000-1005) forces an empty body
+// for story placement. Making this editable would let a user type a caption,
+// see a success toast, and have it silently discarded. Do not "fix" this.
 ```
 
-to:
+- [ ] **Step 2: Run it**
 
-```tsx
-        canEdit={canEdit}
-```
+Run: `npx vitest run src/features/planner/post-drawer.test.tsx`
+Expected: PASS with no source change. If it fails, the current behaviour is not what this task assumes; stop and report.
 
-Leave `isStory={content.placement === 'story'}` on the next line alone. Status gating is already handled by `BANNER_EDITABLE_STATUSES` in both `banner-controls.tsx:37` and `planner/actions.ts:1306`, so the published case keeps working without further change.
+- [ ] **Step 3: Confirm no source drift**
 
-- [ ] **Step 4: Run and commit**
+Run: `git status --short src/features/planner/post-drawer.tsx`
+Expected: no output. If the file shows as modified, revert the edit with a targeted change, not a git restore.
 
-```bash
-npx vitest run src/features/planner/post-drawer.test.tsx
-git add src/features/planner/post-drawer.tsx src/features/planner/post-drawer.test.tsx
-git commit -m "feat(planner): allow story overlays to be edited after scheduling"
-```
+- [ ] **Step 4: Verification item, not a code change**
+
+Spec criterion 11 is checked by opening a scheduled story at `/planner/[contentId]` during Task 15's live verification and confirming the overlay field is editable there. Note it on the live-verification checklist.
 
 ## Task 12: Show both previews for mixed feed and story briefs
 

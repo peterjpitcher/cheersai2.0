@@ -185,11 +185,15 @@ The story auto-seed effect rebuilds slot copies and omits `bannerTextOverride`. 
 
 Add `bannerTextOverride: existing?.bannerTextOverride` to `nextCopies`, and add the field to `storyCopySignature`.
 
-**E. Allow editing a story's overlay in the planner.** `src/features/planner/post-drawer.tsx:326`
+**E. Editing a story's overlay in the planner: no change needed.**
 
-Drop the `content.placement !== 'story'` clause from `canEdit`. `updatePlannerBannerConfig` already has no story guard.
+The first draft of this spec called for dropping a `content.placement !== 'story'` clause at `post-drawer.tsx:326`. That was wrong, and the correction matters enough to record:
 
-Editable statuses are already `draft`, `scheduled`, `queued`, `failed` (`BANNER_EDITABLE_STATUSES`, `src/lib/scheduling/banner-config.ts:158`), enforced client-side at `banner-controls.tsx:37` and server-side at `planner/actions.ts:1306`. Acceptance criterion 8 states them explicitly rather than saying "an existing story".
+- `post-drawer.tsx:322-328` renders `<InlineCopyEditor>`. Its `canEdit` and `isStory` props gate the **body copy** editor, not the overlay.
+- The overlay editor is `BannerControls`, rendered only at `planner-content-composer.tsx:273` on the `/planner/[contentId]` route. That call site passes no placement, so a story's overlay is **already editable** today, gated only by `BANNER_EDITABLE_STATUSES` (`src/lib/scheduling/banner-config.ts:158`): `draft`, `scheduled`, `queued`, `failed`. Enforced client-side at `banner-controls.tsx:37` and server-side at `planner/actions.ts:1306`.
+- Making the flip would have introduced a regression, not a feature: `updatePlannerContentBody` (`planner/actions.ts:1000-1005`) forces `resolvedBody = ""` for stories, so a user could type a story caption, save, see a success toast, and have the text silently discarded.
+
+Story captions are read-only by design, because stories have no caption. Add a regression test pinning that, with a comment naming the reason, so nobody repeats this mistake.
 
 **F. Correct the type comment.** `src/types/content.ts:78`. "Stories never carry an overlay" is now false.
 
@@ -272,7 +276,7 @@ Required, as one pre-write all-or-nothing gate alongside the existing overlay-te
 8. Scheduling an **event** story with blank overlay text writes `banner_enabled = true` and a NULL `banner_text_override`, so the worker prints the computed proximity label. This matches event feed posts exactly.
 9. An event story card shows the `Auto: <label>` placeholder in the overlay input.
 10. Publishing a story with an overlay produces an image with the strip composited onto the 1080x1920 derivative, and that image is what the provider receives.
-11. A story in `draft`, `scheduled`, `queued` or `failed` state can have its overlay edited from the planner drawer. Other statuses remain read-only.
+11. A story in `draft`, `scheduled`, `queued` or `failed` state can have its overlay edited at `/planner/[contentId]` via `BannerControls`. Other statuses remain read-only. **Already satisfied today**, so this is a verification item rather than a change. The story caption stays read-only in the planner drawer, which is correct: stories have no caption.
 12. For a brief with both feed and story placements, the card shows a feed preview and a 9:16 story preview, both driven by one shared overlay text field, and both rows are written with that text.
 13. Feed post overlay behaviour is unchanged: same strip, same colours, same automatic event label.
 14. `BANNER_OVERLAY_DISABLED` bypasses the overlay for stories exactly as for feed posts.
