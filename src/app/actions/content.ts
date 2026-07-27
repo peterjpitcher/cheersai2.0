@@ -718,16 +718,84 @@ export async function createScheduledBatch(
       return { error: 'Select Facebook or Instagram when scheduling stories.' };
     }
 
-    // Stories require an image. Reject up front rather than scheduling a blank
-    // story that only fails (or publishes empty) at publish time. Applies to any
-    // story placement (story content type, or event/promotion/weekly with a
-    // story placement) — a story slot must resolve to at least one media asset.
+    // Trust boundary: media ids arrive from the client and are written straight
+    // into content_variants.media_ids, which the service-role publish worker
+    // later resolves with no account filter. Verify ownership here, before any
+    // write, so another account's asset can never be published from this one.
+    const submittedMediaIds = Array.from(
+      new Set(slotCopies.flatMap((slot) => slot.mediaIds ?? selectedMediaIds)),
+    );
+
+    if (submittedMediaIds.length > 0) {
+      const { data: ownedMedia, error: ownedMediaError } = await supabase
+        .from('media_assets')
+        .select('id')
+        .eq('account_id', accountId)
+        .in('id', submittedMediaIds)
+        .returns<Array<{ id: string }>>();
+
+      if (ownedMediaError) {
+        return { error: `Could not verify media: ${ownedMediaError.message}` };
+      }
+
+      const ownedIds = new Set((ownedMedia ?? []).map((row) => row.id));
+      if (submittedMediaIds.some((id) => !ownedIds.has(id))) {
+        // Deliberately vague: this must not confirm to a caller whether a given
+        // UUID exists on another account.
+        return { error: 'One or more selected images are not available. Reselect your media.' };
+      }
+    }
+
+    // Stories have a hard media contract the publish worker enforces: exactly one
+    // asset, an image, with a ready 1080x1920 derivative. Checking only for "at
+    // least one" lets a user schedule a story that is guaranteed to fail at
+    // publish time, long after the UI told them it was ready. Applies to any story
+    // placement (story content type, or event/promotion/weekly with a story
+    // placement).
+    //
+    // The messages are copied verbatim from getPublishReadinessIssues in
+    // src/lib/publishing/preflight.ts so the wording matches the planner's
+    // preflight errors. Preflight itself cannot be reused here: it keys every
+    // check off a content_items id, and on this path the content rows do not
+    // exist yet.
     if (placements.includes('story')) {
-      const storySlotMissingMedia = slotCopies.some(
-        (slot) => (slot.mediaIds ?? selectedMediaIds).length === 0,
-      );
-      if (storySlotMissingMedia) {
-        return { error: 'Stories need at least one image. Add media before scheduling.' };
+      const storySlotMedia = slotCopies.map((slot) => slot.mediaIds ?? selectedMediaIds);
+
+      if (storySlotMedia.some((mediaIds) => mediaIds.length === 0)) {
+        return { error: 'Stories require one processed image. Add a story image before scheduling.' };
+      }
+      if (storySlotMedia.some((mediaIds) => mediaIds.length !== 1)) {
+        return { error: 'Stories can only include one image.' };
+      }
+
+      const storyMediaIds = Array.from(new Set(storySlotMedia.flat()));
+      const { data: storyAssets, error: storyAssetsError } = await supabase
+        .from('media_assets')
+        .select('id, media_type, derived_variants')
+        .in('id', storyMediaIds)
+        .returns<Array<{
+          id: string;
+          media_type: string | null;
+          derived_variants: Record<string, unknown> | null;
+        }>>();
+
+      if (storyAssetsError) {
+        return { error: `Could not verify media: ${storyAssetsError.message}` };
+      }
+
+      const storyAssetsById = new Map((storyAssets ?? []).map((row) => [row.id, row]));
+      for (const mediaId of storyMediaIds) {
+        const asset = storyAssetsById.get(mediaId);
+        if (!asset) {
+          return { error: 'One or more media assets are missing. Reattach media before scheduling.' };
+        }
+        if (asset.media_type !== 'image') {
+          return { error: 'Stories only support images.' };
+        }
+        const storyVariant = asset.derived_variants?.story;
+        if (typeof storyVariant !== 'string' || storyVariant.length === 0) {
+          return { error: 'Story image is still processing. Wait for derivatives or choose another image.' };
+        }
       }
     }
 
@@ -879,14 +947,15 @@ export async function createScheduledBatch(
       // Overlays are opt-in per post. Derive the overlay once per slot; it applies
       // to every platform variant of that slot. Write an explicit banner_enabled
       // (never NULL) so the resolver's account-default fallback can't re-enable it,
-      // and keep the invariant "enabled ⇒ non-empty text". Stories never carry an
-      // overlay regardless of typed text.
-      const overlay = placement === 'story' ? null : normaliseBannerText(slot.bannerTextOverride);
+      // and keep the invariant "enabled implies non-empty text or a computed label".
+      // Placement is deliberately not consulted: stories follow the same rule as
+      // feed posts (see tasks/SPEC-story-text-overlays.md section 4.1).
+      const overlay = normaliseBannerText(slot.bannerTextOverride);
       // Events auto-enable a dynamic date overlay even without typed text: the
       // banner is enabled with a null override so the worker prints the per-post
-      // proximity label (TONIGHT / THIS FRIDAY / FRIDAY 17TH JULY). Other content
-      // types stay opt-in (enabled only when text is typed). Stories never carry one.
-      const autoOverlayForEvent = placement !== 'story' && contentType === 'event';
+      // proximity label (TONIGHT, THIS FRIDAY, FRIDAY 17TH JULY). Other content
+      // types stay opt-in, enabled only when text is typed.
+      const autoOverlayForEvent = contentType === 'event';
 
       return {
         content_item_id: item.id,
