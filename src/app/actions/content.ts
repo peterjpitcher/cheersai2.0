@@ -718,16 +718,94 @@ export async function createScheduledBatch(
       return { error: 'Select Facebook or Instagram when scheduling stories.' };
     }
 
-    // Stories require an image. Reject up front rather than scheduling a blank
-    // story that only fails (or publishes empty) at publish time. Applies to any
-    // story placement (story content type, or event/promotion/weekly with a
-    // story placement) — a story slot must resolve to at least one media asset.
+    // Trust boundary: media ids arrive from the client and are written straight
+    // into content_variants.media_ids, which the service-role publish worker
+    // later resolves with no account filter. Verify ownership here, before any
+    // write, so another account's asset can never be published from this one.
+    const submittedMediaIds = Array.from(
+      new Set(slotCopies.flatMap((slot) => slot.mediaIds ?? selectedMediaIds)),
+    );
+
+    if (submittedMediaIds.length > 0) {
+      const { data: ownedMedia, error: ownedMediaError } = await supabase
+        .from('media_assets')
+        .select('id')
+        .eq('account_id', accountId)
+        .in('id', submittedMediaIds)
+        .returns<Array<{ id: string }>>();
+
+      if (ownedMediaError) {
+        return { error: `Could not verify media: ${ownedMediaError.message}` };
+      }
+
+      const ownedIds = new Set((ownedMedia ?? []).map((row) => row.id));
+      if (submittedMediaIds.some((id) => !ownedIds.has(id))) {
+        // Deliberately vague: this must not confirm to a caller whether a given
+        // UUID exists on another account.
+        return { error: 'One or more selected images are not available. Reselect your media.' };
+      }
+    }
+
+    // Stories have a hard media contract the publish worker enforces: exactly one
+    // asset, an image, with a ready 1080x1920 derivative. Checking only for "at
+    // least one" lets a user schedule a story that is guaranteed to fail at
+    // publish time, long after the UI told them it was ready. Applies to any story
+    // placement (story content type, or event/promotion/weekly with a story
+    // placement).
+    //
+    // The messages are copied verbatim from getPublishReadinessIssues in
+    // src/lib/publishing/preflight.ts so the wording matches the planner's
+    // preflight errors. Preflight itself cannot be reused here: it keys every
+    // check off a content_items id, and on this path the content rows do not
+    // exist yet.
+    //
+    // Scope matters on a mixed batch. When the brief asks for a feed post AND a
+    // story, the story row carries only the first asset (see variantMedia below),
+    // so the strict "exactly one" count would reject a perfectly valid two-image
+    // feed post and write nothing at all. Story-only batches keep the count check:
+    // there the extra images have nowhere to go, so the user must be told rather
+    // than silently truncated.
     if (placements.includes('story')) {
-      const storySlotMissingMedia = slotCopies.some(
-        (slot) => (slot.mediaIds ?? selectedMediaIds).length === 0,
-      );
-      if (storySlotMissingMedia) {
-        return { error: 'Stories need at least one image. Add media before scheduling.' };
+      const storyOnlyBatch = !placements.includes('feed');
+      const storySlotMedia = slotCopies.map((slot) => slot.mediaIds ?? selectedMediaIds);
+
+      if (storySlotMedia.some((mediaIds) => mediaIds.length === 0)) {
+        return { error: 'Stories require one processed image. Add a story image before scheduling.' };
+      }
+      if (storyOnlyBatch && storySlotMedia.some((mediaIds) => mediaIds.length !== 1)) {
+        return { error: 'Stories can only include one image.' };
+      }
+
+      // Validate exactly what the story row will publish: the first asset of each
+      // slot. On a story-only batch that is the slot's single asset anyway.
+      const storyMediaIds = Array.from(new Set(storySlotMedia.map((mediaIds) => mediaIds[0])));
+      const { data: storyAssets, error: storyAssetsError } = await supabase
+        .from('media_assets')
+        .select('id, media_type, derived_variants')
+        .in('id', storyMediaIds)
+        .returns<Array<{
+          id: string;
+          media_type: string | null;
+          derived_variants: Record<string, unknown> | null;
+        }>>();
+
+      if (storyAssetsError) {
+        return { error: `Could not verify media: ${storyAssetsError.message}` };
+      }
+
+      const storyAssetsById = new Map((storyAssets ?? []).map((row) => [row.id, row]));
+      for (const mediaId of storyMediaIds) {
+        const asset = storyAssetsById.get(mediaId);
+        if (!asset) {
+          return { error: 'One or more media assets are missing. Reattach media before scheduling.' };
+        }
+        if (asset.media_type !== 'image') {
+          return { error: 'Stories only support images.' };
+        }
+        const storyVariant = asset.derived_variants?.story;
+        if (typeof storyVariant !== 'string' || storyVariant.length === 0) {
+          return { error: 'Story image is still processing. Wait for derivatives or choose another image.' };
+        }
       }
     }
 
@@ -853,6 +931,14 @@ export async function createScheduledBatch(
     // wizard-level selection when a slot carries no media field at all.
     const resolveSlotMedia = (slot: (typeof slotCopies)[number]): string[] =>
       slot.mediaIds ?? selectedMediaIds;
+    // Media is chosen per slot but written per placement. Stories publish exactly
+    // one asset (the worker throws on anything else), so a story row takes only
+    // the first asset while the feed row keeps the whole selection. This is the
+    // same first-asset rule the wizard's mixed-placement story preview shows.
+    const resolvePlacementMedia = (
+      slotMedia: string[],
+      placement: 'feed' | 'story',
+    ): string[] => (placement === 'story' ? slotMedia.slice(0, 1) : slotMedia);
     const ctaLinks = readPlatformCtaLinks(brief);
     const ctaLabel = typeof brief.ctaLabel === 'string' ? brief.ctaLabel : undefined;
 
@@ -874,25 +960,26 @@ export async function createScheduledBatch(
             brief,
           }, { ctaLinks, contentType })
         : null;
-      const slotMedia = resolveSlotMedia(slot);
+      const variantMedia = resolvePlacementMedia(resolveSlotMedia(slot), placement);
 
       // Overlays are opt-in per post. Derive the overlay once per slot; it applies
       // to every platform variant of that slot. Write an explicit banner_enabled
       // (never NULL) so the resolver's account-default fallback can't re-enable it,
-      // and keep the invariant "enabled ⇒ non-empty text". Stories never carry an
-      // overlay regardless of typed text.
-      const overlay = placement === 'story' ? null : normaliseBannerText(slot.bannerTextOverride);
+      // and keep the invariant "enabled implies non-empty text or a computed label".
+      // Placement is deliberately not consulted: stories follow the same rule as
+      // feed posts (see tasks/SPEC-story-text-overlays.md section 4.1).
+      const overlay = normaliseBannerText(slot.bannerTextOverride);
       // Events auto-enable a dynamic date overlay even without typed text: the
       // banner is enabled with a null override so the worker prints the per-post
-      // proximity label (TONIGHT / THIS FRIDAY / FRIDAY 17TH JULY). Other content
-      // types stay opt-in (enabled only when text is typed). Stories never carry one.
-      const autoOverlayForEvent = placement !== 'story' && contentType === 'event';
+      // proximity label (TONIGHT, THIS FRIDAY, FRIDAY 17TH JULY). Other content
+      // types stay opt-in, enabled only when text is typed.
+      const autoOverlayForEvent = contentType === 'event';
 
       return {
         content_item_id: item.id,
         body,
         preview_data: previewData,
-        media_ids: slotMedia.length > 0 ? slotMedia : null,
+        media_ids: variantMedia.length > 0 ? variantMedia : null,
         banner_enabled: overlay !== null || autoOverlayForEvent,
         banner_text_override: overlay,
       };
@@ -915,12 +1002,16 @@ export async function createScheduledBatch(
       return { error: `Variant insert failed: ${variantError.message}` };
     }
 
-    // Insert content_media_attachments for v2 compatibility (per-slot media)
+    // Insert content_media_attachments for v2 compatibility. Attachments are keyed
+    // per content item and every content item has a placement, so they follow the
+    // same per-placement media as the variant above. Otherwise a story item's
+    // planner thumbnail and library reference count would claim images the story
+    // will never publish.
     const attachmentRows: Record<string, unknown>[] = [];
     insertedItems.forEach((item, index) => {
-      const { slotIdx } = slotPlatformIndex[index];
-      const slotMedia = resolveSlotMedia(slotCopies[slotIdx]);
-      slotMedia.forEach((mediaId, mi) => {
+      const { slotIdx, placement } = slotPlatformIndex[index];
+      const itemMedia = resolvePlacementMedia(resolveSlotMedia(slotCopies[slotIdx]), placement);
+      itemMedia.forEach((mediaId, mi) => {
         attachmentRows.push({
           content_item_id: item.id,
           media_id: mediaId,

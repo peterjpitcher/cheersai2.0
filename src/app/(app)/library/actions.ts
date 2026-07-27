@@ -12,7 +12,13 @@ import { normaliseTag, normaliseTags } from "@/lib/library/tags";
 import { SYSTEM_MEDIA_TAGS } from "@/lib/library/system-tags";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
 import type { MediaAssetSummary } from "@/lib/library/data";
-import { resolvePreviewCandidates, normaliseStoragePath, type PreviewCandidate } from "@/lib/library/data";
+import {
+  resolvePreviewCandidates,
+  resolveStoryDerivativePath,
+  normaliseStoragePath,
+  type PreviewCandidate,
+  type PreviewPlacement,
+} from "@/lib/library/data";
 
 const REVALIDATE_PATHS = ["/library", "/create", "/planner", "/campaigns", "/link-in-bio", "/tournaments"] as const;
 
@@ -225,17 +231,20 @@ export async function finaliseMediaUpload(input: FinaliseUploadInput) {
     return null;
   }
 
-  const { url: previewUrl, shape: previewShape } = await signPreviewFromCandidates(
-    supabase,
-    resolvePreviewCandidates({
-      storagePath: assetRow.storage_path,
-      derivedVariants: assetRow.derived_variants ?? {},
-      aspectClass: assetRow.aspect_class,
-      placement: "feed",
-    }),
-  );
+  // The feed preview takes the first signable candidate; the story preview is
+  // resolved separately from the story derivative, which is the only thing the
+  // publish worker will accept for a story.
+  const candidates = resolvePreviewCandidates({
+    storagePath: assetRow.storage_path,
+    derivedVariants: assetRow.derived_variants ?? {},
+    aspectClass: assetRow.aspect_class,
+    placement: "feed",
+  });
 
-  return mapToSummary(assetRow, previewUrl, previewShape);
+  const { url: previewUrl, shape: previewShape } = await signPreviewFromCandidates(supabase, candidates);
+  const storyPreviewUrl = await signStoryPreview(supabase, assetRow.derived_variants);
+
+  return mapToSummary(assetRow, previewUrl, previewShape, storyPreviewUrl);
 }
 
 function normaliseDerivedVariants({
@@ -305,17 +314,20 @@ export async function updateMediaAsset(input: UpdateMediaAssetInput) {
     return null;
   }
 
-  const { url: previewUrl, shape: previewShape } = await signPreviewFromCandidates(
-    supabase,
-    resolvePreviewCandidates({
-      storagePath: assetRow.storage_path,
-      derivedVariants: assetRow.derived_variants ?? {},
-      aspectClass: assetRow.aspect_class,
-      placement: "feed",
-    }),
-  );
+  // The feed preview takes the first signable candidate; the story preview is
+  // resolved separately from the story derivative, which is the only thing the
+  // publish worker will accept for a story.
+  const candidates = resolvePreviewCandidates({
+    storagePath: assetRow.storage_path,
+    derivedVariants: assetRow.derived_variants ?? {},
+    aspectClass: assetRow.aspect_class,
+    placement: "feed",
+  });
 
-  return mapToSummary(assetRow, previewUrl, previewShape);
+  const { url: previewUrl, shape: previewShape } = await signPreviewFromCandidates(supabase, candidates);
+  const storyPreviewUrl = await signStoryPreview(supabase, assetRow.derived_variants);
+
+  return mapToSummary(assetRow, previewUrl, previewShape, storyPreviewUrl);
 }
 
 /**
@@ -1205,6 +1217,41 @@ async function signPreviewFromCandidates(
   return { url: undefined, shape: "square" };
 }
 
+/**
+ * Sign the 1080x1920 story derivative specifically. Resolved from
+ * derived_variants.story, never from a candidate's shape: shape marks a
+ * portrait-looking original as "story" too, and the publish worker requires the
+ * derivative itself. Returns undefined when there is no derivative, because
+ * falling back to an original or square crop would silently promise a story
+ * crop that does not exist.
+ */
+async function signStoryPreview(
+  supabase: SupabaseClient,
+  derivedVariants: Record<string, string> | null | undefined,
+): Promise<string | undefined> {
+  const storyPath = resolveStoryDerivativePath(derivedVariants);
+
+  if (!storyPath) {
+    return undefined;
+  }
+
+  try {
+    const { data, error } = await supabase.storage
+      .from(MEDIA_BUCKET)
+      .createSignedUrl(storyPath, 600);
+    if (!error && data?.signedUrl) {
+      return data.signedUrl;
+    }
+  } catch (error) {
+    console.error("[library] failed to sign story preview", {
+      path: storyPath,
+      error,
+    });
+  }
+
+  return undefined;
+}
+
 function mapToSummary(
   row: {
     id: string;
@@ -1221,6 +1268,7 @@ function mapToSummary(
   },
   previewUrl?: string,
   previewShape: "square" | "story" = "square",
+  storyPreviewUrl?: string,
 ): MediaAssetSummary {
   return {
     id: row.id,
@@ -1235,11 +1283,19 @@ function mapToSummary(
     derivedVariants: row.derived_variants ?? {},
     aspectClass: (row.aspect_class ?? "square") as MediaAssetSummary["aspectClass"],
     previewUrl,
+    storyPreviewUrl,
     previewShape,
   };
 }
 
-export async function fetchMediaAssetPreviewUrl(assetId: string) {
+/**
+ * Sign a preview URL for a single asset. `placement` defaults to "feed" so every
+ * existing caller is unaffected; pass "story" to get the 1080x1920 crop first.
+ */
+export async function fetchMediaAssetPreviewUrl(
+  assetId: string,
+  placement: PreviewPlacement = "feed",
+): Promise<string | null> {
   const { supabase, accountId } = await requireAuthContext();
 
   const { data: asset, error } = await supabase
@@ -1263,7 +1319,7 @@ export async function fetchMediaAssetPreviewUrl(assetId: string) {
       storagePath: asset.storage_path,
       derivedVariants: asset.derived_variants ?? {},
       aspectClass: asset.aspect_class,
-      placement: "feed",
+      placement,
     }),
   );
 

@@ -12,7 +12,10 @@
 //   - its content_item belongs to an EVENT campaign (campaign_type = 'event');
 //   - the content_item is still unpublished (draft/review/approved/scheduled/
 //     queued) — published/posted/failed rows are left untouched;
-//   - the content_item placement is NOT 'story' (stories never carry overlays);
+//   - ANY placement, feed or story. Stories were excluded when this script was
+//     written because overlays were switched off for them at creation time.
+//     That guard is gone (see tasks/SPEC-story-text-overlays.md), so event
+//     stories now follow the same rule as event feed posts and are included;
 //   - banner_text_override IS NULL — never touch a deliberately-typed overlay;
 //   - banner_enabled is currently false — i.e. the overlay is off.
 //
@@ -91,7 +94,7 @@ async function main(): Promise<void> {
     return;
   }
 
-  // 2. Unpublished, non-story content items in those campaigns.
+  // 2. Unpublished content items in those campaigns, feed and story alike.
   const contentItemIds: string[] = [];
   for (const ids of chunk(eventCampaignIds, IN_CHUNK)) {
     const items = await collectPaged<{ id: string }>((from) =>
@@ -100,7 +103,6 @@ async function main(): Promise<void> {
         .select("id")
         .in("campaign_id", ids)
         .in("status", UNPUBLISHED_STATUSES)
-        .neq("placement", "story")
         .range(from, from + PAGE_SIZE - 1),
     );
     contentItemIds.push(...items.map((row) => row.id));
