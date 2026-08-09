@@ -446,22 +446,17 @@ CheersAI is an AI-powered social media management platform for hospitality venue
 - Key locations: `src/lib/constants.ts` (DEFAULT_TIMEZONE), `src/lib/*/time-utils.ts`
 <!-- GSD:architecture-end -->
 
-<!-- GSD:workflow-start source:GSD defaults -->
-## GSD Workflow Enforcement
+## Planning Workflow
 
-Before using Edit, Write, or other file-changing tools, start work through a GSD command so planning artifacts and execution context stay in sync.
+The GSD commands (`/gsd:quick`, `/gsd:debug`, `/gsd:execute-phase`) were archived on
+2026-07-03 and no longer exist. Do not try to invoke them.
 
-Use these entry points:
-- `/gsd:quick` for small fixes, doc updates, and ad-hoc tasks
-- `/gsd:debug` for investigation and bug fixing
-- `/gsd:execute-phase` for planned phase work
+For anything beyond a trivial edit, work through `tasks/`:
 
-Do not make direct repo edits outside a GSD workflow unless the user explicitly asks to bypass it.
-<!-- GSD:workflow-end -->
+- Write a `tasks/SPEC-<slug>.md` before changing code, covering what changes, why, the
+  rollback, and anything that must be deployed before a production setting is flipped.
+- Use `tasks/PLAN-<slug>.md` for multi-PR work, mapping the order and dependencies.
+- Record decisions in the spec as they are made. Open questions belong in chat, never in
+  a file.
 
-<!-- GSD:profile-start -->
-## Developer Profile
-
-> Profile not yet configured. Run `/gsd:profile-user` to generate your developer profile.
-> This section is managed by `generate-claude-profile` -- do not edit manually.
-<!-- GSD:profile-end -->
+Finish with `npm run ci:verify` (lint, typecheck, test, build). All four gates must pass.
