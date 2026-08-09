@@ -61,7 +61,8 @@ export interface AdCopyValidationIssue {
     | 'missing_payment_reassurance'
     | 'food_tonight'
     | 'food_last_orders'
-    | 'food_wrong_service';
+    | 'food_wrong_service'
+    | 'vague_headline';
   message: string;
   adSetName?: string;
   adName?: string;
@@ -72,6 +73,20 @@ const RAW_URL_PATTERN = /https?:\/\//i;
 const WALK_IN_PATTERN = /\bwalk-?ins?\s+(welcome|available|if space allows)\b/i;
 const PAY_ON_ARRIVAL_PATTERN = /\b(no payment now|pay.{0,40}(arrival|night|door)|cash.{0,30}(arrival|night|door))\b/i;
 const TEXT_DATE_PATTERN = /\b(\d{1,2})(?:st|nd|rd|th)?\s+(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|sept|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\b/gi;
+// A headline earns its place by naming something real. Prices, numbers and dates are
+// self-evidently concrete; anything else has to be a word the brief itself used (a host
+// name, prize, or theme), which is what separates "Nikki's Country Bingo" from "Quiz
+// Night Awaits!". Deliberately excludes tonight/tomorrow: urgency is not a fact.
+const CONCRETE_HEADLINE_PATTERN = /(£\s*\d|\d|\bfree\b|\b(two|three|four|five|six|seven|eight|nine|ten)\b|\b(mon|tues|wednes|thurs|fri|satur|sun)days?\b|\b(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|sept|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\b)/i;
+// Filler that carries no information, so it cannot count as a brief-derived term.
+const HEADLINE_STOPWORDS = new Set([
+  'this', 'that', 'with', 'your', 'yours', 'from', 'here', 'have', 'more', 'best', 'good',
+  'great', 'come', 'book', 'booking', 'now', 'tonight', 'tomorrow', 'today', 'night', 'nights',
+  'awaits', 'await', 'only', 'just', 'get', 'the', 'and', 'for', 'our', 'you', 'all', 'new',
+  'fun', 'time', 'times', 'event', 'events', 'plan', 'play', 'join', 'love', 'want', 'need',
+  'live', 'over', 'into', 'make', 'made', 'take', 'what', 'when', 'where', 'wait', 'ready',
+]);
+
 const GENERIC_PHRASES = [
   "don't miss out",
   "don't miss",
@@ -109,7 +124,7 @@ MANDATORY — CASH-ON-ARRIVAL PAYMENT REASSURANCE:
 When payment_mode is "cash_only" or the brief mentions pay on arrival, EVERY ad's primary_text MUST contain one of: "No payment now", "pay on arrival", "pay on the night", "pay at the door", or "cash on arrival". Ads missing this phrase will be rejected. This rule overrides length concerns — include the phrase even if it means shortening other copy.
 
 COPY RULES:
-- headline: max 40 characters — punchy, specific, no generic phrases
+- headline: max 40 characters, punchy and specific. MANDATORY: every headline must state at least one concrete fact taken from the brief, being a host or performer name, a price, a date or day, or a named prize, round, or theme. Headlines that only convey mood or urgency ("Quiz Night Awaits!", "Instant Fun Awaits!", "Tonight Only: Book Now!") will be rejected. Prices and named hosts are strengths, so lead with them rather than hiding them.
 - primary_text: 120–260 characters — front-load booking intent because Meta truncates copy:
   • Line 1: the concrete reason to book/reserve/buy seats now; name a number, prize, price, date, time, limited capacity, or mechanic from the brief
   • Line 2: specific proof/detail from the brief — prices, mechanics, atmosphere, social context, category, performer, food angle, or value
@@ -236,6 +251,29 @@ export function enforceAdSetConstraints(
   };
 }
 
+/**
+ * True when the headline states a fact rather than a mood: a price, a number, a date, or a
+ * distinctive word the brief itself used (host name, prize, theme). `briefTerms` is empty
+ * when no brief was supplied, in which case only the self-evident signals apply.
+ */
+export function headlineStatesAConcreteFact(headline: string, briefTerms: Set<string>): boolean {
+  if (CONCRETE_HEADLINE_PATTERN.test(headline)) return true;
+
+  return headline
+    .toLowerCase()
+    .split(/[^a-z']+/)
+    .some((word) => word.length >= 4 && !HEADLINE_STOPWORDS.has(word) && briefTerms.has(word));
+}
+
+function extractBriefTerms(brief: string | null | undefined): Set<string> {
+  if (!brief) return new Set();
+  const terms = new Set<string>();
+  for (const word of brief.toLowerCase().split(/[^a-z']+/)) {
+    if (word.length >= 4 && !HEADLINE_STOPWORDS.has(word)) terms.add(word);
+  }
+  return terms;
+}
+
 export function validateCampaignCopy(
   payload: AiCampaignPayload,
   options?: {
@@ -246,9 +284,12 @@ export function validateCampaignCopy(
     campaignKind?: PaidCampaignKind;
     serviceKey?: FoodServiceKey | null;
     decisionStage?: FoodDecisionStage | null;
+    /** The campaign brief, so headlines can be checked for naming something real. */
+    problemBrief?: string | null;
   },
 ): AdCopyValidationIssue[] {
   const issues: AdCopyValidationIssue[] = [];
+  const briefTerms = extractBriefTerms(options?.problemBrief);
 
   for (const adSet of payload.ad_sets) {
     const seenAngles = new Set<string>();
@@ -268,6 +309,17 @@ export function validateCampaignCopy(
         issues.push({
           code: 'raw_url',
           message: 'Do not paste raw URLs into ad copy.',
+          adSetName: adSet.name,
+          adName: ad.name,
+        });
+      }
+      // Event campaigns only: this is the rule from the August 2026 ads review, where vague
+      // event headlines were tracked to poor click-through. food_booking copy has its own
+      // service-specific rules below and is deliberately left alone.
+      if (options?.campaignKind === 'event' && !headlineStatesAConcreteFact(ad.headline, briefTerms)) {
+        issues.push({
+          code: 'vague_headline',
+          message: 'Every headline must state a concrete fact: a host name, a price, a date, or a named prize or theme.',
           adSetName: adSet.name,
           adName: ad.name,
         });
@@ -532,10 +584,12 @@ The ads array must contain EXACTLY 3 entries per ad set. Each must have a differ
   }
 
   const validationOptions = {
+    campaignKind: input.campaignKind,
     requireBookingIntent: input.campaignKind === 'event',
     requireBookNow: input.campaignKind === 'event',
     eventDate: textValue(input.sourceSnapshot?.eventDate),
     cashOnArrival,
+    problemBrief: input.problemBrief,
   };
 
   const copyIssues = validateCampaignCopy(payload, validationOptions);
@@ -572,6 +626,7 @@ async function validateAndCorrectFoodCopy(
       campaignKind: 'food_booking' as const,
       serviceKey: window?.serviceKey ?? null,
       decisionStage: window?.decisionStage ?? null,
+      problemBrief: input.problemBrief,
     };
 
     const singleAdSetPayload: AiCampaignPayload = { ...payload, ad_sets: [correctedAdSets[index]!] };

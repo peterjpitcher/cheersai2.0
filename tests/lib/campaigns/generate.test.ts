@@ -141,7 +141,9 @@ describe('generateCampaign', () => {
   });
 
   it('should truncate headlines longer than 40 chars', async () => {
-    const longHeadline = 'A'.repeat(50); // 50 chars
+    // Over 40 chars, and concrete enough to clear the vague-headline rule so this test
+    // exercises truncation rather than copy validation.
+    const longHeadline = '£5 Quiz Night with Nikki Manfadge this Friday'; // 44 chars
     const mockPayload = {
       objective: 'OUTCOME_AWARENESS',
       rationale: 'Test',
