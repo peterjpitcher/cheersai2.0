@@ -476,7 +476,7 @@ describe('generateCampaignAction', () => {
     expect(result.payload.media_plan).toMatchObject({
       executionMode: 'single_push',
       budgetRecommendation: {
-        recommendedBudgetAmount: 30,
+        recommendedBudgetAmount: 100,
         targetExecutionMode: 'two_phase',
       },
     });
@@ -495,7 +495,7 @@ describe('generateCampaignAction', () => {
       destinationUrl: 'https://vip-club.uk/ma123',
       geoRadiusMiles: 3,
       audienceMode: 'local_only',
-      budgetAmount: 35,
+      budgetAmount: 100,
       budgetType: 'LIFETIME',
       startDate: '2026-03-10',
       endDate: '2026-03-15',
@@ -519,7 +519,7 @@ describe('generateCampaignAction', () => {
       destinationUrl: 'https://vip-club.uk/ma123',
       geoRadiusMiles: 3,
       audienceMode: 'local_only',
-      budgetAmount: 45,
+      budgetAmount: 150,
       budgetType: 'LIFETIME',
       startDate: '2026-03-10',
       endDate: '2026-03-15',
