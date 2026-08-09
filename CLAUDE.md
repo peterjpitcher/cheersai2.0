@@ -460,3 +460,21 @@ For anything beyond a trivial edit, work through `tasks/`:
   a file.
 
 Finish with `npm run ci:verify` (lint, typecheck, test, build). All four gates must pass.
+
+## Paid Ads Briefs (read before any ads work)
+
+**Read `tasks/ADS-PLAYBOOK-the-anchor.md` first whenever Peter briefs a paid Meta campaign**,
+especially one the wizard cannot build (the wizard only covers `event` and `food_booking`;
+anything else, Sunday roast, Christmas, function hire, recruitment, is off-app work).
+
+It holds the verified ad account, Page, pixel and venue facts, the exact limits of what
+`src/lib/meta/marketing.ts` can publish, real CPC and CTR benchmarks from live campaigns, the
+copy guardrails, and the brief template. Re-verify the account facts against Supabase before
+anything that spends money.
+
+Two standing points from that file, so they are not missed:
+
+- Campaigns publish **through the app**, not by hand in Ads Manager, so the dashboard,
+  performance sync and optimiser all see them.
+- The Instagram `social_connections.status` value of `expiring` is a dead label, not a fault.
+  Nothing writes or gates on it. Do not report it as needing reconnection.
