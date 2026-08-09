@@ -11,7 +11,11 @@ import {
   type CampaignPhase,
 } from '@/lib/campaigns/phases';
 
-export const MIN_EVENT_BUDGET_PER_EXECUTION_PHASE = 15;
+// Each execution phase is a separate Meta ad set, and every ad set starts its own learning
+// phase from zero. At GBP 15 a typical event budget split into three, leaving each ad set with
+// too little spend to learn from, which is what drove event CPCs up. GBP 50 keeps a normal
+// GBP 45 event on one ad set and only splits when there is genuinely enough money for two.
+export const MIN_EVENT_BUDGET_PER_EXECUTION_PHASE = 50;
 
 interface BuildEventMediaPlanInput {
   startDate: string;

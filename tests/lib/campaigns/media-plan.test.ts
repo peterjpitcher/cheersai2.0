@@ -29,7 +29,7 @@ describe('buildEventMediaPlan', () => {
       startDate: '2026-03-14',
       eventDate: '2026-03-15',
       adsStopTime: '19:00',
-      budgetAmount: 30,
+      budgetAmount: 100,
       budgetType: 'LIFETIME',
     });
 
@@ -60,8 +60,8 @@ describe('buildEventMediaPlan', () => {
       },
     ]);
     expect(plan.budgetRecommendation).toMatchObject({
-      recommendedBudgetAmount: 30,
-      additionalBudgetAmount: 10,
+      recommendedBudgetAmount: 100,
+      additionalBudgetAmount: 80,
       targetExecutionMode: 'two_phase',
     });
   });
@@ -71,7 +71,7 @@ describe('buildEventMediaPlan', () => {
       startDate: '2026-03-10',
       eventDate: '2026-03-15',
       adsStopTime: '19:00',
-      budgetAmount: 35,
+      budgetAmount: 100,
       budgetType: 'LIFETIME',
     });
 
@@ -93,8 +93,8 @@ describe('buildEventMediaPlan', () => {
       },
     ]);
     expect(plan.budgetRecommendation).toMatchObject({
-      recommendedBudgetAmount: 45,
-      additionalBudgetAmount: 10,
+      recommendedBudgetAmount: 150,
+      additionalBudgetAmount: 50,
       targetExecutionMode: 'three_phase',
     });
   });
@@ -104,7 +104,7 @@ describe('buildEventMediaPlan', () => {
       startDate: '2026-03-13',
       eventDate: '2026-03-15',
       adsStopTime: '19:00',
-      budgetAmount: 45,
+      budgetAmount: 150,
       budgetType: 'LIFETIME',
     });
 
@@ -123,25 +123,25 @@ describe('buildEventMediaPlan', () => {
       startDate: '2026-03-10',
       eventDate: '2026-03-15',
       adsStopTime: '19:00',
-      budgetAmount: 5,
+      budgetAmount: 20,
       budgetType: 'DAILY',
     });
     const highPlan = buildEventMediaPlan({
       startDate: '2026-03-10',
       eventDate: '2026-03-15',
       adsStopTime: '19:00',
-      budgetAmount: 8,
+      budgetAmount: 25,
       budgetType: 'DAILY',
     });
 
-    expect(mediumPlan.lifetimeEquivalentBudget).toBe(30);
+    expect(mediumPlan.lifetimeEquivalentBudget).toBe(120);
     expect(mediumPlan.executionMode).toBe('two_phase');
     expect(mediumPlan.budgetRecommendation).toMatchObject({
-      recommendedBudgetAmount: 8,
-      additionalBudgetAmount: 3,
+      recommendedBudgetAmount: 25,
+      additionalBudgetAmount: 5,
       targetExecutionMode: 'three_phase',
     });
-    expect(highPlan.lifetimeEquivalentBudget).toBe(48);
+    expect(highPlan.lifetimeEquivalentBudget).toBe(150);
     expect(highPlan.executionMode).toBe('three_phase');
   });
 

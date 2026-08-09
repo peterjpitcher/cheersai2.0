@@ -272,6 +272,13 @@ function validateBookingConversionPreflight(
   if (!shouldRequireBookingConversionSetup(campaign) || conversionSetup) return null;
 
   const readiness = buildConversionReadiness(adAccount);
+
+  // Conversion optimisation switched off deliberately is a choice, not a misconfiguration:
+  // event campaigns fall back to traffic optimisation instead of being blocked. A pixel that
+  // is missing or pointing at the wrong event still blocks, because that is an accident.
+  // food_booking has no traffic fallback (see food-materialise.ts) so it blocks either way.
+  if (!readiness.enabled && !isFoodBookingCampaign(campaign)) return null;
+
   const issueText = readiness.issues.length
     ? readiness.issues.join(' ')
     : 'Meta conversion tracking is not ready.';
@@ -726,7 +733,15 @@ export async function publishCampaign(
 
   const { access_token: accessToken, meta_account_id: adAccountId } = adAccount;
   const conversionSetup = buildPublishConversionSetup(campaign, adAccount);
-  const publishObjective = conversionSetup ? 'OUTCOME_SALES' : campaign.objective;
+  // A draft generated while conversion optimisation was on still carries OUTCOME_SALES and
+  // OFFSITE_CONVERSIONS. Publishing that after the switch would ask Meta to optimise for
+  // conversions with no pixel attached, which it rejects, so coerce the pair to traffic.
+  const trafficFallback = !conversionSetup && !buildConversionReadiness(adAccount).enabled;
+  const publishObjective = conversionSetup
+    ? 'OUTCOME_SALES'
+    : trafficFallback
+      ? 'OUTCOME_TRAFFIC'
+      : campaign.objective;
 
   // ── 3. Token expiry check (separate query) ────────────────────────────────
 
@@ -918,7 +933,11 @@ export async function publishCampaign(
     for (const adSet of adSets) {
       const budgetAmount = adSetBudgets.get(adSet.id) ?? Number(campaign.budget_amount);
       const isDaily = campaign.budget_type === 'DAILY';
-      const optimisationGoal = conversionSetup ? 'OFFSITE_CONVERSIONS' : adSet.optimisation_goal;
+      const optimisationGoal = conversionSetup
+        ? 'OFFSITE_CONVERSIONS'
+        : trafficFallback
+          ? 'LINK_CLICKS'
+          : adSet.optimisation_goal;
       const promotedObject = conversionSetup
         ? {
             pixel_id: conversionSetup.pixelId,
