@@ -138,19 +138,37 @@ website contract did not move.
 | Tests | 17 fetch security, 13 image, 31 import, 11 client, 15 selection, 14 route, 6 banner |
 | Gate | `npm run ci:verify` passes: lint, typecheck, **1909 tests**, build |
 
-### Not done, and why
+### Migrations applied 2026-08-25
 
-1. **Migrations are not applied.** Both write to production (the AMS one grants a
-   scope to a live API key). Column and constraint references were verified
-   read-only against both production databases, so they will apply cleanly, but
-   applying them is Peter's call.
-2. **The three SQL functions have no test against a real database.** Their
-   callers are covered by a fake that asserts the reserve, finalise, release and
-   compensation sequence, but concurrent reserve, stale takeover and the unique
-   index itself are only proven once the migration exists somewhere to run
-   against. This is the one item from the review's F-25 that is still open, and
-   it should be closed on a Supabase branch or staging before production.
-3. **The benchmark gate has not been run.** It needs a preview deployment and a
-   real event with the full kit. Assumptions A-1, A-3 and A-5 stay unverified
-   until it is.
-4. **The orphan-object audit script is deferred**, as stated in the spec.
+Both applied to production and verified. Local filenames were renamed to the
+versions actually recorded, so a later `db push` does not try to re-run them.
+
+| Project | Version | Verified |
+|---|---|---|
+| AMS `tfcasgxopxegwrabvwat` | `20260825090130_event_artwork_api_scope` | `cheersai` key now holds `read:events:artwork`; both column comments updated |
+| CheersAI `nbkjciurhvkfpcpatbnt` | `20260825090338_media_asset_provenance` | 2 columns, 1 partial unique index, 3 functions, 3 `service_role` grants, **0** grants leaked to `anon`/`authenticated`/`PUBLIC` |
+
+### Review item F-25, closed
+
+The three SQL functions were exercised **against the real production schema**
+inside a `DO` block, which is a single transaction, ending in a deliberate
+`RAISE` so every row rolled back. Confirmed afterwards: zero residue.
+
+| Assertion | Result |
+|---|---|
+| First reserve claims the key | `reserved` |
+| `media_library` mirror exists immediately | 1 row |
+| Concurrent duplicate does not repeat the work | `in_progress` |
+| Finalise without a story derivative | refused |
+| Same key after finalise | `reused` |
+| Release of a ready asset | refused |
+| Release of a failed import | both rows removed |
+
+That was the last open item from the review that could be closed before release.
+
+### Still not done
+
+1. **The benchmark gate has not been run.** It needs a real import against an
+   event with the full kit. Assumptions A-1, A-3 and A-5 stay unverified until
+   it is.
+2. **The orphan-object audit script is deferred**, as stated in the spec.
