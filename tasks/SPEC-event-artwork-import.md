@@ -325,8 +325,12 @@ Sequence:
 
 1. Resolve artwork from AMS. No sources means return `none` or `unavailable` and do nothing.
 2. Compute `source_key`. Look for an existing asset and run the 6.6 validity check.
-3. Call `reserve_...`. `reused` returns it. `in_progress` returns `in_progress`, and the
-   client retries once after 3s. `reserved` continues.
+3. Call `reserve_...`. `reused` returns it. `reserved` continues. `in_progress` is
+   reported to the user as "already being imported, it will appear in your
+   library shortly" and stops there: no automatic retry. That path only fires
+   when one account imports the same event twice at once, and it self-heals on
+   the next attempt, so a retry would add a timer for a case that resolves
+   itself.
 4. Fetch, validate, transform, upload all four objects.
 5. Call `finalise_...`.
 6. **On any failure between 3 and 5**: delete every object uploaded in this attempt, then
