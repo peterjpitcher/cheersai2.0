@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -29,6 +29,12 @@ import type {
 import { DEFAULT_TIMEZONE, WEEKLY_MAX_OCCURRENCES } from '@/lib/constants';
 
 import { BriefStep } from '@/features/create/steps/brief-step';
+import {
+  decideArtworkSelection,
+  mergeLibraryItems,
+  type ArtworkAttribution,
+} from '@/features/create/artwork-selection';
+import type { ArtworkUiState, ArtworkUiStatus } from '@/features/create/artwork-status';
 import { GenerateStep } from '@/features/create/steps/generate-step';
 import { MediaStep } from '@/features/create/steps/media-step';
 import { ScheduleStep } from '@/features/create/steps/schedule-step';
@@ -88,6 +94,11 @@ export function CreateWizard({ initialDraftId, accountId, onClose }: CreateWizar
   const [lastGenerationContext, setLastGenerationContext] = useState<GenerationBatchContext | null>(null);
   const [isSubmitting] = useState(false);
   const [libraryItems, setLibraryItems] = useState<MediaAssetSummary[]>([]);
+  const [artworkReplacement, setArtworkReplacement] = useState<MediaAssetSummary | null>(null);
+  const [artworkState, setArtworkState] = useState<ArtworkUiState | null>(null);
+  // A ref rather than state: it is read inside a setSelectedMediaIds updater,
+  // where a state variable would be a stale closure, and nothing renders from it.
+  const artworkAttributionRef = useRef<ArtworkAttribution | null>(null);
   const [bannerDefaults, setBannerDefaults] = useState<AccountBannerDefaults | null>(null);
   const toast = useToast();
 
@@ -185,7 +196,11 @@ export function CreateWizard({ initialDraftId, accountId, onClose }: CreateWizar
     if (!accountId) return;
     getCreateModalData()
       .then((data) => {
-        setLibraryItems(data.mediaAssets);
+        // Merge, never replace. This resolves after mount, and an event-artwork
+        // import can finish first: replacing the list would drop the freshly
+        // imported asset while its id stayed selected, leaving the later steps
+        // showing a selection they cannot render.
+        setLibraryItems((current) => mergeLibraryItems(current, data.mediaAssets));
         if (data.bannerDefaults) {
           setBannerDefaults(data.bannerDefaults);
         }
@@ -233,6 +248,105 @@ export function CreateWizard({ initialDraftId, accountId, onClose }: CreateWizar
   // -----------------------------------------------------------------------
   // Navigation
   // -----------------------------------------------------------------------
+
+  // -----------------------------------------------------------------------
+  // Event artwork import
+  //
+  // Owned here rather than in the Brief step because the request outlives that
+  // step: an import takes seconds, and the user is free to move on to Media
+  // while it runs. Started from the step, it would be cancelled by unmount and
+  // the artwork would never arrive.
+  // -----------------------------------------------------------------------
+
+  const artworkRequestRef = useRef<{ token: number; eventId: string } | null>(null);
+  const artworkTokenRef = useRef(0);
+
+  const applyArtworkAsset = useCallback(
+    (asset: MediaAssetSummary, eventId: string) => {
+      // Merge before selecting. The later steps resolve selected ids against
+      // this list, so selecting an id the list does not carry shows a post with
+      // no image and no story readiness.
+      setLibraryItems((current) => mergeLibraryItems(current, [asset]));
+
+      setSelectedMediaIds((current) => {
+        const decision = decideArtworkSelection({
+          currentSelection: current,
+          attribution: artworkAttributionRef.current,
+          assetId: asset.id,
+          eventId,
+        });
+
+        // Which event's artwork put the current selection there. Without it an
+        // auto-attached image is indistinguishable from one the user chose, and
+        // the next event import would quietly overwrite their choice.
+        artworkAttributionRef.current = decision.attribution;
+        setArtworkReplacement(decision.offerReplace ? asset : null);
+
+        return decision.selection;
+      });
+    },
+    [],
+  );
+
+  const handleImportArtwork = useCallback(
+    async (event: { eventId: string; eventSlug?: string }) => {
+      const token = ++artworkTokenRef.current;
+      artworkRequestRef.current = { token, eventId: event.eventId };
+      setArtworkReplacement(null);
+      setArtworkState({ status: 'loading', warning: null });
+
+      try {
+        const response = await fetch('/api/create/event-artwork', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(event),
+        });
+
+        const result = (await response.json()) as {
+          status?: string;
+          asset?: MediaAssetSummary | null;
+          warning?: string | null;
+        };
+
+        // Drop a result the user has already moved past. Applying it would
+        // attach the previous event's artwork to the post they are writing now.
+        const pending = artworkRequestRef.current;
+        if (!pending || pending.token !== token || pending.eventId !== event.eventId) {
+          return;
+        }
+
+        if (result.asset && (result.status === 'imported' || result.status === 'reused' || result.status === 'partial')) {
+          applyArtworkAsset(result.asset, event.eventId);
+        }
+
+        setArtworkState({
+          status: (result.status as ArtworkUiStatus) ?? 'failed',
+          warning: result.warning ?? null,
+        });
+      } catch (error) {
+        console.error('[create-wizard] artwork import failed', error);
+        if (artworkRequestRef.current?.token === token) {
+          setArtworkState({
+            status: 'failed',
+            warning: 'Event artwork could not be imported. Add media in the next step.',
+          });
+        }
+      }
+    },
+    [applyArtworkAsset],
+  );
+
+  /** Explicit swap, offered only when the user's own media was left alone. */
+  const handleUseArtwork = useCallback(() => {
+    const asset = artworkReplacement;
+    const pending = artworkRequestRef.current;
+    if (!asset || !pending) return;
+
+    setLibraryItems((current) => mergeLibraryItems(current, [asset]));
+    setSelectedMediaIds([asset.id]);
+    artworkAttributionRef.current = { eventId: pending.eventId, assetId: asset.id };
+    setArtworkReplacement(null);
+  }, [artworkReplacement]);
 
   const handleContentTypeChange = useCallback(
     (type: ContentType) => {
@@ -498,6 +612,10 @@ export function CreateWizard({ initialDraftId, accountId, onClose }: CreateWizar
               <BriefStep
                 form={form as unknown as import('react-hook-form').UseFormReturn<import('react-hook-form').FieldValues>}
                 onContentTypeChange={handleContentTypeChange}
+                onImportArtwork={handleImportArtwork}
+                artworkState={artworkState}
+                canReplaceWithArtwork={Boolean(artworkReplacement)}
+                onUseArtwork={handleUseArtwork}
               />
             )}
             {currentStep === 1 && (

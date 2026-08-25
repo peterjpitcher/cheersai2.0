@@ -13,10 +13,13 @@ import { SYSTEM_MEDIA_TAGS } from "@/lib/library/system-tags";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
 import type { MediaAssetSummary } from "@/lib/library/data";
 import {
+  mapToSummary,
+  signPreviewFromCandidates,
+  signStoryPreview,
+} from "@/lib/library/summary";
+import {
   resolvePreviewCandidates,
-  resolveStoryDerivativePath,
   normaliseStoragePath,
-  type PreviewCandidate,
   type PreviewPlacement,
 } from "@/lib/library/data";
 
@@ -1194,98 +1197,6 @@ function sanitiseFileName(fileName: string, fallbackId: string) {
 
 function deriveMediaType(mime: string): MediaType {
   return mime.startsWith("video") ? "video" : "image";
-}
-
-async function signPreviewFromCandidates(
-  supabase: SupabaseClient,
-  candidates: PreviewCandidate[],
-): Promise<{ url?: string; shape: "square" | "story" }> {
-  for (const candidate of candidates) {
-    try {
-      const { data, error } = await supabase.storage.from(MEDIA_BUCKET).createSignedUrl(candidate.path, 600);
-      if (!error && data?.signedUrl) {
-        return { url: data.signedUrl, shape: candidate.shape };
-      }
-    } catch (error) {
-      console.error("[library] failed to sign preview candidate", {
-        path: candidate.path,
-        error,
-      });
-    }
-  }
-
-  return { url: undefined, shape: "square" };
-}
-
-/**
- * Sign the 1080x1920 story derivative specifically. Resolved from
- * derived_variants.story, never from a candidate's shape: shape marks a
- * portrait-looking original as "story" too, and the publish worker requires the
- * derivative itself. Returns undefined when there is no derivative, because
- * falling back to an original or square crop would silently promise a story
- * crop that does not exist.
- */
-async function signStoryPreview(
-  supabase: SupabaseClient,
-  derivedVariants: Record<string, string> | null | undefined,
-): Promise<string | undefined> {
-  const storyPath = resolveStoryDerivativePath(derivedVariants);
-
-  if (!storyPath) {
-    return undefined;
-  }
-
-  try {
-    const { data, error } = await supabase.storage
-      .from(MEDIA_BUCKET)
-      .createSignedUrl(storyPath, 600);
-    if (!error && data?.signedUrl) {
-      return data.signedUrl;
-    }
-  } catch (error) {
-    console.error("[library] failed to sign story preview", {
-      path: storyPath,
-      error,
-    });
-  }
-
-  return undefined;
-}
-
-function mapToSummary(
-  row: {
-    id: string;
-    file_name: string | null;
-    media_type: "image" | "video";
-    tags?: string[] | null;
-    uploaded_at: string;
-    size_bytes: number | null;
-    storage_path: string;
-    processed_status: "pending" | "processing" | "ready" | "failed" | "skipped" | null;
-    processed_at: string | null;
-    derived_variants: Record<string, string> | null;
-    aspect_class?: "square" | "story" | "landscape" | null;
-  },
-  previewUrl?: string,
-  previewShape: "square" | "story" = "square",
-  storyPreviewUrl?: string,
-): MediaAssetSummary {
-  return {
-    id: row.id,
-    fileName: row.file_name ?? row.id,
-    mediaType: row.media_type,
-    tags: normaliseTags(row.tags),
-    uploadedAt: row.uploaded_at,
-    sizeBytes: row.size_bytes ?? undefined,
-    storagePath: row.storage_path,
-    processedStatus: (row.processed_status ?? "pending") as MediaAssetSummary["processedStatus"],
-    processedAt: row.processed_at ?? undefined,
-    derivedVariants: row.derived_variants ?? {},
-    aspectClass: (row.aspect_class ?? "square") as MediaAssetSummary["aspectClass"],
-    previewUrl,
-    storyPreviewUrl,
-    previewShape,
-  };
 }
 
 /**
