@@ -20,6 +20,7 @@ import type { ContentType, Platform } from '@/types/content';
 import { InstantPostFields } from '@/features/create/forms/instant-post-fields';
 import { StoryFields } from '@/features/create/forms/story-fields';
 import { EventFields } from '@/features/create/forms/event-fields';
+import type { ArtworkUiState } from '@/features/create/artwork-status';
 import { PromotionFields } from '@/features/create/forms/promotion-fields';
 import { WeeklyRecurringFields } from '@/features/create/forms/weekly-recurring-fields';
 
@@ -62,6 +63,15 @@ const DEFAULT_CAMPAIGN_PLACEMENTS: Array<'feed' | 'story'> = ['feed'];
 interface BriefStepProps {
   form: UseFormReturn<FieldValues>;
   onContentTypeChange: (type: ContentType) => void;
+  /**
+   * Artwork import is driven by the wizard, not by this step. The request
+   * outlives the step: the user can move on to Media while it runs, and a
+   * request started here would be cancelled by unmount.
+   */
+  onImportArtwork?: (event: { eventId: string; eventSlug?: string }) => void;
+  artworkState?: ArtworkUiState | null;
+  canReplaceWithArtwork?: boolean;
+  onUseArtwork?: () => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -72,7 +82,14 @@ interface BriefStepProps {
  * Step 1: Content type picker, common fields, platform selection, and
  * progressive disclosure fine-tune controls (D-04).
  */
-export function BriefStep({ form, onContentTypeChange }: BriefStepProps): React.JSX.Element {
+export function BriefStep({
+  form,
+  onContentTypeChange,
+  onImportArtwork,
+  artworkState,
+  canReplaceWithArtwork,
+  onUseArtwork,
+}: BriefStepProps): React.JSX.Element {
   const { register, watch, setValue, formState: { errors } } = form;
   const contentType = watch('contentType');
   const selectedPlatforms = watch('platforms') ?? [];
@@ -262,7 +279,15 @@ export function BriefStep({ form, onContentTypeChange }: BriefStepProps): React.
       {/* Type-specific fields */}
       {contentType === 'instant_post' && <InstantPostFields form={form} />}
       {contentType === 'story' && <StoryFields form={form} />}
-      {contentType === 'event' && <EventFields form={form} />}
+      {contentType === 'event' && (
+        <EventFields
+          form={form}
+          onImportArtwork={onImportArtwork}
+          artworkState={artworkState ?? null}
+          canReplaceWithArtwork={Boolean(canReplaceWithArtwork)}
+          onUseArtwork={onUseArtwork}
+        />
+      )}
       {contentType === 'promotion' && <PromotionFields form={form} />}
       {contentType === 'weekly_recurring' && <WeeklyRecurringFields form={form} />}
 

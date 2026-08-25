@@ -9,9 +9,23 @@ import {
   listManagementEventOptions,
   getManagementEventPrefill,
 } from '@/app/(app)/create/actions';
+import {
+  describeArtworkState,
+  isArtworkProblem,
+  type ArtworkUiState,
+} from '@/features/create/artwork-status';
 
 interface EventFieldsProps {
   form: UseFormReturn<FieldValues>;
+  /**
+   * Asks the wizard to import this event's artwork. Deliberately fire and
+   * forget: the wizard owns the request so it survives this step unmounting,
+   * and reports back through `artworkState`.
+   */
+  onImportArtwork?: (event: { eventId: string; eventSlug?: string }) => void;
+  artworkState?: ArtworkUiState | null;
+  canReplaceWithArtwork?: boolean;
+  onUseArtwork?: () => void;
 }
 
 interface EventOption {
@@ -23,7 +37,13 @@ interface EventOption {
   status?: string;
 }
 
-export function EventFields({ form }: EventFieldsProps): React.JSX.Element {
+export function EventFields({
+  form,
+  onImportArtwork,
+  artworkState = null,
+  canReplaceWithArtwork = false,
+  onUseArtwork,
+}: EventFieldsProps): React.JSX.Element {
   const { register, formState: { errors }, setValue } = form;
   const [importOpen, setImportOpen] = useState(false);
   const [events, setEvents] = useState<EventOption[]>([]);
@@ -78,6 +98,12 @@ export function EventFields({ form }: EventFieldsProps): React.JSX.Element {
         }
         setSelectedLabel(sourceLabel);
         setImportOpen(false);
+
+        // Started only after the fields land, and never awaited. Artwork
+        // involves several megabytes of download and re-render, so tying it to
+        // the prefill would make the form feel slow, and a slow or missing
+        // artwork host must never stop the details importing.
+        onImportArtwork?.({ eventId: event.id, eventSlug: event.slug });
       } else {
         setImportError(result.error.message);
       }
@@ -87,6 +113,8 @@ export function EventFields({ form }: EventFieldsProps): React.JSX.Element {
   const filteredEvents = search
     ? events.filter((e) => e.name.toLowerCase().includes(search.toLowerCase()))
     : events;
+
+  const artworkStatusText = describeArtworkState(artworkState);
 
   return (
     <fieldset className="space-y-4">
@@ -114,7 +142,11 @@ export function EventFields({ form }: EventFieldsProps): React.JSX.Element {
                 Cancel
               </button>
             </div>
+            <Label htmlFor="managementEventSearch" className="sr-only">
+              Search events
+            </Label>
             <Input
+              id="managementEventSearch"
               placeholder="Search events..."
               value={search}
               onChange={(e) => handleSearch(e.target.value)}
@@ -158,6 +190,36 @@ export function EventFields({ form }: EventFieldsProps): React.JSX.Element {
             Imported: {selectedLabel}
           </p>
         )}
+
+        {/*
+          Artwork arrives seconds after the fields, often once this panel has
+          closed, so the update has to be announced rather than merely drawn.
+          Problems are marked with words as well as colour.
+        */}
+        <div aria-live="polite" role="status" className="space-y-2">
+          {artworkStatusText && (
+            <p
+              className={
+                isArtworkProblem(artworkState)
+                  ? 'text-xs font-medium text-destructive'
+                  : 'text-xs text-muted-foreground'
+              }
+            >
+              {isArtworkProblem(artworkState) ? 'Artwork problem: ' : ''}
+              {artworkStatusText}
+            </p>
+          )}
+
+          {canReplaceWithArtwork && onUseArtwork && (
+            <button
+              type="button"
+              onClick={onUseArtwork}
+              className="rounded-md border px-2 py-1 text-xs font-medium hover:bg-accent"
+            >
+              Replace current media with event artwork
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="space-y-1.5">

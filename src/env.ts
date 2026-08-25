@@ -75,6 +75,16 @@ const serverEnv = {
   // the endpoint 500s with a clear message when unset rather than failing the build.
   BOOKING_CONVERSION_INGEST_SECRET: readOptionalEnv("BOOKING_CONVERSION_INGEST_SECRET"),
   BOOKING_CONVERSION_ACCOUNT_ID: readOptionalEnv("BOOKING_CONVERSION_ACCOUNT_ID"),
+  // Event-artwork import: the exact origins the server may download artwork from.
+  // Comma-separated, scheme and host (and port, if not the default). It is
+  // deliberately server-owned rather than learned from the management API's
+  // response, which would make the check circular: the point is to bound where
+  // this server can be made to send a request, and the URLs come from another
+  // system. Defaults to the Anchor management app's storage origin.
+  MANAGEMENT_ARTWORK_ORIGINS: readOptionalEnv(
+    "MANAGEMENT_ARTWORK_ORIGINS",
+    "https://tfcasgxopxegwrabvwat.supabase.co",
+  ),
   // Token vault (AES-256-GCM encryption key -- 64 hex chars = 32 bytes)
   TOKEN_VAULT_KEY: readOptionalEnv("TOKEN_VAULT_KEY"),
   TOKEN_VAULT_KEY_VERSION: readOptionalEnv("TOKEN_VAULT_KEY_VERSION", "1"),

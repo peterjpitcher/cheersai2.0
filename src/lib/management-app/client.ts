@@ -99,6 +99,46 @@ export interface ManagementEventDetail {
   imageUrl?: string | null;
 }
 
+/** One artwork file from the scoped artwork endpoint. */
+export interface ManagementArtworkFile {
+  url: string;
+  mimeType: string | null;
+  sizeBytes: number | null;
+  updatedAt: string | null;
+  /**
+   * True when the management app is serving a category default rather than
+   * artwork designed for this event. Worth surfacing: an inherited square is
+   * stock, so cropping a story out of it is a poorer result than usual.
+   */
+  inherited: boolean;
+}
+
+export type ManagementArtworkVariantKey = "square" | "story" | "landscape";
+
+export type ManagementArtworkVariants = Record<
+  ManagementArtworkVariantKey,
+  ManagementArtworkFile | null
+>;
+
+/**
+ * Why this is a union rather than a nullable payload.
+ *
+ * "This event has no artwork" and "artwork import is not wired up" produce the
+ * same empty result but need opposite responses: the first is normal and the
+ * user should just add media, the second is a provisioning fault that would
+ * otherwise sit undetected because every other health check stays green.
+ */
+export type ManagementArtworkResult =
+  | {
+      status: "ok";
+      eventId: string;
+      slug: string | null;
+      kitUpdatedAt: string | null;
+      variants: ManagementArtworkVariants;
+    }
+  | { status: "unavailable"; reason: "forbidden" | "unsupported" | "not_found" }
+  | { status: "error"; message: string };
+
 export interface ManagementEventCtaLinks {
   facebook?: string | null;
   instagram?: string | null;
@@ -237,6 +277,84 @@ export async function getManagementEventDetail(
   }
 
   return shapeEventDetail(detail);
+}
+
+/**
+ * Fetch the designed artwork kit for one event.
+ *
+ * Never throws for an expected outcome. A 403 means the API key has not been
+ * granted `read:events:artwork`; a 404 on this path means a management app that
+ * predates the endpoint, because the caller has already resolved the event
+ * through the detail endpoint before getting here.
+ */
+export async function getManagementEventArtwork(
+  config: ManagementApiConfig,
+  eventId: string,
+): Promise<ManagementArtworkResult> {
+  const trimmedId = eventId.trim();
+  if (!trimmedId) {
+    return { status: "error", message: "Event id is required." };
+  }
+
+  try {
+    const data = await requestManagementData<unknown>(
+      config,
+      `/api/events/${encodeURIComponent(trimmedId)}/artwork`,
+    );
+
+    if (!data || typeof data !== "object") {
+      return { status: "error", message: "Artwork response was invalid." };
+    }
+
+    const row = data as Record<string, unknown>;
+    const variantsValue = row.variants;
+
+    if (!variantsValue || typeof variantsValue !== "object") {
+      return { status: "error", message: "Artwork response carried no variants." };
+    }
+
+    const variantsRow = variantsValue as Record<string, unknown>;
+
+    return {
+      status: "ok",
+      eventId: asOptionalString(row.eventId) ?? trimmedId,
+      slug: asOptionalString(row.slug) ?? null,
+      kitUpdatedAt: asOptionalString(row.kitUpdatedAt) ?? null,
+      variants: {
+        square: shapeArtworkFile(variantsRow.square),
+        story: shapeArtworkFile(variantsRow.story),
+        landscape: shapeArtworkFile(variantsRow.landscape),
+      },
+    };
+  } catch (error) {
+    if (error instanceof ManagementApiError) {
+      if (error.status === 403 || error.code === "FORBIDDEN") {
+        return { status: "unavailable", reason: "forbidden" };
+      }
+      if (error.status === 404) {
+        return { status: "unavailable", reason: "unsupported" };
+      }
+      return { status: "error", message: error.message };
+    }
+
+    return { status: "error", message: "Artwork request failed." };
+  }
+}
+
+function shapeArtworkFile(value: unknown): ManagementArtworkFile | null {
+  if (!value || typeof value !== "object") return null;
+
+  const row = value as Record<string, unknown>;
+  const url = asOptionalString(row.url);
+  if (!url) return null;
+
+  return {
+    url,
+    mimeType: asOptionalString(row.mimeType) ?? null,
+    sizeBytes: asOptionalNumber(row.sizeBytes),
+    updatedAt: asOptionalString(row.updatedAt) ?? null,
+    inherited: row.inherited === true,
+  };
 }
 
 export async function listManagementMenuSpecials(
