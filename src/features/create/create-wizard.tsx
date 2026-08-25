@@ -375,7 +375,9 @@ export function CreateWizard({ initialDraftId, accountId, onClose }: CreateWizar
       const typeDefaults: Record<ContentType, Partial<ContentBriefInput>> = {
         instant_post: { publishMode: 'now' },
         story: {},
-        event: { eventName: '', eventDate: '', eventTime: '', venue: DEFAULT_EVENT_VENUE, placements: ['feed'] },
+        // Events go out on the feed and as a story on every posting day, so both
+        // are on by default rather than something to remember to tick.
+        event: { eventName: '', eventDate: '', eventTime: '', venue: DEFAULT_EVENT_VENUE, placements: ['feed', 'story'] },
         promotion: { offerSummary: '', endDate: '', placements: ['feed'] },
         weekly_recurring: {
           daysOfWeek: [1],

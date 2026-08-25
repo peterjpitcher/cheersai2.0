@@ -166,7 +166,7 @@ describe('createScheduledBatch', () => {
     const result = await createScheduledBatch({
       draftContentId: 'draft-1',
       contentType: 'event',
-      brief: { title: 'Test Event', eventName: 'Test Event', platforms: ['facebook', 'instagram'], eventDate: '2026-06-15', eventTime: '19:00' },
+      brief: { title: 'Test Event', eventName: 'Test Event', platforms: ['facebook', 'instagram'], eventDate: '2026-06-15', eventTime: '19:00', placements: ['feed'] },
       selectedMediaIds: [],
       slotCopies: [
         {
@@ -467,7 +467,7 @@ describe('createScheduledBatch', () => {
     const result = await createScheduledBatch({
       draftContentId: 'draft-1',
       contentType: 'event',
-      brief: { title: 'Quiz', eventName: 'Quiz', platforms: ['facebook', 'instagram'], eventDate: '2026-06-15', eventTime: '19:00' },
+      brief: { title: 'Quiz', eventName: 'Quiz', platforms: ['facebook', 'instagram'], eventDate: '2026-06-15', eventTime: '19:00', placements: ['feed'] },
       selectedMediaIds: ['media-1'],
       slotCopies: [
         {
@@ -492,6 +492,152 @@ describe('createScheduledBatch', () => {
       expect(row.banner_enabled).toBe(true);
       expect(row.banner_text_override).toBe('£5 PINTS');
     }
+  });
+
+  // -------------------------------------------------------------------------
+  // Events post to the feed and as a story on the same day
+  // -------------------------------------------------------------------------
+
+  it('creates a feed post and a story per platform for every event slot', async () => {
+    // One slot, two platforms, two placements = four content items. The story
+    // rows carry no body: a story is the artwork, not the copy.
+    supabaseMock.enqueueResult({ data: { id: 'draft-1' }, error: null }); // draft lookup
+    supabaseMock.enqueueResult({ data: [{ id: 'media-1' }], error: null }); // media ownership
+    supabaseMock.enqueueResult({
+      data: [{ id: 'media-1', media_type: 'image', derived_variants: { story: 'derived/media-1/story.jpg' } }],
+      error: null,
+    }); // story media readiness
+    supabaseMock.enqueueResult({ data: { id: 'camp-1' }, error: null }); // campaign insert
+    supabaseMock.enqueueResult({ data: [], error: null }); // provenance lookup
+
+    (supabaseMock.mock as Record<string, unknown>).select = vi.fn((...args: unknown[]) => {
+      supabaseMock.calls.push({ method: 'select', args });
+      if (args[0] === 'id, platform') {
+        return {
+          data: [
+            { id: 'ci-1', platform: 'facebook' },
+            { id: 'ci-2', platform: 'instagram' },
+            { id: 'ci-3', platform: 'facebook' },
+            { id: 'ci-4', platform: 'instagram' },
+          ],
+          error: null,
+        };
+      }
+      return supabaseMock.mock;
+    });
+    (supabaseMock.mock as Record<string, unknown>).upsert = vi.fn((...args: unknown[]) => {
+      supabaseMock.calls.push({ method: 'upsert', args });
+      return Promise.resolve({ error: null });
+    });
+    (supabaseMock.mock as Record<string, unknown>).delete = vi.fn((...args: unknown[]) => {
+      supabaseMock.calls.push({ method: 'delete', args });
+      return supabaseMock.mock;
+    });
+
+    const { createScheduledBatch } = await import('@/app/actions/content');
+
+    const result = await createScheduledBatch({
+      draftContentId: 'draft-1',
+      contentType: 'event',
+      brief: {
+        title: 'Quiz Night',
+        eventName: 'Quiz Night',
+        platforms: ['facebook', 'instagram'],
+        eventDate: '2026-06-15',
+        eventTime: '19:00',
+        placements: ['feed', 'story'],
+      },
+      selectedMediaIds: ['media-1'],
+      slotCopies: [
+        {
+          slotKey: 'event-day',
+          scheduledAt: '2026-06-15T06:00:00.000Z',
+          label: 'Event day',
+          copy: { facebook: { body: 'FB' }, instagram: { body: 'IG' } },
+        },
+      ],
+      platforms: ['facebook', 'instagram'],
+      mode: 'schedule',
+    });
+
+    expect(result.error).toBeUndefined();
+    expect(result.success).toBe(true);
+
+    const contentInsert = supabaseMock.calls.find(
+      (call) => call.method === 'insert' && Array.isArray(call.args[0]) &&
+        (call.args[0] as Array<Record<string, unknown>>)[0]?.placement !== undefined,
+    );
+    const rows = contentInsert?.args[0] as Array<Record<string, unknown>>;
+
+    expect(rows.map((row) => `${row.platform}:${row.placement}`)).toEqual([
+      'facebook:feed',
+      'instagram:feed',
+      'facebook:story',
+      'instagram:story',
+    ]);
+
+    // The story shares the post's timing, so both land together on the day.
+    expect(new Set(rows.map((row) => row.scheduled_for))).toEqual(
+      new Set(['2026-06-15T06:00:00.000Z']),
+    );
+  });
+
+  it('does not reject a multi-image event feed post just because a story is included', async () => {
+    // The story row takes only the first asset, so the strict "exactly one
+    // image" story rule must not apply to a mixed batch, or a two-image feed
+    // post would write nothing at all.
+    supabaseMock.enqueueResult({ data: { id: 'draft-1' }, error: null });
+    supabaseMock.enqueueResult({ data: [{ id: 'media-1' }, { id: 'media-2' }], error: null });
+    supabaseMock.enqueueResult({
+      data: [{ id: 'media-1', media_type: 'image', derived_variants: { story: 'derived/media-1/story.jpg' } }],
+      error: null,
+    });
+    supabaseMock.enqueueResult({ data: { id: 'camp-1' }, error: null });
+    supabaseMock.enqueueResult({ data: [], error: null });
+
+    (supabaseMock.mock as Record<string, unknown>).select = vi.fn((...args: unknown[]) => {
+      supabaseMock.calls.push({ method: 'select', args });
+      if (args[0] === 'id, platform') {
+        return { data: [{ id: 'ci-1', platform: 'facebook' }, { id: 'ci-2', platform: 'facebook' }], error: null };
+      }
+      return supabaseMock.mock;
+    });
+    (supabaseMock.mock as Record<string, unknown>).upsert = vi.fn((...args: unknown[]) => {
+      supabaseMock.calls.push({ method: 'upsert', args });
+      return Promise.resolve({ error: null });
+    });
+    (supabaseMock.mock as Record<string, unknown>).delete = vi.fn((...args: unknown[]) => {
+      supabaseMock.calls.push({ method: 'delete', args });
+      return supabaseMock.mock;
+    });
+
+    const { createScheduledBatch } = await import('@/app/actions/content');
+
+    const result = await createScheduledBatch({
+      draftContentId: 'draft-1',
+      contentType: 'event',
+      brief: {
+        title: 'Quiz Night', eventName: 'Quiz Night', platforms: ['facebook'],
+        eventDate: '2026-06-15', eventTime: '19:00', placements: ['feed', 'story'],
+      },
+      selectedMediaIds: ['media-1', 'media-2'],
+      slotCopies: [{
+        slotKey: 'event-day',
+        scheduledAt: '2026-06-15T06:00:00.000Z',
+        label: 'Event day',
+        copy: { facebook: { body: 'FB' }, instagram: { body: 'IG' } },
+      }],
+      platforms: ['facebook'],
+      mode: 'schedule',
+    });
+
+    expect(result.error).toBeUndefined();
+
+    const variantUpsert = supabaseMock.calls.find((call) => call.method === 'upsert');
+    const variants = variantUpsert?.args[0] as Array<Record<string, unknown>>;
+    // Feed keeps both images; the story takes only the first.
+    expect(variants[0]?.media_ids).toEqual(['media-1', 'media-2']);
+    expect(variants[1]?.media_ids).toEqual(['media-1']);
   });
 
   // -------------------------------------------------------------------------
@@ -544,7 +690,7 @@ describe('createScheduledBatch', () => {
     return createScheduledBatch({
       draftContentId: 'draft-1',
       contentType: 'event',
-      brief: { title: 'Quiz', eventName: 'Quiz', platforms: ['facebook'], eventDate: '2026-06-15', eventTime: '19:00' },
+      brief: { title: 'Quiz', eventName: 'Quiz', platforms: ['facebook'], eventDate: '2026-06-15', eventTime: '19:00', placements: ['feed'] },
       selectedMediaIds: mediaIds,
       slotCopies: [
         {
@@ -634,7 +780,7 @@ describe('createScheduledBatch', () => {
     const result = await createScheduledBatch({
       draftContentId: 'draft-1',
       contentType: 'event',
-      brief: { title: 'Quiz', eventName: 'Quiz', platforms: ['facebook'], eventDate: '2026-06-15', eventTime: '19:00' },
+      brief: { title: 'Quiz', eventName: 'Quiz', platforms: ['facebook'], eventDate: '2026-06-15', eventTime: '19:00', placements: ['feed'] },
       selectedMediaIds: ['media-1'],
       slotCopies: [
         {
@@ -1120,8 +1266,42 @@ describe('createScheduledBatch', () => {
     expect(enqueueAndDispatch).not.toHaveBeenCalled();
   });
 
-  it('rejects event campaigns that request both post and story placements', async () => {
-    supabaseMock.enqueueResult({ data: { id: 'draft-1' }, error: null });
+  it('accepts event campaigns that request both post and story placements', async () => {
+    // This used to be refused outright by a server-side guard. Events now post
+    // to the feed and as a story on the same day, so the guard is gone and the
+    // only remaining rule is that a placement has to be publishable somewhere.
+    supabaseMock.enqueueResult({ data: { id: 'draft-1' }, error: null }); // draft lookup
+    supabaseMock.enqueueResult({ data: [{ id: 'media-1' }], error: null }); // media ownership
+    supabaseMock.enqueueResult({
+      data: [{ id: 'media-1', media_type: 'image', derived_variants: { story: 'derived/media-1/story.jpg' } }],
+      error: null,
+    }); // story media readiness
+    supabaseMock.enqueueResult({ data: { id: 'camp-1' }, error: null }); // campaign insert
+    supabaseMock.enqueueResult({ data: [], error: null }); // provenance lookup
+
+    (supabaseMock.mock as Record<string, unknown>).select = vi.fn((...args: unknown[]) => {
+      supabaseMock.calls.push({ method: 'select', args });
+      if (args[0] === 'id, platform') {
+        return {
+          data: [
+            { id: 'ci-1', platform: 'facebook' },
+            { id: 'ci-2', platform: 'instagram' },
+            { id: 'ci-3', platform: 'facebook' },
+            { id: 'ci-4', platform: 'instagram' },
+          ],
+          error: null,
+        };
+      }
+      return supabaseMock.mock;
+    });
+    (supabaseMock.mock as Record<string, unknown>).upsert = vi.fn((...args: unknown[]) => {
+      supabaseMock.calls.push({ method: 'upsert', args });
+      return Promise.resolve({ error: null });
+    });
+    (supabaseMock.mock as Record<string, unknown>).delete = vi.fn((...args: unknown[]) => {
+      supabaseMock.calls.push({ method: 'delete', args });
+      return supabaseMock.mock;
+    });
 
     const { createScheduledBatch } = await import('@/app/actions/content');
 
@@ -1136,7 +1316,7 @@ describe('createScheduledBatch', () => {
         platforms: ['facebook', 'instagram'],
         placements: ['feed', 'story'],
       },
-      selectedMediaIds: [],
+      selectedMediaIds: ['media-1'],
       slotCopies: [
         {
           slotKey: 'slot-1',
@@ -1151,8 +1331,9 @@ describe('createScheduledBatch', () => {
       mode: 'schedule',
     });
 
-    expect(result.error).toBe('Choose either a post or a story for event campaigns, not both.');
-    expect(enqueueAndDispatch).not.toHaveBeenCalled();
+    expect(result.error).toBeUndefined();
+    expect(result.success).toBe(true);
+    expect(enqueueAndDispatch).toHaveBeenCalledTimes(4);
   });
 
   it('rolls back all created rows when enqueue fails mid-batch', async () => {
@@ -1209,7 +1390,7 @@ describe('createScheduledBatch', () => {
     const result = await createScheduledBatch({
       draftContentId: 'draft-1',
       contentType: 'event',
-      brief: { title: 'Test Event', eventName: 'Test Event', platforms: ['facebook', 'instagram'], eventDate: '2026-06-15', eventTime: '19:00' },
+      brief: { title: 'Test Event', eventName: 'Test Event', platforms: ['facebook', 'instagram'], eventDate: '2026-06-15', eventTime: '19:00', placements: ['feed'] },
       selectedMediaIds: [],
       slotCopies: [
         {

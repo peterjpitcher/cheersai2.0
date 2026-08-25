@@ -11,10 +11,21 @@
 import { z } from 'zod';
 
 const placementSchema = z.enum(['feed', 'story']);
+/**
+ * Events post to the feed AND to stories on every posting day, which is why this
+ * is no longer restricted to one placement.
+ *
+ * The backend has always supported the pair: createScheduledBatch creates a
+ * content item per slot, platform and placement, and its story-media validation
+ * already special-cases a mixed batch (the story row takes only the first asset,
+ * so a two-image feed post is not rejected). Promotions have been using that path
+ * all along. The restriction here was the only thing keeping events out of it.
+ */
 const eventPlacementsSchema = z
   .array(placementSchema)
-  .length(1, 'Choose either a post or a story for event campaigns, not both.')
-  .default(['feed']);
+  .min(1, 'Select at least one placement')
+  .max(2, 'There are only two placements')
+  .default(['feed', 'story']);
 const campaignPlacementsSchema = z
   .array(placementSchema)
   .min(1, 'Select at least one placement')
