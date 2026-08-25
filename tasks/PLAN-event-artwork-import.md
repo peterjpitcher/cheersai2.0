@@ -223,11 +223,41 @@ never reaches the importer.
 
 ### One deviation worth recording
 
-CheersAI's Vercel git integration did not raise a production deployment for the
-merge commit, though it built both previews for the PR. Production was deployed
-explicitly with `vercel --prod` from a clean checkout of the merge commit
-(`69d5042`), aliased to www.cheersai.uk. Worth a look before the next release:
-AMS auto-deployed from the same kind of merge without trouble.
+CheersAI's Vercel git integration is **intermittent**, not broken. It raised no
+production deployment for the PR #29 merge, though it built both previews, and
+production was deployed explicitly with `vercel --prod` from a clean checkout of
+the merge commit (`69d5042`). On the PR #31 merge it fired on its own, alongside
+a second explicit deploy. Confirm with
+`vercel ls oj-cheersai2-0 --scope peter-pitchers-projects` after any merge rather
+than assuming it went out.
+
+## Follow-on: event scheduling (PR #31, deployed 2026-08-25)
+
+Not part of the original spec. Raised once the artwork import was live, because
+the imported asset made it possible.
+
+**Event-day posts moved from 17:00 to 07:00.** `buildEventCadenceSlots` puts every
+slot at `DEFAULT_POST_TIME` (12:00) and `deconflictSuggestions` then overrode the
+event-day slot to 17:00. Now `EVENT_DAY_POST_TIME` (07:00). Only the event-day
+slot moves; countdown posts keep midday.
+
+**Events now post to the feed and as a story on every posting day**, defaulting to
+both. `createScheduledBatch` always supported this (one content item per slot x
+platform x placement) and its story-media validation already special-cased a mixed
+batch. Promotions had used that path all along. Three gates kept events out, all
+removed: the `.length(1)` rule in both placement schemas, radio buttons in the
+Brief step, and a hard server guard in `createScheduledBatch`.
+
+**The trap, found by a failing test:** `resolveBatchPlacements` reads the RAW
+brief, not the Zod-parsed one, so the new schema default never reached the server.
+An event brief arriving without placements (an older draft) would have silently
+got feed only. Its fallback now states the rule separately, and differs by type:
+events default to both, promotions to feed. Change one and you must change the
+other.
+
+Verified in production: artwork endpoint returns 200 `no-store` with all three
+variants, an invalid key returns 401, and the website contract is untouched (no
+story or print URL anywhere in `/api/events/{id}`, `image[0]` still the square).
 
 ### Still open
 
