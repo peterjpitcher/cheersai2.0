@@ -172,3 +172,67 @@ That was the last open item from the review that could be closed before release.
    event with the full kit. Assumptions A-1, A-3 and A-5 stay unverified until
    it is.
 2. **The orphan-object audit script is deferred**, as stated in the spec.
+
+---
+
+## Deployed 2026-08-25
+
+Order followed: AMS migration, AMS code, CheersAI migration, CheersAI code.
+
+| Step | Evidence |
+|---|---|
+| AMS migration | `cheersai` key holds `read:events:artwork`; both column comments updated |
+| AMS code, PR #114 | 687 files / 5721 tests green, merged, live |
+| CheersAI migration | 2 columns, partial unique index, 3 functions, `service_role` only, 0 leaked grants |
+| CheersAI code, PR #29 | lint, typecheck, test, build, migration-check, E2E smoke all green, merged, live |
+
+### Verified against production, not just CI
+
+Artwork endpoint, called with the real `cheersai` key:
+
+```
+GET /api/events/{id}/artwork
+200 | cache-control: no-store | etag: null
+square    present inherited=false image/png 1974635B
+story     present inherited=false image/png 2049388B
+landscape present inherited=false image/png 2112611B
+```
+
+The website contract, checked on the same event in the same run:
+
+```
+GET /api/events/{id}
+200 | cache-control: public, max-age=60
+story/print URLs in the payload: 0
+image[0] is the square: true
+```
+
+That is the guarantee this whole design rests on, confirmed in production
+rather than inferred from a passing test.
+
+CheersAI import route, unauthenticated:
+
+```
+POST /api/create/event-artwork          401 | no-store
+POST with spoofed accountId/storagePath 401 | no-store
+GET  (POST-only route)                  405
+```
+
+Auth is checked before anything else, so a spoofed account id or storage path
+never reaches the importer.
+
+### One deviation worth recording
+
+CheersAI's Vercel git integration did not raise a production deployment for the
+merge commit, though it built both previews for the PR. Production was deployed
+explicitly with `vercel --prod` from a clean checkout of the merge commit
+(`69d5042`), aliased to www.cheersai.uk. Worth a look before the next release:
+AMS auto-deployed from the same kind of merge without trouble.
+
+### Still open
+
+1. **The benchmark gate.** Needs a real import through the wizard against an
+   event with the full kit. Assumptions A-1 (artwork is opaque), A-3 (roughly
+   500 KB out) and A-5 (`maxDuration = 60` allowed on this plan) stay unverified
+   until then. This is the first thing to do on the next real event.
+2. **The orphan-object audit script**, deferred by design.
