@@ -81,17 +81,38 @@ describe("deconflictSuggestions (Issue 2 regression)", () => {
     expect(result[0]?.label).toBe("Weekly hype · 2 weeks out");
   });
 
-  it("keeps Event day pinned and forces its time to 17:00", () => {
+  it("keeps Event day pinned and moves it to 07:00", () => {
+    // The cadence builder puts every slot at midday, which is fine days out and
+    // wrong on the day itself: an event-day post has to leave people time to
+    // see it and book. It used to be forced to 17:00, which did not.
     const suggestions: SuggestedSlotDisplay[] = [
       suggestion({ id: "event-day", date: "2026-05-23", time: "12:00", label: "Event day" }),
     ];
 
     const result = deconflictSuggestions(suggestions, [{ date: "2026-05-23" }], TZ);
 
-    // Event day stays even when occupied; time normalised to 17:00.
+    // Event day stays even when occupied; only its time is normalised.
     expect(result).toHaveLength(1);
     expect(result[0]?.date).toBe("2026-05-23");
-    expect(result[0]?.time).toBe("17:00");
+    expect(result[0]?.time).toBe("07:00");
+  });
+
+  it("moves only Event day, leaving the countdown slots at their own time", () => {
+    // "7am on the day" is about the day of the event. A post three days out has
+    // no reason to move.
+    const suggestions: SuggestedSlotDisplay[] = [
+      suggestion({ id: "a", date: "2026-05-21", time: "12:00", label: "2 days to go" }),
+      suggestion({ id: "b", date: "2026-05-22", time: "12:00", label: "1 day to go" }),
+      suggestion({ id: "c", date: "2026-05-23", time: "12:00", label: "Event day" }),
+    ];
+
+    const result = deconflictSuggestions(suggestions, [], TZ);
+
+    expect(result.map((slot) => [slot.label, slot.time])).toEqual([
+      ["2 days to go", "12:00"],
+      ["1 day to go", "12:00"],
+      ["Event day", "07:00"],
+    ]);
   });
 
   it("returns all suggestions unchanged when no occupancy conflicts exist", () => {

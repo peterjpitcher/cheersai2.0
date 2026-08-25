@@ -74,6 +74,38 @@ describe('Content Zod Schemas', () => {
     });
   });
 
+  describe('eventBriefSchema placements', () => {
+    const base = {
+      contentType: 'event' as const,
+      title: 'Quiz Night',
+      eventName: 'Quiz Night',
+      eventDate: '2026-06-15',
+      eventTime: '19:00',
+      platforms: ['facebook', 'instagram'] as Array<'facebook' | 'instagram'>,
+    };
+
+    it('defaults to posting on the feed and as a story', () => {
+      // Both, without anyone having to remember to tick the second one.
+      const result = eventBriefSchema.safeParse(base);
+      expect(result.success).toBe(true);
+      if (result.success) expect(result.data.placements).toEqual(['feed', 'story']);
+    });
+
+    it('accepts feed and story together', () => {
+      const result = eventBriefSchema.safeParse({ ...base, placements: ['feed', 'story'] });
+      expect(result.success).toBe(true);
+    });
+
+    it('still allows a feed-only or story-only event', () => {
+      expect(eventBriefSchema.safeParse({ ...base, placements: ['feed'] }).success).toBe(true);
+      expect(eventBriefSchema.safeParse({ ...base, placements: ['story'] }).success).toBe(true);
+    });
+
+    it('requires at least one placement', () => {
+      expect(eventBriefSchema.safeParse({ ...base, placements: [] }).success).toBe(false);
+    });
+  });
+
   describe('promotionBriefSchema', () => {
     it('should require offerSummary and endDate', () => {
       const input = {

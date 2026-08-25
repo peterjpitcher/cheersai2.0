@@ -5,10 +5,13 @@ import { BannerDefaultsSchema } from "@/lib/scheduling/banner-config";
 
 export const platformEnum = z.enum(["facebook", "instagram"]);
 export const placementEnum = z.enum(["feed", "story"]);
+// Events post to the feed and to stories on the same day. See the note on the
+// matching schema in features/create/schemas/content-schemas.ts.
 const eventPlacementsSchema = z
   .array(placementEnum)
-  .length(1, "Choose either a post or a story for event campaigns, not both")
-  .default(["feed"]);
+  .min(1, "Select at least one placement")
+  .max(2, "There are only two placements")
+  .default(["feed", "story"]);
 const campaignPlacementsSchema = z
   .array(placementEnum)
   .min(1, "Select at least one placement")

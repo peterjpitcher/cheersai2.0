@@ -67,7 +67,14 @@ function resolveBatchPlacements(
     const placements = Array.isArray(brief.placements)
       ? brief.placements.filter(isPlacement)
       : [];
-    return placements.length ? Array.from(new Set(placements)) : ['feed'];
+    if (placements.length) return Array.from(new Set(placements));
+
+    // This reads the raw brief, not the Zod-parsed one, so the schema default
+    // never reaches here. The fallback has to be stated again, and it differs by
+    // type: an event posts to the feed and as a story on every posting day, so a
+    // brief that arrives without placements (an older draft, say) must still get
+    // both. Promotions stay feed-only unless asked otherwise.
+    return contentType === 'event' ? ['feed', 'story'] : ['feed'];
   }
 
   if (contentType === 'weekly_recurring') {
@@ -709,9 +716,6 @@ export async function createScheduledBatch(
     }
 
     const placements = resolveBatchPlacements(contentType, brief);
-    if (contentType === 'event' && placements.length !== 1) {
-      return { error: 'Choose either a post or a story for event campaigns, not both.' };
-    }
 
     const hasPublishablePlacement = placements.some(
       (placement) => platformsForPlacement(platforms, placement).length > 0,

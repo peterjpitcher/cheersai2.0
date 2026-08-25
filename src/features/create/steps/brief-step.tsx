@@ -104,16 +104,14 @@ export function BriefStep({
   useEffect(() => {
     if (!isEventCampaign) return;
 
+    // Events need at least one placement; the default is both. This only steps in
+    // when a draft saved under the old single-placement rule loads with none.
     const current = placementKey
       .split('|')
       .filter((value): value is 'feed' | 'story' => value === 'feed' || value === 'story');
-    if (current.length === 1 && (current[0] === 'feed' || current[0] === 'story')) {
-      return;
-    }
+    if (current.length >= 1) return;
 
-    setValue('placements', [current.find((value) => value === 'story' || value === 'feed') ?? 'feed'], {
-      shouldValidate: true,
-    });
+    setValue('placements', ['feed', 'story'], { shouldValidate: true });
   }, [isEventCampaign, placementKey, setValue]);
 
   function handlePlatformToggle(platform: Platform): void {
@@ -125,11 +123,6 @@ export function BriefStep({
   }
 
   function handlePlacementToggle(placement: 'feed' | 'story'): void {
-    if (isEventCampaign) {
-      setValue('placements', [placement], { shouldValidate: true });
-      return;
-    }
-
     const current = selectedPlacements as Array<'feed' | 'story'>;
     const updated = current.includes(placement)
       ? current.filter((value) => value !== placement)
@@ -235,12 +228,11 @@ export function BriefStep({
       {hasCampaignPlacements && (
         <fieldset>
           <legend className="text-sm font-medium text-foreground mb-2">
-            {isEventCampaign ? 'Placement' : 'Placements'} <span className="text-destructive">*</span>
+            Placements <span className="text-destructive">*</span>
           </legend>
           <div className="flex flex-wrap gap-2">
             {(['feed', 'story'] as const).map((placement) => {
               const isChecked = (selectedPlacements as Array<'feed' | 'story'>).includes(placement);
-              const inputType = isEventCampaign ? 'radio' : 'checkbox';
               return (
                 <label
                   key={placement}
@@ -251,20 +243,13 @@ export function BriefStep({
                   }`}
                 >
                   <input
-                    type={inputType}
-                    name={isEventCampaign ? 'event-placement' : undefined}
+                    type="checkbox"
                     className="sr-only"
                     checked={isChecked}
                     onChange={() => handlePlacementToggle(placement)}
                   />
                   <span className="text-foreground">
-                    {isEventCampaign
-                      ? placement === 'story'
-                        ? 'Story'
-                        : 'Post'
-                      : placement === 'story'
-                        ? 'Stories'
-                        : 'Feed'}
+                    {placement === 'story' ? 'Stories' : 'Feed'}
                   </span>
                 </label>
               );

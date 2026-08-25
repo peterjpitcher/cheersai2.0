@@ -5,6 +5,12 @@ export const DEFAULT_TIMEZONE = "Europe/London";
 export const DEFAULT_POST_TIME = "12:00";
 export const STORY_POST_TIME = "07:00";
 /**
+ * Posts landing on the day of the event go out first thing, not late afternoon.
+ * The whole job of an event-day post is to still leave people time to see it and
+ * book a table, which a 17:00 post does not.
+ */
+export const EVENT_DAY_POST_TIME = "07:00";
+/**
  * Maximum number of occurrences a single weekly recurring campaign may schedule.
  * Higher than the generic per-campaign slot cap because a weekly series spans a
  * long run (e.g. a full year at one post per week). Each occurrence still has its
