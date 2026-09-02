@@ -26,7 +26,7 @@
 
 ## Functional Requirements
 ### Public Link Page
-- Route: expose `/l/[slug]` under the `cheersai.uk` host (e.g. `cheersai.uk/l/the-anchor`), rendered with a dedicated minimalist layout.
+- Route: expose `/l/[slug]` under the `cheers.orangejelly.co.uk` host (e.g. `cheers.orangejelly.co.uk/l/the-anchor`), rendered with a dedicated minimalist layout.
 - Header: venue logo/hero image, venue name, short description/bio, optional opening hours.
 - CTA button grid: render the mandatory actions; hide any button lacking configuration but preserve order.
 - Evergreen tile row: display always-on tiles (operator managed) ahead of campaign cards; tiles honour configured image, title, and CTA and stay visible until manually retired.

@@ -458,7 +458,7 @@ export function createDefaultConfig(): PublishWorkerConfig {
         mediaSignedUrlTtlSeconds: Number(readEnv("MEDIA_SIGNED_URL_TTL_SECONDS") ?? 3600),
         resendApiKey: readEnv("RESEND_API_KEY"),
         resendFrom: readEnv("RESEND_FROM"),
-        alertEmail: readEnv("ALERT_EMAIL") ?? readEnv("OWNER_ALERT_EMAIL") ?? "notifications@cheersai.uk",
+        alertEmail: readEnv("ALERT_EMAIL") ?? readEnv("OWNER_ALERT_EMAIL") ?? "peter@orangejelly.co.uk",
         retries: {
             maxAttempts: resolveMaxAttempts(readEnv("PUBLISH_MAX_ATTEMPTS")),
             backoffMinutes: parseBackoff(readEnv("PUBLISH_RETRY_MINUTES")) ?? [5, 15, 30],

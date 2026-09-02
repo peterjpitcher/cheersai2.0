@@ -66,7 +66,7 @@ function buildSupabaseMock(captured: CapturedCalls) {
 }
 
 function makeRequest(body: unknown, secret: string | null = SECRET) {
-  return new Request('https://www.cheersai.uk/api/booking-conversions', {
+  return new Request('https://cheers.orangejelly.co.uk/api/booking-conversions', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { useForm, useWatch, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 
+import { env } from "@/env";
 import { useToast } from "@/components/providers/toast-provider";
 import { useAuth } from "@/components/providers/auth-provider";
 import type { MediaAssetSummary } from "@/lib/library/data";
@@ -80,6 +81,13 @@ function getProfileFormDefaultValues(profile: LinkInBioProfile | null): LinkInBi
 function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback;
 }
+
+/**
+ * Origin shown in the slug help text. Derived from the deployed site URL rather
+ * than hardcoded, so it follows the app if the domain changes. NEXT_PUBLIC_* is
+ * inlined at build time, so this resolves correctly in a client component.
+ */
+const PUBLIC_URL_ORIGIN = env.client.NEXT_PUBLIC_SITE_URL.replace(/\/+$/, "");
 
 export function LinkInBioProfileForm({ profile, mediaAssets }: LinkInBioProfileFormProps) {
   const router = useRouter();
@@ -163,7 +171,7 @@ export function LinkInBioProfileForm({ profile, mediaAssets }: LinkInBioProfileF
       <div className="grid gap-6 lg:grid-cols-2">
         <div className="space-y-2">
           <label className="text-sm font-semibold" style={{ color: "var(--c-ink)" }}>Slug</label>
-          <p className="text-xs" style={{ color: "var(--c-ink-3)" }}>Used in the public URL: https://www.cheersai.uk/l/&lt;slug&gt;.</p>
+          <p className="text-xs" style={{ color: "var(--c-ink-3)" }}>Used in the public URL: {PUBLIC_URL_ORIGIN}/l/&lt;slug&gt;.</p>
           <input
             className="w-full px-3 py-2 text-sm focus:outline-none"
             style={inputStyle}

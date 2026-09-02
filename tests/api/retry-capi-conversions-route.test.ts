@@ -89,7 +89,7 @@ function buildSupabaseMock(rows: Record<string, unknown>[], captured: Captured) 
 }
 
 function makeRequest() {
-  return new Request('https://www.cheersai.uk/api/cron/retry-capi-conversions');
+  return new Request('https://cheers.orangejelly.co.uk/api/cron/retry-capi-conversions');
 }
 
 describe('retry-capi-conversions cron', () => {
