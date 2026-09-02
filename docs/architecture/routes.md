@@ -116,8 +116,15 @@ project: cheersai-2.0
 
 ## Middleware
 
-File: `src/middleware.ts`
+There is none. The root `middleware.ts` was removed: Next 16 builds an empty
+middleware manifest for it (`"middleware": {}`), so it never ran.
 
-- Redirects apex domain (`cheersai.uk`) to `www.cheersai.uk` (308 permanent)
-- Matches all routes except static assets
-- No auth enforcement at middleware level -- auth is handled in layouts
+- The apex-to-`www` redirect it claimed to perform is in fact a **Vercel
+  domain-level redirect**, which returns 307 with `content-type: text/plain`,
+  not the 308 the old file would have produced.
+- `src/app/proxy.ts` exports a Next 16 proxy auth guard, but `src/app/` is not a
+  location Next loads it from, so it does not run at the edge either. Its
+  `isPublicPath` helper is still unit-tested and used as a reference.
+- **Auth is enforced in layouts**, not at the edge. `src/app/(app)/layout.tsx`
+  calls `getCurrentUser()`; an unauthenticated request to `/planner` is answered
+  with a 307 to `/auth/login` by the app itself.

@@ -1,7 +1,7 @@
 # Link-in-Bio Implementation Plan
 
 ## Overview
-Deliver a fully branded "link in bio" experience (`cheersai.uk/l/[slug]`) for The Anchor, including:
+Deliver a fully branded "link in bio" experience (`cheers.orangejelly.co.uk/l/[slug]`) for The Anchor, including:
 - Account-scoped profile configuration (theme, CTAs, evergreen tiles).
 - Campaign surfacing that honours urgency and only shows entries with a link-in-bio URL.
 - Always-on tiles backed by media library assets.
@@ -9,7 +9,7 @@ Deliver a fully branded "link in bio" experience (`cheersai.uk/l/[slug]`) for Th
 ## Prerequisites
 - Brand assets placed under `cheersai-app/public/brands/the-anchor/`:
   - `logo.png` (white mark, assumes green background `#005131`), `hero.jpg` (2400×1600 recommended), optional `texture.jpg` / `palette.json`.
-- Confirm final slug (`the-anchor`) and production hostname `cheersai.uk` routing.
+- Confirm final slug (`the-anchor`) and production hostname `cheers.orangejelly.co.uk` routing.
 - Ensure Supabase service role credentials available in target environments.
 
 ## Phase 1 – Data Model & Migrations
@@ -72,7 +72,7 @@ Deliver a fully branded "link in bio" experience (`cheersai.uk/l/[slug]`) for Th
 ## Deployment & Ops
 - Roll out migrations with supabase CLI (include rollback scripts).
 - After deploy, run seed script to populate Anchor profile and import brand assets to storage if needed.
-- Verify `cheersai.uk` domain routing to Next.js app and configure rewrite for `/l/:slug`.
+- Verify `cheers.orangejelly.co.uk` domain routing to Next.js app and configure rewrite for `/l/:slug`.
 - Monitor logs for Supabase policy errors; add alert for failed revalidation/logging.
 
 ## Risks & Mitigations
