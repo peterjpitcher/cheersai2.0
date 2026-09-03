@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { legacyHostRedirects } from "@/lib/routing/legacy-host-redirects";
 import { securityHeaders } from "@/lib/security/headers";
 
 const nextConfig: NextConfig = {
@@ -16,6 +17,9 @@ const nextConfig: NextConfig = {
   },
   async headers() {
     return securityHeaders;
+  },
+  async redirects() {
+    return legacyHostRedirects;
   },
 };
 
