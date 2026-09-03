@@ -1,3 +1,4 @@
+import { unstable_cache } from "next/cache";
 import { DateTime } from "luxon";
 
 import { DEFAULT_TIMEZONE, MEDIA_BUCKET } from "@/lib/constants";
@@ -150,6 +151,25 @@ interface CampaignAggregate {
 type ServiceSupabaseClient = NonNullable<ReturnType<typeof tryCreateServiceSupabaseClient>>;
 
 const WEBSITE_EVENT_LIMIT = 6;
+/**
+ * How long the management "what's on" list may be stale.
+ *
+ * This list previously cost ~2.4s of blocking cross-app HTTP on every render of
+ * a public link-in-bio page: one list call plus one detail call per event, all
+ * with `cache: "no-store"`. Event listings change rarely, so a short window
+ * turns that into a cache hit without anything a visitor would notice. The
+ * signed media URLs and campaign windows that make this page `force-dynamic`
+ * are fetched separately and are unaffected.
+ */
+const WEBSITE_EVENTS_REVALIDATE_SECONDS = 300;
+/**
+ * Detail candidates fetched beyond what is rendered. Detail data can still drop
+ * an event (no name anywhere, or a status that turns out to be cancelled), so a
+ * small buffer backfills rather than leaving a short list. Without it we would
+ * have to fetch details for every listed event just in case, which is the cost
+ * this change removes.
+ */
+const WEBSITE_EVENT_DETAIL_BUFFER = 4;
 const MANAGEMENT_EVENT_STATUSES = "scheduled,rescheduled,postponed,sold_out";
 const FALLBACK_WEBSITE_BASE_URL = "https://the-anchor.pub";
 
@@ -471,19 +491,74 @@ function shapePublicWebsiteEvent(
   } satisfies PublicWebsiteEvent;
 }
 
-async function getPublicWebsiteEvents({
-  supabase,
-  accountId,
-  timezone,
-  now,
-  websiteUrl,
-}: {
-  supabase: ServiceSupabaseClient;
-  accountId: string;
-  timezone: string;
-  now: DateTime;
-  websiteUrl: string | null;
-}): Promise<PublicWebsiteEvent[]> {
+/** Cache tag for a brand's website events, so the list can be busted on demand. */
+export function websiteEventsCacheTag(accountId: string): string {
+  return `link-in-bio:website-events:${accountId}`;
+}
+
+/**
+ * Narrow a management event list down to the entries worth fetching details for.
+ *
+ * Start time and status are both resolvable from the list item alone
+ * (`parseManagementEventStart` falls back to `startDate`/`date`/`time` when no
+ * detail is supplied), so the ordering and the "not long past" cut can be
+ * applied before spending a network round trip per event. Exported for testing.
+ */
+export function selectWebsiteEventCandidates(
+  list: ManagementEventListItem[],
+  timezone: string,
+  now: DateTime,
+): ManagementEventListItem[] {
+  const threshold = now.minus({ hours: 4 });
+  const seen = new Set<string>();
+  const dated: { item: ManagementEventListItem; startsAt: DateTime }[] = [];
+
+  for (const item of list) {
+    if (!item?.id || seen.has(item.id)) continue;
+    if (!isVisibleManagementEventStatus(item.event_status)) continue;
+
+    const startsAt = parseManagementEventStart(item, null, timezone);
+    if (!startsAt?.isValid || startsAt < threshold) continue;
+
+    seen.add(item.id);
+    dated.push({ item, startsAt });
+  }
+
+  return dated
+    .sort((a, b) => a.startsAt.toMillis() - b.startsAt.toMillis())
+    .slice(0, WEBSITE_EVENT_LIMIT + WEBSITE_EVENT_DETAIL_BUFFER)
+    .map((entry) => entry.item);
+}
+
+/**
+ * Cached entry point. `now` is deliberately computed inside rather than passed
+ * in: a per-request timestamp in the cache key would mean the cache never hit.
+ */
+function getPublicWebsiteEvents(
+  accountId: string,
+  timezone: string,
+  websiteUrl: string | null,
+): Promise<PublicWebsiteEvent[]> {
+  return unstable_cache(
+    (tz: string, url: string | null) => loadPublicWebsiteEvents(accountId, tz, url),
+    ["link-in-bio", "website-events", accountId],
+    {
+      revalidate: WEBSITE_EVENTS_REVALIDATE_SECONDS,
+      tags: [websiteEventsCacheTag(accountId)],
+    },
+  )(timezone, websiteUrl);
+}
+
+async function loadPublicWebsiteEvents(
+  accountId: string,
+  timezone: string,
+  websiteUrl: string | null,
+): Promise<PublicWebsiteEvent[]> {
+  const supabase = tryCreateServiceSupabaseClient();
+  if (!supabase) return [];
+
+  const now = DateTime.now().setZone(timezone);
+
   const { data: connection, error } = await supabase
     .from("management_app_connections")
     .select("base_url, api_key, enabled")
@@ -513,7 +588,12 @@ async function getPublicWebsiteEvents({
       status: MANAGEMENT_EVENT_STATUSES,
     });
 
-    const detailResults = await Promise.all(list.map(async (item) => {
+    // Only the events that can actually be rendered get a detail round trip.
+    // Previously this fetched details for every listed event and then discarded
+    // most of them, which is where the bulk of the page latency came from.
+    const candidates = selectWebsiteEventCandidates(list, timezone, now);
+
+    const detailResults = await Promise.all(candidates.map(async (item) => {
       let detail: ManagementEventDetail | null = null;
       try {
         detail = await getManagementEventDetail(config, item.id, { fallbackSlug: item.slug ?? undefined });
@@ -848,13 +928,7 @@ export async function getPublicLinkInBioPageData(slug: string): Promise<PublicLi
 
     const [logoMedia, websiteEvents] = await Promise.all([
       resolveLogoMedia(supabase, profile.logoUrl),
-      getPublicWebsiteEvents({
-        supabase,
-        accountId,
-        timezone,
-        now,
-        websiteUrl: profile.websiteUrl,
-      }),
+      getPublicWebsiteEvents(accountId, timezone, profile.websiteUrl),
     ]);
     const heroMedia = profile.heroMediaId ? assetMaps.previews.get(profile.heroMediaId) ?? null : null;
 
@@ -884,7 +958,7 @@ function isHttpUrl(value: string): boolean {
 }
 
 async function resolveLogoMedia(
-  supabase: NonNullable<ReturnType<typeof tryCreateServiceSupabaseClient>>,
+  supabase: ServiceSupabaseClient,
   logoUrl: string | null,
 ): Promise<{ url: string } | null> {
   const value = logoUrl?.trim();

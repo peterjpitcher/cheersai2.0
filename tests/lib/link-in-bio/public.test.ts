@@ -1,5 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+// `unstable_cache` needs Next's incremental cache context, which a plain Vitest
+// run does not provide. Pass the wrapped function straight through: the caching
+// behaviour is Next's concern, not this suite's.
+vi.mock("next/cache", () => ({
+  unstable_cache: (fn: (...args: never[]) => unknown) => fn,
+}));
+
 vi.mock("@/lib/library/data", () => ({
   normaliseStoragePath: (value: string) => value,
   resolvePreviewCandidates: () => [],
