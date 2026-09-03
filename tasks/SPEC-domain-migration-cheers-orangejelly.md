@@ -625,6 +625,50 @@ production builds.
 
 ---
 
+### 6c. DNS record changes (2026-09-03)
+
+Made in the Cloudflare `cheersai.uk` zone, after the cutover, once Vercel's
+canonical config and the live records had diverged.
+
+| Record | Before | After |
+|---|---|---|
+| `www.cheersai.uk` | CNAME `10f2952c7b8f8f1e.vercel-dns-016.com`, DNS-only, TTL 10 min | CNAME `b2a246dd3827302f.vercel-dns-016.com`, DNS-only, TTL 10 min |
+| `cheersai.uk` (apex) | **A** `216.150.1.1`, DNS-only, TTL 10 min | **CNAME** `b2a246dd3827302f.vercel-dns-016.com`, DNS-only, TTL 10 min |
+| `_vercel.cheersai.uk` (x2 TXT) | unchanged | unchanged |
+
+Why: `b2a246dd3827302f` is the project-level target for `oj-cheersai2-0`, the
+same one `cheers.orangejelly.co.uk` uses. The `10f2952c...` target was a stale
+per-domain target left from the original assignment, and was live during the
+`DEPLOYMENT_NOT_FOUND` outage described below.
+
+Notes for anyone repeating this:
+
+- Both records are **DNS-only (grey cloud)**. Proxying would put Cloudflare in
+  front of the Vercel edge and break certificate issuance.
+- Cloudflare **flattens** the apex CNAME, because a CNAME at a zone apex is
+  illegal in DNS. Verified: apex CNAME lookups return nothing and the apex
+  resolves to Vercel A records. Nothing else exists at the apex to collide with;
+  the two TXT records are on `_vercel`, not the apex.
+- Changing a record's **type** in Cloudflare replaces it: the old record is
+  deleted and a new one created. Rollback for the apex is therefore "create an A
+  record `216.150.1.1`, DNS-only", not an undo.
+- Vercel reports both hostnames `attached: true`, `verified: true`,
+  `ipStatus: no-change`, `misconfigured: false`.
+- The "recommended records" block in `vercel domains verify` is the canonical
+  config restated, **not** a list of outstanding changes. It appears even for a
+  domain already configured correctly.
+
+**Outage on the day, worth recording.** Between the cutover and this DNS work,
+both retired hostnames returned `404 DEPLOYMENT_NOT_FOUND` for a period. Cause:
+the apex had been detached from the `oj-cheersai2-0` project, so Vercel answered
+at the edge and the request never reached the app. That matters because the
+Phase E redirect lives in application code (`next.config.ts`), so **it only works
+while the old domains stay attached to the project**. That is the one real
+weakness of the code-based redirect versus a domain-level one. Fixed by
+re-attaching the apex with `vercel domains add cheersai.uk oj-cheersai2-0`.
+
+---
+
 ## 7. Verification
 
 Split by subsystem per F-15. Every check has a method and a single requirement.
