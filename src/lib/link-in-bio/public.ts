@@ -623,20 +623,45 @@ async function loadPublicWebsiteEvents(
   }
 }
 
-export async function getPublicLinkInBioPageData(slug: string): Promise<PublicLinkInBioPageData | null> {
+/**
+ * Optional per-phase timing collector. Passing one in is how the guarded
+ * diagnostic route at /api/internal/link-in-bio-timing measures this function
+ * without changing anything on the public render path: when it is omitted,
+ * `track` just awaits the promise.
+ */
+export type PageDataTimings = Record<string, number>;
+
+async function track<T>(
+  timings: PageDataTimings | undefined,
+  phase: string,
+  work: () => Promise<T>,
+): Promise<T> {
+  if (!timings) return work();
+  const started = Date.now();
+  try {
+    return await work();
+  } finally {
+    timings[phase] = (timings[phase] ?? 0) + (Date.now() - started);
+  }
+}
+
+export async function getPublicLinkInBioPageData(
+  slug: string,
+  timings?: PageDataTimings,
+): Promise<PublicLinkInBioPageData | null> {
   const supabase = tryCreateServiceSupabaseClient();
   if (!supabase) {
     throw new Error("Supabase service credentials are not configured");
   }
 
   try {
-    const { data: profileRow, error: profileError } = await supabase
+    const { data: profileRow, error: profileError } = await track(timings, "profile", async () => supabase
       .from("link_in_bio_profiles")
       .select(
         "account_id, slug, display_name, bio, logo_url, hero_media_id, theme, phone_number, whatsapp_number, booking_url, menu_url, parking_url, directions_url, facebook_url, instagram_url, website_url, template, font_family, is_published, created_at, updated_at",
       )
       .eq("slug", slug)
-      .maybeSingle<LinkInBioProfileRow>();
+      .maybeSingle<LinkInBioProfileRow>());
 
     if (profileError) {
       if (isSchemaMissingError(profileError)) {
@@ -656,7 +681,7 @@ export async function getPublicLinkInBioPageData(slug: string): Promise<PublicLi
       { data: accountRow, error: accountError },
       { data: tileRows, error: tileError },
       { data: postingDefaultsRow, error: postingDefaultsError },
-    ] = await Promise.all([
+    ] = await track(timings, "account+tiles+defaults", () => Promise.all([
       supabase
         .from("accounts")
         .select("timezone")
@@ -675,7 +700,7 @@ export async function getPublicLinkInBioPageData(slug: string): Promise<PublicLi
         .select("banners_enabled, banner_position, banner_bg, banner_text_colour")
         .eq("account_id", accountId)
         .maybeSingle<PostingDefaultsRow>(),
-    ]);
+    ]));
 
     if (accountError && !isSchemaMissingError(accountError)) {
       throw accountError;
@@ -701,7 +726,7 @@ export async function getPublicLinkInBioPageData(slug: string): Promise<PublicLi
     const timezone = accountRow?.timezone ?? DEFAULT_TIMEZONE;
     const now = DateTime.now().setZone(timezone);
 
-    const { data: campaignRows, error: campaignError } = await supabase
+    const { data: campaignRows, error: campaignError } = await track(timings, "campaigns-query", async () => supabase
       .from("content_items")
       .select(
         "id, campaign_id, scheduled_for, status, placement, prompt_context, platform, content_variants(media_ids, banner_enabled, banner_text_override, banner_position, banner_bg, banner_text_colour), campaigns!inner(id, name, campaign_type, link_in_bio_url, account_id, metadata)",
@@ -711,7 +736,7 @@ export async function getPublicLinkInBioPageData(slug: string): Promise<PublicLi
       .in("platform", ["instagram", "facebook"])
       .in("status", ["scheduled", "publishing", "posted"])
       .order("scheduled_for", { ascending: true })
-      .returns<CampaignContentRow[]>();
+      .returns<CampaignContentRow[]>());
 
     if (campaignError && !isSchemaMissingError(campaignError)) {
       throw campaignError;
@@ -789,7 +814,8 @@ export async function getPublicLinkInBioPageData(slug: string): Promise<PublicLi
       campaignMeta.set(row.campaigns!.id, aggregate);
     }
 
-    const assetMaps = await fetchMediaAssets(Array.from(mediaAssetIds));
+    const assetMaps = await track(timings, "media-assets+signing", () =>
+      fetchMediaAssets(Array.from(mediaAssetIds)));
 
     const campaignCards: PublicCampaignCard[] = [];
 
@@ -926,10 +952,10 @@ export async function getPublicLinkInBioPageData(slug: string): Promise<PublicLi
       } satisfies PublicLinkInBioTile;
     });
 
-    const [logoMedia, websiteEvents] = await Promise.all([
+    const [logoMedia, websiteEvents] = await track(timings, "logo+website-events", () => Promise.all([
       resolveLogoMedia(supabase, profile.logoUrl),
       getPublicWebsiteEvents(accountId, timezone, profile.websiteUrl),
-    ]);
+    ]));
     const heroMedia = profile.heroMediaId ? assetMaps.previews.get(profile.heroMediaId) ?? null : null;
 
     return {
