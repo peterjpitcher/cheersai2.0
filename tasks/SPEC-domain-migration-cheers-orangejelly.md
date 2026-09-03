@@ -1,8 +1,8 @@
 # SPEC v2: Move CheersAI from cheersai.uk to cheers.orangejelly.co.uk
 
-- **Status**: Revised after third-party developer review; all decisions settled;
-  **both code changesets written, verified and committed on branches**. Remaining
-  work is environment and console changes, which are the owner's.
+- **Status**: **Complete.** All phases done, all decisions settled, every code
+  change merged and deployed, and every verification run. Nothing outstanding;
+  see 6d for the close-out and for what was deliberately not done.
 - **Supersedes**: v1 (2026-09-02 morning). Review at
   `tasks/REVIEW-SPEC-domain-migration-cheers-orangejelly.md`.
 - **Revised**: 2026-09-02, after re-verifying every claim in the review live and
@@ -574,22 +574,17 @@ Phases A to D are complete except where noted. Evidence:
 | Production redeploy | Done, so the new value is inlined |
 | **Flip proved live** | `GET /api/oauth/facebook-ads/callback` with no state returns `307` to `https://cheers.orangejelly.co.uk/connections?ads_error=missing_state`, from **both** hosts. That route builds its redirect from `NEXT_PUBLIC_SITE_URL`, so this is direct evidence the running build carries the new value |
 
-**Outstanding, and both need a person:**
+**Both items that needed a person are now done and verified.**
 
-1. **Meta Basic Settings are unchanged.** Read back from the Graph API after the
-   owner reported them done: `app_domains` is still `["cheersai.orangejelly.co.uk"]`
+1. **Meta Basic Settings: corrected.** They failed to save twice before taking.
+   Verified via the Graph API: `app_domains` is `["cheers.orangejelly.co.uk"]`
    and `website_url`, `privacy_policy_url`, `terms_of_service_url` and `link` all
-   still point at `https://www.cheersai.uk`. Not a flip blocker (the old domain is
-   renewed and still resolves), but it must be corrected before Phase E. The three
-   OAuth redirect URIs cannot be read back at all, so whether they saved is
-   unverified; the app now sends
-   `https://cheers.orangejelly.co.uk/api/oauth/{provider}/callback` as its
-   `redirect_uri`, so if they did not save, **reconnect fails** while existing
-   tokens keep publishing.
-2. **Vercel production domain.** New deployments still alias to
-   `www.cheersai.uk`. Both hosts serve the same deployment, so this is cosmetic
-   for now, but the primary should move to `cheers.orangejelly.co.uk` in the
-   dashboard. The CLI does not expose it.
+   point at `https://cheers.orangejelly.co.uk`. No field references a retired or
+   never-used hostname. The three OAuth redirect URIs cannot be read back via
+   the API, but a live Facebook reconnect succeeded, which is the only proof
+   available that they saved.
+2. **Vercel production domain: done**, in the dashboard. This is the change that
+   caused the outage described in 6c.
 
 Phase E (redirecting the old hosts) has deliberately **not** started.
 
@@ -602,7 +597,7 @@ Phase E (redirecting the old hosts) has deliberately **not** started.
 | Redirect implemented | cheersai2.0 #34 (`2fb0e49d`), merged and deployed. `src/lib/routing/legacy-host-redirects.ts`, imported into `next.config.ts` |
 | Method | **Changed from the plan.** The spec called for a Vercel domain-level redirect. The Vercel CLI has no command for it, so it was done in `next.config.ts` instead: reviewable, unit tested, and revertible by PR |
 | Status | 307 temporary, as specified, so no client caches it during the observation window |
-| Instagram bio | Owner action, outstanding |
+| Instagram bio | Done, repointed at the new host |
 
 Live verification, production:
 
@@ -691,6 +686,44 @@ otherwise a perfectly reasonable tidy-up, and nothing warns you that it also
 deletes the redirect. A Vercel domain-level redirect would not have this
 coupling. Anyone told to promote a new primary domain here should be told
 explicitly to leave the old domains attached.
+
+---
+
+### 6d. Close-out (2026-09-03)
+
+Nothing is outstanding. Every phase is complete and every check that can be run
+without waiting for a scheduled event has been run.
+
+**The last unproven link, V8, now passes.** Rather than wait for the next
+scheduled post, the chain was exercised directly: a real `media_assets` row was
+signed for 300 seconds through Supabase Storage exactly as the publish worker
+does, then posted to `https://cheers.orangejelly.co.uk/api/internal/render-banner`
+with `authorization: Bearer <CRON_SECRET>`, the same header the worker sends.
+It returned **HTTP 200, `image/jpeg`, 217,047 bytes, in 725ms**. That covers the
+Supabase edge secret, the new hostname, the endpoint's auth, the storage fetch
+and Sharp rendering in one pass.
+
+**Deliberately not done, and not pending:**
+
+- *Removing the old Meta OAuth redirect URIs and Supabase Auth redirect
+  entries.* These are additive allowlist entries. Leaving them costs nothing and
+  they are the rollback route. There is no deadline and no benefit to removing
+  them beyond tidiness, so this is closed rather than scheduled.
+- *Making the 307 redirects permanent.* `cheersai.uk` is renewed and redirects
+  indefinitely, so a 307 is the correct long-term choice: it keeps the rollback
+  open and nothing caches it. Closed as a non-change.
+- *Matching deletion requests to a stored connection.* The Meta data deletion
+  callback is implemented and verified in production. Actually revoking a
+  connection would require recording Meta's app-scoped `user_id` at connect
+  time, which CheersAI does not do. Since no data is held against that
+  identifier, there is nothing to delete and the callback reports that honestly.
+  Recording the id would mean storing *more* personal data in order to support
+  deletion; not worth it unless Meta asks.
+
+**Standing warning, unchanged:** the Phase E redirect lives in
+`next.config.ts`, so it only works while `cheersai.uk` and `www.cheersai.uk`
+remain attached to the Vercel project. Move the redirect to Vercel's
+domain-level setting before ever detaching them.
 
 ---
 
