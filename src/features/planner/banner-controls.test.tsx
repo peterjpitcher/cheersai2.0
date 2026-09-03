@@ -59,7 +59,7 @@ describe("<BannerControls />", () => {
       />,
     );
 
-    expect(screen.getByText(/leave blank for no overlay/i)).toBeInTheDocument();
+    expect(screen.getByText(/leave the text blank/i)).toBeInTheDocument();
 
     const input = screen.getByLabelText("Custom overlay text");
     fireEvent.change(input, { target: { value: "late deal" } });
@@ -85,7 +85,7 @@ describe("<BannerControls />", () => {
     });
   });
 
-  it("turns the overlay OFF when the text is cleared", async () => {
+  it("turns the overlay OFF from the toggle, not from the text box", async () => {
     updatePlannerBannerConfigMock.mockResolvedValueOnce({});
 
     render(
@@ -97,14 +97,67 @@ describe("<BannerControls />", () => {
       />,
     );
 
-    const input = screen.getByLabelText("Custom overlay text");
-    expect(input).toHaveValue("BANK HOLIDAY");
+    expect(screen.getByLabelText("Custom overlay text")).toHaveValue("BANK HOLIDAY");
 
-    fireEvent.click(screen.getByRole("button", { name: "Turn off" }));
+    fireEvent.click(screen.getByLabelText("Show overlay strip"));
 
     await waitFor(() => {
       expect(updatePlannerBannerConfigMock).toHaveBeenCalledWith(
         expect.objectContaining({ enabled: false, textOverride: null }),
+      );
+    });
+  });
+
+  it("turns the overlay ON with no text so the automatic label prints", async () => {
+    // The gap this closes: a post whose automatic strip was dropped could only
+    // get one back by typing words over it.
+    updatePlannerBannerConfigMock.mockResolvedValueOnce({});
+    const onUpdate = vi.fn();
+
+    render(
+      <BannerControls
+        contentItemId="content-1"
+        status="draft"
+        accountDefaults={accountDefaults}
+        overrides={{ ...defaultOverrides, banner_enabled: false }}
+        autoLabel="THIS FRIDAY"
+        onUpdate={onUpdate}
+      />,
+    );
+
+    fireEvent.click(screen.getByLabelText("Show overlay strip"));
+
+    await waitFor(() => {
+      expect(updatePlannerBannerConfigMock).toHaveBeenCalledWith(
+        expect.objectContaining({ enabled: true, textOverride: null }),
+      );
+    });
+
+    expect(onUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ enabled: true, textOverride: null }),
+    );
+    // The preview shows what will actually print, not a blank.
+    expect(screen.getByText("THIS FRIDAY")).toBeInTheDocument();
+  });
+
+  it("clearing the text leaves the strip on and falls back to the automatic label", async () => {
+    updatePlannerBannerConfigMock.mockResolvedValueOnce({});
+
+    render(
+      <BannerControls
+        contentItemId="content-1"
+        status="draft"
+        accountDefaults={accountDefaults}
+        overrides={{ ...defaultOverrides, banner_enabled: true, banner_text_override: "BANK HOLIDAY" }}
+        autoLabel="THIS FRIDAY"
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Clear text" }));
+
+    await waitFor(() => {
+      expect(updatePlannerBannerConfigMock).toHaveBeenCalledWith(
+        expect.objectContaining({ enabled: true, textOverride: null }),
       );
     });
   });

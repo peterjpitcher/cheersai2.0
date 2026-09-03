@@ -20,7 +20,11 @@ interface BannerControlsProps {
   status: string;
   accountDefaults: AccountBannerDefaults;
   overrides: PostBannerOverrides;
-  /** @deprecated Overlays are opt-in per post; the automatic label is no longer shown. */
+  /**
+   * The proximity label this post would print when no custom text is set
+   * (TONIGHT, THIS FRIDAY, FRIDAY 17TH JULY). Shown in the preview so "on with
+   * no text" reads as a real choice rather than an empty one.
+   */
   autoLabel?: string | null;
   onUpdate?: (config: ResolvedConfig) => void;
 }
@@ -30,6 +34,7 @@ export function BannerControls({
   status,
   accountDefaults,
   overrides,
+  autoLabel,
   onUpdate,
 }: BannerControlsProps): React.ReactElement {
   const toast = useToast();
@@ -45,20 +50,19 @@ export function BannerControls({
     localOverrides.banner_text_override ?? "",
   );
 
-  async function persist(next: PostBannerOverrides): Promise<void> {
+  async function persist(next: PostBannerOverrides, enabled: boolean): Promise<void> {
     if (isLocked) return;
-    // Overlays are opt-in: the banner is enabled iff there is overlay text.
-    // Writing an explicit boolean (never NULL) means a post can be turned OFF
-    // and stays OFF on later edits, and can never be left enabled-but-blank.
-    const overlayText = next.banner_text_override;
-    const enabled = overlayText != null && overlayText.length > 0;
+    // Always write an explicit boolean (never NULL) so a post that is turned OFF
+    // stays off and cannot be re-enabled by the account default at publish time.
+    // Enabled with no text is legitimate: the worker prints the computed
+    // proximity label. Text is cleared when off so the two cannot disagree.
     const normalised: PostBannerOverrides = {
       ...next,
       banner_enabled: enabled,
       banner_position: FIXED_BANNER_POSITION,
       banner_bg: FIXED_BANNER_BG,
       banner_text_colour: FIXED_BANNER_TEXT,
-      banner_text_override: enabled ? overlayText : null,
+      banner_text_override: enabled ? next.banner_text_override : null,
     };
     setSaving(true);
     const previous = localOverrides;
@@ -94,21 +98,52 @@ export function BannerControls({
       return;
     }
     setTextOverrideDraft(check.value ?? "");
-    void persist({ ...localOverrides, banner_text_override: check.value });
+    // Typing text implies "on"; clearing it back to blank leaves the strip on
+    // and falls back to the automatic label rather than silently switching off.
+    void persist(
+      { ...localOverrides, banner_text_override: check.value },
+      resolved.enabled || check.value !== null,
+    );
   }
+
+  function toggleEnabled(next: boolean): void {
+    void persist({ ...localOverrides, banner_text_override: textOverrideDraft || null }, next);
+  }
+
+  // What the strip will actually print: custom text wins, otherwise the
+  // computed label. Mirrors BannerOverlay's own precedence.
+  const previewText = resolved.enabled
+    ? (resolved.textOverride && resolved.textOverride.length > 0
+        ? resolved.textOverride
+        : autoLabel ?? null)
+    : null;
 
   return (
     <div className="space-y-3 rounded-lg border p-4">
-      <div>
-        <span className="text-sm font-medium">Overlay</span>
-        <p className="mt-1 text-xs text-muted-foreground">
-          Add overlay text to switch it on for this post. Leave blank for no overlay.
-        </p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <span className="text-sm font-medium">Overlay</span>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Leave the text blank to print the automatic date label.
+          </p>
+        </div>
+        <label className="flex shrink-0 items-center gap-2 text-xs font-medium">
+          <input
+            type="checkbox"
+            role="switch"
+            aria-label="Show overlay strip"
+            checked={resolved.enabled}
+            disabled={isLocked}
+            className="h-4 w-4 disabled:cursor-not-allowed disabled:opacity-50"
+            onChange={(e) => toggleEnabled(e.target.checked)}
+          />
+          {resolved.enabled ? "On" : "Off"}
+        </label>
       </div>
 
       <div className="flex items-center gap-2">
         <span className="text-xs text-muted-foreground">Preview</span>
-        {resolved.textOverride ? (
+        {previewText ? (
           <div
             className="flex h-6 items-center rounded px-3 text-[10px] font-bold uppercase tracking-wider"
             style={{
@@ -116,10 +151,12 @@ export function BannerControls({
               color: FIXED_BANNER_TEXT,
             }}
           >
-            {resolved.textOverride}
+            {previewText}
           </div>
         ) : (
-          <span className="text-xs italic text-muted-foreground">No overlay</span>
+          <span className="text-xs italic text-muted-foreground">
+            {resolved.enabled ? "No label due for this date" : "No overlay"}
+          </span>
         )}
       </div>
 
@@ -132,10 +169,10 @@ export function BannerControls({
             type="text"
             aria-label="Custom overlay text"
             maxLength={MAX_BANNER_TEXT_LENGTH}
-            placeholder="Add overlay text (optional)"
+            placeholder="Blank uses the automatic label"
             value={textOverrideDraft}
-            disabled={isLocked}
-            className="flex-1 rounded border px-2 py-1 text-sm uppercase"
+            disabled={isLocked || !resolved.enabled}
+            className="flex-1 rounded border px-2 py-1 text-sm uppercase disabled:cursor-not-allowed disabled:opacity-50"
             onChange={(e) => setTextOverrideDraft(e.target.value)}
             onBlur={commitTextOverride}
           />
@@ -144,11 +181,11 @@ export function BannerControls({
             disabled={isLocked || textOverrideDraft.length === 0}
             onClick={() => {
               setTextOverrideDraft("");
-              void persist({ ...localOverrides, banner_text_override: null });
+              void persist({ ...localOverrides, banner_text_override: null }, resolved.enabled);
             }}
             className="rounded border px-2 py-1 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-50"
           >
-            Turn off
+            Clear text
           </button>
           <span className="self-center text-xs text-muted-foreground">
             {textOverrideDraft.length}/{MAX_BANNER_TEXT_LENGTH}

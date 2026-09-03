@@ -641,32 +641,20 @@ describe('createScheduledBatch', () => {
   });
 
   // -------------------------------------------------------------------------
-  // Automatic date banner vs imported event artwork
+  // Automatic date banner on event posts
   //
-  // Event posts normally get a date strip stamped over the artwork. Artwork
-  // designed in the management app usually carries its own date and has real
-  // content under the strip, so the strip is dropped for a post whose media is
-  // entirely imported. The decision reads provenance from the database rather
-  // than anything the client sent, so it cannot be spoofed and cannot drift out
-  // of step with what was actually attached.
+  // Every event post gets the date strip, whatever its media. Artwork imported
+  // from the management app was briefly exempt on the grounds that it carries
+  // its own date, which took the strip off every event post once artwork import
+  // became the normal way to attach an image. The strip prints a proximity
+  // label rather than a date, so no static artwork can replace it.
   // -------------------------------------------------------------------------
 
-  /**
-   * Queue the terminal results for one event batch.
-   *
-   * The provenance lookup closes on .returns(), like the ownership check either
-   * side of it, so it draws from the same queue in call order.
-   */
-  function stubBatchChain(
-    ownedIds: string[],
-    provenance: Array<{ id: string; source_key: string | null }> | null,
-  ) {
+  /** Queue the terminal results for one event batch. */
+  function stubBatchChain(ownedIds: string[]) {
     supabaseMock.enqueueResult({ data: { id: 'draft-1' }, error: null }); // draft lookup
     supabaseMock.enqueueResult({ data: ownedIds.map((id) => ({ id })), error: null }); // media ownership
     supabaseMock.enqueueResult({ data: { id: 'camp-1' }, error: null }); // campaign insert
-    supabaseMock.enqueueResult(
-      provenance ? { data: provenance, error: null } : { data: null, error: { message: 'no such column' } },
-    ); // provenance lookup
 
     (supabaseMock.mock as Record<string, unknown>).select = vi.fn((...args: unknown[]) => {
       supabaseMock.calls.push({ method: 'select', args });
@@ -711,42 +699,38 @@ describe('createScheduledBatch', () => {
     return call?.args[0] as Array<Record<string, unknown>>;
   }
 
-  it('drops the automatic date strip when every asset is imported event artwork', async () => {
-    stubBatchChain(['media-1', 'media-2'], [
-      { id: 'media-1', source_key: 'ams:event:evt-1:abc123' },
-      { id: 'media-2', source_key: 'ams:event:evt-1:abc123' },
-    ]);
+  it('keeps the automatic date strip on imported event artwork (regression)', async () => {
+    // The case that silently took the strip off a month of scheduled posts.
+    stubBatchChain(['media-1', 'media-2']);
 
     const result = await runEventBatch(['media-1', 'media-2']);
 
     expect(result.success).toBe(true);
-    expect(variantRows().every((row) => row.banner_enabled === false)).toBe(true);
+    for (const row of variantRows()) {
+      expect(row.banner_enabled).toBe(true);
+      // No typed text: null means the worker prints the computed label.
+      expect(row.banner_text_override).toBeNull();
+    }
   });
 
   it('keeps the strip when the post mixes imported artwork with an uploaded image', async () => {
-    // A designed poster and a photo from the camera roll are not the same thing,
-    // and only one of them already says when the event is.
-    stubBatchChain(['media-1', 'media-2'], [
-      { id: 'media-1', source_key: 'ams:event:evt-1:abc123' },
-      { id: 'media-2', source_key: null },
-    ]);
+    stubBatchChain(['media-1', 'media-2']);
 
     await runEventBatch(['media-1', 'media-2']);
 
     expect(variantRows().every((row) => row.banner_enabled === true)).toBe(true);
   });
 
-  it('keeps the strip for media imported from somewhere other than an event', async () => {
-    stubBatchChain(['media-1'], [{ id: 'media-1', source_key: 'canva:design:xyz' }]);
+  it('keeps the strip on an event post with no media at all', async () => {
+    stubBatchChain([]);
 
-    await runEventBatch(['media-1']);
+    await runEventBatch([]);
 
     expect(variantRows().every((row) => row.banner_enabled === true)).toBe(true);
   });
 
-  it('still honours typed overlay text on imported artwork', async () => {
-    // Suppression removes the automatic date, not the user's own decision.
-    stubBatchChain(['media-1'], [{ id: 'media-1', source_key: 'ams:event:evt-1:abc123' }]);
+  it('still honours typed overlay text on an event post', async () => {
+    stubBatchChain(['media-1']);
 
     await runEventBatch(['media-1'], 'LAST FEW TICKETS');
 
@@ -754,24 +738,6 @@ describe('createScheduledBatch', () => {
       expect(row.banner_enabled).toBe(true);
       expect(row.banner_text_override).toBe('LAST FEW TICKETS');
     }
-  });
-
-  it('fails closed and keeps the strip when provenance cannot be read', async () => {
-    // Includes the window before the migration is applied. Losing the date from
-    // posts that need it is far worse than printing it twice.
-    stubBatchChain(['media-1'], null);
-
-    await runEventBatch(['media-1']);
-
-    expect(variantRows().every((row) => row.banner_enabled === true)).toBe(true);
-  });
-
-  it('fails closed when provenance returns fewer rows than were attached', async () => {
-    stubBatchChain(['media-1', 'media-2'], [{ id: 'media-1', source_key: 'ams:event:evt-1:abc123' }]);
-
-    await runEventBatch(['media-1', 'media-2']);
-
-    expect(variantRows().every((row) => row.banner_enabled === true)).toBe(true);
   });
 
   it('rejects the batch when overlay text contains disallowed characters', async () => {
