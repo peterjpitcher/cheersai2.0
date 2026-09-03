@@ -456,7 +456,7 @@ derives the same endpoint. Affected:
 | Vercel `oj-cheersai2-0` | Preview | `NEXT_PUBLIC_SITE_URL` | **Must be set to a non-localhost URL.** v2 said to leave it unset; that was wrong and would break every preview build. Vercel builds previews with `NODE_ENV=production`, an unset value falls back to `http://localhost:3000`, and the guard at `src/env.ts:149` then throws `NEXT_PUBLIC_SITE_URL must be set to the deployed domain in production`. Set to `https://cheers.orangejelly.co.uk`, matching the pre-existing arrangement. The cost is that preview OAuth returns to production, which is unchanged from before. |
 | Vercel `oj-cheersai2-0` | Development | `NEXT_PUBLIC_SITE_URL` | `https://cheers.orangejelly.co.uk` (a local `.env.local` overrides it anyway). |
 | Vercel `oj-cheersai2-0` | Production | `RESEND_FROM` | `CheersAI <noreply@auth.orangejelly.co.uk>` |
-| Vercel `oj-cheersai2-0` | Preview, Development | `RESEND_FROM` | **Unset.** `src/lib/email/resend.ts:21-27` then skips sending with a warning, which is the desired guard against preview jobs emailing real users. |
+| Vercel `oj-cheersai2-0` | Preview, Development | `RESEND_FROM` | **Must be set.** v2 said to leave it unset as a guard against preview jobs emailing real users. That is wrong and **breaks every preview build**: `RESEND_FROM` is in `requiredServerKeys` in `src/env.ts`, Vercel builds previews with `NODE_ENV=production`, and `validateProductionEnv()` then throws `Missing required production environment variables: RESEND_FROM` during page-data collection. This was done and had to be reverted; see §6a. The guard was never available. Preview deployments run no crons and no webhooks, so they do not send anyway. |
 | **Supabase `nbkjciurhvkfpcpatbnt`** | function secrets | `NEXT_PUBLIC_SITE_URL` | `https://cheers.orangejelly.co.uk` |
 | **Supabase `nbkjciurhvkfpcpatbnt`** | function secrets | `ALERT_EMAIL` | `peter@orangejelly.co.uk` |
 | Vercel `oj-the-anchor-pub` | Production | `CHEERSAI_BASE_URL` | `https://cheers.orangejelly.co.uk` |
@@ -590,6 +590,38 @@ Phases A to D are complete except where noted. Evidence:
    dashboard. The CLI does not expose it.
 
 Phase E (redirecting the old hosts) has deliberately **not** started.
+
+---
+
+### 6b. Phase E record (2026-09-03)
+
+| Step | State |
+|---|---|
+| Redirect implemented | cheersai2.0 #34 (`2fb0e49d`), merged and deployed. `src/lib/routing/legacy-host-redirects.ts`, imported into `next.config.ts` |
+| Method | **Changed from the plan.** The spec called for a Vercel domain-level redirect. The Vercel CLI has no command for it, so it was done in `next.config.ts` instead: reviewable, unit tested, and revertible by PR |
+| Status | 307 temporary, as specified, so no client caches it during the observation window |
+| Instagram bio | Owner action, outstanding |
+
+Live verification, production:
+
+| Check | Result |
+|---|---|
+| V3a `www.cheersai.uk/` | 307 to `https://cheers.orangejelly.co.uk/` |
+| V3b path | 307 to `/l/the-anchor` |
+| V3c query | 307 to `/l/the-anchor?x=1&y=2`, query intact |
+| V3d apex | `http://cheersai.uk/...` chains 308 to HTTPS, 307 to `www` (Vercel's own edge redirect fires first), 307 to the new host, 200. Query survives all three hops |
+| No loop | New host returns 200 and is never redirected |
+| Static assets | `_next/static` is excluded from redirects by Next, verified 404 rather than 307 |
+
+**A mistake worth recording.** Fixing `RESEND_FROM` earlier in the day meant
+removing an entry that spanned all three environments and re-adding it for
+Production only, following the (wrong) §5.3 guidance above. That broke **every**
+preview build, not just the one on #34, for the same `NODE_ENV=production`
+reason already corrected for `NEXT_PUBLIC_SITE_URL`. Two preview deployments
+failed before it was spotted on #34's checks. Restoring all three scopes fixed
+it, confirmed by a clean preview rebuild. The lesson generalises: **any key in
+`requiredServerKeys` must be set in Preview**, because Vercel previews are
+production builds.
 
 ---
 
