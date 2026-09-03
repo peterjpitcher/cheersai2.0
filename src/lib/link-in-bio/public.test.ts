@@ -1,7 +1,12 @@
 import { describe, it, expect } from "vitest";
 import { DateTime } from "luxon";
 
-import { selectWebsiteEventCandidates, websiteEventsCacheTag } from "./public";
+import {
+  selectDisplayableCampaignIds,
+  selectWebsiteEventCandidates,
+  websiteEventsCacheTag,
+  type CampaignDisplayCandidate,
+} from "./public";
 import type { ManagementEventListItem } from "@/lib/management-app/client";
 
 const TZ = "Europe/London";
@@ -124,5 +129,91 @@ describe("websiteEventsCacheTag", () => {
   it("is scoped per account so one brand cannot bust another's cache", () => {
     expect(websiteEventsCacheTag("acc-1")).toBe("link-in-bio:website-events:acc-1");
     expect(websiteEventsCacheTag("acc-1")).not.toBe(websiteEventsCacheTag("acc-2"));
+  });
+});
+
+describe("selectDisplayableCampaignIds", () => {
+  const base: CampaignDisplayCandidate = {
+    id: "c1",
+    campaignType: "event",
+    campaignMetadata: {},
+    linkUrl: "https://example.com/book",
+    earliest: DateTime.fromISO("2026-09-01T18:00:00", { zone: TZ }),
+    latest: DateTime.fromISO("2026-09-05T18:00:00", { zone: TZ }),
+  };
+
+  it("keeps a campaign that has started and has not ended", () => {
+    expect(selectDisplayableCampaignIds([base], NOW)).toEqual(["c1"]);
+  });
+
+  it("drops a campaign that has not started yet", () => {
+    const future = {
+      ...base,
+      earliest: DateTime.fromISO("2026-10-01T18:00:00", { zone: TZ }),
+      latest: DateTime.fromISO("2026-10-05T18:00:00", { zone: TZ }),
+    };
+    expect(selectDisplayableCampaignIds([future], NOW)).toEqual([]);
+  });
+
+  it("drops a campaign whose event date has passed", () => {
+    // metadata.startDate is what drives an event campaign's end. Without it the
+    // timing helper falls back to "now", which would keep every campaign alive
+    // today, so a realistic fixture has to carry the date.
+    const past = {
+      ...base,
+      campaignMetadata: { startDate: "2026-08-05" },
+      earliest: DateTime.fromISO("2026-08-01T18:00:00", { zone: TZ }),
+      latest: DateTime.fromISO("2026-08-05T18:00:00", { zone: TZ }),
+    };
+    expect(selectDisplayableCampaignIds([past], NOW)).toEqual([]);
+  });
+
+  it("keeps an event campaign on the day of the event", () => {
+    const today = {
+      ...base,
+      campaignMetadata: { startDate: "2026-09-03" },
+      earliest: DateTime.fromISO("2026-08-28T18:00:00", { zone: TZ }),
+      latest: DateTime.fromISO("2026-09-03T09:00:00", { zone: TZ }),
+    };
+    expect(selectDisplayableCampaignIds([today], NOW)).toEqual(["c1"]);
+  });
+
+  it("drops a campaign with no link, matching the card loop", () => {
+    expect(selectDisplayableCampaignIds([{ ...base, linkUrl: "" }], NOW)).toEqual([]);
+  });
+
+  it("drops a campaign with no scheduling bounds", () => {
+    expect(
+      selectDisplayableCampaignIds([{ ...base, earliest: null, latest: null }], NOW),
+    ).toEqual([]);
+  });
+
+  it("keeps a same-day campaign, since the end is the end of that day", () => {
+    const today = {
+      ...base,
+      earliest: DateTime.fromISO("2026-09-03T09:00:00", { zone: TZ }),
+      latest: DateTime.fromISO("2026-09-03T09:00:00", { zone: TZ }),
+    };
+    expect(selectDisplayableCampaignIds([today], NOW)).toEqual(["c1"]);
+  });
+
+  it("returns only the live ones from a mixed set", () => {
+    const candidates = [
+      { ...base, id: "live" },
+      {
+        ...base,
+        id: "over",
+        campaignMetadata: { startDate: "2026-07-02" },
+        earliest: DateTime.fromISO("2026-07-01T18:00:00", { zone: TZ }),
+        latest: DateTime.fromISO("2026-07-02T18:00:00", { zone: TZ }),
+      },
+      {
+        ...base,
+        id: "not-started",
+        earliest: DateTime.fromISO("2026-11-01T18:00:00", { zone: TZ }),
+        latest: DateTime.fromISO("2026-11-02T18:00:00", { zone: TZ }),
+      },
+    ];
+    expect(selectDisplayableCampaignIds(candidates, NOW)).toEqual(["live"]);
   });
 });

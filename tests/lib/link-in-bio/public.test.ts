@@ -29,6 +29,20 @@ const managementClientMock = vi.hoisted(() => ({
 
 vi.mock("@/lib/management-app/client", () => managementClientMock);
 
+/**
+ * The page now loads campaign definitions in a separate query, so the mock has
+ * to serve the `campaigns` table too. Derive them from each test's own
+ * content_items fixture rather than restating them, so the two cannot drift.
+ */
+function campaignsFromContentRows(rows: unknown): unknown[] {
+  const seen = new Map<string, unknown>();
+  for (const row of Array.isArray(rows) ? rows : []) {
+    const campaign = (row as { campaigns?: { id?: string } } | null)?.campaigns;
+    if (campaign?.id && !seen.has(campaign.id)) seen.set(campaign.id, campaign);
+  }
+  return Array.from(seen.values());
+}
+
 describe("getPublicLinkInBioPageData", () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -105,6 +119,16 @@ describe("getPublicLinkInBioPageData", () => {
         });
 
         builder.returns = vi.fn(async () => {
+          if (table === "campaigns") {
+            const contentBuilder = (
+              supabaseMock!.from as unknown as (t: string) => {
+                returns: () => Promise<{ data: unknown }>;
+              }
+            )("content_items");
+            const items = await contentBuilder.returns();
+            return { data: campaignsFromContentRows(items.data), error: null };
+          }
+
           if (table === "link_in_bio_tiles") {
             return { data: [], error: null };
           }
@@ -208,6 +232,16 @@ describe("getPublicLinkInBioPageData", () => {
         });
 
         builder.returns = vi.fn(async () => {
+          if (table === "campaigns") {
+            const contentBuilder = (
+              supabaseMock!.from as unknown as (t: string) => {
+                returns: () => Promise<{ data: unknown }>;
+              }
+            )("content_items");
+            const items = await contentBuilder.returns();
+            return { data: campaignsFromContentRows(items.data), error: null };
+          }
+
           if (table === "link_in_bio_tiles") {
             return { data: [], error: null };
           }
@@ -302,6 +336,16 @@ describe("getPublicLinkInBioPageData", () => {
         });
 
         builder.returns = vi.fn(async () => {
+          if (table === "campaigns") {
+            const contentBuilder = (
+              supabaseMock!.from as unknown as (t: string) => {
+                returns: () => Promise<{ data: unknown }>;
+              }
+            )("content_items");
+            const items = await contentBuilder.returns();
+            return { data: campaignsFromContentRows(items.data), error: null };
+          }
+
           if (table === "link_in_bio_tiles") {
             return { data: [], error: null };
           }
@@ -423,6 +467,16 @@ describe("getPublicLinkInBioPageData", () => {
         });
 
         builder.returns = vi.fn(async () => {
+          if (table === "campaigns") {
+            const contentBuilder = (
+              supabaseMock!.from as unknown as (t: string) => {
+                returns: () => Promise<{ data: unknown }>;
+              }
+            )("content_items");
+            const items = await contentBuilder.returns();
+            return { data: campaignsFromContentRows(items.data), error: null };
+          }
+
           if (table === "link_in_bio_tiles") {
             return { data: [], error: null };
           }
@@ -556,6 +610,16 @@ describe("getPublicLinkInBioPageData", () => {
         });
 
         builder.returns = vi.fn(async () => {
+          if (table === "campaigns") {
+            const contentBuilder = (
+              supabaseMock!.from as unknown as (t: string) => {
+                returns: () => Promise<{ data: unknown }>;
+              }
+            )("content_items");
+            const items = await contentBuilder.returns();
+            return { data: campaignsFromContentRows(items.data), error: null };
+          }
+
           if (table === "link_in_bio_tiles" || table === "content_items") {
             return { data: [], error: null };
           }

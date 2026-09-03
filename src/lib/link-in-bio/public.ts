@@ -645,6 +645,57 @@ async function track<T>(
   }
 }
 
+/** Minimum a campaign needs before we know whether it can be displayed. */
+export interface CampaignDisplayCandidate {
+  id: string;
+  campaignType: string;
+  campaignMetadata: Record<string, unknown>;
+  linkUrl: string;
+  earliest: DateTime | null;
+  latest: DateTime | null;
+}
+
+/**
+ * Decide which campaigns can actually appear, from scheduling bounds alone.
+ *
+ * This exists so the page does not have to load every content item it has ever
+ * published just to render the one or two campaigns that are currently live.
+ * It applies exactly the same rules the card loop applies, so narrowing here
+ * cannot show or hide anything the full pass would not have.
+ */
+export function selectDisplayableCampaignIds(
+  candidates: CampaignDisplayCandidate[],
+  now: DateTime,
+): string[] {
+  const ids: string[] = [];
+
+  for (const candidate of candidates) {
+    if (!candidate.linkUrl) continue;
+    if (!candidate.earliest?.isValid || !candidate.latest?.isValid) continue;
+    // Not started yet.
+    if (now < candidate.earliest) continue;
+
+    const displayWindow = resolveCampaignDisplayWindow(
+      {
+        id: candidate.id,
+        name: "",
+        linkUrl: candidate.linkUrl,
+        campaignType: candidate.campaignType,
+        campaignMetadata: candidate.campaignMetadata,
+        earliest: candidate.earliest,
+        latest: candidate.latest,
+        entries: [],
+      },
+      now,
+    );
+    if (now > resolveCampaignActiveEnd(displayWindow.endsAt, candidate.latest)) continue;
+
+    ids.push(candidate.id);
+  }
+
+  return ids;
+}
+
 export async function getPublicLinkInBioPageData(
   slug: string,
   timings?: PageDataTimings,
@@ -726,17 +777,75 @@ export async function getPublicLinkInBioPageData(
     const timezone = accountRow?.timezone ?? DEFAULT_TIMEZONE;
     const now = DateTime.now().setZone(timezone);
 
-    const { data: campaignRows, error: campaignError } = await track(timings, "campaigns-query", async () => supabase
+    // Loading every content item this account has ever published, with its
+    // variants and campaign metadata, cost over a second and grew with history,
+    // all to render the one or two campaigns that are live. Narrow first on
+    // cheap columns, then fetch the full rows only for the campaigns that can
+    // actually appear. The scheduling bounds come from the complete entry set,
+    // so this decides exactly what the full pass would have decided.
+    const { data: scheduleRows, error: scheduleError } = await track(timings, "campaigns-schedule", async () => supabase
       .from("content_items")
-      .select(
-        "id, campaign_id, scheduled_for, status, placement, prompt_context, platform, content_variants(media_ids, banner_enabled, banner_text_override, banner_position, banner_bg, banner_text_colour), campaigns!inner(id, name, campaign_type, link_in_bio_url, account_id, metadata)",
-      )
+      .select("campaign_id, scheduled_for, campaigns!inner(account_id)")
       .eq("campaigns.account_id", accountId)
       .eq("placement", "feed")
       .in("platform", ["instagram", "facebook"])
       .in("status", ["scheduled", "publishing", "posted"])
-      .order("scheduled_for", { ascending: true })
-      .returns<CampaignContentRow[]>());
+      .returns<{ campaign_id: string | null; scheduled_for: string | null }[]>());
+
+    if (scheduleError && !isSchemaMissingError(scheduleError)) {
+      throw scheduleError;
+    }
+
+    const bounds = new Map<string, { earliest: DateTime; latest: DateTime }>();
+    for (const row of scheduleRows ?? []) {
+      if (!row.campaign_id || !row.scheduled_for) continue;
+      const scheduled = DateTime.fromISO(row.scheduled_for).setZone(timezone);
+      if (!scheduled.isValid) continue;
+      const existing = bounds.get(row.campaign_id);
+      if (!existing) {
+        bounds.set(row.campaign_id, { earliest: scheduled, latest: scheduled });
+        continue;
+      }
+      if (scheduled < existing.earliest) existing.earliest = scheduled;
+      if (scheduled > existing.latest) existing.latest = scheduled;
+    }
+
+    const { data: campaignDefinitions, error: campaignDefinitionError } = await track(timings, "campaign-definitions", async () => supabase
+      .from("campaigns")
+      .select("id, name, campaign_type, link_in_bio_url, account_id, metadata")
+      .eq("account_id", accountId)
+      .in("id", Array.from(bounds.keys()))
+      .returns<NonNullable<CampaignContentRow["campaigns"]>[]>());
+
+    if (campaignDefinitionError && !isSchemaMissingError(campaignDefinitionError)) {
+      throw campaignDefinitionError;
+    }
+
+    const displayableIds = selectDisplayableCampaignIds(
+      (campaignDefinitions ?? []).map((definition) => ({
+        id: definition.id,
+        campaignType: definition.campaign_type,
+        campaignMetadata: definition.metadata ?? {},
+        linkUrl: resolveCampaignLinkUrl(definition),
+        earliest: bounds.get(definition.id)?.earliest ?? null,
+        latest: bounds.get(definition.id)?.latest ?? null,
+      })),
+      now,
+    );
+
+    const { data: campaignRows, error: campaignError } = displayableIds.length
+      ? await track(timings, "campaigns-query", async () => supabase
+          .from("content_items")
+          .select(
+            "id, campaign_id, scheduled_for, status, placement, prompt_context, platform, content_variants(media_ids, banner_enabled, banner_text_override, banner_position, banner_bg, banner_text_colour), campaigns!inner(id, name, campaign_type, link_in_bio_url, account_id, metadata)",
+          )
+          .in("campaign_id", displayableIds)
+          .eq("placement", "feed")
+          .in("platform", ["instagram", "facebook"])
+          .in("status", ["scheduled", "publishing", "posted"])
+          .order("scheduled_for", { ascending: true })
+          .returns<CampaignContentRow[]>())
+      : { data: [] as CampaignContentRow[], error: null };
 
     if (campaignError && !isSchemaMissingError(campaignError)) {
       throw campaignError;
