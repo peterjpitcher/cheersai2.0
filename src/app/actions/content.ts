@@ -2,7 +2,6 @@
 
 import { revalidatePath } from 'next/cache';
 import { DateTime } from 'luxon';
-import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { requireAuthContext } from '@/lib/auth/server';
 import { contentBriefSchema } from '@/features/create/schemas/content-schemas';
@@ -15,7 +14,6 @@ import { normaliseBannerText, validateBannerText } from '@/lib/banner/text';
 import { readPlatformCtaLinks } from '@/lib/publishing/copy-rules';
 import { logPublishAuditEvent } from '@/lib/publishing/audit';
 import { MEDIA_BUCKET, DEFAULT_TIMEZONE, WEEKLY_MAX_OCCURRENCES } from '@/lib/constants';
-import { isImportedEventArtwork } from '@/lib/management-app/artwork-provenance';
 import type { ContentItem, ContentType, Platform, PlatformCopy } from '@/types/content';
 
 // ---------------------------------------------------------------------------
@@ -948,20 +946,6 @@ export async function createScheduledBatch(
     const ctaLinks = readPlatformCtaLinks(brief);
     const ctaLabel = typeof brief.ctaLabel === 'string' ? brief.ctaLabel : undefined;
 
-    // Event posts normally get an automatic date strip. Artwork imported from
-    // the management app is designed for the placement it publishes to, usually
-    // already carries the date, and has real content where the strip lands, so
-    // stamping one over it prints the date twice and covers the artwork.
-    //
-    // Read from provenance rather than from anything the client sent: it cannot
-    // be spoofed, and it cannot drift out of step with what was actually
-    // attached. Only a post whose media is *entirely* imported artwork opts out;
-    // mix in one uploaded image and the strip is still the right call.
-    const usesOnlyImportedEventArtwork =
-      contentType === 'event' &&
-      submittedMediaIds.length > 0 &&
-      (await isEveryAssetImportedEventArtwork(supabase, accountId, submittedMediaIds));
-
     const variantPayloads = insertedItems.map((item, index) => {
       const { slotIdx, platform, placement } = slotPlatformIndex[index];
       const slot = slotCopies[slotIdx];
@@ -993,7 +977,12 @@ export async function createScheduledBatch(
       // banner is enabled with a null override so the worker prints the per-post
       // proximity label (TONIGHT, THIS FRIDAY, FRIDAY 17TH JULY). Other content
       // types stay opt-in, enabled only when text is typed.
-      const autoOverlayForEvent = contentType === 'event' && !usesOnlyImportedEventArtwork;
+      //
+      // This applies to artwork imported from the management app too. That
+      // artwork was previously exempt on the grounds that it already carries
+      // its own date, but the strip prints a proximity label, not a date, and
+      // no static artwork can say TONIGHT or THIS FRIDAY.
+      const autoOverlayForEvent = contentType === 'event';
 
       return {
         content_item_id: item.id,
@@ -1134,36 +1123,3 @@ export async function createScheduledBatch(
 }
 
 
-/**
- * True when every one of these assets was imported from a management-app event.
- *
- * Used to decide whether the automatic date strip is still wanted. Fails closed:
- * any query error, missing row or hand-uploaded asset returns false, so the
- * strip stays on. Getting that backwards would silently drop the date from posts
- * that need it, which is far worse than an occasional duplicate.
- */
-async function isEveryAssetImportedEventArtwork(
-  supabase: SupabaseClient,
-  accountId: string,
-  mediaIds: string[],
-): Promise<boolean> {
-  if (mediaIds.length === 0) return false;
-
-  const { data, error } = await supabase
-    .from('media_assets')
-    .select('id, source_key')
-    .eq('account_id', accountId)
-    .in('id', mediaIds)
-    .returns<Array<{ id: string; source_key: string | null }>>();
-
-  if (error || !data) {
-    // Includes the case where source_key does not exist yet, i.e. the migration
-    // has not been applied. Behave exactly as before.
-    return false;
-  }
-
-  // A short result means an id we could not account for. Treat it as unknown.
-  if (data.length !== mediaIds.length) return false;
-
-  return data.every((row) => isImportedEventArtwork(row.source_key));
-}

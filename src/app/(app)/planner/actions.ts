@@ -1269,8 +1269,8 @@ const BANNER_POSITION_ENUM = z.enum(["top", "bottom", "left", "right"]);
 
 const updateBannerSchema = z.object({
   contentItemId: z.string().uuid(),
-  // `enabled` is accepted for wire compatibility but is derived server-side from
-  // the overlay text (see below) — it is never trusted from the client.
+  // The user's explicit on/off choice. `null` means "decide from the text",
+  // which keeps older clients working: they only ever sent text.
   enabled: z.boolean().nullable(),
   position: BANNER_POSITION_ENUM.nullable(),
   bgColour: z.string().regex(HEX_COLOUR).nullable(),
@@ -1307,15 +1307,25 @@ export async function updatePlannerBannerConfig(
     return { error: "This post can no longer be edited." };
   }
 
-  // Overlays are opt-in: validate the text against the shared charset rules and
-  // derive banner_enabled from it (blank = off) rather than trusting the client.
-  // This guarantees a post can always be turned OFF and can never be persisted
-  // enabled-but-blank.
+  // Validate the text against the shared charset rules before anything else.
   const overlay = validateBannerText(data.textOverride);
   if (!overlay.ok) {
     return { error: overlay.reason };
   }
-  const bannerEnabled = overlay.value !== null;
+
+  // Enabled-but-blank is a real, wanted state: it means "print the computed
+  // proximity label" (TONIGHT, THIS FRIDAY, FRIDAY 17TH JULY), which is what
+  // event posts get automatically at creation. Deriving the flag from the text
+  // alone made that unreachable from the planner, so a post that lost its
+  // automatic strip could only get one back by typing words over it.
+  //
+  // An explicit `null` still falls back to the old text-derived behaviour so an
+  // older client, which never sent a choice, keeps working unchanged.
+  const bannerEnabled = data.enabled ?? overlay.value !== null;
+  // Text is only meaningful while the strip is on. Clearing it here rather than
+  // relying on the caller means the flag and the text can never disagree, so
+  // turning a post back on later cannot resurrect wording the user removed.
+  const bannerText = bannerEnabled ? overlay.value : null;
 
   const { error } = await supabase
     .from("content_variants")
@@ -1324,7 +1334,7 @@ export async function updatePlannerBannerConfig(
       banner_position: data.position,
       banner_bg: data.bgColour,
       banner_text_colour: data.textColour,
-      banner_text_override: overlay.value,
+      banner_text_override: bannerText,
     })
     .eq("content_item_id", data.contentItemId);
 

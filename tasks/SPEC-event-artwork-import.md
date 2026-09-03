@@ -91,7 +91,14 @@ Two facts drive the whole design:
   pre-selects it in the wizard.
 - Graceful, diagnosable degradation for partial artwork, no artwork, and an AMS that has
   not been upgraded.
-- Suppressing the automatic date banner on posts built from imported artwork.
+- ~~Suppressing the automatic date banner on posts built from imported artwork.~~
+  **Reversed on 2026-09-03.** Once artwork import became the normal way to attach an
+  image to an event, the exemption applied to every event post, so the strip
+  disappeared from the whole of September. The strip prints a proximity label
+  (TONIGHT, THIS FRIDAY, FRIDAY 18TH SEPTEMBER), not a date, so artwork carrying
+  its own date does not replace it. Event posts get the strip again regardless of
+  where their media came from, and the 50 affected scheduled posts were backfilled
+  (rollback: `tasks/ROLLBACK-event-banner-backfill-2026-09-03.sql`).
 
 **Out of scope**
 
