@@ -150,8 +150,10 @@ answered by the proxied Cloudflare wildcard parking page. By 09:05 BST it was:
 | Serves | The CheersAI production deployment. `/` 308 to `/planner`, `/login` 200, `/l/the-anchor` 200, `/privacy` 200, all with `server: Vercel` and a `x-vercel-id` | HTTP probe |
 | Control | `zz-control-4f21.orangejelly.co.uk` still returns the Cloudflare wildcard (104.21.74.96 / 172.67.201.193), proving the `cheers` record is explicit, not wildcard | `dig` |
 
-**Who made this change and when is not established.** Before executing anything
-else, confirm the change owner and whether any Meta, Supabase, Resend or Vercel
+**Who made this change and when was not established at the time.** The Vercel
+audit log (see 6c) later resolved the related domain question; the DNS record
+itself predates the event window retrieved. Before executing anything else,
+confirm the change owner and whether any Meta, Supabase, Resend or Vercel
 environment settings were altered at the same time. Section 10's preflight
 re-checks all of them.
 
@@ -658,14 +660,37 @@ Notes for anyone repeating this:
   config restated, **not** a list of outstanding changes. It appears even for a
   domain already configured correctly.
 
-**Outage on the day, worth recording.** Between the cutover and this DNS work,
-both retired hostnames returned `404 DEPLOYMENT_NOT_FOUND` for a period. Cause:
-the apex had been detached from the `oj-cheersai2-0` project, so Vercel answered
-at the edge and the request never reached the app. That matters because the
-Phase E redirect lives in application code (`next.config.ts`), so **it only works
-while the old domains stay attached to the project**. That is the one real
-weakness of the code-based redirect versus a domain-level one. Fixed by
-re-attaching the apex with `vercel domains add cheersai.uk oj-cheersai2-0`.
+**Outage on the day, cause established from the Vercel audit log.** Between the
+cutover and this DNS work, both retired hostnames returned
+`404 DEPLOYMENT_NOT_FOUND`.
+
+The team event log (`GET /v3/events`) gives the exact sequence:
+
+| Time (UTC) | Event | Source |
+|---|---|---|
+| 10:24:27 | `project-domain-deleted`: **www.cheersai.uk** removed from `oj-cheersai2-0` | Dashboard |
+| 10:24:29 | `project-domain-updated`: `cheers.orangejelly.co.uk` updated | Dashboard |
+| 10:25:33 | `project-add-alias`: `www.cheersai.uk` re-added | Vercel CLI |
+| 10:26:36 | `project-add-alias`: `cheersai.uk` added | Vercel CLI |
+
+Events carried out through the CLI are tagged `(via Vercel CLI)`; the two at
+10:24 are not, so they were made in the dashboard. They are the "make
+`cheers.orangejelly.co.uk` the primary production domain" step, and removing the
+old domain looks like a natural part of promoting a new one.
+
+**Correcting the earlier account in this file:** it was **`www.cheersai.uk`**
+that was removed, not the apex. The apex had never been attached to the project
+at all; it had been serving a redirect to `www`, so when `www` was removed both
+hostnames died at once. Re-adding `www` restored service; adding the apex
+attached it for the first time.
+
+The real lesson is a design one, and it stands: the Phase E redirect lives in
+application code (`next.config.ts`), so **it only works while the old domains
+remain attached to the project**. Removing `www.cheersai.uk` from the project is
+otherwise a perfectly reasonable tidy-up, and nothing warns you that it also
+deletes the redirect. A Vercel domain-level redirect would not have this
+coupling. Anyone told to promote a new primary domain here should be told
+explicitly to leave the old domains attached.
 
 ---
 
