@@ -113,6 +113,14 @@ export function isRetryableMetaGraphFailure(graph: MetaGraphErrorDetails | null 
   if (isExplicitMetaConnectionFailure(graph)) return false;
   if (graph.status !== null && graph.status >= 500) return true;
   if (graph.code === 1 || graph.code === 2 || graph.code === 4 || graph.code === 17 || graph.code === 613) return true;
+  // Code 9004 is Meta's "media download" family for Instagram containers
+  // (for example subcode 2207052, "Only photo or video can be accepted as
+  // media type"). Meta raises it when its own fetcher fails to retrieve the
+  // image_url, and it happens intermittently even when the URL is valid and
+  // was never requested from our storage. The worker validates the media
+  // before calling Meta, so treat it as transient and let the bounded retry
+  // ladder decide whether it is permanent.
+  if (graph.code === 9004) return true;
   return graph.code === 100 && /authori[sz]ation/i.test(graph.message);
 }
 
