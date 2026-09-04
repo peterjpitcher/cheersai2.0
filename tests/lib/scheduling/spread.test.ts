@@ -238,7 +238,7 @@ describe("buildSpreadEvenlySlots", () => {
 
       expect(toLocalDateStr(instagramSlot!.date)).toBe("2026-04-15");
       // Facebook should land on Wednesday too (now least-busy with 1 post)
-      // — but NOT on a day with 2 posts when Wednesday has only 1
+      //, but NOT on a day with 2 posts when Wednesday has only 1
       expect(toLocalDateStr(facebookSlot!.date)).toBe("2026-04-15");
     });
 
@@ -355,7 +355,7 @@ describe("buildSpreadEvenlySlots", () => {
         windowEnd: WEEK_END,
       };
 
-      // Fill Monday with stories only — should still be treated as empty
+      // Fill Monday with stories only, should still be treated as empty
       const existing = [
         { scheduledFor: makeDate(2026, 4, 13), platform: "instagram", placement: "story" },
         { scheduledFor: makeDate(2026, 4, 13), platform: "instagram", placement: "story" },
