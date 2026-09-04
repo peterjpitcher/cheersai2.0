@@ -6,17 +6,20 @@ import {
   type SpreadConfig,
 } from "@/lib/scheduling/spread";
 
-// Helper: create a Date at midnight local time
+// The scheduler does all day arithmetic in the venue timezone, so the fixtures
+// must be anchored there too. Building them with `new Date(y, m, d)` used the
+// process timezone instead, which made these tests pass under Europe/London and
+// fail under UTC, the zone the serverless runtime actually uses.
+const TEST_TZ = "Europe/London";
+
+// Helper: create a Date at midnight in the venue timezone
 function makeDate(year: number, month: number, day: number): Date {
-  return new Date(year, month - 1, day);
+  return DateTime.fromObject({ year, month, day }, { zone: TEST_TZ }).toJSDate();
 }
 
-// Helper: extract local YYYY-MM-DD from a Date (avoids UTC shift from toISOString)
+// Helper: extract the venue-timezone YYYY-MM-DD from a Date
 function toLocalDateStr(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${dd}`;
+  return DateTime.fromJSDate(d, { zone: TEST_TZ }).toFormat("yyyy-MM-dd");
 }
 
 // Monday 2026-04-13 through Sunday 2026-04-19 (one full week)
