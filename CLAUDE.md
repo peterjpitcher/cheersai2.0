@@ -1,480 +1,123 @@
-# CLAUDE.md — CheersAI 2.0
+# CLAUDE.md, CheersAI 2.0
 
-This file provides project-specific guidance. See the workspace-level `CLAUDE.md` one directory up for shared conventions.
+Workspace standards (stack defaults, TypeScript, Tailwind, Supabase, Git, testing, server actions) live in `/Users/peterpitcher/Cursor/CLAUDE.md`: read that first. This file holds only what is unique to this repo. `AGENTS.md` is a relative symlink to this file so Codex and Cursor read the same rules. Longer reference material (layer map, conventions, full env table, ops scripts, cron schedule) is in `docs/agent-reference.md`.
 
-## Quick Profile
+## What this is
 
-- **Framework**: Next.js 16.1, React 19.2
-- **Test runner**: Vitest
-- **Database**: Supabase (PostgreSQL + RLS)
-- **Key integrations**: OpenAI, Resend Email, Framer Motion animations, React Query, Social media APIs (Instagram, Facebook, Google My Business)
-- **Size**: ~158 files in src/
+CheersAI is an AI-assisted social media tool for hospitality venues. An owner creates a piece of content once, the AI adapts it per platform, and the publishing pipeline schedules, preflight-checks and delivers it to Facebook and Instagram with no manual work after approval. It also builds and monitors paid Meta campaigns. The first and main customer is The Anchor; the app lives at `cheers.orangejelly.co.uk`.
+
+## Stack: where this repo differs from the workspace default
+
+- Next.js **16.2** App Router (workspace default is 15), React 19.2, Tailwind v4, TypeScript strict. Node **20.x** (`engines`), npm with `package-lock.json`.
+- `npm run build` runs `next build --webpack`: webpack, not Turbopack. The build type-checks against `tsconfig.build.json` (src only); `npm run typecheck` uses `tsconfig.json`, which also covers `tests/` and `scripts/`, so the two can disagree.
+- Tests are **Vitest 4** (node environment, `TZ` forced to Europe/London) plus **Playwright** for e2e. Not Jest.
+- No `middleware.ts` or `proxy.ts`. The auth gate is `src/app/(app)/layout.tsx` calling `getCurrentUser()` (redirects to `/auth/login` or `/no-access`); server actions and routes call `requireAuthContext()` from `src/lib/auth/server.ts`.
+- Background work: Vercel Cron (`vercel.json`, region `lhr1`) for scheduling, **Upstash QStash** for publish delivery, and two Supabase edge functions (`publish-queue`, `media-derivatives`) for the legacy and media paths.
+- Logging is **Axiom** via `createLogger()` in `src/lib/logging`. Rate limiting is Upstash Redis (`src/lib/auth/rate-limit.ts`, 5 requests per 60 seconds, skipped when the Upstash vars are unset).
+- `cheersai.uk` is retired and 307-redirects to the new host (`src/lib/routing/legacy-host-redirects.ts`), browser traffic only.
 
 ## Commands
 
 ```bash
-npm run dev              # Start development server
-npm run build            # Production build
-npm run start            # Start production server
-npm run lint             # ESLint check (max-warnings=0 in CI)
-npm run test             # Vitest run (single pass)
-npm run test:watch       # Vitest watch mode
-npm run typecheck        # TypeScript check (tsc --noEmit)
-npm run ci:verify        # Full CI pipeline: lint + typecheck + test + build
-npm run ops:*            # Operational scripts (backfill, link-auth, regenerate derivatives)
+npm run dev                 # local server on :3000
+npm run lint:ci             # eslint --max-warnings=0 (what CI runs; `npm run lint` is the lenient form)
+npm run typecheck           # tsc --noEmit against tsconfig.json
+npm run test:ci             # CI=1 vitest run (`npm test` is watch mode)
+npm run ci:verify           # lint:ci + typecheck + test:ci + build; all four must pass before a PR
+npm run test:e2e:smoke      # Playwright smoke suite; needs E2E_TEST_EMAIL, E2E_TEST_PASSWORD, BASE_URL
+npm run db:rebuild          # reset the LOCAL Supabase DB with the v1 baseline staged (see gotchas)
+npm run ops:<name>          # tsx scripts in scripts/ops/ (catalogue in docs/agent-reference.md)
 ```
 
+CI (`.github/workflows/ci.yml`) runs typecheck, lint, test:ci and build as separate jobs, then `supabase db lint` on a from-scratch local database and the e2e smoke suite when credentials are configured.
+
 ## Architecture
 
-**Route Structure**: App Router with next.js 16 conventions. Key sections:
-- `/auth` — Sign in, sign up, password reset (Supabase JWT + cookies)
-- `/dashboard` — Main workspace for authenticated users
-- `/api/` — Webhooks and integrations (Instagram, Facebook callbacks)
+```
+src/app/                (app) authenticated routes, (auth), (public), actions/ (server actions)
+src/app/api/            cron/, webhooks/ (QStash), oauth/, internal/ (banner render), feed/, booking-conversions/
+src/features/<domain>   feature components: analytics, campaigns, connections, create, library,
+                        link-in-bio, planner, publishing, settings, tournament
+src/lib/<domain>        domain logic: ai, banner, campaigns, meta, providers, publishing, scheduling,
+                        token-vault, management-app, supabase, security, logging, and more
+src/types/              central types        src/env.ts   Zod env validation
+supabase/               migrations/ (30), baseline/ (v1 baseline, NOT a migration), functions/, SCHEMA.md snapshot
+tests/                  mirrors src/ (co-located src/**/*.test.ts also run)     e2e/  Playwright
+tasks/                  SPEC-*.md, PLAN-*.md, ADS-PLAYBOOK-the-anchor.md
+```
 
-**Auth**: Supabase Auth with JWT + HTTP-only cookies. Auth context in `src/lib/auth/` provides user state and permissions. All server actions re-verify auth server-side.
+## Domain and business rules
 
-**Database**: Supabase PostgreSQL with RLS enabled. Service-role operations for system tasks only (backfills, crons). Client operations use anon-key client.
+- **Platforms are Facebook and Instagram only** (`Platform` in `src/types/content.ts`, adapters in `src/lib/providers/`). Google Business Profile was removed deliberately (`tasks/SPEC-weekly-recurrence-story-gbp-removal.md`, June 2026); do not reintroduce it without an explicit brief. `HANDOFF.md`, `docs/integration-spec.md` and older plans still mention GBP and are stale on that point.
+- **Tenancy**: a "brand" is a `public.accounts` row and every content table is `account_id`-scoped. Most reads use the service-role client (52 files), so scoping is the code's job: every such query must carry an explicit `.eq('account_id', accountId)`. RLS membership (the `20260714_multibrand_*` migrations) is the second layer; keep both in lockstep. A read that relies on RLS alone (historically `src/lib/content/queries.ts` and `src/lib/media/resolve-thumbnails.ts`) becomes a cross-brand leak once RLS is membership-based.
+- **Timezone**: Europe/London everywhere (`DEFAULT_TIMEZONE` in `src/lib/constants.ts`; `accounts.timezone` defaults to it; Vitest and CI set `TZ`). Use Luxon for all date maths and comment GMT/BST edge cases.
+- **Publishing pipeline** (`src/lib/publishing/`): jobs move `approved -> scheduled -> queued -> publishing -> published | failed`, and `failed -> queued` on retry (`state-machine.ts`). The `publish-scheduler` cron runs every minute, promotes due jobs to `queued` and dispatches them to QStash (`dispatch.ts`); QStash calls `/api/webhooks/qstash-publish` (signature-verified), which runs `handler.ts`; failures land on `/api/webhooks/qstash-publish/failure`. Run `preflight.ts` before anything is queued. `/api/cron/publish` is a 410 tombstone. The scheduler falls back to the Supabase `publish-queue` edge function only while `publish_jobs` lacks a `platform` column, and tournament publishing (`src/app/actions/tournament.ts`) still invokes `publish-queue` directly.
+- **Paid Meta ads**: campaigns publish **through the app** (`src/lib/meta/marketing.ts`), never by hand in Ads Manager, so the dashboard, performance sync and optimiser all see them. The wizard builds `event` and `evergreen` campaigns, plus `food_booking` behind `NEXT_PUBLIC_ENABLE_FOOD_BOOKING`; anything else (Sunday roast, Christmas, function hire, recruitment) is off-app work. **Read `tasks/ADS-PLAYBOOK-the-anchor.md` before any ads brief**: it holds the verified ad account, Page, pixel and venue facts, real CPC and CTR benchmarks, the copy guardrails and the brief template. Re-verify the account facts against Supabase before anything that spends money.
+- The Instagram `social_connections.status` value `expiring` is a dead label, not a fault. Nothing in `src/` writes it; the UI only maps it to a badge. Do not report it as needing reconnection.
+- Feature flags default off: `FOOD_OPTIMISATION_ENABLED`, `FOOD_AUTO_MATERIALISE_ENABLED` (the weekly cron is a no-op when off) and `NEXT_PUBLIC_ENABLE_FOOD_BOOKING`.
 
-**Key Integrations**:
-- **OpenAI**: `src/lib/` — content generation and AI features
-- **Social APIs**: Instagram (webhooks), Facebook (Graph API), Google My Business integrations
-- **Resend**: Email notifications and transactional email
-- **React Query**: Data fetching with custom hooks in `src/lib/`
-- **Framer Motion**: Page transitions and animations
+## Integrations and external services
 
-**Data Flow**: Server actions handle mutations (auth, content operations). Client components use React Query for fetching. All responses validated with Zod.
+| Service | Where | Notes |
+|---|---|---|
+| Meta Graph API (Facebook Pages, Instagram) | `src/lib/providers/`, `src/lib/meta/` | OAuth at `/api/oauth/[provider]`; `META_GRAPH_VERSION` pins the version; per-platform limits in `providers/rate-limits.ts` |
+| Meta Marketing API (paid campaigns) | `src/lib/meta/marketing.ts`, `src/lib/campaigns/` | Ads OAuth at `/api/oauth/facebook-ads`; daily `sync-meta-campaigns` and `optimise-meta-campaigns` crons |
+| OpenAI | `src/lib/ai/`, `src/app/actions/ai-generate.ts` | `OPENAI_MODEL` defaults to `gpt-4o-mini` |
+| Resend | `src/lib/email/`, `src/lib/notifications/` | failure and expiring-connection alerts |
+| Upstash QStash and Redis | `src/lib/qstash/client.ts`, `src/lib/auth/rate-limit.ts` | delivery queue; auth rate limiting |
+| Axiom | `src/lib/logging/axiom.ts` | structured logs; silent when `AXIOM_TOKEN` is unset |
+| Supabase edge functions | `supabase/functions/publish-queue`, `media-derivatives` | legacy publish worker; image derivatives via FFmpeg WASM |
+| The Anchor management app | `src/lib/management-app/` | event artwork import; per-account settings in `management_app_connections`; allowed hosts in `MANAGEMENT_ARTWORK_ORIGINS` |
+| Booking conversions ingest | `/api/booking-conversions` | per-brand `bce_` secrets; hourly `retry-capi-conversions` cron |
+| Banner rendering | `src/lib/banner/`, `/api/internal/render-banner` | satori, sharp, text-to-svg; fetches only from the project's Supabase Storage host over https |
 
-## Key Files
+## Environment variables
 
-| Path | Purpose |
-|------|---------|
-| `src/types/` | TypeScript definitions (database, API contracts) |
-| `src/lib/auth/` | Authentication, server-side auth helpers, rate limiting |
-| `src/lib/publishing/` | Publishing queue and preflight checks |
-| `src/lib/scheduling/` | Event conflict detection, scheduling logic |
-| `src/lib/planner/` | Data fetching for planner features |
-| `src/lib/settings/` | Settings data and user preferences |
-| `src/env.ts` | Environment variable validation (Zod) |
-| `src/app/api/` | Webhooks (Instagram, Facebook, email) |
-| `src/features/` | Feature-specific components and logic |
-| `supabase/migrations/` | Database schema migrations |
-| `vitest.config.ts` | Vitest configuration |
+`src/env.ts` is canonical (Zod, server and client scoped). Add a variable there before reading it anywhere. Validation throws only in production, so a missing var locally fails later and quietly; `SKIP_ENV_VALIDATION=1` bypasses it (CI builds use it with placeholder Supabase values). Key groups (full table in `docs/agent-reference.md`):
 
-## Environment Variables
+- Supabase: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`
+- Token vault: `TOKEN_VAULT_KEY` (exactly 64 hex characters in production), `TOKEN_VAULT_KEY_VERSION`
+- Meta: `NEXT_PUBLIC_FACEBOOK_APP_ID`, `FACEBOOK_APP_SECRET`, `INSTAGRAM_APP_ID`, `INSTAGRAM_APP_SECRET`, `INSTAGRAM_VERIFY_TOKEN`, `META_GRAPH_VERSION`, `NEXT_PUBLIC_META_GRAPH_VERSION`
+- Queues and secrets: `CRON_SECRET`, `ALERTS_SECRET`, `UPSTASH_QSTASH_TOKEN`, `UPSTASH_QSTASH_CURRENT_SIGNING_KEY`, `UPSTASH_QSTASH_NEXT_SIGNING_KEY`, `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`
+- Services: `OPENAI_API_KEY` (`OPENAI_MODEL` optional), `RESEND_API_KEY`, `RESEND_FROM`, `AXIOM_TOKEN`, `AXIOM_DATASET`, `NEXT_PUBLIC_SITE_URL` (must be the deployed domain in production)
+- Ingest and flags: `BOOKING_CONVERSION_INGEST_SECRET`, `BOOKING_CONVERSION_ACCOUNT_ID`, `MANAGEMENT_ARTWORK_ORIGINS`, `ENABLE_CONNECTION_DIAGNOSTICS`, plus the three feature flags above
 
-| Var | Purpose |
-|-----|---------|
-| `OPENAI_API_KEY` | OpenAI API key for content generation |
-| `RESEND_API_KEY` | Resend email service key |
-| `RESEND_FROM` | Email sender address |
-| `SUPABASE_SERVICE_ROLE_KEY` | Supabase service-role key (server-only) |
-| `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL (public) |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anon key (public) |
-| `NEXT_PUBLIC_SITE_URL` | App base URL for redirects/links |
-| `FACEBOOK_APP_ID` | Facebook app ID (public) |
-| `FACEBOOK_APP_SECRET` | Facebook app secret (server-only) |
-| `INSTAGRAM_APP_ID` | Instagram app ID (public) |
-| `INSTAGRAM_APP_SECRET` | Instagram app secret (server-only) |
-| `INSTAGRAM_VERIFY_TOKEN` | Instagram webhook verification token |
-| `GOOGLE_MY_BUSINESS_CLIENT_ID` | Google My Business OAuth client ID |
-| `GOOGLE_MY_BUSINESS_CLIENT_SECRET` | Google My Business OAuth secret |
-| `ALERTS_SECRET` | Internal webhook secret for alerts |
-| `CRON_SECRET` | Internal webhook secret for cron jobs |
-| `ENABLE_CONNECTION_DIAGNOSTICS` | Enable debug logging for integrations |
-| `VERCEL_OIDC_TOKEN` | Vercel deployment OIDC (for Vercel functions) |
+`GOOGLE_MY_BUSINESS_*` variables no longer exist. `.env.example` still lists `INTERNAL_RENDER_SECRET` and `INTERNAL_RENDER_URL`, which nothing reads. Secrets live in `.env.local` (gitignored); never commit them.
 
-## Project-Specific Rules / Gotchas
+## Security rules
 
-### Env Validation
-- `src/env.ts` uses Zod to validate all environment variables at startup
-- Missing required vars will throw at build/start time
-- Always add new vars to `src/env.ts` before using in code
+- Social OAuth tokens are encrypted at rest with `src/lib/token-vault` (AES-256-GCM, versioned keys for rotation). Never store or log a plaintext token; rotation steps are in `docs/runbooks/credential-rotation.md`.
+- Cron routes authenticate with `verifyCronAuth()` (`src/lib/security/cron-auth.ts`): `Authorization: Bearer` or `x-cron-secret` header only, timing-safe comparison, query-string secrets rejected. QStash webhooks verify the QStash signature. Use `src/lib/security/signing.ts` for any new secret comparison.
+- Security headers come from `src/lib/security/headers.ts` through `next.config.ts`; keep them there so they stay unit-tested.
+- The service-role client bypasses RLS, so every service-role query must scope by `account_id` (see Tenancy).
 
-### Social Media Integrations
-- Instagram, Facebook, Google My Business require OAuth tokens and refresh logic
-- Webhook verification tokens must match config exactly
-- Rate limits enforced per platform — check `src/lib/auth/rate-limit.ts`
+## Supabase specifics (deviations from the workspace rule)
 
-### Publishing Queue
-- `src/lib/publishing/preflight.ts` validates posts before scheduling
-- `src/lib/publishing/queue.ts` manages async publishing
-- Always check preflight results before queuing posts
+- Clients, all in `src/lib/supabase/`: `createServerSupabaseClient()` (cookie session, respects RLS), `createServiceSupabaseClient()` and `tryCreateServiceSupabaseClient()` (service role), `createBrowserSupabaseClient()` (client components).
+- There is **no `fromDb<T>()` helper** here: map `snake_case` rows to `camelCase` types by hand in the domain's `data.ts` or `mappers.ts`.
+- There is **no generic `logAuditEvent()`**: publishing writes to `audit_log` through `logPublishAuditEvent()` in `src/lib/publishing/audit.ts`. Other mutations are not audited today.
+- `isSchemaMissingError()` in `src/lib/supabase/errors.ts` detects migration gaps (production logs them, dev falls back quietly).
+- `supabase/SCHEMA.md` is a snapshot; the live schema wins (workspace rule). Specs refer to the live project as `cheersai2.0` (`nbkjciurhvkfpcpatbnt`).
+- RLS is on for every table; add matching policies for any new multi-tenant table or the session-scoped client will see nothing.
 
-### Scheduling Logic
-- `src/lib/scheduling/conflicts.ts` prevents double-booking
-- `src/lib/scheduling/materialise.ts` expands recurring events
-- Timezone handling uses Luxon library (see workspace CLAUDE.md)
+## Testing
 
-### Testing with Vitest
-- Test files coexist with source: `src/**/*.test.ts(x)`
-- Mock external services (OpenAI, Resend, Supabase)
-- Use factories for test data, not inline object literals
-- Minimum 80% coverage on business logic
+- Vitest picks up `tests/**/*.test.ts` and co-located `src/**/*.test.ts(x)`; both conventions are in use. Coverage thresholds in `vitest.config.ts`: `src/lib/auth` 80%, `src/lib/publishing` 85%, `src/lib/scheduling` 90%.
+- `tests/setup.ts` stubs `localStorage` and Framer Motion (the node environment has no DOM). MSW handlers live in `tests/msw/`, a Supabase mock in `tests/helpers/mock-supabase.ts`, an FFmpeg stub in `tests/__mocks__/`.
+- Mock OpenAI, Resend, Meta and Supabase; a unit test must never reach a live service.
+- Playwright: `e2e/tests/smoke` and `e2e/tests/full`, chromium only, real login via `E2E_TEST_EMAIL` and `E2E_TEST_PASSWORD`.
 
-### Framer Motion Usage
-- Used for page transitions and micro-interactions
-- Keep animations performant (prefer transform, opacity)
-- Test animations disabled in unit tests
+## Known gotchas and past bugs
 
-### Supabase RLS
-- All queries respect RLS — use service-role only for system operations
-- Service-role operations documented with comments: `// admin operation: [reason]`
-- Never disable RLS "temporarily"
+- **The v1 baseline is not a migration.** The v2 chain assumes v1 objects that no migration creates. `npm run db:rebuild` and CI copy `supabase/baseline/v1_baseline.sql` to `supabase/migrations/20260519230001_v1_baseline.sql`, run the reset, then delete it. Never commit or push that staged file.
+- `src/lib/scheduling/proximity-label.ts` is duplicated in `supabase/functions/publish-queue/banner-label.ts`; change both.
+- Legacy host redirects are 307 and browser-only: a cross-origin redirect strips `Authorization`, so server-to-server callers must target `cheers.orangejelly.co.uk` directly.
+- Instagram media-fetch failures (Meta error code 9004) are transient and retried (PR #45); do not treat them as hard failures.
+- `publish_jobs` legacy bridge: the scheduler checks for the `platform` column and falls back to the edge function when it is missing; keep that check until the bridge is retired.
+- Multi-brand: reads that rely on RLS alone leak across brands once membership RLS is on (see Tenancy).
+- The GSD commands (`/gsd:quick`, `/gsd:debug`, `/gsd:execute-phase`) were archived on 2026-07-03 and do not exist; `.planning/` is their residue.
+- Root `HANDOFF.md` and `BACKLOG.md` are status snapshots from the rebuild, not current instructions (HANDOFF still describes a GBP provider that no longer exists).
 
-### Resend Email
-- All transactional email goes through Resend
-- Email templates should be tested with `RESEND_API_KEY` set
-- From address format: `"Name (email@domain)"`
+## Planning workflow
 
-### Operational Scripts
-- `ops:backfill-connections` — sync social connections
-- `ops:backfill-link-in-bio-url` — update profile links
-- `ops:link-auth-user` — link Supabase auth to business profile
-- `ops:regenerate-story-derivatives` — rebuild cached story variants
-- Run in test environment first, then production with caution
-
-### CI Pipeline
-- `npm run ci:verify` runs full suite: lint → typecheck → test → build
-- All four steps must pass before merge
-- No console warnings allowed in CI
-
-### Next.js 16 Specifics
-- Using latest App Router patterns
-- Server actions with 'use server' directive
-- Streaming responses supported but not heavily used
-- Build optimization enabled by default
-
-<!-- GSD:project-start source:PROJECT.md -->
-## Project
-
-**CheersAI 2.0 — Complete Redesign**
-
-CheersAI is an AI-powered social media management platform for hospitality venues (pubs, restaurants, bars). Owners create content once — the AI adapts it per platform (Facebook, Instagram, Google Business Profile) — and the publishing pipeline handles scheduling, preflight checks, and delivery. This is a ground-up rebuild of v1, driven by a comprehensive 12-document design audit that identified 6 critical security issues, 28 high-severity problems, and 30+ minor issues making v1 unsafe for production scale.
-
-**Core Value:** An owner can create a single piece of content, have AI generate platform-specific copy, and reliably publish it to Facebook, Instagram, and Google Business Profile — without manual intervention after approval.
-
-### Constraints
-
-- **Tech stack**: Next.js 16 App Router, React 19, TypeScript strict, Tailwind v4, Supabase, deployed on Vercel
-- **Replace in place**: v1 goes offline while v2 is built in the same repository
-- **Ship complete**: entire redesign ships together, no partial releases
-- **Security first**: all 6 critical issues (C-1 through C-6) must be resolved before any feature work
-- **Europe/London timezone**: hardcoded, no multi-timezone support
-- **Platform APIs**: Facebook, Instagram, GBP — each with different rate limits, token lifecycles, and content formats
-- **Background jobs**: QStash (not Vercel Cron) for publish pipeline reliability
-- **Observability**: Axiom for structured logging (new addition to stack)
-<!-- GSD:project-end -->
-
-<!-- GSD:stack-start source:codebase/STACK.md -->
-## Technology Stack
-
-## Languages
-- TypeScript 5.x — Full codebase, strict mode enabled
-- JavaScript (ES2017+) — Next.js configuration, build scripts
-- SQL — Supabase PostgreSQL migrations and queries
-- HTML/CSS — Rendered via React/Tailwind
-## Runtime
-- Node.js (LTS recommended) — Server runtime via Next.js
-- Browser (modern) — Client runtime via React 19
-- npm — Primary (v9+)
-- Lockfile: `package-lock.json` (present)
-## Frameworks
-- Next.js 16.1.0 — Full-stack App Router with server components and actions
-- React 19.2.3 — UI rendering, hooks, server/client components
-- TypeScript 5.x — Type safety, strict mode
-- Tailwind CSS 4.x — Utility-first CSS framework
-- Tailwind Merge 3.4.0 — Dynamic class merging without conflicts
-- Class Variance Authority 0.7.1 — Component variant management
-- Radix UI (dialog, label, separator, slot, tooltip) 1.1.x — Accessible components
-- Lucide React 0.562.0 — Icon library
-- Framer Motion 12.23.26 — Page transitions and micro-interactions
-- React Hook Form 7.69.0 — Efficient form state management
-- Zod 4.2.1 — Schema validation and type inference
-- @hookform/resolvers 5.2.2 — Zod integration with React Hook Form
-- TanStack React Query 5.90.x — Server state management, caching, background sync
-- TanStack React Query DevTools 5.91.x — Development debugging
-- Vitest 4.0.16 — Test runner (fast, Vite-native)
-- @testing-library/react 16.3.2 — Component testing utilities
-- @testing-library/jest-dom 6.9.1 — DOM matchers
-- jsdom 29.1.1 — DOM implementation for Node.js tests
-- Next.js internal Webpack 5 — Configured via `npm run build --webpack`
-- Tailwind PostCSS 4.x — CSS processing pipeline
-- Lightning CSS (Darwin ARM64) 1.30.2 — Optional fast CSS transpiler
-- tsx 4.21.0 — TypeScript execution for scripts (ops, seeds)
-- ESLint 9.x — Linting with Next.js config
-- dotenv 17.2.3 — Environment variable loading
-## Key Dependencies
-- @supabase/supabase-js 2.89.0 — PostgreSQL client with auth, RLS support
-- @supabase/ssr 0.8.0 — Server-side rendering helpers for cookie-based auth
-- openai 6.15.0 — OpenAI API client for content generation
-- resend 6.6.0 — Transactional email service
-- luxon 3.7.2 — Date/time library with timezone support (Europe/London default)
-- libphonenumber-js — Phone number normalization (referenced in standards, check imports)
-- p-limit 7.3.0 — Promise concurrency limiting for bulk operations
-- satori 0.26.0 — HTML-to-image rendering (banner/social image generation)
-- sharp 0.34.5 — Image processing and optimization (serverExternalPackage in Next.js)
-- text-to-svg 3.1.5 — Text rendering for image generation
-- clsx 2.1.1 — Conditional class name composition
-## Configuration
-- `src/env.ts` — Zod-validated environment variables (server + client scoped)
-- Two client patterns: anon-key (user auth) and service-role (system operations)
-- Production validation enforces required vars: `CRON_SECRET`, `SUPABASE_SERVICE_ROLE_KEY`, `FACEBOOK_APP_SECRET`, `GOOGLE_MY_BUSINESS_CLIENT_ID/SECRET`, `RESEND_API_KEY`, `RESEND_FROM`, `OPENAI_API_KEY`
-- `next.config.ts` — Next.js configuration (sharp as external package, no index crawling)
-- `tsconfig.json` — TypeScript strict mode, path aliases (`@/*` → `./src/*`)
-- `vitest.config.ts` — Test runner config with path aliases and module mocks
-- `postcss.config.mjs` — Tailwind CSS PostCSS pipeline
-- `eslint.config.mjs` — ESLint 9 flat config with Next.js rules
-## Platform Requirements
-- Node.js LTS (v18+)
-- npm v9+
-- Supabase local dev CLI (optional, for migrations)
-- Modern IDE with TypeScript support
-- Deployed on Vercel (Next.js native)
-- Supabase PostgreSQL backend
-- Environment variables for all external services configured
-## Deployment
-- Vercel (Next.js native platform)
-- Supabase PostgreSQL (remote, RLS enabled)
-- `npm run ci:verify` → Full pipeline: lint → typecheck → test → build
-- All four gates must pass before merge
-<!-- GSD:stack-end -->
-
-<!-- GSD:conventions-start source:CONVENTIONS.md -->
-## Conventions
-
-## Naming Patterns
-- Components: PascalCase (e.g., `BannerOverlay.tsx`, `DeleteCampaignButton.tsx`)
-- Utilities and helpers: camelCase (e.g., `palette.ts`, `validation.ts`, `time-utils.ts`)
-- Test files: co-located alongside source with `.test.ts` or `.test.tsx` suffix (e.g., `palette.test.ts`, `banner-overlay.test.tsx`)
-- Types: `snake_case` in database context, `camelCase` in TypeScript interfaces
-- Server actions: camelCase with verb prefix (e.g., `createTournament`, `deleteCampaign`)
-- Utility functions: camelCase verb-first pattern
-- React Components: PascalCase
-- Hooks: `use` prefix (e.g., `use-now-minute.test.tsx`)
-- camelCase: standard for all variables
-- Constants: UPPERCASE_SNAKE_CASE (e.g., `BANNER_LABEL_REPEAT_COUNT`, `DEFAULT_TIMEZONE`)
-- React props: camelCase (e.g., `mediaUrl`, `postTemplate`, `houseRulesText`)
-- Interfaces: PascalCase (e.g., `Tournament`, `CampaignPerformanceMetrics`)
-- Type aliases for unions: PascalCase (e.g., `TournamentStatus`, `CampaignObjective`)
-- Database domain types separate: snake_case in DB, camelCase in TS (converted via `fromDb<T>`)
-- Enum-like types stored as unions: `type CampaignStatus = 'DRAFT' | 'ACTIVE' | 'PAUSED' | 'ARCHIVED'`
-## Code Style
-- Prettier (implicit via Next.js config)
-- 2-space indentation
-- Single quotes for strings
-- Trailing commas in multi-line objects/arrays
-- Line length: no hard limit enforced, but keep readable
-- ESLint config: `eslint.config.mjs` with Next.js presets (`eslint-config-next/core-web-vitals` and `eslint-config-next/typescript`)
-- Strict TypeScript: `tsconfig.json` has `"strict": true`
-- No `any` types unless explicitly justified with a comment
-- `skipLibCheck: true` (skip type checking of node_modules)
-- `isolatedModules: true` (each file is independently valid)
-- Next.js core web vitals (image optimization, font optimization, script loading)
-- TypeScript strict mode rules
-- React hooks rules (built-in to next/typescript preset)
-- Accessibility rules via JSX A11y plugin
-## Import Organization
-- `@/*` → `./src/*` (defined in `tsconfig.json` and `vitest.config.ts`)
-- Example: `import { formatFriendlyTime } from '@/lib/utils/date'`
-- Barrel exports not heavily used; direct imports preferred
-- Internal helpers kept private (no `export`)
-- Type exports always use `import type { ... }`
-## Error Handling
-- Server actions return `Promise<{ success?: boolean; error?: string }>` with optional additional fields
-- Input validation via Zod schemas (e.g., `tournamentCreateSchema`, `fixtureCreateSchema`)
-- Parse before using: `const parsed = schema.parse(input)` — throws if invalid
-- Try/catch in server actions to catch Zod errors and Supabase errors
-- Errors logged with context helpers (e.g., `tournamentDebugError`, `redactId`)
-- No silent failures: always surface errors to caller via return value
-## Logging
-- Debug helpers with context: `tournamentDebug(redactId(tournamentId), 'doing work')`
-- Error helpers: `tournamentDebugError(redactId(tournamentId), err)`
-- All console calls should have descriptive context (what operation, which resource)
-- Use `redactId()` to anonymize sensitive IDs in logs
-- Entry/exit of long-running operations
-- Important state transitions (draft → active)
-- Errors with full context for debugging
-- External API calls and responses (when safe)
-## Comments
-- Algorithm explanations (especially date/timezone logic)
-- Non-obvious business rules or constraints
-- Workarounds with reason for workaround
-- Complex regex patterns or data transformations
-- Date/timezone handling edge cases (e.g., GMT vs BST transitions)
-- Exported functions have single-line or multi-line JSDoc
-- Parameters documented only if non-obvious
-- Example from codebase:
-## Function Design
-- Aim for 20-50 lines (excluding comments)
-- Extract helper functions aggressively for readability
-- Single responsibility principle: one function, one job
-- Max 3-4 parameters; use objects for related parameters
-- Always typed explicitly: `function foo(id: string, count: number): Promise<Result>`
-- Optional/nullable parameters at end, use `?` and `default` values
-- Objects destructured at function signature when appropriate
-- Always explicitly typed on exported functions
-- Server actions return wrapped success/error objects: `Promise<{ success?: boolean; error?: string }>`
-- Query functions return typed data (via `fromDb<T>`) or null
-- Validators return structured result objects with `ready: boolean` and `missing: string[]`
-## Module Design
-- Named exports for everything; no default exports
-- Private helpers use no `export` keyword
-- Barrel files (`index.ts`) not commonly used; direct imports preferred
-- Feature-specific code in `src/features/[feature]/`
-- Shared utilities in `src/lib/[domain]/`
-- Types in `src/types/[domain].ts` (centralized)
-- Server actions in `src/app/actions/[domain].ts`
-- Components in `src/components/` or `src/features/`
-## Type Patterns
-- All database types centralized in `src/types/database.ts` (or domain-specific: `tournament.ts`, `campaigns.ts`)
-- Database columns: `snake_case`
-- TypeScript properties: `camelCase`
-- Conversion always via `fromDb<T>(dbRow)` utility
-- Named interface, never inline anonymous object for props
-- Convention: `interface ComponentNameProps { ... }`
-- Example:
-<!-- GSD:conventions-end -->
-
-<!-- GSD:architecture-start source:ARCHITECTURE.md -->
-## Architecture
-
-## Pattern Overview
-- **Server-first by default** — Server Components for data fetching; Client Components only for interactivity
-- **Server Actions for mutations** — All state changes via `'use server'` functions with auth re-verification
-- **Supabase RLS-enforced** — Client queries respect Row-Level Security; service-role admin client isolated
-- **Feature-first directory structure** — Shared `lib/` utilities, feature-specific components in `features/`
-- **Centralised type definitions** — Single source of truth in `src/types/`
-## Layers
-- Purpose: React components for UI rendering
-- Location: `src/components/`, `src/features/`
-- Contains: Server Components, Client Components, UI primitives (buttons, cards, dialogs)
-- Depends on: `lib/auth/`, `lib/utils`, design tokens in `globals.css`
-- Used by: Route handlers in `src/app/`
-- Purpose: Feature-specific logic and components grouped by domain
-- Location: `src/features/` (campaigns, create, library, planner, connections, settings, reviews)
-- Contains: Domain-specific forms, components, utilities (banner configs, content schedules)
-- Depends on: `lib/` utilities, types, Supabase client
-- Used by: Route pages and layouts
-- Purpose: Core domain logic, data transformations, external integrations
-- Location: `src/lib/` (ai, banner, campaigns, create, scheduling, tournament, etc.)
-- Contains: OpenAI integration, Meta API client, scheduling algorithms, content generation, conflict detection
-- Depends on: Supabase client, external SDKs (OpenAI, Resend, libphonenumber-js)
-- Used by: Server actions, API routes, features
-- Purpose: Database and external service interactions
-- Location: `src/lib/supabase/`, `src/lib/auth/`, `src/lib/*/data.ts` or `*/queries.ts`
-- Contains: Supabase client factories (server, service-role), auth helpers, query builders
-- Depends on: Supabase SDK, environment variables
-- Used by: Business logic layer
-- Purpose: Authenticated mutation entry points with auth re-verification
-- Location: `src/app/actions/`, `src/app/(app)/*/actions.ts`
-- Contains: Campaign operations, tournament publishing, reviews, content creation
-- Depends on: `requireAuthContext()`, business logic
-- Used by: Client components via form submissions
-- Purpose: Webhooks, OAuth callbacks, cron jobs, internal integrations
-- Location: `src/app/api/`
-- Contains: Instagram/Facebook webhooks, OAuth state handlers, Vercel cron triggers
-- Depends on: Supabase service-role client, external API clients
-- Used by: External services, cron triggers
-## Data Flow
-- **Authentication:** Context Provider in `src/components/providers/auth-provider.tsx` — read-only, server-initialized
-- **Data fetching:** React Query via `QueryClientProvider` in `src/components/providers/app-providers.tsx`
-- **UI state:** Local component state (forms, modals, toggles)
-- **Server state:** Supabase database with RLS policies enforcing account-level isolation
-- **Toast notifications:** Sonner via `ToastProvider` in `src/components/providers/toast-provider.tsx`
-## Key Abstractions
-- Purpose: Type-safe mutation entry points with built-in auth verification
-- Examples: `src/app/actions/tournament.ts`, `src/app/(app)/campaigns/actions.ts`
-- Pattern: `'use server'` decorator, `requireAuthContext()` call, Zod schema validation, Supabase service-role write, `revalidatePath()` cache invalidation, `logAuditEvent()` audit trail
-- Purpose: Consistent client initialization for different auth contexts
-- Examples: `createServerSupabaseClient()`, `createServiceSupabaseClient()`, `getSupabaseBrowserClient()`
-- Pattern: Clients imported from `src/lib/supabase/{server|service|client}.ts`; anon-key respects RLS, service-role bypasses
-- Purpose: Convert database snake_case columns to camelCase TypeScript types
-- Examples: `fromDb<Tournament>()`, `fromDb<CampaignDashboardModel>()`
-- Pattern: Wraps raw DB row, converts keys, parses ISO date strings to Date objects
-- Purpose: Manage event timing, timezone conversions, prevent double-booking
-- Examples: `src/lib/scheduling/conflicts.ts`, `src/lib/scheduling/materialise.ts`
-- Pattern: Luxon library for dates, calendar-day semantics for event boundaries, conflict matrix builder
-- Purpose: Generate social media overlay images with text, colours, positioning
-- Examples: `src/lib/banner/render-server.ts`, `src/lib/banner/config.ts`
-- Pattern: Server-side image generation, palette builder, position/colour configuration
-- Purpose: OpenAI API integration with prompt engineering and post-processing
-- Examples: `src/lib/ai/client.ts`, `src/lib/ai/prompts.ts`, `src/lib/ai/voice.ts`
-- Pattern: Pillar-based prompts, voice/brand guidelines, proof points incorporation, deterministic post-processing
-- Purpose: OAuth token exchange, Graph API calls, campaign creation, interest targeting
-- Examples: `src/lib/meta/marketing.ts`, `src/lib/campaigns/interest-targeting.ts`
-- Pattern: Token refresh logic, audience segmentation, performance sync, budget optimization
-## Entry Points
-- Location: `src/app/layout.tsx` (RootLayout)
-- Triggers: Application startup
-- Responsibilities: Font loading, global styles, AppProviders wrapper
-- Location: `src/app/(app)/layout.tsx` (AppLayout)
-- Triggers: Access to `/` and all `/dashboard/*` routes
-- Responsibilities: Auth check via `getCurrentUser()`, AppShell wrapper (sidebar, nav), role-based access control
-- Location: `src/app/(app)/planner/page.tsx`
-- Triggers: User navigates to `/planner`
-- Responsibilities: Query param parsing (month, status filters, show_images), Suspense boundary, calendar component rendering
-- Location: `src/app/(app)/create/page.tsx`
-- Triggers: User clicks "Create Post" or navigates to `/create`
-- Responsibilities: Multi-step form (campaign selection, content generation, preview, publish)
-- Location: `src/app/(app)/campaigns/page.tsx`, `src/app/(app)/campaigns/[id]/page.tsx`
-- Triggers: User navigates to `/campaigns` or campaign detail
-- Responsibilities: Campaign listing with Meta sync, detail view with performance metrics
-- Location: `src/app/(app)/settings/page.tsx`
-- Triggers: User navigates to `/settings`
-- Responsibilities: Social connection management (OAuth), brand voice, posting defaults
-- Location: `src/app/api/feed/`, `src/app/api/cron/`, `src/app/api/oauth/`
-- Triggers: External service callbacks (Meta, cron scheduler)
-- Responsibilities: Async job processing, status updates, token refresh
-## Error Handling
-- **Schema Missing Detection:** `isSchemaMissingError()` and `isSchemaMissingErrorWithWarning()` in `src/lib/supabase/errors.ts` catch migration gaps; production logs critical errors, dev silently falls back
-- **Auth Errors:** `requireAuthContext()` catches `"session_not_found"` errors, clears cookies, redirects to `/login`
-- **Validation Errors:** Zod schemas in `src/lib/*/validation.ts` validate inputs; errors returned to client with schema-specific messages
-- **API Errors:** Server actions return `{ success?: boolean; error?: string }` shape; client surfaces via toast notifications
-- **Async Job Errors:** Publishing queue in `src/lib/publishing/queue.ts` retries with backoff; failures logged to database
-## Cross-Cutting Concerns
-- Approach: Console-based with context (production-only for schema gaps)
-- Key locations: `src/lib/supabase/errors.ts`, `src/lib/audit-log/` (if present), individual service error handlers
-- Approach: Zod schemas at API boundaries and form submissions
-- Key locations: `src/lib/*/validation.ts` (campaigns, tournament, create)
-- Approach: Supabase JWT in HTTP-only cookies, server-side session verification
-- Key locations: `src/lib/auth/server.ts` (getCurrentUser, requireAuthContext), middleware (if present)
-- Approach: `logAuditEvent()` called on all mutations
-- Key locations: Server actions, API routes that modify data
-- Approach: Upstash or similar; per-user rate limits on sensitive operations
-- Key locations: `src/lib/auth/rate-limit.ts`
-- Approach: Luxon library, default timezone Europe/London, user timezone override via account preferences
-- Key locations: `src/lib/constants.ts` (DEFAULT_TIMEZONE), `src/lib/*/time-utils.ts`
-<!-- GSD:architecture-end -->
-
-## Planning Workflow
-
-The GSD commands (`/gsd:quick`, `/gsd:debug`, `/gsd:execute-phase`) were archived on
-2026-07-03 and no longer exist. Do not try to invoke them.
-
-For anything beyond a trivial edit, work through `tasks/`:
-
-- Write a `tasks/SPEC-<slug>.md` before changing code, covering what changes, why, the
-  rollback, and anything that must be deployed before a production setting is flipped.
-- Use `tasks/PLAN-<slug>.md` for multi-PR work, mapping the order and dependencies.
-- Record decisions in the spec as they are made. Open questions belong in chat, never in
-  a file.
-
-Finish with `npm run ci:verify` (lint, typecheck, test, build). All four gates must pass.
-
-## Paid Ads Briefs (read before any ads work)
-
-**Read `tasks/ADS-PLAYBOOK-the-anchor.md` first whenever Peter briefs a paid Meta campaign**,
-especially one the wizard cannot build (the wizard only covers `event` and `food_booking`;
-anything else, Sunday roast, Christmas, function hire, recruitment, is off-app work).
-
-It holds the verified ad account, Page, pixel and venue facts, the exact limits of what
-`src/lib/meta/marketing.ts` can publish, real CPC and CTR benchmarks from live campaigns, the
-copy guardrails, and the brief template. Re-verify the account facts against Supabase before
-anything that spends money.
-
-Two standing points from that file, so they are not missed:
-
-- Campaigns publish **through the app**, not by hand in Ads Manager, so the dashboard,
-  performance sync and optimiser all see them.
-- The Instagram `social_connections.status` value of `expiring` is a dead label, not a fault.
-  Nothing writes or gates on it. Do not report it as needing reconnection.
+For anything beyond a trivial edit, work through `tasks/`: write `tasks/SPEC-<slug>.md` before changing code (what changes, why, the rollback, and anything that must deploy before a production setting is flipped); use `tasks/PLAN-<slug>.md` for multi-PR work. Record decisions in the spec as they are made; open questions belong in chat, never in a file. Finish with `npm run ci:verify`.
