@@ -1,24 +1,25 @@
-# Fix: planner post detail crashes on platform-less posts
+# Fix: Instagram story failed with Meta code 9004 (2026-09-04)
 
 ## Problem
-Clicking certain posts (e.g. the materialised weekly-recurring slots that land on
-Mondays such as 27 Jul 2026) crashes the post detail view / drawer. Root cause:
-`content_items.platform` can be `NULL` (39 rows: 2 weekly_recurring, 31 event,
-5 instant_post, 1 story) but several components index a `facebook`/`instagram`-only
-map with the raw platform value, so a null platform resolves to `undefined` and throws.
+The 11:00 BST Instagram story for "Big Sing Friday: Karaoke Night" failed on
+attempt 1 of 4 with `9004 / 2207052 Only photo or video can be accepted as media
+type`. The banner JPEG and signed URL were valid and Meta never fetched the file,
+so this was a transient Meta-side media fetch failure that the worker treated as
+permanent.
 
-## Fix (class-wide, not one post)
-- [x] Harden `PlatformDot` — tolerate null/unknown platform, neutral fallback
-- [x] Harden `PlatformBadge` — tolerate null/unknown platform, neutral fallback
-- [x] Harden `formatPlatformLabel` — accept null, return "No platform"
-- [x] Harden `PlannerContentComposer` — neutral theme when platform is null
-- [x] Normalise + retype `platform` in `getPlannerContentDetail` (data layer honesty)
-- [x] Remove misleading `as Platform` cast in `post-drawer`
-- [x] Tests: PlatformDot / PlatformBadge / formatPlatformLabel render with null (8 tests)
-- [x] Verify: typecheck ✓ + lint ✓ + test ✓ (1727) + build ✓ (after clearing stale .next)
-- [ ] Live-app repro is auth-gated (planner detail requires a session) — covered by unit tests instead
+## Tasks
+- [x] Trace the failed job, banner upload, signed URL and edge logs on the live project
+- [x] Confirm the rendered banner is a valid 1080x1920 JPEG identical to the Facebook story
+- [x] Classify Meta code 9004 as retryable in `meta-error.ts`
+- [x] Unit tests for the classifier (`tests/publish-queue-meta-error.test.ts`)
+- [x] Worker-level test for the 9004 story retry (`tests/publish-queue.test.ts`)
+- [x] Spec written: `tasks/SPEC-instagram-media-fetch-retry.md`
+- [x] `npm run ci:verify` green (lint, typecheck, 1971 tests, build)
+- [ ] Merge PR and deploy `publish-queue` by name (needs Peter's go-ahead)
+- [ ] Re-schedule the missed story to a new time so it publishes (needs Peter's go-ahead)
 
-## Out of scope (flagged separately)
-- Sibling enum lookups that could crash on unexpected DB values
-  (CampaignList status, campaigns/[id] status, connection-cards provider).
-- Data cleanup / completion of the 2 platform-less weekly_recurring drafts.
+## Notes
+- The manual retry button will not work for this story: the worker rejects stories
+  more than 5 minutes past `scheduled_for`. It needs a new time.
+- The deployed `publish-queue` is version 34 from 2026-07-27. The 2026-09-02 domain
+  commit also touched the function and has not been deployed yet.

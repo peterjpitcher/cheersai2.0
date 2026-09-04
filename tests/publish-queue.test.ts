@@ -445,6 +445,157 @@ describe("PublishQueueWorker", () => {
             );
         });
 
+        it("retries instagram story publish when Meta cannot fetch the media (code 9004)", async () => {
+            const nowIso = new Date().toISOString();
+            const job = {
+                id: "job-story-9004",
+                content_item_id: "content-story-9004",
+                variant_id: "variant-story-9004",
+                status: "queued",
+                attempt: 0,
+                placement: "story",
+            };
+
+            // 1. Mock jobs fetch
+            mockSupabase.from.mockReturnValueOnce({
+                select: vi.fn().mockReturnThis(),
+                eq: vi.fn().mockReturnThis(),
+                lte: vi.fn().mockReturnThis(),
+                order: vi.fn().mockReturnThis(),
+                limit: vi.fn().mockResolvedValue({ data: [job], error: null }),
+            });
+
+            // 2. Lock
+            mockSupabase.from.mockReturnValueOnce({
+                update: vi.fn().mockReturnThis(),
+                eq: vi.fn().mockReturnThis(),
+                select: vi.fn().mockReturnThis(),
+                maybeSingle: vi.fn().mockResolvedValue({ data: { id: job.id }, error: null }),
+            });
+
+            // 3. Content
+            mockSupabase.from.mockReturnValueOnce({
+                select: vi.fn().mockReturnThis(),
+                eq: vi.fn().mockReturnThis(),
+                maybeSingle: vi.fn().mockResolvedValue({
+                    data: {
+                        id: job.content_item_id,
+                        account_id: "acc-1",
+                        platform: "instagram",
+                        placement: "story",
+                        scheduled_for: nowIso,
+                        prompt_context: {},
+                        campaigns: null,
+                    },
+                    error: null,
+                }),
+            });
+
+            // 4. Variant
+            mockSupabase.from.mockReturnValueOnce({
+                select: vi.fn().mockReturnThis(),
+                eq: vi.fn().mockReturnThis(),
+                maybeSingle: vi.fn().mockResolvedValue({
+                    data: {
+                        id: job.variant_id,
+                        content_item_id: job.content_item_id,
+                        body: "",
+                        media_ids: [],
+                        banner_enabled: null,
+                        banner_text_override: null,
+                        banner_position: null,
+                        banner_bg: null,
+                        banner_text_colour: null,
+                    },
+                    error: null,
+                }),
+            });
+
+            // 5. Connection
+            mockSupabase.from.mockReturnValueOnce({
+                select: vi.fn().mockReturnThis(),
+                eq: vi.fn().mockReturnThis(),
+                maybeSingle: vi.fn().mockResolvedValue({
+                    data: {
+                        id: "conn-ig-1",
+                        provider: "instagram",
+                        status: "active",
+                        access_token: "token",
+                        metadata: { igBusinessId: "ig-123" },
+                    },
+                    error: null,
+                }),
+            });
+
+            // 6. markContentStatus (publishing)
+            mockSupabase.from.mockReturnValueOnce({
+                update: vi.fn().mockReturnThis(),
+                eq: vi.fn().mockResolvedValue({ error: null }),
+            });
+
+            // 6b. Posting defaults lookup (banner preflight): no row, short-circuit
+            mockSupabase.from.mockReturnValueOnce({
+                select: vi.fn().mockReturnThis(),
+                eq: vi.fn().mockReturnThis(),
+                maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
+            });
+
+            // 7. Provider publish fails: Meta's fetcher could not retrieve the
+            //    signed image URL (live failure shape from 2026-09-04).
+            const mediaFetchError = new MetaGraphApiError(
+                400,
+                {
+                    error: {
+                        message: "Only photo or video can be accepted as media type.",
+                        type: "OAuthException",
+                        code: 9004,
+                        error_subcode: 2207052,
+                        fbtrace_id: "Aiqoy1udcEIZiTIuGpCJU1P",
+                    },
+                },
+                "instagram_create_container",
+            );
+            vi.spyOn(worker, "publishByPlatform").mockRejectedValue(mediaFetchError);
+
+            const retryJobUpdate = vi.fn().mockReturnThis();
+
+            // 8. publish_jobs reschedule
+            mockSupabase.from.mockReturnValueOnce({
+                update: retryJobUpdate,
+                eq: vi.fn().mockResolvedValue({ error: null }),
+            });
+
+            // 9. markContentStatus (scheduled)
+            mockSupabase.from.mockReturnValueOnce({
+                update: vi.fn().mockReturnThis(),
+                eq: vi.fn().mockResolvedValue({ error: null }),
+            });
+
+            const insertNotification = vi.fn().mockResolvedValue({ error: null });
+
+            // 10. retry notification
+            mockSupabase.from.mockReturnValueOnce({
+                insert: insertNotification,
+            });
+
+            const result = await worker.processDueJobs();
+            expect(result.processed).toBe(1);
+            expect(result.results?.[0]?.status).toBe("processed");
+
+            expect(retryJobUpdate).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    status: "queued",
+                    last_error: mediaFetchError.message,
+                }),
+            );
+
+            expect(insertNotification).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    category: "story_publish_retry",
+                }),
+            );
+        });
+
         it("retries ambiguous instagram story code 100 when connection probes healthy", async () => {
             const nowIso = new Date().toISOString();
             const job = {
