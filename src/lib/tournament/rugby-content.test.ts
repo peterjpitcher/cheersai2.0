@@ -38,3 +38,30 @@ it.each(['facebook', 'instagram'] as const)('keeps split kitchen details after f
 it('blocks a feed if final channel shortening removes kitchen qualification', () => {
  expect(() => buildTournamentContentPayload({ tournament, fixture, screened: { ...screened, screening: { ...screened.screening, foodPromotion: { ...screened.screening.foodPromotion, message: 'Kitchen service '.repeat(90) } } }, platform: 'instagram', placement: 'feed', scheduledFor: new Date('2026-11-06T11:40:00Z') })).toThrow('shortened');
 });
+
+it.each([
+  ['facebook', 'feed'], ['facebook', 'story'],
+  ['instagram', 'feed'], ['instagram', 'story'],
+] as const)('retains conditional late opening and kitchen limits for %s %s', (platform, placement) => {
+  const openingLabel = 'Usual pub hours 12:00 to 22:00. If people are still here watching, we will stay open until the game finishes. Please arrive before our usual closing time.';
+  const foodMessage = 'Book a table for food and rugby. Kitchen service 12:00 to 15:00 and 16:00 to 21:00.';
+  const lateScreened = {
+    ...screened,
+    screening: {
+      ...screened.screening,
+      openingLabel,
+      lateFinishPolicy: 'stay_open_if_viewers' as const,
+      foodPromotion: { ...screened.screening.foodPromotion, message: foodMessage },
+    },
+  };
+  const result = buildTournamentContentPayload({
+    tournament, fixture: { ...fixture, kickOffAt: '2026-11-06T20:10:00Z' },
+    screened: lateScreened, platform, placement,
+    scheduledFor: new Date('2026-11-03T20:10:00Z'),
+  });
+  const copy = placement === 'story' ? result.promptContext.screening_caption : result.body;
+  expect(copy).toContain(openingLabel);
+  expect(copy).toContain(foodMessage);
+  expect(copy).not.toContain('end of the match may be missed');
+  expect(result.promptContext.screening_template_version).toBe('nations-screening-v3');
+});

@@ -411,7 +411,10 @@ export async function generateFixtureContent(
     if (screened) {
       overlayData.houseRulesText = [screened.screening.openingLabel, screened.screening.foodPromotion.message].filter(Boolean).join(' ');
       overlayData.bookingLabel = 'Book a table for this game';
-      overlayData.footerNote = [screened.screening.openingLabel, screened.screening.foodPromotion.message].filter(Boolean).join('. ');
+      overlayData.footerNote = [screened.screening.openingLabel, screened.screening.foodPromotion.message]
+        .filter((message): message is string => Boolean(message))
+        .map(message => message.replace(/\.$/, ''))
+        .join('. ');
     }
 
     // Download base images (use cache if provided, otherwise fetch and de-duplicate)

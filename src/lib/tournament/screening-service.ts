@@ -3,6 +3,8 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { fetchScreeningHours, unknownScreeningHours, type ScreeningDayHours } from '@/lib/management-app/screening-hours';
 import { resolveScreening, toScreeningFacts, type ScreeningProjection } from './screening';
 import type { Tournament, TournamentFixture, ScreeningFacts } from '@/types/tournament';
+// Owner-confirmed policy, 5 September 2026, recorded in the website docs/SSOT.md.
+const ANCHOR_ACCOUNT_ID = '91fda684-2801-4abb-980e-f42cec017cef';
 export interface ScreenedFixture extends ScreeningFacts { hours: ScreeningDayHours; screening: ScreeningProjection }
 export async function projectTournamentFixtures(db: SupabaseClient, tournament: Tournament, fixtures: TournamentFixture[], now = new Date()): Promise<ScreenedFixture[]> {
   const today = DateTime.fromJSDate(now).setZone('Europe/London').toISODate()!;
@@ -22,7 +24,7 @@ export async function projectTournamentFixtures(db: SupabaseClient, tournament: 
     const date = DateTime.fromISO(fixture.kickOffAt).setZone('Europe/London').toISODate()!;
     const hours = days.get(date) ?? unknownScreeningHours(date);
     const facts = toScreeningFacts(fixture, tournament.sport);
-    const screening = resolveScreening(facts, hours, now);
+    const screening = resolveScreening(facts, hours, now, tournament.accountId === ANCHOR_ACCOUNT_ID ? 'stay_open_if_viewers' : undefined);
     const startsLate = Boolean(screening.screeningStartAt && Date.parse(screening.screeningStartAt) > Date.parse(facts.kickOffAt));
     const plannedEnd = facts.plannedEndAt ? Date.parse(facts.plannedEndAt) : Date.parse(facts.kickOffAt) + 120 * 60_000;
     const endsEarly = Boolean(screening.screeningEndAt && Date.parse(screening.screeningEndAt) < plannedEnd);

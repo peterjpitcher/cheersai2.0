@@ -68,3 +68,9 @@ No environment values, secrets, database records or feature flag settings change
 - [x] Add clear default scheduling controls to tournament creation and settings.
 - [x] Run focused tests, lint, types, full London and UTC suites and build. Both zones: 2,207 passed, three skipped.
 - [ ] Deploy verified increments, set Nations to 72 hours, verify existing future content through normal generation.
+
+## Conditional late match finishes
+- [x] Check current screening, booking and content paths and record the owner policy.
+- [x] Add scoped conditional late-finish feed and social wording with tests.
+- [x] Verify lint, types, London and UTC tests and build. Both zones: 2,214 passed, three skipped.
+- [ ] Deploy compatible website, Cheers and worker; regenerate existing content and check live.

@@ -9,6 +9,7 @@ export interface ScreeningProjection {
     'confirmed_full' | 'confirmed_partial' | 'not_showing' | 'finished' | 'cancelled';
   screeningStartAt: string | null;
   screeningEndAt: string | null;
+  lateFinishPolicy?: 'stay_open_if_viewers';
   openingLabel: string;
   kitchenLabel: string;
   foodPromotion: {
@@ -51,7 +52,7 @@ function describeWindows(windows: ServiceWindow[]): string {
   return windows.map(w => `${clock(w.startAt)} to ${clock(w.endAt)}`).join(' and ');
 }
 
-export function resolveScreening(fixture: ScreeningFacts, hours: ScreeningDayHours, now: Date): ScreeningProjection {
+export function resolveScreening(fixture: ScreeningFacts, hours: ScreeningDayHours, now: Date, lateFinishPolicy?: ScreeningProjection['lateFinishPolicy']): ScreeningProjection {
   const result: ScreeningProjection = {
     status: 'awaiting_decision', screeningStartAt: null, screeningEndAt: null,
     openingLabel: hours.state === 'open' && hours.bar ? `Pub open ${describeWindows([hours.bar])}` : hours.state === 'closed' ? 'Pub closed' : 'Opening times unavailable; check before travelling',
@@ -80,7 +81,15 @@ export function resolveScreening(fixture: ScreeningFacts, hours: ScreeningDayHou
   result.screeningStartAt = new Date(Math.max(open, kick)).toISOString();
   result.screeningEndAt = new Date(end).toISOString();
   if (open > kick) result.openingLabel = `Showing from ${clock(hours.bar.startAt)}; kick-off ${clock(fixture.kickOffAt)}, start missed`;
-  if (close < plannedEnd) result.openingLabel += `; showing until ${clock(hours.bar.endAt)} when the pub closes, the end of the match may be missed`;
+  if (close < plannedEnd) {
+    if (lateFinishPolicy === 'stay_open_if_viewers') {
+      result.lateFinishPolicy = lateFinishPolicy;
+      result.openingLabel = result.openingLabel.replace(/^Pub open/, 'Usual pub hours');
+      result.openingLabel += '. If people are still here watching, we will stay open until the game finishes. Please arrive before our usual closing time.';
+    } else {
+      result.openingLabel += `; showing until ${clock(hours.bar.endAt)} when the pub closes, the end of the match may be missed`;
+    }
+  }
   // An elapsed planned end suppresses future offers without inventing a final result.
   result.canBookForScreening = Number.isFinite(now.getTime()) && now.getTime() < end;
   result.canGenerateTeamPromotion = result.canBookForScreening && fixture.teamsConfirmed && areBothTeamsConfirmed(fixture.teamA, fixture.teamB);
