@@ -23,3 +23,10 @@ permanent.
   more than 5 minutes past `scheduled_for`. It needs a new time.
 - The deployed `publish-queue` is version 34 from 2026-07-27. The 2026-09-02 domain
   commit also touched the function and has not been deployed yet.
+
+## Tournament upload-only artwork
+- [x] Replace library selection with direct uploads and current previews.
+- [x] Validate and save tournament-owned originals without shared library entries.
+- [x] Exercise upload, replacement, errors and library exclusion; run release gates.
+
+Local verification: ci:verify passed (2,098 tests passed, three skipped), 30 focused backend/route tests and eight UI tests passed. Isolated Chromium exercised uploads, replacement, recovery and mobile layout. Production storage writes were not used for tests.

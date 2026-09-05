@@ -77,7 +77,8 @@ export async function listMediaAssets(
         "id, file_name, media_type, tags, uploaded_at, size_bytes, storage_path, processed_status, processed_at, derived_variants, aspect_class",
       )
       .eq("account_id", accountId)
-      .is("hidden_at", null);
+      .is("hidden_at", null)
+      .not("storage_path", "like", "tournaments/%/base/%");
 
     const excludeTags = options.includeSystemAssets
       ? options.excludeTags ?? []
