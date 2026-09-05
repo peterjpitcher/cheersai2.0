@@ -40,6 +40,7 @@ function extractFirstTeamTextBounds(svg: string): {
 
 describe('renderOverlaySvg', () => {
   const baseData: OverlayData = {
+    tournamentName: 'Nations Championship 2026',
     teamA: 'Germany',
     teamB: 'Japan',
     dateDisplay: 'Saturday 14 June',
@@ -61,6 +62,40 @@ describe('renderOverlaySvg', () => {
     } finally {
       cwdSpy.mockRestore();
       fetchSpy.mockRestore();
+    }
+  });
+
+  it.each([1080, 1920])('renders the tournament name as visible artwork at height %i', async (height) => {
+    const dimensions = { width: 1080, height };
+    const named = await renderOverlaySvg(baseData, dimensions);
+    const unnamed = await renderOverlaySvg({ ...baseData, tournamentName: '' }, dimensions);
+    const titleRegion = { left: 64, top: Math.round(height * 0.06), width: 952, height: Math.round(height * 0.12) };
+    const namedPixels = await sharp(Buffer.from(named)).extract(titleRegion).raw().toBuffer();
+    const unnamedPixels = await sharp(Buffer.from(unnamed)).extract(titleRegion).raw().toBuffer();
+
+    expect(named).toContain('tournamentName="Nations Championship 2026"');
+    expect(namedPixels.equals(unnamedPixels)).toBe(false);
+    // A title must not displace any existing match, date, booking or footer artwork.
+    const matchRegion = { left: 0, top: Math.round(height * 0.18), width: 1080, height: height - Math.round(height * 0.18) };
+    const namedMatch = await sharp(Buffer.from(named)).extract(matchRegion).raw().toBuffer();
+    const unnamedMatch = await sharp(Buffer.from(unnamed)).extract(matchRegion).raw().toBuffer();
+    expect(namedMatch.equals(unnamedMatch)).toBe(true);
+  });
+
+  it.each([1080, 1920])('keeps long tournament names inside the title area at height %i', async (height) => {
+    for (const tournamentName of ['International Nations Championship Rugby Tournament 2026', 'W'.repeat(200)]) {
+      const svg = await renderOverlaySvg({ ...baseData, tournamentName }, { width: 1080, height });
+      const paths = [...svg.matchAll(/<path fill="rgba\(255,255,255,0.95\)" d="([^"]+)"/g)];
+      expect(paths.length).toBeGreaterThan(0);
+      for (const path of paths) {
+        const nums = [...path[1].matchAll(/-?\d+(?:\.\d+)?/g)].map(value => Number(value[0]));
+        const xs = nums.filter((_, index) => index % 2 === 0);
+        const ys = nums.filter((_, index) => index % 2 === 1);
+        expect(Math.min(...xs)).toBeGreaterThanOrEqual(64);
+        expect(Math.max(...xs)).toBeLessThanOrEqual(1016);
+        expect(Math.min(...ys)).toBeGreaterThanOrEqual(Math.round(height * 0.06));
+        expect(Math.max(...ys)).toBeLessThanOrEqual(Math.round(height * 0.18));
+      }
     }
   });
 
@@ -138,6 +173,7 @@ describe('renderOverlaySvg', () => {
         teamA: 'Bosnia & Herzegovina',
         teamB: 'A "Quoted" Team',
         roundLabel: 'A < B',
+        tournamentName: 'Rugby & \"Friends\" <2026>',
       },
       { width: 1080, height: 1080 },
     );
@@ -145,6 +181,7 @@ describe('renderOverlaySvg', () => {
     expect(svg).toContain('teamA="BOSNIA &amp; HERZEGOVINA"');
     expect(svg).toContain('teamB="A &quot;QUOTED&quot; TEAM"');
     expect(svg).toContain('roundLabel="A &lt; B"');
+    expect(svg).toContain('tournamentName="Rugby &amp; &quot;Friends&quot; &lt;2026&gt;"');
   });
 
   it('does not expand replacement tokens in metadata', async () => {
@@ -159,6 +196,7 @@ describe('renderOverlaySvg', () => {
 
   it('snapshot: short/short team names', async () => {
     const data: OverlayData = {
+    tournamentName: 'Nations Championship 2026',
       teamA: 'Germany',
       teamB: 'Japan',
       dateDisplay: 'Saturday 14 June',
@@ -176,6 +214,7 @@ describe('renderOverlaySvg', () => {
 
   it('snapshot: long/long team names', async () => {
     const data: OverlayData = {
+    tournamentName: 'Nations Championship 2026',
       teamA: 'Netherlands',
       teamB: 'Switzerland',
       dateDisplay: 'Sunday 15 June',
@@ -191,6 +230,7 @@ describe('renderOverlaySvg', () => {
 
   it('snapshot: default booking and footer', async () => {
     const data: OverlayData = {
+    tournamentName: 'Nations Championship 2026',
       teamA: 'England',
       teamB: 'France',
       dateDisplay: 'Friday 20 June',
@@ -206,6 +246,7 @@ describe('renderOverlaySvg', () => {
 
   it('uses custom booking and footer when provided', async () => {
     const data: OverlayData = {
+    tournamentName: 'Nations Championship 2026',
       teamA: 'Spain',
       teamB: 'Italy',
       dateDisplay: 'Saturday 21 June',
@@ -225,6 +266,7 @@ describe('renderOverlaySvg', () => {
 
 describe('compositeOverlay', () => {
   const baseData: OverlayData = {
+    tournamentName: 'Nations Championship 2026',
     teamA: 'Germany',
     teamB: 'Japan',
     dateDisplay: 'Saturday 14 June',

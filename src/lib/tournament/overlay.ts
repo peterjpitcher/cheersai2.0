@@ -13,6 +13,7 @@ import {
 import { tournamentDebug, tournamentDebugError } from '@/lib/tournament/debug';
 
 export interface OverlayData {
+  tournamentName: string;
   teamA: string;
   teamB: string;
   dateDisplay: string;
@@ -107,7 +108,33 @@ export async function renderOverlaySvg(
     textTransform: 'uppercase' as const,
   });
 
-  // 1: Matchup zone — centred in the lit safe area
+  // Keep the tournament in its own safe area above the existing match details.
+  const tournamentTitle = {
+    type: 'div',
+    props: {
+      style: {
+        position: 'absolute',
+        top: sh(0.06),
+        height: sh(0.12),
+        left: sw(0.06),
+        right: sw(0.06),
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        textAlign: 'center',
+        color: 'rgba(255,255,255,0.95)',
+        fontFamily: 'Oswald',
+        fontWeight: 600,
+        fontSize: sw(data.tournamentName.length > 100 ? 0.024 : data.tournamentName.length > 60 ? 0.03 : 0.038),
+        lineHeight: 1.15,
+        textTransform: 'uppercase',
+        wordBreak: 'break-word',
+      },
+      children: data.tournamentName,
+    },
+  };
+
+  // 1: Matchup zone, centred in the lit safe area
   const matchupZone = {
     type: 'div',
     props: {
@@ -148,7 +175,7 @@ export async function renderOverlaySvg(
         },
         // Team A
         { type: 'div', props: { 'aria-label': teamA, style: teamStyle(teamA), children: teamA } },
-        // vs — italic gold pivot
+        // vs , italic gold pivot
         {
           type: 'div',
           props: {
@@ -217,7 +244,7 @@ export async function renderOverlaySvg(
     },
   };
 
-  // 2: Booking CTA — anchored above the pitch
+  // 2: Booking CTA , anchored above the pitch
   const cta = {
     type: 'div',
     props: {
@@ -264,7 +291,7 @@ export async function renderOverlaySvg(
     },
   };
 
-  // 3: Closing-time note — pinned at the canvas bottom edge
+  // 3: Closing-time note , pinned at the canvas bottom edge
   const note = {
     type: 'div',
     props: {
@@ -287,7 +314,7 @@ export async function renderOverlaySvg(
     },
   };
 
-  // 4: Root — relative so the three zones layer correctly
+  // 4: Root , relative so the three zones layer correctly
   const element = {
     type: 'div',
     props: {
@@ -297,7 +324,7 @@ export async function renderOverlaySvg(
         width: `${width}px`,
         height: `${height}px`,
       },
-      children: [matchupZone, cta, note],
+      children: [tournamentTitle, matchupZone, cta, note],
     },
   };
 
@@ -318,12 +345,13 @@ export async function renderOverlaySvg(
 
   // Embed text data as SVG metadata so downstream consumers (and tests) can
   // locate the original strings without parsing glyph paths. Satori renders
-  // text as <path> outlines — the human-readable content lives here.
+  // text as <path> outlines , the human-readable content lives here.
   const teamAUpper = data.teamA.toUpperCase();
   const teamBUpper = data.teamB.toUpperCase();
   const metadata =
     `<metadata>` +
     `<match-data` +
+    ` tournamentName="${escapeSvgAttribute(data.tournamentName)}"` +
     ` teamA="${escapeSvgAttribute(teamAUpper)}"` +
     ` teamB="${escapeSvgAttribute(teamBUpper)}"` +
     ` dateDisplay="${escapeSvgAttribute(data.dateDisplay)}"` +

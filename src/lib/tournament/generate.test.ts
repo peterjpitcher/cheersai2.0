@@ -58,6 +58,12 @@ describe('formatRoundLabel', () => {
 });
 
 describe('computeScheduledFor', () => {
+  it('schedules Nations posts three days ahead while preserving the five-minute fixture stagger', () => {
+    const kickOff = new Date('2026-11-06T20:10:00.000Z');
+    expect(computeScheduledFor(kickOff, 72, 0).toISOString()).toBe('2026-11-03T20:10:00.000Z');
+    expect(computeScheduledFor(kickOff, 72, 1).toISOString()).toBe('2026-11-03T20:15:00.000Z');
+  });
+
   it('should subtract lead hours from kick-off', () => {
     const kickOff = new Date('2026-06-14T19:00:00Z');
     const result = computeScheduledFor(kickOff, 24, 0);
@@ -71,7 +77,8 @@ describe('computeScheduledFor', () => {
   });
 });
 
-const tournament: Pick<Tournament, 'id' | 'houseRulesText' | 'postTemplate'> = {
+const tournament: Pick<Tournament, 'id' | 'name' | 'houseRulesText' | 'postTemplate'> = {
+  name: 'World Cup 2026',
   id: 'tournament-1',
   houseRulesText: null,
   postTemplate: '{team_a} vs {team_b}\n{date} at {time}',
@@ -186,6 +193,7 @@ describe('buildTournamentOverlayData', () => {
     });
 
     expect(overlay).toEqual(expect.objectContaining({
+      tournamentName: tournament.name,
       teamA: 'Canada',
       teamB: 'Bosnia & Herz.',
       dateDisplay: 'Thursday 11 June',
