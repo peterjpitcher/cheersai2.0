@@ -100,16 +100,15 @@ const serverEnv = {
   UPSTASH_QSTASH_NEXT_SIGNING_KEY: readOptionalEnv("UPSTASH_QSTASH_NEXT_SIGNING_KEY"),
 } as const;
 
+// Next.js only embeds public environment variables referenced by their literal name.
+// Dynamic process.env[key] reads are empty in the browser.
 const clientEnv = {
-  NEXT_PUBLIC_FACEBOOK_APP_ID: readOptionalEnv("NEXT_PUBLIC_FACEBOOK_APP_ID"),
-  NEXT_PUBLIC_SITE_URL: readOptionalEnv("NEXT_PUBLIC_SITE_URL", "http://localhost:3000"),
+  NEXT_PUBLIC_FACEBOOK_APP_ID: process.env.NEXT_PUBLIC_FACEBOOK_APP_ID ?? "",
+  NEXT_PUBLIC_SITE_URL: process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000",
   NEXT_PUBLIC_SUPABASE_ANON_KEY: resolveSupabaseAnonKey(),
   NEXT_PUBLIC_SUPABASE_URL: resolveSupabaseUrl(),
-  NEXT_PUBLIC_META_GRAPH_VERSION: readOptionalEnv(
-    "NEXT_PUBLIC_META_GRAPH_VERSION",
-    DEFAULT_META_GRAPH_VERSION,
-  ),
-  NEXT_PUBLIC_ENABLE_FOOD_BOOKING: readOptionalEnv("NEXT_PUBLIC_ENABLE_FOOD_BOOKING"),
+  NEXT_PUBLIC_META_GRAPH_VERSION: process.env.NEXT_PUBLIC_META_GRAPH_VERSION ?? DEFAULT_META_GRAPH_VERSION,
+  NEXT_PUBLIC_ENABLE_FOOD_BOOKING: process.env.NEXT_PUBLIC_ENABLE_FOOD_BOOKING ?? "",
 } as const;
 
 export const env = {
