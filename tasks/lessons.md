@@ -1,3 +1,4 @@
 # Lessons
 
 - Tournament artwork is uploaded for that tournament only. Do not offer shared library selection or put tournament originals in the shared library.
+- Owner-approved terrestrial coverage is enough to accept match bookings. Exact TV channels, screen assignments and audio details must not delay bookings. Keep existing opening hours and show coverage limits clearly.

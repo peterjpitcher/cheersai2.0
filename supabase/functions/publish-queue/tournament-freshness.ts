@@ -9,8 +9,12 @@ export async function legacyTournamentContentIssue(db: SupabaseClient, accountId
     if (tournamentError || !tournament) return 'Tournament unavailable. Review required.';
     if (tournament.sport !== 'rugby_union') return null;
     if (tournament.status !== 'active' || tournament.updated_at !== context.tournament_updated_at) return 'Tournament changed. Review and regenerate.';
-    const { data: fixture, error: fixtureError } = await db.from('tournament_fixtures').select('content_revision, screening_decision, broadcast_decision, teams_confirmed, planned_end_at, kick_off_at, match_state, booking_url').eq('id', context.tournament_fixture_id).eq('tournament_id', tournament.id).maybeSingle();
-    if (fixtureError || !fixture || fixture.content_revision !== context.screening_revision || fixture.screening_decision !== 'confirmed' || fixture.broadcast_decision !== 'confirmed' || !fixture.teams_confirmed || !['scheduled','in_progress'].includes(fixture.match_state) || !(Date.parse(fixture.planned_end_at) > Date.now())) return 'Screening changed or ended. Review and regenerate.';
+    const { data: fixture, error: fixtureError } = await db.from('tournament_fixtures').select('content_revision, showing, screening_decision, broadcast_decision, broadcast_checked_at, screening_confirmed_at, teams_confirmed, planned_end_at, kick_off_at, match_state, booking_url').eq('id', context.tournament_fixture_id).eq('tournament_id', tournament.id).maybeSingle();
+    if (fixtureError || !fixture || fixture.content_revision !== context.screening_revision || fixture.screening_decision === 'not_showing' || (fixture.showing !== true && fixture.screening_decision !== 'confirmed') || fixture.broadcast_decision !== 'confirmed' || !fixture.teams_confirmed || !['scheduled','in_progress'].includes(fixture.match_state)) return 'Screening changed or ended. Review and regenerate.';
+    if (fixture.showing === true && (!fixture.broadcast_checked_at || !fixture.screening_confirmed_at)) return 'Screening approval is unavailable. Review required.';
+    const kick = Date.parse(fixture.kick_off_at);
+    const plannedEnd = fixture.planned_end_at ? Date.parse(fixture.planned_end_at) : fixture.showing === true ? kick + 120 * 60_000 : NaN;
+    if (!Number.isFinite(kick) || !Number.isFinite(plannedEnd) || plannedEnd <= kick) return 'Screening timing is unavailable. Review required.';
     const { data: connection, error: connectionError } = await db.from('management_app_connections').select('base_url, api_key, enabled').eq('account_id', accountId).maybeSingle();
     if (connectionError || !connection?.enabled || !connection.api_key) return 'Opening and kitchen times unavailable. Review required.';
     const date = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/London', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(fixture.kick_off_at));
@@ -24,6 +28,10 @@ export async function legacyTournamentContentIssue(db: SupabaseClient, accountId
     const payload = await response.json();
     const days = payload?.data?.days;
     if (payload?.success !== true || payload?.data?.schemaVersion !== 1 || payload?.data?.timezone !== 'Europe/London' || !Array.isArray(days) || days.length !== 1 || days[0].date !== date || days[0].state !== 'open' || !context.screening_hours_fingerprint || days[0].fingerprint !== context.screening_hours_fingerprint) return 'Opening or kitchen times changed. Review and regenerate.';
+    const open = Date.parse(days[0].bar?.startAt ?? '');
+    const close = Date.parse(days[0].bar?.endAt ?? '');
+    const end = fixture.showing === true ? Math.min(plannedEnd, close) : plannedEnd;
+    if (!Number.isFinite(open) || !Number.isFinite(close) || end <= Math.max(open, kick) || end > close || end <= Date.now()) return 'Screening changed or ended. Review and regenerate.';
     return null;
   } catch { return 'Screening facts unavailable. Review required.'; }
 }

@@ -24,7 +24,7 @@ export interface ScreeningProjection {
 
 export function toScreeningFacts(fixture: TournamentFixture, sport: TournamentSport = 'football'): ScreeningFacts {
   return {
-    id: fixture.id, importKey: fixture.importKey ?? fixture.id, sport, round: fixture.round,
+    bookingApproved: fixture.showing === true, id: fixture.id, importKey: fixture.importKey ?? fixture.id, sport, round: fixture.round,
     roundNumber: fixture.roundNumber ?? null, finalPosition: fixture.finalPosition ?? null,
     teamA: fixture.teamA, teamB: fixture.teamB, teamsConfirmed: fixture.teamsConfirmed,
     kickOffAt: fixture.kickOffAt, plannedEndAt: fixture.plannedEndAt ?? null,
@@ -61,20 +61,26 @@ export function resolveScreening(fixture: ScreeningFacts, hours: ScreeningDayHou
   };
   if (fixture.matchState === 'cancelled' || fixture.matchState === 'finished') return { ...result, status: fixture.matchState };
   if (fixture.screeningDecision === 'not_showing' || fixture.broadcastDecision === 'not_linear') return { ...result, status: 'not_showing' };
-  if (fixture.broadcastDecision !== 'confirmed' || !fixture.linearChannel?.trim() || !fixture.broadcastCheckedAt) return { ...result, status: 'awaiting_channel' };
-  if (fixture.screeningDecision !== 'confirmed' || !fixture.screenLabel?.trim() || !fixture.screeningConfirmedAt) return result;
+  const ownerApproved = fixture.bookingApproved === true;
+  if (fixture.broadcastDecision !== 'confirmed' || (!ownerApproved && !fixture.linearChannel?.trim()) || !fixture.broadcastCheckedAt) return { ...result, status: 'awaiting_channel' };
+  if ((!ownerApproved && (fixture.screeningDecision !== 'confirmed' || !fixture.screenLabel?.trim())) || !fixture.screeningConfirmedAt) return result;
   const kick = Date.parse(fixture.kickOffAt);
-  const end = Date.parse(fixture.plannedEndAt ?? '');
+  // The established two-hour table-booking default is a planning window, not a match finish.
+  const plannedEnd = fixture.plannedEndAt ? Date.parse(fixture.plannedEndAt) : ownerApproved ? kick + 120 * 60_000 : NaN;
+  let end = plannedEnd;
   if (!Number.isFinite(kick) || !Number.isFinite(end) || end <= kick) return result;
   if (hours.state === 'unknown' || (hours.state === 'open' && !hours.bar) || hours.date !== DateTime.fromISO(fixture.kickOffAt).setZone('Europe/London').toISODate()) return { ...result, status: 'hours_unknown' };
   if (hours.state === 'closed' || !hours.bar) return { ...result, status: 'opening_conflict' };
   const open = Date.parse(hours.bar.startAt), close = Date.parse(hours.bar.endAt);
   if (!Number.isFinite(open) || !Number.isFinite(close)) return { ...result, status: 'hours_unknown' };
-  if (open >= end || close < end) return { ...result, status: 'opening_conflict' };
-  result.status = open > kick ? 'confirmed_partial' : 'confirmed_full';
+  if (open >= end || close <= kick || (!ownerApproved && close < end)) return { ...result, status: 'opening_conflict' };
+  if (ownerApproved) end = Math.min(end, close);
+  if (Math.max(open, kick) >= end) return { ...result, status: 'opening_conflict' };
+  result.status = open > kick || close < plannedEnd ? 'confirmed_partial' : 'confirmed_full';
   result.screeningStartAt = new Date(Math.max(open, kick)).toISOString();
   result.screeningEndAt = new Date(end).toISOString();
   if (open > kick) result.openingLabel = `Showing from ${clock(hours.bar.startAt)}; kick-off ${clock(fixture.kickOffAt)}, start missed`;
+  if (close < plannedEnd) result.openingLabel += `; showing until ${clock(hours.bar.endAt)} when the pub closes, the end of the match may be missed`;
   // An elapsed planned end suppresses future offers without inventing a final result.
   result.canBookForScreening = Number.isFinite(now.getTime()) && now.getTime() < end;
   result.canGenerateTeamPromotion = result.canBookForScreening && fixture.teamsConfirmed && areBothTeamsConfirmed(fixture.teamA, fixture.teamB);

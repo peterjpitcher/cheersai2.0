@@ -7,6 +7,8 @@ import {
   computeScheduledFor,
   formatRoundLabel,
 } from './generate';
+import { resolveScreening, toScreeningFacts } from './screening';
+import type { ScreeningDayHours } from '@/lib/management-app/screening-hours';
 import type { Tournament, TournamentFixture } from '@/types/tournament';
 
 describe('computeStaggerOffset', () => {
@@ -190,5 +192,19 @@ describe('buildTournamentOverlayData', () => {
       timeDisplay: '8:00 PM',
       roundLabel: 'Group A',
     }));
+  });
+});
+
+
+describe('owner-approved rugby copy', () => {
+  it('omits unassigned screens and commentary whilst retaining booking and food details', () => {
+    const game = { ...fixture, teamA: 'England', teamB: 'Japan', kickOffAt: '2026-11-14T16:40:00Z', showing: true, teamsConfirmed: true, screeningDecision: 'unconfirmed', broadcastDecision: 'confirmed', broadcastCheckedAt: '2026-09-05T09:00:00Z', screeningConfirmedAt: '2026-09-05T09:00:00Z' } as TournamentFixture;
+    const facts = toScreeningFacts(game, 'rugby_union');
+    const hours: ScreeningDayHours = { date: '2026-11-14', state: 'open', regularOpensAt: '2026-11-14T12:00:00Z', bar: { startAt: '2026-11-14T12:00:00Z', endAt: '2026-11-14T22:00:00Z' }, kitchen: [{ startAt: '2026-11-14T12:00:00Z', endAt: '2026-11-14T19:00:00Z' }], kitchenState: 'known', hasSpecialHours: false, fingerprint: 'verified-hours' };
+    const screened = { ...facts, hours, screening: resolveScreening(facts, hours, new Date('2026-09-05T09:00:00Z')) };
+    const payload = buildTournamentContentPayload({ tournament, fixture: game, screened, platform: 'facebook', placement: 'feed', scheduledFor: new Date('2026-11-13T16:40:00Z') });
+    expect(payload.body).toContain('Book a table for this game');
+    expect(payload.body).toContain('Kitchen service 12:00 to 19:00');
+    expect(payload.body).not.toMatch(/Screen:|commentary|null|undefined/i);
   });
 });

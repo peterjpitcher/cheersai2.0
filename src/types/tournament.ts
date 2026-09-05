@@ -76,7 +76,7 @@ export type TournamentSport = 'football' | 'rugby_union';
 export type ScreeningDecision = 'unconfirmed' | 'confirmed' | 'not_showing';
 export type BroadcastDecision = 'unconfirmed' | 'confirmed' | 'not_linear';
 export type Commentary = 'unconfirmed' | 'on' | 'off';
-export type Coverage = 'full' | 'from_opening';
+export type Coverage = 'full' | 'from_opening' | 'until_closing' | 'from_opening_until_closing';
 export interface FixtureScreeningFields {
   importKey: string | null;
   roundNumber: number | null;
@@ -95,6 +95,8 @@ export interface FixtureScreeningFields {
   contentRevision: number;
 }
 export interface ScreeningFacts extends Omit<FixtureScreeningFields, 'importKey'> {
+  /** Owner approval to take bookings, independent of detailed screen setup. */
+  bookingApproved?: boolean;
   id: string;
   importKey: string;
   sport: TournamentSport;
