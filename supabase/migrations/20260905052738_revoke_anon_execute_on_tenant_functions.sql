@@ -1,7 +1,6 @@
 -- Close anon and PUBLIC EXECUTE on three tenant-sensitive functions.
 --
--- NOT YET APPLIED. Drafted 4 September 2026, awaiting the owner's approval
--- before `supabase db push`.
+-- Applied to production on 5 September 2026, recorded as version 20260905052738.
 --
 -- increment_rate_limit is SECURITY DEFINER, takes p_account_id from its caller,
 -- and upserts public.provider_rate_limits with no membership check. Its ACL is
