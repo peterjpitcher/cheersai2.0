@@ -459,7 +459,11 @@ export function lintContent({
   if (hasUrl) {
     const ctaUrl = getContextString(context, "ctaUrl");
     if (platform === "facebook" && ctaUrl) {
-      const onlyCta = urls.every((url) => url === ctaUrl);
+      const menuUrl = getContextString(context, "screening_menu_url");
+      const verifiedTournamentMenu = context?.source === "tournament" && context?.screening_sport === "rugby_union"
+        && ["https://www.the-anchor.pub/sunday-roast", "https://www.the-anchor.pub/food-menu"].includes(menuUrl ?? "")
+        ? menuUrl : null;
+      const onlyCta = urls.every((url) => url === ctaUrl || url === verifiedTournamentMenu);
       if (!onlyCta) {
         const code = "url_disallowed";
         issues.push({ code, message: "Only the CTA URL is allowed in Facebook copy.", severity: resolveSeverity(code) });

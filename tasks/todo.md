@@ -54,3 +54,10 @@ Local verification: ci:verify passed (2,098 tests passed, three skipped), 30 foc
 - [ ] Verify production Settings after deployment.
 
 No environment values, secrets, database records or feature flag settings changed.
+
+## Nations Sunday menu links
+
+- [x] Match menu destination to the London fixture day and verified food service.
+- [x] Cover Sunday during and before games, weekdays and unavailable kitchen service.
+- [x] Full ci:verify and UTC suite passed: 2,191 tests passed, 3 skipped in each timezone.
+- [ ] Deploy and verify the exact production alias.

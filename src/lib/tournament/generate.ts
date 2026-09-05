@@ -150,19 +150,36 @@ export function buildTournamentContentPayload({
     templateVars.booking_url = String(promptContext.booking_url);
   }
   const templateBody = interpolatePostTemplate(tournament.postTemplate, templateVars);
+  const foodPromotion = screened?.screening.foodPromotion;
+  const promotedWindows = foodPromotion?.kind === 'during_screening'
+    ? foodPromotion.overlapWindows
+    : foodPromotion?.kind === 'before_match' ? foodPromotion.serviceWindows : [];
+  const hasFoodService = screened?.hours.kitchenState === 'known' && promotedWindows.some(window =>
+    Date.parse(window.endAt) > Date.parse(window.startAt));
+  const menuLink = hasFoodService
+    ? kickOffDt.weekday === 7
+      ? 'View the Sunday roast menu: https://www.the-anchor.pub/sunday-roast'
+      : 'View the menu: https://www.the-anchor.pub/food-menu'
+    : null;
+  if (menuLink) promptContext.screening_menu_url = menuLink.slice(menuLink.indexOf('https://'));
   const rawBody = screened
-    ? [`${fixture.teamA} v ${fixture.teamB}`, `${kickOffDt.toFormat('EEEE d MMMM')}, kick-off ${kickOffDt.toFormat('HH:mm')}.`, screened.screening.openingLabel, [screened.screenLabel ? `Screen: ${screened.screenLabel}.` : null, screened.commentary === 'on' ? 'Commentary on.' : screened.commentary === 'off' ? 'Without commentary.' : null].filter(Boolean).join(' '), screened.screening.foodPromotion.message, screened.screening.foodPromotion.kind === 'during_screening' || screened.screening.foodPromotion.kind === 'before_match' ? 'View the menu: https://www.the-anchor.pub/food-menu' : null, `Book a table for this game: ${promptContext.ctaUrl}`].filter(Boolean).join('\n\n')
+    ? [`${fixture.teamA} v ${fixture.teamB}`, `${kickOffDt.toFormat('EEEE d MMMM')}, kick-off ${kickOffDt.toFormat('HH:mm')}.`, screened.screening.openingLabel, [screened.screenLabel ? `Screen: ${screened.screenLabel}.` : null, screened.commentary === 'on' ? 'Commentary on.' : screened.commentary === 'off' ? 'Without commentary.' : null].filter(Boolean).join(' '), screened.screening.foodPromotion.message, menuLink, `Book a table for this game: ${promptContext.ctaUrl}`].filter(Boolean).join('\n\n')
     : placement === 'feed'
     ? buildTournamentFeedBody({ templateBody, fixture })
     : templateBody;
   if (screened) promptContext.screening_caption = rawBody;
-  const { body } = applyChannelRules({
+  const { body: processedBody } = applyChannelRules({
     body: rawBody,
     platform,
     placement,
     context: promptContext,
     scheduledFor,
   });
+
+  // Channel processing keeps the primary booking CTA; restore only our verified menu link.
+  const body = screened && menuLink && platform === 'facebook' && placement === 'feed'
+    ? processedBody.replace(menuLink.split('https://')[0].trim(), menuLink)
+    : processedBody;
 
   if (screened && placement === 'feed') {
     const requiredFacts = [screened.screening.openingLabel, screened.screening.foodPromotion.message].filter(Boolean);
