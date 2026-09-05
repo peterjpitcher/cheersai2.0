@@ -32,3 +32,10 @@ permanent.
 - [x] Complete lint, typecheck, full London and UTC tests, clean production build.
 - [x] Exercise exact connection helper and review sibling paths again.
 - [x] Hand verified local changes to root for coordinated deployment.
+
+## Tournament upload-only artwork
+- [x] Replace library selection with direct uploads and current previews.
+- [x] Validate and save tournament-owned originals without shared library entries.
+- [x] Exercise upload, replacement, errors and library exclusion; run release gates.
+
+Local verification: ci:verify passed (2,098 tests passed, three skipped), 30 focused backend/route tests and eight UI tests passed. Isolated Chromium exercised uploads, replacement, recovery and mobile layout. Production storage writes were not used for tests.

@@ -75,7 +75,7 @@ describe("listMediaAssets", () => {
     expect(mockNot).toHaveBeenCalledWith("tags", "cs", "{Tournament}");
     expect(mockNot).toHaveBeenCalledWith("tags", "cs", "{link-in-bio}");
     expect(mockNot).toHaveBeenCalledWith("storage_path", "like", "tournaments/%");
-    expect(mockNot).toHaveBeenCalledTimes(3);
+    expect(mockNot).toHaveBeenCalledTimes(4);
   });
 
   it("applies only tag filter when excludeTags does not include Tournament", async () => {
@@ -90,7 +90,7 @@ describe("listMediaAssets", () => {
       "like",
       "tournaments/%",
     );
-    expect(mockNot).toHaveBeenCalledTimes(2);
+    expect(mockNot).toHaveBeenCalledTimes(3);
   });
 
   it("excludes system assets when excludeTags is empty", async () => {
@@ -99,7 +99,7 @@ describe("listMediaAssets", () => {
     await listMediaAssets({});
 
     expect(mockNot).toHaveBeenCalledWith("tags", "cs", "{link-in-bio}");
-    expect(mockNot).toHaveBeenCalledTimes(1);
+    expect(mockNot).toHaveBeenCalledTimes(2);
   });
 
   it("excludes system assets when called with no options", async () => {
@@ -108,7 +108,7 @@ describe("listMediaAssets", () => {
     await listMediaAssets();
 
     expect(mockNot).toHaveBeenCalledWith("tags", "cs", "{link-in-bio}");
-    expect(mockNot).toHaveBeenCalledTimes(1);
+    expect(mockNot).toHaveBeenCalledTimes(2);
   });
 
   it("can include system assets for settings previews", async () => {
@@ -116,7 +116,7 @@ describe("listMediaAssets", () => {
 
     await listMediaAssets({ includeSystemAssets: true });
 
-    expect(mockNot).not.toHaveBeenCalled();
+    expect(mockNot).toHaveBeenCalledExactlyOnceWith("storage_path", "like", "tournaments/%/base/%");
   });
 
   it("applies path filter alongside multiple tag filters when Tournament is among them", async () => {
@@ -129,7 +129,7 @@ describe("listMediaAssets", () => {
     expect(mockNot).toHaveBeenCalledWith("tags", "cs", "{Archive}");
     expect(mockNot).toHaveBeenCalledWith("tags", "cs", "{link-in-bio}");
     expect(mockNot).toHaveBeenCalledWith("storage_path", "like", "tournaments/%");
-    expect(mockNot).toHaveBeenCalledTimes(5);
+    expect(mockNot).toHaveBeenCalledTimes(6);
   });
 });
 

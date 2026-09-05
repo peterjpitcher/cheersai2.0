@@ -46,7 +46,7 @@ All server actions use `'use server'` directive. Auth is verified server-side vi
 | `createTournament` | tournaments, social_connections | revalidatePath(/tournaments) |
 | `updateTournament` | tournaments | revalidatePath(/tournaments/*) |
 | `updateTournamentStatus` | tournaments | revalidatePath(/tournaments/*) |
-| `updateTournamentBaseImages` | tournaments, media_assets | revalidatePath(/tournaments/*) |
+| `uploadTournamentBaseImage` | tournaments, media_assets, private Storage | Validated tournament-only upload; revalidatePath(/tournaments/*) |
 | `createFixture` | tournament_fixtures | revalidatePath(/tournaments/*) |
 | `deleteFixture` | tournament_fixtures | revalidatePath(/tournaments/*) |
 | `updateFixture` | tournament_fixtures | revalidatePath(/tournaments/*) |
@@ -54,7 +54,7 @@ All server actions use `'use server'` directive. Auth is verified server-side vi
 | `bulkGenerateAction` | tournament_fixtures | revalidatePath(/tournaments/*) |
 | `publishNowFixture` | content_items, publish_jobs, tournament_fixtures | revalidatePath(/tournaments/*) |
 | `toggleFixtureShowing` | tournament_fixtures, content_items | revalidatePath(/tournaments/*) |
-| `getMediaAssetsForPicker` | media_assets | -- |
+| `getTournamentBaseImageUploads` | tournaments, media_assets | Attached tournament images only |
 | `deleteTournament` | tournaments | revalidatePath(/tournaments) |
 | `getFixturePreview` | content_items, content_variants | -- |
 | `importFixtures` | tournament_fixtures | revalidatePath(/tournaments/*) |

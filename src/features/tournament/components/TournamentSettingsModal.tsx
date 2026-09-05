@@ -2,18 +2,16 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { X, Loader2, ImageIcon, Check, Copy, Eye, EyeOff, RefreshCw, Code } from 'lucide-react';
+import { X, Loader2, Check, Copy, Eye, EyeOff, RefreshCw, Code } from 'lucide-react';
 import type { Tournament } from '@/types/tournament';
 import {
   updateTournament,
   updateTournamentStatus,
-  updateTournamentBaseImages,
-  getMediaAssetsForPicker,
   deleteTournament,
   regenerateFeedApiKey,
   disableFeedApiKey,
 } from '@/app/actions/tournament';
-import type { PickerAsset } from '@/app/actions/tournament';
+import { TournamentImageUploads } from './TournamentImageUploads';
 
 interface TournamentSettingsModalProps {
   tournament: Tournament;
@@ -32,16 +30,10 @@ export function TournamentSettingsModal({
   const [postLeadHours, setPostLeadHours] = useState(tournament.postLeadHours);
   const [platforms, setPlatforms] = useState(tournament.platforms);
   const [saving, setSaving] = useState(false);
+  const [imagesUploading, setImagesUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
 
-  const [squareImageId, setSquareImageId] = useState(tournament.baseImageSquareId);
-  const [storyImageId, setStoryImageId] = useState(tournament.baseImageStoryId);
-  const [assets, setAssets] = useState<PickerAsset[]>([]);
-  const [assetsLoading, setAssetsLoading] = useState(false);
-  const [assetsError, setAssetsError] = useState<string | null>(null);
-  const [assetLoadNonce, setAssetLoadNonce] = useState(0);
-  const assetsLoaded = useRef(false);
   const [deleteConfirm, setDeleteConfirm] = useState('');
   const [deleting, setDeleting] = useState(false);
   const router = useRouter();
@@ -53,12 +45,12 @@ export function TournamentSettingsModal({
   useEffect(() => {
     if (!open) return;
     function handleKeyDown(e: KeyboardEvent) {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape' && !imagesUploading) onClose();
     }
     document.addEventListener('keydown', handleKeyDown);
     dialogRef.current?.focus();
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [open, onClose]);
+  }, [open, onClose, imagesUploading]);
 
   useEffect(() => {
     if (!open) return;
@@ -67,29 +59,13 @@ export function TournamentSettingsModal({
     setPostTemplate(tournament.postTemplate);
     setPostLeadHours(tournament.postLeadHours);
     setPlatforms(tournament.platforms);
-    setSquareImageId(tournament.baseImageSquareId);
-    setStoryImageId(tournament.baseImageStoryId);
     setFeedApiKey(tournament.feedApiKey);
     setFeedKeyVisible(false);
     setFeedCopied(null);
     setError(null);
     setDeleteConfirm('');
-    assetsLoaded.current = false;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, tournament.id]);
-
-  useEffect(() => {
-    if (!open || assetsLoaded.current) return;
-    assetsLoaded.current = true;
-    setAssetsLoading(true);
-    setAssetsError(null);
-    let cancelled = false;
-    getMediaAssetsForPicker()
-      .then((result) => { if (!cancelled) setAssets(result); })
-      .catch(() => { if (!cancelled) setAssetsError('Failed to load images'); })
-      .finally(() => { if (!cancelled) setAssetsLoading(false); });
-    return () => { cancelled = true; };
-  }, [open, assetLoadNonce]);
 
   if (!open) return null;
 
@@ -107,21 +83,6 @@ export function TournamentSettingsModal({
       if (!result.success) {
         setError(result.error ?? 'Failed to save');
         return;
-      }
-
-      const imagesChanged =
-        squareImageId !== tournament.baseImageSquareId ||
-        storyImageId !== tournament.baseImageStoryId;
-      if (imagesChanged) {
-        const imgResult = await updateTournamentBaseImages(
-          tournament.id,
-          squareImageId,
-          storyImageId,
-        );
-        if (!imgResult.success) {
-          setError(imgResult.error ?? 'Failed to save base images');
-          return;
-        }
       }
 
       onClose();
@@ -218,7 +179,7 @@ export function TournamentSettingsModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => { if (!imagesUploading) onClose(); }}>
       <div
         ref={dialogRef}
         role="dialog"
@@ -240,7 +201,7 @@ export function TournamentSettingsModal({
           >
             Tournament Settings
           </h2>
-          <button onClick={onClose} aria-label="Close settings">
+          <button onClick={onClose} disabled={imagesUploading} aria-label="Close settings">
             <X className="h-5 w-5" style={{ color: 'var(--c-ink-3)' }} />
           </button>
         </div>
@@ -369,146 +330,7 @@ export function TournamentSettingsModal({
             </div>
           </div>
 
-          <div>
-            <label
-              className="block text-sm font-medium mb-2"
-              style={{ color: 'var(--c-ink)' }}
-            >
-              Base Images
-            </label>
-            <p
-              className="text-xs mb-3"
-              style={{ color: 'var(--c-ink-3)' }}
-            >
-              Select a square (1:1) and story (9:16) image used as the background for generated fixture posts.
-            </p>
-            {assetsLoading ? (
-              <div
-                className="flex items-center gap-2 text-sm py-4"
-                style={{ color: 'var(--c-ink-3)' }}
-              >
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Loading images...
-              </div>
-            ) : assetsError ? (
-              <div
-                className="flex items-center gap-2 text-sm py-4"
-                style={{ color: 'var(--c-claret)' }}
-              >
-                <ImageIcon className="h-4 w-4" />
-                {assetsError}
-                <button
-                  type="button"
-                  onClick={() => {
-                    assetsLoaded.current = false;
-                    setAssetLoadNonce((value) => value + 1);
-                  }}
-                  className="text-xs underline ml-1"
-                >
-                  Retry
-                </button>
-              </div>
-            ) : assets.length === 0 ? (
-              <div
-                className="flex items-center gap-2 text-sm py-4"
-                style={{ color: 'var(--c-ink-3)' }}
-              >
-                <ImageIcon className="h-4 w-4" />
-                No images in library. Upload images in the Library first.
-              </div>
-            ) : (
-              <div className="space-y-3">
-                <div>
-                  <span
-                    className="text-xs font-medium"
-                    style={{ color: 'var(--c-ink-3)' }}
-                  >
-                    Square (1:1)
-                  </span>
-                  <div className="flex gap-2 mt-1 overflow-x-auto pb-1">
-                    {assets
-                      .filter((a) => a.aspectClass === 'square')
-                      .map((asset) => (
-                        <button
-                          key={asset.id}
-                          type="button"
-                          onClick={() => setSquareImageId(asset.id)}
-                          className="relative flex-shrink-0 h-16 w-16 overflow-hidden transition-colors"
-                          style={{
-                            borderRadius: 'var(--r-md)',
-                            border: `2px solid ${
-                              squareImageId === asset.id
-                                ? 'var(--c-orange)'
-                                : 'transparent'
-                            }`,
-                          }}
-                          title={asset.fileName}
-                        >
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img
-                            src={asset.previewUrl}
-                            alt={asset.fileName}
-                            className="h-full w-full object-contain"
-                          />
-                          {squareImageId === asset.id && (
-                            <div
-                              className="absolute inset-0 flex items-center justify-center"
-                              style={{ backgroundColor: 'var(--c-orange-tint)', opacity: 0.7 }}
-                            >
-                              <Check className="h-5 w-5" style={{ color: 'var(--c-orange)' }} />
-                            </div>
-                          )}
-                        </button>
-                      ))}
-                  </div>
-                </div>
-                <div>
-                  <span
-                    className="text-xs font-medium"
-                    style={{ color: 'var(--c-ink-3)' }}
-                  >
-                    Story (9:16)
-                  </span>
-                  <div className="flex gap-2 mt-1 overflow-x-auto pb-1">
-                    {assets
-                      .filter((a) => a.aspectClass === 'story')
-                      .map((asset) => (
-                        <button
-                          key={asset.id}
-                          type="button"
-                          onClick={() => setStoryImageId(asset.id)}
-                          className="relative flex-shrink-0 h-20 w-12 overflow-hidden transition-colors"
-                          style={{
-                            borderRadius: 'var(--r-md)',
-                            border: `2px solid ${
-                              storyImageId === asset.id
-                                ? 'var(--c-orange)'
-                                : 'transparent'
-                            }`,
-                          }}
-                          title={asset.fileName}
-                        >
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img
-                            src={asset.previewUrl}
-                            alt={asset.fileName}
-                            className="h-full w-full object-contain"
-                          />
-                          {storyImageId === asset.id && (
-                            <div
-                              className="absolute inset-0 flex items-center justify-center"
-                              style={{ backgroundColor: 'var(--c-orange-tint)', opacity: 0.7 }}
-                            >
-                              <Check className="h-5 w-5" style={{ color: 'var(--c-orange)' }} />
-                            </div>
-                          )}
-                        </button>
-                      ))}
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
+          <TournamentImageUploads key={tournament.id} tournamentId={tournament.id} disabled={saving || deleting} onUploadingChange={setImagesUploading} />
 
           <div>
             <label
@@ -522,7 +344,7 @@ export function TournamentSettingsModal({
                 <button
                   key={s}
                   onClick={() => handleStatusChange(s)}
-                  disabled={tournament.status === s || saving}
+                  disabled={tournament.status === s || saving || imagesUploading}
                   className="px-3 py-1.5 text-sm disabled:opacity-50 transition-colors"
                   style={{
                     borderRadius: 'var(--r-md)',
@@ -686,7 +508,7 @@ export function TournamentSettingsModal({
               <button
                 type="button"
                 onClick={handleGenerateFeedKey}
-                disabled={feedLoading || saving}
+                disabled={feedLoading || saving || imagesUploading}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50 transition-colors"
                 style={{
                   backgroundColor: 'var(--c-orange)',
@@ -700,7 +522,7 @@ export function TournamentSettingsModal({
                 <button
                   type="button"
                   onClick={handleDisableFeedKey}
-                  disabled={feedLoading || saving}
+                  disabled={feedLoading || saving || imagesUploading}
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs disabled:opacity-50 transition-colors"
                   style={{
                     backgroundColor: 'var(--c-paper-2)',
@@ -746,7 +568,7 @@ export function TournamentSettingsModal({
           />
           <button
             onClick={handleDeleteTournament}
-            disabled={deleteConfirm !== tournament.name || deleting || saving}
+            disabled={deleteConfirm !== tournament.name || deleting || saving || imagesUploading}
             className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white disabled:opacity-50 transition-colors"
             style={{
               backgroundColor: 'var(--c-claret)',
@@ -774,6 +596,7 @@ export function TournamentSettingsModal({
         <div className="mt-6 flex justify-end gap-3">
           <button
             onClick={onClose}
+            disabled={imagesUploading}
             className="px-4 py-2 text-sm transition-colors"
             style={{
               color: 'var(--c-ink-3)',
@@ -784,7 +607,7 @@ export function TournamentSettingsModal({
           </button>
           <button
             onClick={handleSave}
-            disabled={saving || !name.trim() || !postTemplate.trim() || platforms.length === 0}
+            disabled={saving || imagesUploading || !name.trim() || !postTemplate.trim() || platforms.length === 0}
             className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white disabled:opacity-50 transition-colors"
             style={{
               backgroundColor: 'var(--c-orange)',

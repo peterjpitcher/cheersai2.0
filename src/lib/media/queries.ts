@@ -63,7 +63,8 @@ export async function getMediaByAccount(options?: {
         'id, account_id, file_name, storage_path, mime_type, size_bytes, width, height, tags, uploaded_at',
       )
       .eq('account_id', accountId)
-      .is('hidden_at', null);
+      .is('hidden_at', null)
+      .not('storage_path', 'like', 'tournaments/%/base/%');
 
     for (const tag of SYSTEM_MEDIA_TAGS) {
       query = query.not('tags', 'cs', `{${tag}}`);
@@ -174,6 +175,7 @@ export async function searchMedia(query: string): Promise<MediaItem[]> {
       )
       .eq('account_id', accountId)
       .is('hidden_at', null)
+      .not('storage_path', 'like', 'tournaments/%/base/%')
       .ilike('file_name', searchTerm);
 
     for (const tag of SYSTEM_MEDIA_TAGS) {
