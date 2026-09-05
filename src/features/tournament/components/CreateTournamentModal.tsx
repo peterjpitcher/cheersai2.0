@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { X, Loader2 } from 'lucide-react';
 import { createTournament } from '@/app/actions/tournament';
+import { TournamentScheduleDefault, parsePostLeadHours } from './TournamentScheduleDefault';
 
 interface CreateTournamentModalProps {
   open: boolean;
@@ -28,6 +29,7 @@ export function CreateTournamentModal({ open, onClose }: CreateTournamentModalPr
     '⚽ {team_a} vs {team_b}\n📅 {date} at {time}\n\n{house_rules}\n\n{booking_url}',
   );
   const [platforms, setPlatforms] = useState<string[]>(['instagram', 'facebook']);
+  const [postLeadHours, setPostLeadHours] = useState('24');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -55,6 +57,8 @@ export function CreateTournamentModal({ open, onClose }: CreateTournamentModalPr
   }
 
   async function handleCreate() {
+    const leadHours = parsePostLeadHours(postLeadHours);
+    if (leadHours === null) return;
     setSaving(true);
     setError(null);
     try {
@@ -64,7 +68,7 @@ export function CreateTournamentModal({ open, onClose }: CreateTournamentModalPr
         slug,
         postTemplate,
         platforms,
-        postLeadHours: 24,
+        postLeadHours: leadHours,
       });
       if (!result.success) {
         setError(result.error ?? 'Failed to create tournament');
@@ -77,7 +81,7 @@ export function CreateTournamentModal({ open, onClose }: CreateTournamentModalPr
     }
   }
 
-  const canCreate = name.trim().length > 0 && slug.length > 0 && postTemplate.trim().length > 0 && platforms.length > 0;
+  const canCreate = parsePostLeadHours(postLeadHours) !== null && name.trim().length > 0 && slug.length > 0 && postTemplate.trim().length > 0 && platforms.length > 0;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
@@ -87,7 +91,7 @@ export function CreateTournamentModal({ open, onClose }: CreateTournamentModalPr
         aria-modal="true"
         aria-label="Create Tournament"
         tabIndex={-1}
-        className="w-full max-w-lg p-6"
+        className="w-full max-w-lg p-6 max-h-[90vh] overflow-y-auto"
         style={{
           backgroundColor: 'var(--c-card)',
           borderRadius: 'var(--r-xl)',
@@ -188,6 +192,8 @@ export function CreateTournamentModal({ open, onClose }: CreateTournamentModalPr
               Placeholders: {'{team_a}'}, {'{team_b}'}, {'{date}'}, {'{time}'}, {'{group_round}'}, {'{house_rules}'}, {'{booking_url}'}
             </p>
           </div>
+
+          <TournamentScheduleDefault value={postLeadHours} onChange={setPostLeadHours} />
 
           <div>
             <label

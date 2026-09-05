@@ -61,3 +61,10 @@ No environment values, secrets, database records or feature flag settings change
 - [x] Cover Sunday during and before games, weekdays and unavailable kitchen service.
 - [x] Full ci:verify and UTC suite passed: 2,191 tests passed, 3 skipped in each timezone.
 - [ ] Deploy and verify the exact production alias.
+
+## Tournament overlay names and scheduling defaults
+- [x] Inspect live schema, existing lead-time controls and generated Nations content.
+- [x] Render the tournament name on square and story artwork and test layout.
+- [x] Add clear default scheduling controls to tournament creation and settings.
+- [x] Run focused tests, lint, types, full London and UTC suites and build. Both zones: 2,207 passed, three skipped.
+- [ ] Deploy verified increments, set Nations to 72 hours, verify existing future content through normal generation.
