@@ -41,7 +41,16 @@ permanent.
 Local verification: ci:verify passed (2,098 tests passed, three skipped), 30 focused backend/route tests and eight UI tests passed. Isolated Chromium exercised uploads, replacement, recovery and mobile layout. Production storage writes were not used for tests.
 
 ## Terrestrial rugby bookings
-- [ ] Support owner booking approval separately from detailed screen setup.
-- [ ] Accept bookings within existing hours with accurate food and partial-coverage wording.
+- [x] Support owner booking approval separately from detailed screen setup.
+- [x] Accept bookings within existing hours with accurate food and partial-coverage wording.
 - [ ] Test and deploy website and Cheers compatibility.
 - [ ] Apply the approved November fixture decisions and verify live booking entry points without creating bookings.
+
+## Public browser configuration follow-up, 5 September 2026
+
+- [x] Reproduce localhost public link on the production Settings screen.
+- [x] Replace dynamic reads for all four affected public variables with literal references so Next.js embeds the configured values.
+- [x] Lint, typecheck, production build and both timezone suites passed (2,116 tests each).
+- [ ] Verify production Settings after deployment.
+
+No environment values, secrets, database records or feature flag settings changed.
