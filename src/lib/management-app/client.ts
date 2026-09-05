@@ -232,7 +232,10 @@ export async function listManagementEvents(
     searchParams.set("status", options.status);
   }
   const data = await requestManagementData<EventsResponseData>(config, `/api/events?${searchParams.toString()}`);
-  const events = Array.isArray(data.events) ? data.events : [];
+  if (!Array.isArray(data?.events)) {
+    throw new ManagementApiError("INVALID_RESPONSE", "Event list response was invalid.");
+  }
+  const events = data.events;
   return events
     .map(shapeEventListItem)
     .filter((event): event is ManagementEventListItem => Boolean(event));
@@ -361,7 +364,10 @@ export async function listManagementMenuSpecials(
   config: ManagementApiConfig,
 ): Promise<ManagementMenuSpecialItem[]> {
   const data = await requestManagementData<SpecialsResponseData>(config, "/api/menu/specials");
-  const specials = Array.isArray(data.specials) ? data.specials : [];
+  if (!Array.isArray(data?.specials)) {
+    throw new ManagementApiError("INVALID_RESPONSE", "Menu specials response was invalid.");
+  }
+  const specials = data.specials;
   return specials
     .map(shapeMenuSpecial)
     .filter((special): special is ManagementMenuSpecialItem => Boolean(special));
@@ -406,7 +412,10 @@ export async function listManagementEventBookingConversions(
     config,
     `/api/marketing/event-booking-conversions?${searchParams.toString()}`,
   );
-  const conversions = Array.isArray(data.conversions) ? data.conversions : [];
+  if (!Array.isArray(data?.conversions)) {
+    throw new ManagementApiError("INVALID_RESPONSE", "Booking conversion response was invalid.");
+  }
+  const conversions = data.conversions;
   return conversions
     .map(shapeBookingConversion)
     .filter((conversion): conversion is ManagementBookingConversion => Boolean(conversion));

@@ -685,6 +685,8 @@ describe('runMetaCampaignOptimisation action recording', () => {
     historyRows?: Array<Record<string, unknown>>;
     recentActionRows?: Array<Record<string, unknown>>;
     actionInsertError?: { message: string } | null;
+    bookingError?: { message: string };
+    managementConnection?: { base_url: string; api_key: string; enabled: boolean };
   }) {
     const actionInserts: Array<Record<string, unknown>> = [];
     const runUpdates: Array<Record<string, unknown>> = [];
@@ -718,9 +720,9 @@ describe('runMetaCampaignOptimisation action recording', () => {
         case 'meta_campaigns':
           return thenableChain({ data: args.campaigns, error: null });
         case 'booking_conversion_events':
-          return thenableChain({ data: [], error: null });
+          return thenableChain({ data: [], error: args.bookingError ?? null });
         case 'management_app_connections':
-          return thenableChain({ data: null, error: null });
+          return thenableChain({ data: args.managementConnection ?? null, error: null });
         case 'ad_metrics_history':
           return thenableChain({ data: args.historyRows ?? [], error: null });
         case 'meta_optimisation_actions':
@@ -770,6 +772,111 @@ describe('runMetaCampaignOptimisation action recording', () => {
       }),
     ];
   }
+
+  it('records a failed run without recommendations when first-party bookings cannot be loaded', async () => {
+    const harness = optimisationRunHarness({ campaigns: fatiguedCampaignFixture(), bookingError: { message: 'database unavailable' } });
+    await expect(runMetaCampaignOptimisation({ accountId: 'account-1', supabase: harness.supabase })).rejects.toThrow('Booking conversion data could not be loaded');
+    expect(harness.actionInserts).toHaveLength(0);
+    expect(harness.runUpdates).toEqual([expect.objectContaining({ status: 'failed' })]);
+  });
+
+  it.each([500, 200])('records a failed run for unavailable or malformed management bookings (HTTP %s)', async (status) => {
+    const harness = optimisationRunHarness({
+      campaigns: [campaign({ source_id: 'event-1', source_type: 'event' })],
+      managementConnection: { base_url: 'https://management.example.com', api_key: 'private-key', enabled: true },
+    });
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json({ error: 'upstream-sensitive-body' }, { status })));
+    try {
+      await expect(runMetaCampaignOptimisation({ accountId: 'account-1', supabase: harness.supabase })).rejects.toThrow('Management booking conversions are unavailable');
+      expect(harness.actionInserts).toHaveLength(0);
+      expect(harness.runUpdates).toEqual([expect.objectContaining({ status: 'failed' })]);
+      expect(JSON.stringify(harness.runUpdates)).not.toContain('private-key');
+      expect(JSON.stringify(harness.runUpdates)).not.toContain('upstream-sensitive-body');
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  const validManagementConversion = {
+    booking_id: '4b73c99c-15be-45c4-951a-6a3f63cb25ab',
+    event_id: 'd6253069-4228-4026-8ba0-9e4e8a9a50fb',
+    occurred_at: '2026-09-05T10:00:00+00:00',
+    booking_type: 'event',
+    tickets: 2,
+  };
+
+  it.each([
+    { success: false, data: { conversions: [validManagementConversion] } },
+    { success: true, data: { conversions: [{}] } },
+    { success: true, data: { conversions: [{ ...validManagementConversion, booking_id: 'invalid-id' }] } },
+    { success: true, data: { conversions: [{ ...validManagementConversion, occurred_at: 'not-a-date' }] } },
+    { success: true, data: { conversions: [{ ...validManagementConversion, tickets: 0 }] } },
+  ])('rejects invalid conversion rows and unsuccessful envelopes before recommendations', async (payload) => {
+    const harness = optimisationRunHarness({
+      campaigns: [campaign({ source_id: validManagementConversion.event_id, source_type: 'event' })],
+      managementConnection: { base_url: 'https://management.example.com', api_key: 'test-only', enabled: true },
+    });
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json(payload)));
+    try {
+      await expect(runMetaCampaignOptimisation({ accountId: 'account-1', supabase: harness.supabase })).rejects.toThrow('Management booking conversions are unavailable');
+      expect(harness.actionInserts).toHaveLength(0);
+      expect(harness.runUpdates).toEqual([expect.objectContaining({ status: 'failed' })]);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('accepts valid conversion rows from the management contract', async () => {
+    const harness = optimisationRunHarness({
+      campaigns: [campaign({ source_id: validManagementConversion.event_id, source_type: 'event' })],
+      managementConnection: { base_url: 'https://management.example.com', api_key: 'test-only', enabled: true },
+    });
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json({ success: true, data: { conversions: [validManagementConversion] } })));
+    try {
+      await runMetaCampaignOptimisation({ accountId: 'account-1', supabase: harness.supabase });
+      expect(harness.runUpdates).toEqual([expect.objectContaining({ status: 'completed' })]);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('does not query management bookings for a custom promotion source ID', async () => {
+    const harness = optimisationRunHarness({
+      campaigns: [campaign({ source_type: 'custom_promotion', campaign_kind: 'evergreen', source_id: 'promotion-1' })],
+      managementConnection: { base_url: 'https://management.example.com', api_key: 'test-only', enabled: true },
+    });
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      await runMetaCampaignOptimisation({ accountId: 'account-1', supabase: harness.supabase });
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(harness.runUpdates).toEqual([expect.objectContaining({ status: 'completed' })]);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('splits 101 distinct management events into GET batches of at most 100', async () => {
+    const ids = Array.from({ length: 101 }, (_, index) => `00000000-0000-4000-8000-${String(index).padStart(12, '0')}`);
+    const harness = optimisationRunHarness({
+      campaigns: ids.map((id) => campaign({ id, source_type: 'management_event', source_id: id })),
+      managementConnection: { base_url: 'https://management.example.com', api_key: 'test-only', enabled: true },
+    });
+    const requestedIds: string[][] = [];
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      const batch = new URL(url).searchParams.get('event_ids')!.split(',');
+      requestedIds.push(batch);
+      return Response.json({ success: true, data: { conversions: [] } });
+    }));
+    try {
+      await runMetaCampaignOptimisation({ accountId: 'account-1', supabase: harness.supabase });
+      expect(requestedIds.map((batch) => batch.length)).toEqual([100, 1]);
+      expect(requestedIds.flat()).toEqual(ids);
+      expect(harness.runUpdates).toEqual([expect.objectContaining({ status: 'completed' })]);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
 
   it('records a planned creative_fatigue action on the first run', async () => {
     const harness = optimisationRunHarness({

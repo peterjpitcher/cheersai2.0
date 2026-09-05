@@ -10,6 +10,7 @@ import {
   linkInBioTileFormSchema,
   linkInBioTileReorderSchema,
 } from "@/features/settings/schema";
+import { checkManagementConnection } from "@/lib/management-app/connection-check";
 import { requireAuthContext } from "@/lib/auth/server";
 import { DEFAULT_TIMEZONE } from "@/lib/constants";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
@@ -21,7 +22,7 @@ import {
   updateLinkInBioTile,
   upsertLinkInBioProfile,
 } from "@/lib/link-in-bio/profile";
-import { listManagementEvents, ManagementApiError } from "@/lib/management-app/client";
+import { ManagementApiError } from "@/lib/management-app/client";
 import {
   getManagementConnectionConfig,
   saveManagementConnection,
@@ -194,16 +195,16 @@ export async function updateManagementConnectionSettings(formData: unknown) {
 export async function testManagementConnectionSettings() {
   try {
     const config = await getManagementConnectionConfig();
-    await listManagementEvents(config, { limit: 1 });
+    const message = await checkManagementConnection(config);
     const summary = await updateManagementConnectionTestResult({
       status: "ok",
-      message: "Connection test succeeded.",
+      message,
     });
 
     revalidatePath("/settings");
     return {
       ok: true as const,
-      message: "Connection test succeeded.",
+      message,
       summary,
     };
   } catch (error) {
@@ -232,7 +233,7 @@ function describeManagementConnectionError(error: unknown): string {
       return "Management API rejected the credentials. Check the API key.";
     }
     if (error.code === "FORBIDDEN") {
-      return "Management API key is missing required permissions (read:events/read:menu).";
+      return "Management API key is missing required permissions (read:events/read:menu/read:events:artwork).";
     }
     if (error.code === "RATE_LIMITED") {
       return "Management API rate limit exceeded. Try again shortly.";
