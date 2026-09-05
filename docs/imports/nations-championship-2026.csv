@@ -1,0 +1,25 @@
+match_number,round,team_a,team_b,kick_off_at,import_key,teams_confirmed,round_number,final_position,planned_end_at,source_url,source_checked_at
+19,league_round,Ireland,Argentina,2026-11-06T20:10:00.000Z,nations-2026-291598,true,4,,,https://nationschampionshiprugby.com/en/match-centre/fixtures,2026-09-05T07:20:05.577328Z
+20,league_round,Italy,South Africa,2026-11-07T11:40:00.000Z,nations-2026-291599,true,4,,,https://nationschampionshiprugby.com/en/match-centre/fixtures,2026-09-05T07:20:05.577328Z
+21,league_round,Scotland,New Zealand,2026-11-07T14:10:00.000Z,nations-2026-291595,true,4,,,https://nationschampionshiprugby.com/en/match-centre/fixtures,2026-09-05T07:20:05.577328Z
+22,league_round,Wales,Japan,2026-11-07T16:40:00.000Z,nations-2026-291596,true,4,,,https://nationschampionshiprugby.com/en/match-centre/fixtures,2026-09-05T07:20:05.577328Z
+23,league_round,France,Fiji,2026-11-07T20:10:00.000Z,nations-2026-291597,true,4,,,https://nationschampionshiprugby.com/en/match-centre/fixtures,2026-09-05T07:20:05.577328Z
+24,league_round,England,Australia,2026-11-08T15:10:00.000Z,nations-2026-291600,true,4,,,https://nationschampionshiprugby.com/en/match-centre/fixtures,2026-09-05T07:20:05.577328Z
+25,league_round,France,South Africa,2026-11-13T20:10:00.000Z,nations-2026-291604,true,5,,,https://nationschampionshiprugby.com/en/match-centre/fixtures,2026-09-05T07:20:05.577328Z
+26,league_round,Italy,Argentina,2026-11-14T11:40:00.000Z,nations-2026-291606,true,5,,,https://nationschampionshiprugby.com/en/match-centre/fixtures,2026-09-05T07:20:05.577328Z
+27,league_round,Wales,New Zealand,2026-11-14T14:10:00.000Z,nations-2026-291603,true,5,,,https://nationschampionshiprugby.com/en/match-centre/fixtures,2026-09-05T07:20:05.577328Z
+28,league_round,England,Japan,2026-11-14T16:40:00.000Z,nations-2026-291601,true,5,,,https://nationschampionshiprugby.com/en/match-centre/fixtures,2026-09-05T07:20:05.577328Z
+29,league_round,Ireland,Fiji,2026-11-14T20:10:00.000Z,nations-2026-291605,true,5,,,https://nationschampionshiprugby.com/en/match-centre/fixtures,2026-09-05T07:20:05.577328Z
+30,league_round,Scotland,Australia,2026-11-15T15:10:00.000Z,nations-2026-291602,true,5,,,https://nationschampionshiprugby.com/en/match-centre/fixtures,2026-09-05T07:20:05.577328Z
+31,league_round,England,New Zealand,2026-11-21T14:10:00.000Z,nations-2026-291607,true,6,,,https://nationschampionshiprugby.com/en/match-centre/fixtures,2026-09-05T07:20:05.577328Z
+32,league_round,Scotland,Japan,2026-11-21T14:10:00.000Z,nations-2026-291608,true,6,,,https://nationschampionshiprugby.com/en/match-centre/fixtures,2026-09-05T07:20:05.577328Z
+33,league_round,Ireland,South Africa,2026-11-21T16:40:00.000Z,nations-2026-291611,true,6,,,https://nationschampionshiprugby.com/en/match-centre/fixtures,2026-09-05T07:20:05.577328Z
+34,league_round,Italy,Fiji,2026-11-21T16:40:00.000Z,nations-2026-291612,true,6,,,https://nationschampionshiprugby.com/en/match-centre/fixtures,2026-09-05T07:20:05.577328Z
+35,league_round,Wales,Australia,2026-11-21T20:10:00.000Z,nations-2026-291609,true,6,,,https://nationschampionshiprugby.com/en/match-centre/fixtures,2026-09-05T07:20:05.577328Z
+36,league_round,France,Argentina,2026-11-21T20:10:00.000Z,nations-2026-291610,true,6,,,https://nationschampionshiprugby.com/en/match-centre/fixtures,2026-09-05T07:20:05.577328Z
+37,placement_final,Northern group position 6,Southern group position 6,2026-11-27T16:40:00.000Z,nations-2026-291613,false,,6,,https://nationschampionshiprugby.com/en/match-centre/fixtures,2026-09-05T07:20:05.577328Z
+38,placement_final,Northern group position 3,Southern group position 3,2026-11-27T20:10:00.000Z,nations-2026-291616,false,,3,,https://nationschampionshiprugby.com/en/match-centre/fixtures,2026-09-05T07:20:05.577328Z
+39,placement_final,Northern group position 5,Southern group position 5,2026-11-28T13:10:00.000Z,nations-2026-291614,false,,5,,https://nationschampionshiprugby.com/en/match-centre/fixtures,2026-09-05T07:20:05.577328Z
+40,placement_final,Northern group position 2,Southern group position 2,2026-11-28T16:40:00.000Z,nations-2026-291617,false,,2,,https://nationschampionshiprugby.com/en/match-centre/fixtures,2026-09-05T07:20:05.577328Z
+41,placement_final,Northern group position 4,Southern group position 4,2026-11-29T13:10:00.000Z,nations-2026-291615,false,,4,,https://nationschampionshiprugby.com/en/match-centre/fixtures,2026-09-05T07:20:05.577328Z
+42,placement_final,Northern group position 1,Southern group position 1,2026-11-29T16:40:00.000Z,nations-2026-291618,false,,1,,https://nationschampionshiprugby.com/en/match-centre/fixtures,2026-09-05T07:20:05.577328Z

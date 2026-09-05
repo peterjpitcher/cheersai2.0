@@ -1,3 +1,5 @@
+import { NATIONS_TEMPLATE_VERSION, nationsContentLinks } from '../../../supabase/functions/_shared/nations-content-contract';
+import { projectTournamentFixtures, type ScreenedFixture } from './screening-service';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { DateTime } from 'luxon';
 import pLimit from 'p-limit';
@@ -60,6 +62,8 @@ const ROUND_LABELS: Record<string, string> = {
   semi_final: 'Semi-Final',
   third_place: 'Third Place Play-Off',
   final: 'Final',
+  league_round: 'League round',
+  placement_final: 'Placement final',
 };
 
 export function formatRoundLabel(round: string, groupName: string | null): string {
@@ -100,8 +104,10 @@ export function buildTournamentContentPayload({
   platform,
   placement,
   scheduledFor,
+  screened,
 }: {
-  tournament: Pick<Tournament, 'id' | 'houseRulesText' | 'postTemplate'>;
+  tournament: Pick<Tournament, 'id' | 'houseRulesText' | 'postTemplate'> & Partial<Pick<Tournament, 'updatedAt'>>;
+  screened?: ScreenedFixture;
   fixture: Pick<TournamentFixture, 'id' | 'teamA' | 'teamB' | 'kickOffAt' | 'round' | 'groupName' | 'bookingUrl'>;
   platform: TournamentPlatform;
   placement: ContentPlacement;
@@ -134,10 +140,22 @@ export function buildTournamentContentPayload({
     ctaLabel: 'Book a table',
   };
 
+  if (screened) {
+    promptContext.screening_revision = screened.contentRevision;
+    promptContext.screening_hours_fingerprint = screened.hours.fingerprint;
+    promptContext.tournament_updated_at = tournament.updatedAt;
+    promptContext.screening_sport = 'rugby_union';
+    promptContext.screening_template_version = NATIONS_TEMPLATE_VERSION;
+    Object.assign(promptContext, nationsContentLinks(fixture.id, kickOffDt.toISODate()!, fixture.bookingUrl));
+    templateVars.booking_url = String(promptContext.booking_url);
+  }
   const templateBody = interpolatePostTemplate(tournament.postTemplate, templateVars);
-  const rawBody = placement === 'feed'
+  const rawBody = screened
+    ? [`${fixture.teamA} v ${fixture.teamB}`, `${kickOffDt.toFormat('EEEE d MMMM')}, kick-off ${kickOffDt.toFormat('HH:mm')}.`, screened.screening.openingLabel, `Screen: ${screened.screenLabel}. ${screened.commentary === 'on' ? 'Commentary on.' : screened.commentary === 'off' ? 'Without commentary.' : 'Commentary to be confirmed.'}`, screened.screening.foodPromotion.message, screened.screening.foodPromotion.kind === 'during_screening' || screened.screening.foodPromotion.kind === 'before_match' ? 'View the menu: https://www.the-anchor.pub/food-menu' : null, `Book a table for this game: ${promptContext.ctaUrl}`].filter(Boolean).join('\n\n')
+    : placement === 'feed'
     ? buildTournamentFeedBody({ templateBody, fixture })
     : templateBody;
+  if (screened) promptContext.screening_caption = rawBody;
   const { body } = applyChannelRules({
     body: rawBody,
     platform,
@@ -146,6 +164,10 @@ export function buildTournamentContentPayload({
     scheduledFor,
   });
 
+  if (screened && placement === 'feed') {
+    const requiredFacts = [screened.screening.openingLabel, screened.screening.foodPromotion.message].filter(Boolean);
+    if (requiredFacts.some(fact => !body.includes(fact!))) throw new Error('Screening opening or kitchen details were shortened. Review the generated copy before publishing.');
+  }
   return { body, promptContext };
 }
 
@@ -262,7 +284,7 @@ interface GenerateFixtureContentOptions {
   skipPublished?: boolean;
   /** When true, skip advisory lock (safe in single-threaded bulk operations). */
   skipLock?: boolean;
-  /** Pre-downloaded base images keyed by media asset ID — avoids redundant downloads. */
+  /** Pre-downloaded base images keyed by media asset ID , avoids redundant downloads. */
   baseImageCache?: Map<string, Buffer>;
 }
 
@@ -273,6 +295,11 @@ export async function generateFixtureContent(
   options: GenerateFixtureContentOptions = {},
 ): Promise<void> {
   const supabase = createServiceSupabaseClient();
+  let screened: ScreenedFixture | undefined;
+  if (tournament.sport === 'rugby_union') {
+    [screened] = await projectTournamentFixtures(supabase, tournament, [fixture]);
+    if (tournament.status !== 'active' || !screened.screening.canGenerateTeamPromotion) throw new Error('Confirm teams, broadcast and screening within existing hours before generating.');
+  }
   const lockKey = hashUuidToInt(fixture.id);
   const fixtureDebug = {
     tournamentId: redactId(tournament.id),
@@ -291,7 +318,7 @@ export async function generateFixtureContent(
   });
 
   if (!options.skipLock) {
-    // Acquire advisory lock — prevents concurrent generation for same fixture
+    // Acquire advisory lock , prevents concurrent generation for same fixture
     const { error: lockError } = await supabase.rpc('advisory_lock_fixture', {
       lock_key: lockKey,
     });
@@ -302,7 +329,7 @@ export async function generateFixtureContent(
     tournamentDebug('generate.fixture.lock-acquired', fixtureDebug);
   }
 
-  // Re-check — another worker may have already generated
+  // Re-check , another worker may have already generated
   const { data: freshFixture, error: refetchError } = await supabase
     .from('tournament_fixtures')
     .select('content_generated')
@@ -338,7 +365,7 @@ export async function generateFixtureContent(
       })),
     });
 
-    if (options.skipPublished) {
+    if (options.skipPublished || tournament.sport === 'rugby_union') {
       const published = await getPublishedPlacements(supabase, fixture.id, tournament.accountId);
       specs = allSpecs.filter(
         (s) => !published.has(`${s.platform}:${s.placement}`),
@@ -351,7 +378,7 @@ export async function generateFixtureContent(
     }
 
     if (!specs.length) {
-      // Nothing to generate — mark as done
+      // Nothing to generate , mark as done
       await supabase
         .from('tournament_fixtures')
         .update({ content_generated: true })
@@ -363,6 +390,11 @@ export async function generateFixtureContent(
     // Prepare overlay data
     const kickOff = new Date(fixture.kickOffAt);
     const overlayData = buildTournamentOverlayData({ tournament, fixture });
+    if (screened) {
+      overlayData.houseRulesText = [screened.screening.openingLabel, screened.screening.foodPromotion.message].filter(Boolean).join(' ');
+      overlayData.bookingLabel = 'Book a table for this game';
+      overlayData.footerNote = [screened.screening.openingLabel, screened.screening.foodPromotion.message].filter(Boolean).join('. ');
+    }
 
     // Download base images (use cache if provided, otherwise fetch and de-duplicate)
     const uniqueBaseIds = [...new Set(specs.map((s) => s.baseImageId))];
@@ -403,6 +435,7 @@ export async function generateFixtureContent(
       const scheduledFor = computeScheduledFor(kickOff, tournament.postLeadHours, staggerIndex);
       const isPastDue = scheduledFor.getTime() < Date.now();
       const { body, promptContext } = buildTournamentContentPayload({
+        screened,
         tournament,
         fixture,
         platform: spec.platform,

@@ -1,3 +1,5 @@
+import { getTournamentById, getFixturesByTournament } from '@/lib/tournament/queries';
+import { projectTournamentFixtures } from '@/lib/tournament/screening-service';
 import { NextResponse } from 'next/server';
 
 import { createServiceSupabaseClient } from '@/lib/supabase/service';
@@ -15,6 +17,8 @@ const VALID_ROUNDS = new Set([
   'semi_final',
   'third_place',
   'final',
+  'league_round',
+  'placement_final',
 ]);
 
 const CORS_HEADERS = {
@@ -47,8 +51,9 @@ export async function GET(
     return errorResponse(429, 'Rate limit exceeded');
   }
 
+  const schema2 = new URL(request.url).searchParams.get('schema') === '2';
   // 2. Validate UUID format
-  if (!UUID_RE.test(tournamentId)) {
+  if (!UUID_RE.test(tournamentId) && !(schema2 && /^[a-z0-9-]{1,100}$/.test(tournamentId))) {
     return errorResponse(400, 'Invalid tournament ID format');
   }
 
@@ -111,6 +116,20 @@ export async function GET(
   }
 
   const supabase = createServiceSupabaseClient();
+  if (schema2) {
+    try {
+      // The key belongs to this exact tournament. A slug never broadens key access.
+      const { data: keyed, error } = await supabase.from('tournaments').select('id, account_id, slug').eq('feed_api_key', apiKey).maybeSingle();
+      if (error) return errorResponse(500, 'Internal server error');
+      if (!keyed || (keyed.id !== tournamentId && keyed.slug !== tournamentId)) return errorResponse(401, 'Missing or invalid API key');
+      const record = await getTournamentById(supabase, keyed.id, keyed.account_id);
+      if (!record || record.status !== 'active') return errorResponse(404, 'Tournament not found');
+      const fixtures = await getFixturesByTournament(supabase, record.id);
+      const projected = await projectTournamentFixtures(supabase, record, fixtures);
+      return NextResponse.json({ schemaVersion: 2, tournament: { id: record.id, name: record.name, slug: record.slug, status: record.status }, fixtures: projected, meta: { fetchedAt: new Date().toISOString(), contentUpdatedAt: [record.updatedAt, ...fixtures.map(f => f.updatedAt)].sort().at(-1) ?? null } }, { headers: { ...CORS_HEADERS, 'Cache-Control': 'no-store', Vary: 'x-api-key' } });
+    } catch { return errorResponse(500, 'Internal server error'); }
+  }
+
 
   let tournament: { id: string; name: string; slug: string; status: string; feed_api_key: string | null } | null;
   try {

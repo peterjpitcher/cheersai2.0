@@ -492,12 +492,15 @@ export function FixtureRow({
         </div>
 
         <FixtureModal
+          sport={tournament.sport}
+          tournamentId={tournament.id}
           open={editOpen}
           onClose={() => setEditOpen(false)}
           onSave={handleEditSave}
           onSaveAndGenerate={canGenerate ? handleEditSaveAndGenerate : undefined}
           title={`Edit Fixture #${fixture.matchNumber}`}
           initial={{
+            ...fixture,
             matchNumber: fixture.matchNumber,
             round: fixture.round,
             groupName: fixture.groupName ?? '',

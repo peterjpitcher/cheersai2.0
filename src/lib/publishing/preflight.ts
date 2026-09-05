@@ -1,3 +1,4 @@
+import { getTournamentContentIssue } from '@/lib/tournament/content-freshness';
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { evaluateConnectionMetadata } from "@/lib/connections/metadata";
@@ -88,6 +89,8 @@ export async function getPublishReadinessIssues({
   const mediaIds = variantData.mediaIds;
   const body = variantData.body;
   const { promptContext, scheduledFor } = await loadContentContext({ supabase, contentId });
+  const screeningIssue = await getTournamentContentIssue(supabase, accountId, promptContext);
+  if (screeningIssue) issues.push({ code: 'screening_review_required', message: screeningIssue });
   const lint = lintContent({
     body,
     platform,

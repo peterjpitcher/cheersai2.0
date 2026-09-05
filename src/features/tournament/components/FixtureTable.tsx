@@ -210,6 +210,8 @@ export function FixtureTable({ tournament, fixtures, canGenerate, contentStatuse
       </div>
 
       <FixtureModal
+          sport={tournament.sport}
+          tournamentId={tournament.id}
         open={addOpen}
         onClose={() => setAddOpen(false)}
         onSave={handleAddFixture}
@@ -218,6 +220,8 @@ export function FixtureTable({ tournament, fixtures, canGenerate, contentStatuse
       />
 
       <ImportFixturesModal
+        sport={tournament.sport}
+        existingFixtures={fixtures}
         open={importOpen}
         onClose={() => setImportOpen(false)}
         tournamentId={tournament.id}

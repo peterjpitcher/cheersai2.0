@@ -2,9 +2,18 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { X, Loader2, Upload, AlertCircle } from 'lucide-react';
+import type { TournamentFixture, TournamentSport } from '@/types/tournament';
+import { fixtureCreateSchema } from '@/lib/tournament/validation';
 import { importFixtures } from '@/app/actions/tournament';
 
 interface ParsedRow {
+  importKey?: string | null;
+  teamsConfirmed?: boolean;
+  roundNumber?: number | null;
+  finalPosition?: number | null;
+  plannedEndAt?: string | null;
+  sourceUrl?: string | null;
+  sourceCheckedAt?: string | null;
   matchNumber: number;
   round: string;
   groupName: string | null;
@@ -20,14 +29,16 @@ interface ImportFixturesModalProps {
   open: boolean;
   onClose: () => void;
   tournamentId: string;
+  sport?: TournamentSport;
+  existingFixtures?: TournamentFixture[];
 }
 
 const VALID_ROUNDS = [
   'group_stage', 'round_of_32', 'round_of_16',
-  'quarter_final', 'semi_final', 'third_place', 'final',
+  'quarter_final', 'semi_final', 'third_place', 'final', 'league_round', 'placement_final',
 ];
 
-function parseCSV(text: string): { rows: ParsedRow[]; headerError?: string } {
+export function parseCSV(text: string): { rows: ParsedRow[]; headerError?: string } {
   const lines = text.trim().split('\n');
   if (lines.length < 2) return { rows: [], headerError: 'CSV must have a header row and at least one data row' };
 
@@ -62,13 +73,18 @@ function parseCSV(text: string): { rows: ParsedRow[]; headerError?: string } {
     else if (!teamB) error = 'Team B is required';
     else if (!kickOffAt || isNaN(Date.parse(kickOffAt))) error = 'Invalid kick-off date';
 
-    rows.push({ matchNumber, round, groupName, teamA, teamB, kickOffAt, venueCity, showing, error });
+    const optional = (name: string) => idx(name) >= 0 ? cols[idx(name)] || null : null;
+    const extra = { importKey: optional('import_key'), teamsConfirmed: optional('teams_confirmed') === 'true', roundNumber: optional('round_number') ? Number(optional('round_number')) : null, finalPosition: optional('final_position') ? Number(optional('final_position')) : null, plannedEndAt: optional('planned_end_at'), sourceUrl: optional('source_url'), sourceCheckedAt: optional('source_checked_at') };
+    const row = { ...extra, matchNumber, round, groupName, teamA, teamB, kickOffAt, venueCity, showing, error };
+    const validated = fixtureCreateSchema.safeParse(row);
+    if (!validated.success) row.error = validated.error.issues.map(issue => `${issue.path.join('.')}: ${issue.message}`).join('; ');
+    rows.push(row);
   }
 
   return { rows };
 }
 
-export function ImportFixturesModal({ open, onClose, tournamentId }: ImportFixturesModalProps) {
+export function ImportFixturesModal({ open, onClose, tournamentId, sport, existingFixtures = [] }: ImportFixturesModalProps) {
   const [rows, setRows] = useState<ParsedRow[]>([]);
   const [headerError, setHeaderError] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
@@ -105,7 +121,7 @@ export function ImportFixturesModal({ open, onClose, tournamentId }: ImportFixtu
       const text = ev.target?.result as string;
       const parsed = parseCSV(text);
       setHeaderError(parsed.headerError ?? null);
-      setRows(parsed.rows);
+      setRows(parsed.rows.map(row => sport === 'rugby_union' && !row.importKey ? { ...row, error: 'Rugby requires import_key' } : row));
       setResult(null);
       setError(null);
     };
@@ -170,7 +186,7 @@ export function ImportFixturesModal({ open, onClose, tournamentId }: ImportFixtu
               className="text-sm mb-2"
               style={{ color: 'var(--c-ink-3)' }}
             >
-              Upload a CSV with columns: match_number, round, team_a, team_b, kick_off_at. Optional: group_name, venue_city, showing.
+              Upload a CSV with columns: match_number, round, team_a, team_b, kick_off_at. Optional: group_name, venue_city, showing, teams_confirmed, round_number, final_position, planned_end_at, source_url, source_checked_at. Rugby requires import_key. Rugby imports reset screening to unconfirmed and do not generate or send posts.
             </p>
             <input
               ref={fileRef}
@@ -184,6 +200,7 @@ export function ImportFixturesModal({ open, onClose, tournamentId }: ImportFixtu
             />
           </div>
 
+          {sport === 'rugby_union' && rows.length > 0 && <p className="text-sm">Preview: {rows.filter(row => !existingFixtures.some(fixture => fixture.importKey === row.importKey)).length} new, {rows.filter(row => existingFixtures.some(fixture => fixture.importKey === row.importKey)).length} updates. Existing fixture IDs are preserved.</p>}
           {headerError && (
             <div
               className="p-3 text-sm flex items-center gap-2"

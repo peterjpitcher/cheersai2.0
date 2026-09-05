@@ -26,6 +26,10 @@ import { redactId, tournamentDebug, tournamentDebugError } from '@/lib/tournamen
 import { areBothTeamsConfirmed } from '@/lib/tournament/placeholder';
 import { dispatchToQStash } from '@/lib/publishing/dispatch';
 import { enqueueAndDispatch, enqueuePublishJob } from '@/lib/publishing/queue';
+import { prepareRugbyFixture, saveRugbyFixture } from '@/lib/tournament/screening-mutation';
+import { checkTournamentContentById } from '@/lib/tournament/content-freshness';
+import { projectTournamentFixtures } from '@/lib/tournament/screening-service';
+import type { TournamentFixture } from '@/types/tournament';
 import type { Tournament } from '@/types/tournament';
 import type { Platform } from '@/types/content';
 
@@ -99,6 +103,7 @@ export async function createTournament(
       .from('tournaments')
       .insert({
         account_id: accountId,
+        sport: parsed.sport ?? 'football',
         name: parsed.name,
         slug: parsed.slug,
         post_template: parsed.postTemplate,
@@ -112,7 +117,7 @@ export async function createTournament(
       .single();
 
     if (error) {
-      // Unique constraint violation — duplicate slug for this account
+      // Unique constraint violation , duplicate slug for this account
       if (error.code === '23505') {
         return { success: false, error: 'A tournament with this slug already exists.' };
       }
@@ -144,6 +149,7 @@ export async function updateTournament(
 
     const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
 
+    if (parsed.sport !== undefined && parsed.sport !== (tournament.sport ?? 'football')) return { success: false, error: 'Create a separate tournament to change sport.' };
     if (parsed.name !== undefined) updates.name = parsed.name;
     if (parsed.slug !== undefined) updates.slug = parsed.slug;
     if (parsed.postTemplate !== undefined) updates.post_template = parsed.postTemplate;
@@ -284,11 +290,13 @@ export async function createFixture(
     if (!tournament) return { success: false, error: 'Tournament not found' };
 
     const bookingUrl = parsed.bookingUrl === '' ? null : (parsed.bookingUrl ?? null);
-    const teamsConfirmed = areBothTeamsConfirmed(parsed.teamA, parsed.teamB);
+    const teamsConfirmed = tournament.sport === 'rugby_union' ? parsed.teamsConfirmed === true && areBothTeamsConfirmed(parsed.teamA, parsed.teamB) : areBothTeamsConfirmed(parsed.teamA, parsed.teamB);
+    const rugbyFields = tournament.sport === 'rugby_union' ? await prepareRugbyFixture(supabase, tournament, { ...parsed, id: '', tournamentId, teamsConfirmed, bookingUrl, contentGenerated: false, groupName: parsed.groupName ?? null, venueCity: parsed.venueCity ?? null, showingNote: parsed.showingNote ?? null, createdAt: '', updatedAt: '' } as TournamentFixture) : {};
 
     const { data, error } = await supabase
       .from('tournament_fixtures')
       .insert({
+        ...rugbyFields,
         tournament_id: tournamentId,
         match_number: parsed.matchNumber,
         round: parsed.round,
@@ -298,7 +306,7 @@ export async function createFixture(
         teams_confirmed: teamsConfirmed,
         kick_off_at: parsed.kickOffAt,
         venue_city: parsed.venueCity ?? null,
-        showing: parsed.showing,
+        showing: tournament.sport === 'rugby_union' ? rugbyFields.showing : parsed.showing,
         showing_note: parsed.showingNote ?? null,
         booking_url: bookingUrl,
       })
@@ -397,6 +405,12 @@ export async function updateFixture(
     if (parsed.groupName !== undefined) updates.group_name = parsed.groupName;
     if (parsed.venueCity !== undefined) updates.venue_city = parsed.venueCity;
 
+    if (tournament.sport === 'rugby_union') {
+      await saveRugbyFixture(supabase, tournament, fixture, { ...fixture, ...parsed, bookingUrl, teamsConfirmed } as TournamentFixture, updates, parsed.contentRevision);
+      revalidatePath(`/tournaments/${tournamentId}`);
+      return { success: true };
+    }
+
     const { error } = await supabase
       .from('tournament_fixtures')
       .update(updates)
@@ -465,6 +479,9 @@ export async function saveAndGenerateFixture(
     if (parsed.groupName !== undefined) updates.group_name = parsed.groupName;
     if (parsed.venueCity !== undefined) updates.venue_city = parsed.venueCity;
 
+    if (tournament.sport === 'rugby_union') {
+      await saveRugbyFixture(supabase, tournament, fixture, { ...fixture, ...parsed, bookingUrl, teamsConfirmed } as TournamentFixture, updates, parsed.contentRevision);
+    } else {
     // Save fixture first
     const { error: saveError } = await supabase
       .from('tournament_fixtures')
@@ -477,6 +494,8 @@ export async function saveAndGenerateFixture(
         return { success: false, error: 'A fixture with this match number already exists in this tournament.' };
       }
       return { success: false, error: saveError.message };
+    }
+
     }
 
     // Re-fetch the saved fixture for generation
@@ -648,6 +667,7 @@ export async function publishNowFixture(
 
     for (const item of unpublishedItems) {
       const itemId = item.id as string;
+      if (tournament.sport === 'rugby_union') { const issue = await checkTournamentContentById(supabase, accountId, itemId); if (issue) return { success: false, error: issue }; }
       const itemPlatform = (item.platform as string) ?? 'facebook';
       const placement = (item.placement as 'feed' | 'story' | null) ?? 'feed';
       const nowIso = new Date().toISOString();
@@ -801,6 +821,11 @@ export async function toggleFixtureShowing(
     const fixture = await getFixtureById(supabase, fixtureId, tournamentId);
     if (!fixture) return { success: false, error: 'Fixture not found' };
 
+    if (tournament.sport === 'rugby_union') {
+      await saveRugbyFixture(supabase, tournament, fixture, { ...fixture, screeningDecision: showing ? 'confirmed' : 'not_showing', screeningConfirmedAt: showing ? new Date().toISOString() : fixture.screeningConfirmedAt }, {}, fixture.contentRevision);
+      revalidatePath(`/tournaments/${tournamentId}`);
+      return { success: true };
+    }
     const { error: toggleError } = await supabase
       .from('tournament_fixtures')
       .update({ showing, updated_at: new Date().toISOString() })
@@ -1009,6 +1034,8 @@ export async function getFixturePreview(
       }
     }
 
+    const currentFixture = tournament.sport === 'rugby_union' ? await getFixtureById(supabase, fixtureId, tournamentId) : null;
+    const currentScreening = currentFixture ? (await projectTournamentFixtures(supabase, tournament, [currentFixture]))[0] : null;
     const items: PreviewItem[] = contentItems.map((item) => {
       const mediaIds = itemMediaMap.get(item.id as string) ?? [];
       const imageUrl = mediaIds.length ? (urlMap.get(mediaIds[0]) ?? '') : '';
@@ -1016,10 +1043,10 @@ export async function getFixturePreview(
       return {
         platform: item.platform as string,
         placement: item.placement as string,
-        status: item.status as string,
+        status: currentFixture && ((item.prompt_context as Record<string, unknown> | null)?.screening_revision !== currentFixture.contentRevision || (item.prompt_context as Record<string, unknown> | null)?.tournament_updated_at !== tournament.updatedAt || (currentScreening?.hours.state !== 'unknown' && (item.prompt_context as Record<string, unknown> | null)?.screening_hours_fingerprint !== currentScreening?.hours.fingerprint)) ? `${item.status}: screening changed, review required` : item.status as string,
         scheduledFor: (item.scheduled_for as string) ?? null,
         imageUrl,
-        captionText: itemCaptionMap.get(item.id as string) ?? null,
+        captionText: itemCaptionMap.get(item.id as string) ?? ((item.prompt_context as Record<string, unknown> | null)?.screening_caption as string | undefined) ?? null,
       };
     });
 
@@ -1041,6 +1068,13 @@ export interface ImportError {
 export async function importFixtures(
   tournamentId: string,
   fixtures: Array<{
+    importKey?: string | null;
+    teamsConfirmed?: boolean;
+    roundNumber?: number | null;
+    finalPosition?: number | null;
+    plannedEndAt?: string | null;
+    sourceUrl?: string | null;
+    sourceCheckedAt?: string | null;
     matchNumber: number;
     round: string;
     groupName: string | null;
@@ -1068,6 +1102,17 @@ export async function importFixtures(
     for (let i = 0; i < fixtures.length; i++) {
       const row = fixtures[i];
       try {
+        const parsed = fixtureCreateSchema.parse(row);
+        if (tournament.sport === 'rugby_union') {
+          if (!parsed.importKey) throw new Error('Rugby imports require a stable import_key.');
+          const existing = (await getFixturesByTournament(supabase, tournamentId)).find(f => f.importKey === parsed.importKey);
+          const result = existing
+            ? await updateFixture(tournamentId, existing.id, { ...existing, ...parsed, teamsConfirmed: parsed.teamsConfirmed === true, showing: false, screeningDecision: 'unconfirmed', contentRevision: existing.contentRevision })
+            : await createFixture(tournamentId, { ...parsed, showing: false, screeningDecision: 'unconfirmed' });
+          if (!result.success) throw new Error(result.error);
+          imported++;
+          continue;
+        }
         const teamsConfirmed = areBothTeamsConfirmed(row.teamA, row.teamB);
 
         const { error: upsertError } = await supabase
@@ -1165,4 +1210,15 @@ export async function disableFeedApiKey(
   } catch (err) {
     return { success: false, error: err instanceof Error ? err.message : String(err) };
   }
+}
+
+export async function getFixtureScreeningPreview(tournamentId: string, input: unknown): Promise<{ success: boolean; error?: string; screening?: import('@/lib/tournament/screening').ScreeningProjection }> {
+  try {
+    const { supabase, accountId } = await requireAuthContext();
+    const tournament = await getTournamentById(supabase, tournamentId, accountId);
+    if (!tournament) throw new Error('Tournament not found');
+    const parsed = fixtureCreateSchema.parse(input);
+    const [result] = await projectTournamentFixtures(supabase, tournament, [{ ...parsed, id: '', tournamentId, teamsConfirmed: parsed.teamsConfirmed ?? false, bookingUrl: parsed.bookingUrl || null } as TournamentFixture]);
+    return { success: true, screening: result.screening };
+  } catch (error) { return { success: false, error: error instanceof Error ? error.message : 'Preview unavailable' }; }
 }

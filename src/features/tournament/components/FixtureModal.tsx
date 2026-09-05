@@ -1,6 +1,9 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import { DateTime } from 'luxon';
+import { getFixtureScreeningPreview } from '@/app/actions/tournament';
+import type { FixtureScreeningFields, TournamentSport } from '@/types/tournament';
 import { X, Loader2 } from 'lucide-react';
 import type { TournamentRound } from '@/types/tournament';
 
@@ -12,9 +15,11 @@ const ROUNDS: { value: TournamentRound; label: string }[] = [
   { value: 'semi_final', label: 'Semi Final' },
   { value: 'third_place', label: 'Third Place' },
   { value: 'final', label: 'Final' },
+  { value: 'league_round', label: 'League round' },
+  { value: 'placement_final', label: 'Placement final' },
 ];
 
-export interface FixtureFormData {
+export interface FixtureFormData extends Partial<FixtureScreeningFields> {
   matchNumber: number;
   round: TournamentRound;
   groupName: string;
@@ -30,6 +35,8 @@ export interface FixtureFormData {
 
 interface FixtureModalProps {
   open: boolean;
+  sport?: TournamentSport;
+  tournamentId?: string;
   onClose: () => void;
   onSave: (data: FixtureFormData) => Promise<{ success: boolean; error?: string }>;
   onSaveAndGenerate?: (data: FixtureFormData) => Promise<{ success: boolean; error?: string }>;
@@ -40,14 +47,12 @@ interface FixtureModalProps {
 
 function toDatetimeLocal(iso: string): string {
   if (!iso) return '';
-  const d = new Date(iso);
-  const pad = (n: number): string => n.toString().padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  return DateTime.fromISO(iso).setZone('Europe/London').toFormat("yyyy-MM-dd'T'HH:mm");
 }
 
 function fromDatetimeLocal(local: string): string {
   if (!local) return '';
-  return new Date(local).toISOString();
+  return DateTime.fromISO(local, { zone: 'Europe/London' }).toUTC().toISO() ?? '';
 }
 
 const inputStyle: React.CSSProperties = {
@@ -58,6 +63,8 @@ const inputStyle: React.CSSProperties = {
 
 export function FixtureModal({
   open,
+  sport = 'football',
+  tournamentId,
   onClose,
   onSave,
   onSaveAndGenerate,
@@ -76,12 +83,16 @@ export function FixtureModal({
   const [showingNote, setShowingNote] = useState(initial?.showingNote ?? '');
   const [bookingUrl, setBookingUrl] = useState(initial?.bookingUrl ?? '');
   const [teamsConfirmed, setTeamsConfirmed] = useState(initial?.teamsConfirmed ?? false);
+  const [screening, setScreening] = useState<Partial<FixtureScreeningFields>>(initial ?? {});
+  const [hoursPreview, setHoursPreview] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!open) return;
+    setScreening(initial ?? {});
+    setHoursPreview('');
     setMatchNumber(initial?.matchNumber ?? nextMatchNumber);
     setRound(initial?.round ?? 'group_stage');
     setGroupName(initial?.groupName ?? '');
@@ -111,6 +122,7 @@ export function FixtureModal({
 
   function buildFormData(): FixtureFormData {
     return {
+      ...(sport === 'rugby_union' ? screening : {}),
       matchNumber,
       round,
       groupName,
@@ -126,7 +138,7 @@ export function FixtureModal({
   }
 
   const isValid = teamA.trim() && teamB.trim() && kickOffAt && matchNumber > 0;
-  const canSaveAndGenerate = Boolean(onSaveAndGenerate && isValid && showing && teamsConfirmed);
+  const canSaveAndGenerate = Boolean(onSaveAndGenerate && isValid && (sport === 'rugby_union' ? screening.screeningDecision === 'confirmed' : showing) && teamsConfirmed);
 
   async function handleSave() {
     setSaving(true);
@@ -315,8 +327,22 @@ export function FixtureModal({
             </div>
           </div>
 
+          {sport === 'rugby_union' && <fieldset className="space-y-3 border p-3" style={{ borderColor: 'var(--c-line)' }}>
+            <legend className="font-semibold">Rugby screening</legend>
+            <p className="text-sm">Opening and kitchen times remain unchanged. Earlier games show from opening with the start missed.</p>
+            {(['importKey', 'linearChannel', 'screenLabel', 'sourceUrl'] as const).map(field => <label key={field} className="block text-sm">{{ importKey: 'Stable import key', linearChannel: 'Verified linear TV channel', screenLabel: 'Screen allocation', sourceUrl: 'Fixture source URL' }[field]}<input className="block w-full px-3 py-2" style={inputStyle} value={screening[field] ?? ''} onChange={event => setScreening(old => ({ ...old, [field]: event.target.value || null }))} /></label>)}
+            {(['roundNumber', 'finalPosition'] as const).map(field => <label key={field} className="block text-sm">{field === 'roundNumber' ? 'Round number' : 'Final placing'}<input type="number" min="1" max="6" className="block w-full px-3 py-2" style={inputStyle} value={screening[field] ?? ''} onChange={event => setScreening(old => ({ ...old, [field]: event.target.value ? Number(event.target.value) : null }))} /></label>)}
+            <label className="block text-sm">Planned screening end (London time)<input type="datetime-local" className="block w-full px-3 py-2" style={inputStyle} value={screening.plannedEndAt ? toDatetimeLocal(screening.plannedEndAt) : ''} onChange={event => setScreening(old => ({ ...old, plannedEndAt: event.target.value ? fromDatetimeLocal(event.target.value) : null }))} /></label>
+            {(['matchState', 'screeningDecision', 'broadcastDecision', 'commentary'] as const).map(field => <label key={field} className="block text-sm">{{ matchState: 'Match state', screeningDecision: 'Pub screening decision', broadcastDecision: 'Broadcast verification', commentary: 'Commentary' }[field]}<select className="block w-full px-3 py-2" style={inputStyle} value={screening[field] ?? (field === 'matchState' ? 'scheduled' : 'unconfirmed')} onChange={event => setScreening(old => ({ ...old, [field]: event.target.value, ...(field === 'screeningDecision' ? { screeningConfirmedAt: event.target.value === 'confirmed' ? new Date().toISOString() : null } : {}), ...(field === 'broadcastDecision' ? { broadcastCheckedAt: event.target.value === 'confirmed' ? new Date().toISOString() : null } : {}) }))}>
+              {(field === 'matchState' ? ['scheduled','in_progress','finished','cancelled'] : field === 'screeningDecision' ? ['unconfirmed','confirmed','not_showing'] : field === 'broadcastDecision' ? ['unconfirmed','confirmed','not_linear'] : ['unconfirmed','on','off']).map(value => <option key={value} value={value}>{value.replaceAll('_',' ')}</option>)}
+            </select></label>)}
+            <label className="block text-sm"><input type="checkbox" checked={Boolean(screening.sourceCheckedAt)} onChange={event => setScreening(old => ({ ...old, sourceCheckedAt: event.target.checked ? new Date().toISOString() : null }))} /> I have checked the fixture source</label>
+            <button type="button" className="underline text-sm" onClick={async () => { if (!tournamentId) return; const result = await getFixtureScreeningPreview(tournamentId, buildFormData()); setHoursPreview(result.screening ? `${result.screening.openingLabel}. ${result.screening.kitchenLabel}. ${result.screening.foodPromotion.message ?? ''}` : result.error ?? 'Hours unavailable'); }}>Check current opening and food service</button>
+            {hoursPreview && <p role="status" className="text-sm">{hoursPreview}</p>}
+          </fieldset>}
+
           <div className="flex items-center gap-6">
-            <label
+            {sport !== 'rugby_union' && <label
               className="flex items-center gap-2 text-sm"
               style={{ color: 'var(--c-ink-2)' }}
             >
@@ -328,8 +354,8 @@ export function FixtureModal({
                 style={{ borderColor: 'var(--c-line-2)' }}
               />
               Showing at venue
-            </label>
-            {initial && (
+            </label>}
+            {(initial || sport === 'rugby_union') && (
               <label
                 className="flex items-center gap-2 text-sm"
                 style={{ color: 'var(--c-ink-2)' }}
@@ -341,7 +367,7 @@ export function FixtureModal({
                   className="rounded"
                   style={{ borderColor: 'var(--c-line-2)' }}
                 />
-                Teams confirmed (override)
+                {sport === 'rugby_union' ? 'Both teams verified' : 'Teams confirmed (override)'}
               </label>
             )}
           </div>
