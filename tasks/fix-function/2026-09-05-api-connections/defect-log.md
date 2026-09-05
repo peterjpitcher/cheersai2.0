@@ -24,3 +24,9 @@ All are user-approved safe in-scope changes. Sibling search covered both convers
 Root identified one remaining false-empty path: malformed rows in an otherwise valid management conversion array were discarded, and success:false envelopes with arrays were accepted. The optimiser now validates UUID IDs, an ISO datetime with offset, optional positive integer ticket counts and typed optional metadata before mapping any rows. A malformed row fails the run. Regression cases cover invalid IDs, invalid dates, zero tickets, empty objects, failed envelopes and a valid response. The connection helper fixture now uses a valid UUID matching the producer query contract. Second focused pass complete; no scope expansion.
 
 Final follow-up gates passed: lint, typecheck, production build and both London/UTC full suites (2,076 passed, 3 skipped in each). After root removed the unused payment scope from the live Cheers key, authenticated GET events, specials and artwork each returned 200. No secrets printed and no live diagnostic status persisted.
+
+## Campaign source and batch contract review
+
+Live read-only aggregate found 10 campaigns, all management_event with event IDs and snapshots, including 9 active. There is no current non-event campaign incident. The accepted creation contract nevertheless allows custom_promotion source IDs, and the campaign query has no 100-campaign cap. The loader now uses explicit snapshot eventId or event/management_event sources only, and splits distinct IDs into batches of at most 100 to match the management API contract. It does not filter malformed actual event IDs into an empty result; upstream rejection still fails the run. Regression tests cover a custom promotion with no management request and 101 event IDs split into 100 and 1.
+
+Source/batch follow-up final gates passed: lint, typecheck, production build, London and UTC suites with 2,078 passed and 3 skipped each.

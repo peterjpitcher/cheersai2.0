@@ -963,7 +963,10 @@ async function loadManagementBookingConversionEvents(
   campaigns: OptimisationCampaignRow[],
 ): Promise<BookingConversionEventForOptimisation[]> {
   const eventIds = Array.from(new Set(campaigns
-    .map((campaign) => stringValue(campaign.source_snapshot?.eventId) ?? campaign.source_id)
+    .map((campaign) => stringValue(campaign.source_snapshot?.eventId)
+      ?? (campaign.source_type === 'management_event' || campaign.source_type === 'event' || campaign.campaign_kind === 'event'
+        ? campaign.source_id
+        : null))
     .filter((value): value is string => Boolean(value))));
 
   if (eventIds.length === 0) return [];
@@ -980,17 +983,33 @@ async function loadManagementBookingConversionEvents(
     return [];
   }
 
+  const conversions: BookingConversionEventForOptimisation[] = [];
+  for (let start = 0; start < eventIds.length; start += 100) {
+    conversions.push(...await fetchManagementBookingConversionBatch(
+      { baseUrl: connection.base_url, apiKey: connection.api_key },
+      eventIds.slice(start, start + 100),
+      oldestRelevantDate(campaigns),
+    ));
+  }
+  return conversions;
+}
+
+async function fetchManagementBookingConversionBatch(
+  connection: { baseUrl: string; apiKey: string },
+  eventIds: string[],
+  since: string,
+): Promise<BookingConversionEventForOptimisation[]> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 5000);
-  const baseUrl = connection.base_url.trim().replace(/\/+$/, '');
+  const baseUrl = connection.baseUrl.trim().replace(/\/+$/, '');
   const url = new URL('/api/marketing/event-booking-conversions', baseUrl);
   url.searchParams.set('event_ids', eventIds.join(','));
-  url.searchParams.set('since', oldestRelevantDate(campaigns));
+  url.searchParams.set('since', since);
 
   try {
     const response = await fetch(url.toString(), {
       headers: {
-        'X-API-Key': connection.api_key.trim(),
+        'X-API-Key': connection.apiKey.trim(),
       },
       cache: 'no-store',
       signal: controller.signal,

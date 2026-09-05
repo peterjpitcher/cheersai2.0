@@ -840,6 +840,44 @@ describe('runMetaCampaignOptimisation action recording', () => {
     }
   });
 
+  it('does not query management bookings for a custom promotion source ID', async () => {
+    const harness = optimisationRunHarness({
+      campaigns: [campaign({ source_type: 'custom_promotion', campaign_kind: 'evergreen', source_id: 'promotion-1' })],
+      managementConnection: { base_url: 'https://management.example.com', api_key: 'test-only', enabled: true },
+    });
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      await runMetaCampaignOptimisation({ accountId: 'account-1', supabase: harness.supabase });
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(harness.runUpdates).toEqual([expect.objectContaining({ status: 'completed' })]);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('splits 101 distinct management events into GET batches of at most 100', async () => {
+    const ids = Array.from({ length: 101 }, (_, index) => `00000000-0000-4000-8000-${String(index).padStart(12, '0')}`);
+    const harness = optimisationRunHarness({
+      campaigns: ids.map((id) => campaign({ id, source_type: 'management_event', source_id: id })),
+      managementConnection: { base_url: 'https://management.example.com', api_key: 'test-only', enabled: true },
+    });
+    const requestedIds: string[][] = [];
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      const batch = new URL(url).searchParams.get('event_ids')!.split(',');
+      requestedIds.push(batch);
+      return Response.json({ success: true, data: { conversions: [] } });
+    }));
+    try {
+      await runMetaCampaignOptimisation({ accountId: 'account-1', supabase: harness.supabase });
+      expect(requestedIds.map((batch) => batch.length)).toEqual([100, 1]);
+      expect(requestedIds.flat()).toEqual(ids);
+      expect(harness.runUpdates).toEqual([expect.objectContaining({ status: 'completed' })]);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('records a planned creative_fatigue action on the first run', async () => {
     const harness = optimisationRunHarness({
       campaigns: fatiguedCampaignFixture(),
