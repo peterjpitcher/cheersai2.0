@@ -23,3 +23,12 @@ permanent.
   more than 5 minutes past `scheduled_for`. It needs a new time.
 - The deployed `publish-queue` is version 34 from 2026-07-27. The 2026-09-02 domain
   commit also touched the function and has not been deployed yet.
+
+# API connection fixes
+
+- [x] Trace Settings diagnostic and both booking conversion loaders.
+- [x] Implement GET-only capability checks and fail closed on unavailable booking evidence.
+- [x] Add failure-injection regression tests; 48 targeted tests passed.
+- [x] Complete lint, typecheck, full London and UTC tests, clean production build.
+- [x] Exercise exact connection helper and review sibling paths again.
+- [x] Hand verified local changes to root for coordinated deployment.

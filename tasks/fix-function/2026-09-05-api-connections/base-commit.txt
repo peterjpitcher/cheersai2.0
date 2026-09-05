@@ -1,0 +1,5 @@
+{
+  "source": "/Users/peterpitcher/Cursor/OJ-CheersAI2.0",
+  "base_commit": "20a384f52417fc6ac369ee4e970aae46fd7b42cc",
+  "dirty": " M tasks/todo.md\n"
+}

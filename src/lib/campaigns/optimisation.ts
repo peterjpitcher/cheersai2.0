@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import { createServiceSupabaseClient } from '@/lib/supabase/service';
 import { utmContentMatchesAd } from '@/lib/campaigns/ad-attribution';
 import { detectCreativeFatigue, type AdMetricsHistoryRow } from '@/lib/campaigns/creative-fatigue';
@@ -107,15 +108,16 @@ interface ManagementConnectionRow {
   enabled: boolean | null;
 }
 
-interface ManagementBookingConversionRow {
-  booking_id?: unknown;
-  booking_type?: unknown;
-  event_id?: unknown;
-  event_slug?: unknown;
-  short_code?: unknown;
-  gclid?: unknown;
-  occurred_at?: unknown;
-}
+const managementBookingConversionSchema = z.object({
+  booking_id: z.string().uuid(),
+  event_id: z.string().uuid(),
+  occurred_at: z.string().datetime({ offset: true }),
+  booking_type: z.enum(['event', 'table']).optional(),
+  tickets: z.number().int().positive().optional(),
+  event_slug: z.string().nullable().optional(),
+  short_code: z.string().nullable().optional(),
+  gclid: z.string().nullable().optional(),
+});
 
 export interface BookingConversionEventForOptimisation {
   booking_id: string;
@@ -880,10 +882,9 @@ async function loadBlendedBookingSignals(
     .eq('account_id', accountId)
     .gte('occurred_at', oldestRelevantDate(campaigns));
 
-  let firstPartyEvents = (data ?? []) as BookingConversionEventForOptimisation[];
+  const firstPartyEvents = (data ?? []) as BookingConversionEventForOptimisation[];
   if (error) {
-    console.error('[optimisation] failed to load booking conversion events', error);
-    firstPartyEvents = [];
+    throw new Error('Booking conversion data could not be loaded. Optimisation stopped before making recommendations.');
   }
 
   const managementEvents = await loadManagementBookingConversionEvents(supabase, accountId, campaigns);
@@ -974,7 +975,8 @@ async function loadManagementBookingConversionEvents(
     .maybeSingle<ManagementConnectionRow>();
 
   if (error || !connection?.enabled || !connection.api_key?.trim() || !connection.base_url?.trim()) {
-    if (error) console.error('[optimisation] failed to load management connection', error);
+    if (error) throw new Error('Management connection could not be loaded. Optimisation stopped before making recommendations.');
+    if (connection?.enabled) throw new Error('Management connection is incomplete. Optimisation stopped before making recommendations.');
     return [];
   }
 
@@ -995,19 +997,20 @@ async function loadManagementBookingConversionEvents(
     });
 
     if (!response.ok) {
-      console.error('[optimisation] management booking fallback rejected', { status: response.status });
-      return [];
+      throw new Error(`Management booking conversion request failed (HTTP ${response.status}).`);
     }
 
-    const payload = await response.json() as { data?: { conversions?: ManagementBookingConversionRow[] } };
-    const rows = Array.isArray(payload?.data?.conversions) ? payload.data.conversions : [];
+    const payload = await response.json() as { success?: boolean; data?: { conversions?: unknown } };
+    if (payload?.success === false || !Array.isArray(payload?.data?.conversions)) {
+      throw new Error('Management booking conversion response was invalid.');
+    }
+    const rows = z.array(managementBookingConversionSchema).parse(payload.data.conversions);
 
     return rows
-      .map((row): BookingConversionEventForOptimisation | null => {
-        const bookingId = stringValue(row.booking_id);
-        const eventId = stringValue(row.event_id);
-        const occurredAt = stringValue(row.occurred_at);
-        if (!bookingId || !eventId || !occurredAt) return null;
+      .map((row): BookingConversionEventForOptimisation => {
+        const bookingId = row.booking_id;
+        const eventId = row.event_id;
+        const occurredAt = row.occurred_at;
         return {
           booking_id: bookingId,
           booking_type: stringValue(row.booking_type) ?? 'event',
@@ -1021,11 +1024,10 @@ async function loadManagementBookingConversionEvents(
           value: null,
           occurred_at: occurredAt,
         };
-      })
-      .filter((row): row is BookingConversionEventForOptimisation => Boolean(row));
-  } catch (error) {
-    console.error('[optimisation] management booking fallback failed', error);
-    return [];
+      });
+  } catch {
+    // Do not persist upstream bodies, URLs or credentials in the run error.
+    throw new Error('Management booking conversions are unavailable. Optimisation stopped before making recommendations.');
   } finally {
     clearTimeout(timeout);
   }
