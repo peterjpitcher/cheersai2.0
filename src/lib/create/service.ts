@@ -34,13 +34,13 @@ const DEBUG_CONTENT_GENERATION = process.env.DEBUG_CONTENT_GENERATION === "true"
  * Per-campaign banner override columns to write to content_variants.
  *
  * F4 + G3: BannerDefaults from the campaign creation form does NOT include a
- * bannersEnabled toggle — only appearance fields and optional custom text. So:
+ * bannersEnabled toggle, only appearance fields and optional custom text. So:
  *  - If the user did not customise any field, return null. The variant
  *    inherits account defaults (including the account's enabled flag) at
  *    publish time via bannerConfigResolver.
  *  - If the user customised at least one field, write ONLY the changed
  *    override columns. Each column independently inherits the account
- *    default at resolve time when omitted. Do NOT set banner_enabled — the
+ *    default at resolve time when omitted. Do NOT set banner_enabled, the
  *    account-level setting still governs whether banners render. Forcing
  *    banner_enabled true here would silently override an account-level
  *    "off".
@@ -96,7 +96,7 @@ export function computeBannerOverride(
  * banner overlays.
  *
  * Campaign callers continue to use `BannerOverrideRow` + `computeBannerOverride`
- * and inherit account defaults — unchanged behaviour.
+ * and inherit account defaults, unchanged behaviour.
  */
 export type InstantBannerOverride = {
   banner_enabled: boolean;
@@ -115,7 +115,7 @@ export type InstantBannerOverride = {
  * - When `banner.enabled` is true, the override carries `banner_enabled: true`
  *   plus the position, colours, and optional custom text derived from
  *   `banner.defaults`. Missing colour entries in {@link BANNER_COLOUR_HEX} are
- *   skipped — the publish-time resolver then falls back to the account default
+ *   skipped, the publish-time resolver then falls back to the account default
  *   for that colour only.
  */
 export function buildInstantBannerOverride(
@@ -161,7 +161,7 @@ async function fetchRecentCopyHistory(
     .limit(5);
 
   if (error) {
-    // Non-fatal — fall back to empty history if columns don't exist yet
+    // Non-fatal, fall back to empty history if columns don't exist yet
     console.warn("[create] fetchRecentCopyHistory failed, using empty history:", error.message);
     return { recentHooks: [], recentPillars: [] };
   }
@@ -179,7 +179,7 @@ async function fetchRecentCopyHistory(
   }
 
   // DB query returns newest-first (DESC). Reverse so newest items are at the
-  // end of each array — selectHookStrategy uses slice(-3) and buildPillarNudge
+  // end of each array, selectHookStrategy uses slice(-3) and buildPillarNudge
   // uses slice(-2) to read the most recent entries from the tail.
   return { recentHooks: recentHooks.reverse(), recentPillars: recentPillars.reverse() };
 }
@@ -485,7 +485,7 @@ async function resolveScheduleConflicts({
         if (allFree) return minute;
         minute -= SLOT_INCREMENT_MINUTES;
       }
-      // No fully-free slot found — fall back to the original time
+      // No fully-free slot found, fall back to the original time
       return candidateMinute;
     };
 
@@ -543,7 +543,7 @@ function describeEventTimingCue(scheduledFor: Date | null, eventStart: Date): Ev
     const msAfterStart = Math.abs(diffMs);
     if (msAfterStart > 3 * HOUR_MS) {
       return {
-        description: `Share a recap of how the event went — highlights, photos, and a look back at ${weekday}’s ${dayMonth} gathering.`,
+        description: `Share a recap of how the event went, highlights, photos, and a look back at ${weekday}’s ${dayMonth} gathering.`,
         toneCue: "reflective, warm, community pride",
         label: "recap",
       };
@@ -576,13 +576,13 @@ function describeEventTimingCue(scheduledFor: Date | null, eventStart: Date): Ev
     const scheduledHour = DateTime.fromJSDate(scheduledFor, { zone: DEFAULT_TIMEZONE }).hour;
     if (scheduledHour < 14) {
       return {
-        description: `Call out that it’s happening today at ${timeLabel}—push final sign-ups and arrivals.`,
+        description: `Call out that it’s happening today at ${timeLabel}, push final sign-ups and arrivals.`,
         toneCue: "bright, reminder, plan-your-day",
         label: "today_morning",
       };
     }
     return {
-      description: `Call out that it’s happening today at ${timeLabel}—push final sign-ups and arrivals.`,
+      description: `Call out that it’s happening today at ${timeLabel}, push final sign-ups and arrivals.`,
       toneCue: "urgent, exciting, last-chance energy",
       label: "today_imminent",
     };
@@ -836,7 +836,7 @@ export function buildEventCampaignPlans({
             : futureSlot;
         const timingCue = describeEventTimingCue(placementScheduledFor, eventStart);
         return {
-          title: `${input.name} — Slot ${index + 1}`,
+          title: `${input.name}, Slot ${index + 1}`,
           prompt: [
             basePrompt,
             buildEventFocusLine(`Custom slot ${index + 1}`, placementScheduledFor, eventStart),
@@ -898,7 +898,7 @@ export function buildEventCampaignPlans({
             : futureSlot;
         const timingCue = describeEventTimingCue(placementScheduledFor, eventStart);
         acc.push({
-          title: `${input.name} — ${slot.label}`,
+          title: `${input.name}, ${slot.label}`,
           prompt: [basePrompt, buildEventFocusLine(slot.label, placementScheduledFor, eventStart)]
             .filter(Boolean)
             .join("\n\n"),
@@ -970,7 +970,7 @@ async function createCampaignFromPlans({
   /**
    * Optional instant-only override that ALWAYS writes an explicit
    * `banner_enabled` (true or false). When omitted (the campaign-flow
-   * default), variant rows behave exactly as today — banner_* columns are
+   * default), variant rows behave exactly as today, banner_* columns are
    * left NULL and inherit account defaults at publish time.
    */
   bannerOverride?: InstantBannerOverride;
@@ -981,7 +981,7 @@ async function createCampaignFromPlans({
     throw new Error("Cannot create campaign without plans");
   }
 
-  // Hoisted copy history — runs ONCE per campaign, not per plan
+  // Hoisted copy history, runs ONCE per campaign, not per plan
   const engagement = await fetchRecentCopyHistory(supabase, accountId);
 
   const variantsStartMs = Date.now();
@@ -1363,7 +1363,7 @@ async function generateVariants({
           if ((input.placement ?? "feed") === "feed" && !finalBody.trim().length) {
             throw new Error(`Generated content is empty for ${platform}.`);
           }
-          // Lint is advisory — never drop a platform over lint issues.
+          // Lint is advisory, never drop a platform over lint issues.
           // applyChannelRules (inside finaliseCopy) already repaired what it
           // could. Record the result for diagnostics but always return content.
           const lint = lintContent({

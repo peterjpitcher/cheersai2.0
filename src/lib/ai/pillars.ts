@@ -92,7 +92,7 @@ const TIE_BREAK_ORDER: ContentPillar[] = [
 
 /**
  * Infer the content pillar from the post title and prompt.
- * Uses score-based matching — pillar with the most keyword hits wins.
+ * Uses score-based matching, pillar with the most keyword hits wins.
  * Ties broken by TIE_BREAK_ORDER. Default: food_drink.
  */
 export function inferContentPillar(title: string, prompt: string): ContentPillar {
@@ -130,7 +130,7 @@ export function inferContentPillar(title: string, prompt: string): ContentPillar
 
 /**
  * Build a pillar nudge string if the inferred pillar matches the most recent 2
- * entries in recentPillars. Advisory only — the AI may still write to the
+ * entries in recentPillars. Advisory only, the AI may still write to the
  * inferred pillar if the brief demands it.
  *
  * Returns null if no nudge is needed.
@@ -151,7 +151,7 @@ export function buildPillarNudge(
   const alternatives = CONTENT_PILLAR_KEYS.filter((k) => k !== inferredPillar).slice(0, 2);
   const altLabels = alternatives.map((k) => CONTENT_PILLARS[k].label);
 
-  return `Recent posts have focused on ${CONTENT_PILLARS[inferredPillar].label}. If possible, try a different angle — e.g., frame this from the ${altLabels.join(" or ")} perspective.`;
+  return `Recent posts have focused on ${CONTENT_PILLARS[inferredPillar].label}. If possible, try a different angle, e.g., frame this from the ${altLabels.join(" or ")} perspective.`;
 }
 
 /**

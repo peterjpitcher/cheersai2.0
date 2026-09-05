@@ -36,7 +36,7 @@ export interface LintResult {
   };
 }
 
-/** Hard-failure lint codes — content would look broken or violate brand rules. */
+/** Hard-failure lint codes, content would look broken or violate brand rules. */
 const BLOCKING_LINT_CODES = new Set(["blocked_tokens", "banned_phrases"]);
 
 function resolveSeverity(code: string): LintSeverity {
@@ -213,7 +213,7 @@ export function applyChannelRules({
   }
 
   // Banned phrases with no inline replacement (e.g. "you won't regret it",
-  // "hidden gem") take their whole sentence with them — deleting only the
+  // "hidden gem") take their whole sentence with them, deleting only the
   // phrase leaves broken grammar.
   const withoutBannedSentences = removeBannedPhraseSentences(output, BANNED_PHRASES);
   if (withoutBannedSentences !== output) {
@@ -260,7 +260,7 @@ export function applyChannelRules({
   }
 
   if (!contract.allowLinkInBio) {
-    // Drop the whole sentence, not just the phrase — deleting "link in our bio"
+    // Drop the whole sentence, not just the phrase, deleting "link in our bio"
     // mid-sentence left broken grammar ("Find the to book.").
     const removal = removeSentencesMatching(output, (text) => {
       LINK_IN_BIO_PATTERN.lastIndex = 0;
@@ -749,7 +749,7 @@ function formatDayName(date: Date) {
 
 /**
  * Tidy the fragment left when a disallowed claim is deleted from a body that was
- * a single sentence — drop an orphaned leading connective/punctuation
+ * a single sentence, drop an orphaned leading connective/punctuation
  * (", so book early." -> "Book early.") rather than shipping a broken fragment.
  */
 function cleanClaimFragment(value: string): string {
@@ -774,7 +774,7 @@ function stripDisallowedClaims(value: string, allowedCodes: string[] = []) {
     }
     rule.pattern.lastIndex = 0;
     // Unverified claims usually sit mid-sentence ("Spaces are limited, so book
-    // early") — deleting the phrase alone leaves fragments, so the whole
+    // early"), deleting the phrase alone leaves fragments, so the whole
     // sentence goes. Fall back to phrase deletion if that would empty the copy.
     const removal = removeSentencesMatching(output, (text) => {
       rule.pattern.lastIndex = 0;

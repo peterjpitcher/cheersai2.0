@@ -16,7 +16,7 @@ export function buildTemporalInstructions(slotLabel?: string): string {
       'Temporal framing: This post goes live on the event day.',
       'Use present tense. Say "today" or "tonight" where natural.',
       'Avoid future-tense phrasing like "coming up" or "this weekend".',
-      'Create immediacy — the event is happening NOW.',
+      'Create immediacy, the event is happening NOW.',
     ].join('\n');
   }
 
@@ -25,7 +25,7 @@ export function buildTemporalInstructions(slotLabel?: string): string {
       'Temporal framing: This is the final post before a promotion ends.',
       'Communicate clear deadline urgency without misleading scarcity.',
       'Use phrases like "last day", "ends today", "don\'t miss out".',
-      'Avoid false urgency — be factual about the deadline.',
+      'Avoid false urgency, be factual about the deadline.',
     ].join('\n');
   }
 
@@ -33,7 +33,7 @@ export function buildTemporalInstructions(slotLabel?: string): string {
   if (countdownMatch) {
     const [, count, unit] = countdownMatch;
     return [
-      `Temporal framing: This post is a countdown — ${count} ${unit}(s) until the event.`,
+      `Temporal framing: This post is a countdown, ${count} ${unit}(s) until the event.`,
       'Naturally reference the remaining time without contradicting the scheduled date.',
       `Build anticipation. Use forward-looking language like "just ${count} ${unit}s away".`,
     ].join('\n');
@@ -41,11 +41,11 @@ export function buildTemporalInstructions(slotLabel?: string): string {
 
   if (lower.includes('hype') || lower.includes('week')) {
     return [
-      `Temporal framing: "${slotLabel}" — a lead-up post building anticipation.`,
+      `Temporal framing: "${slotLabel}", a lead-up post building anticipation.`,
       'Use forward-looking language. Mention the upcoming event naturally.',
       'Do not reference a specific countdown unless the label includes one.',
     ].join('\n');
   }
 
-  return `Slot purpose: "${slotLabel}" — write copy that fits this narrative moment.`;
+  return `Slot purpose: "${slotLabel}", write copy that fits this narrative moment.`;
 }

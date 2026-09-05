@@ -68,7 +68,7 @@ export const advancedOptionsSchema = z.object({
  * `enabled` is the user's explicit on/off choice; when `enabled` is true the
  * caller may also supply `defaults` (position + colours) from the
  * BannerDefaultsPicker. The form defaults this to `{ enabled: false }` so the
- * service layer can persist `banner_enabled = false` rather than NULL —
+ * service layer can persist `banner_enabled = false` rather than NULL,
  * fixing the silent-default banner bug for instant posts.
  */
 export const bannerInputSchema = z

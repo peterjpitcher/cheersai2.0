@@ -233,7 +233,7 @@ function sanitiseCountdownLanguage(
     return value;
   }
 
-  // Drop whole sentences with premature countdown language — deleting only the
+  // Drop whole sentences with premature countdown language, deleting only the
   // phrase left fragments like " to book!" behind.
   const removal = removeSentencesMatching(value, (text) =>
     COUNTDOWN_PATTERNS.some((pattern) => {
@@ -323,7 +323,7 @@ function escapeRegExp(value: string) {
 
 // Collapse apostrophe variants to a class so a phrase stored with a straight
 // apostrophe ("you won't regret it") still matches the model's curly output
-// ("you won’t regret it") and vice-versa — used everywhere banned phrases are
+// ("you won’t regret it") and vice-versa, used everywhere banned phrases are
 // matched, including the empty-body fallback in removeBannedPhraseSentences.
 const APOSTROPHE_CLASS = "['‘’]";
 
@@ -342,7 +342,7 @@ function buildBannedTopicPattern(topic: string) {
 
 // Matches a full emoji sequence (base pictograph + skin-tone modifiers,
 // variation selectors, and ZWJ-joined continuations) so clamping counts and
-// removes whole emoji — never leaving orphaned joiners or half a family emoji.
+// removes whole emoji, never leaving orphaned joiners or half a family emoji.
 const EMOJI_REGEX =
   /\p{Extended_Pictographic}(?:\p{Emoji_Modifier}|\uFE0F|\u20E3)*(?:\u200D\p{Extended_Pictographic}(?:\p{Emoji_Modifier}|\uFE0F)*)*/gu;
 
@@ -382,7 +382,7 @@ function normaliseEventDatePhrasing(body: string, eventStartIso: string): string
   const dayNum = `${dt.day}(?:st|nd|rd|th)?`;
 
   // Rule 1: a relative qualifier + the event weekday (optionally trailed by the
-  // date itself) collapses to the absolute date — catches "this Friday",
+  // date itself) collapses to the absolute date, catches "this Friday",
   // "Next Friday, 17th July", and the "this FRI 17 JUL" overlay-label leak.
   let out = body.replace(
     new RegExp(`\\b(?:this|next)\\s+${weekday}\\b(?:[.,\\s]+${dayNum}\\s+${month})?`, "gi"),
@@ -390,7 +390,7 @@ function normaliseEventDatePhrasing(body: string, eventStartIso: string): string
   );
 
   // Rule 2: an abbreviated or non-ordinal event date normalises to the ordinal
-  // absolute form — catches "Friday 17 July" and a bare "FRI 17 JUL". Idempotent
+  // absolute form, catches "Friday 17 July" and a bare "FRI 17 JUL". Idempotent
   // on an already-correct "Friday 17th July".
   out = out.replace(new RegExp(`\\b${weekday}\\s+${dayNum}\\s+${month}\\b`, "gi"), absolute);
 
@@ -415,7 +415,7 @@ export function postprocessCopy(
   const warnings: string[] = [];
 
   // Whether the publish composer will append a canonical CTA for each platform.
-  // When it will, any bare "Book now!" in the body is a duplicate — stripped
+  // When it will, any bare "Book now!" in the body is a duplicate, stripped
   // inside processPlatformBody BEFORE the signature, so a trailing signature
   // line can't hide the CTA from the trailing-sentence strip. Facebook keys off
   // a cta_text or a Facebook link; Instagram keys off a configured link (the
@@ -491,7 +491,7 @@ function processPlatformBody(
 
   // Replace known clichés with natural alternatives first (keeps the sentence
   // intact), then drop the whole containing sentence for any banned phrase
-  // left over — deleting just the phrase produces broken grammar ("Bring your
+  // left over, deleting just the phrase produces broken grammar ("Bring your
   // friends and family for. Book now!").
   output = scrubBannedPhrases(output).value;
   output = removeBannedPhraseSentences(output, config.bannedPhrases);
@@ -509,7 +509,7 @@ function processPlatformBody(
     output = truncateAtSentenceBoundary(output, maxWords);
   }
 
-  // Remove a bare booking CTA the composer will re-append — BEFORE the
+  // Remove a bare booking CTA the composer will re-append, BEFORE the
   // signature, so a trailing signature line can't hide the CTA from the strip.
   if (stripBareCta) {
     output = stripBareBookingCtaLines(output);
@@ -545,7 +545,7 @@ function stripBareBookingCtaLines(body: string): string {
 /**
  * The model often tacks the bare CTA onto the end of a longer closing line
  * ("…for a great night. Book now!"), which the line filter above cannot catch
- * (the line as a whole exceeds six words). Drop that trailing sentence too —
+ * (the line as a whole exceeds six words). Drop that trailing sentence too,
  * the composer appends the canonical CTA after the body.
  */
 function stripTrailingBareBookingCtaSentence(body: string): string {
