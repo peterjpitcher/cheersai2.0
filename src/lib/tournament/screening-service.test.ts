@@ -32,3 +32,17 @@ describe('approved screening projection', () => {
     expect(result.screening.canBookForScreening).toBe(false);
   });
 });
+
+
+it('applies the owner late-finish policy only to The Anchor, retaining normal booking windows', async () => {
+  vi.mocked(fetchScreeningHours).mockResolvedValue({ schemaVersion: 1, timezone: 'Europe/London', days: [{ date: '2026-11-07', state: 'open', regularOpensAt: '2026-11-07T12:00:00Z', bar: { startAt: '2026-11-07T12:00:00Z', endAt: '2026-11-07T22:00:00Z' }, kitchen: [], kitchenState: 'known', hasSpecialHours: false, fingerprint: 'fp' }] });
+  const lateGame = { ...fixture, kickOffAt: '2026-11-07T20:10:00Z' };
+  const reference = new Date('2026-09-05T09:00:00Z');
+  const [anchor] = await projectTournamentFixtures(db, { ...tournament, accountId: '91fda684-2801-4abb-980e-f42cec017cef' }, [lateGame], reference);
+  const [other] = await projectTournamentFixtures(db, tournament, [lateGame], reference);
+  expect(anchor.screening.lateFinishPolicy).toBe('stay_open_if_viewers');
+  expect(anchor.coverage).toBe('until_closing');
+  expect(anchor.screening.screeningEndAt).toBe(other.screening.screeningEndAt);
+  expect(other.screening.lateFinishPolicy).toBeUndefined();
+  expect(other.screening.openingLabel).toContain('end of the match may be missed');
+});

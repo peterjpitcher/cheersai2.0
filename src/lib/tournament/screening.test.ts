@@ -139,3 +139,23 @@ describe('owner-approved terrestrial bookings', () => {
     expect(result.canGenerateTeamPromotion).toBe(teams === 'true');
   });
 });
+
+describe('conditional late finishes', () => {
+  it('explains continued viewing without offering arrivals or food after normal closing', () => {
+    const game = { ...approved, kickOffAt: at('20:10') };
+    const result = resolveScreening(game, hours, now, 'stay_open_if_viewers');
+    expect(result.lateFinishPolicy).toBe('stay_open_if_viewers');
+    expect(result.openingLabel).toContain('If people are still here watching, we will stay open until the game finishes');
+    expect(result.openingLabel).toContain('Usual pub hours');
+    expect(result.openingLabel).not.toContain('end of the match may be missed');
+    expect(Date.parse(result.screeningEndAt!)).toBe(Date.parse(at('22:00')));
+    expect(result.foodPromotion.serviceWindows).toHaveLength(1);
+    expect(Date.parse(result.foodPromotion.serviceWindows[0].endAt)).toBe(Date.parse(at('19:00')));
+    expect(resolveScreening(game, hours, new Date(at('22:00')), 'stay_open_if_viewers').canBookForScreening).toBe(false);
+  });
+  it('does not promise late opening for daytime, unavailable or closed screenings', () => {
+    expect(resolveScreening(approved, hours, now, 'stay_open_if_viewers').lateFinishPolicy).toBeUndefined();
+    expect(resolveScreening({ ...approved, kickOffAt: at('22:10') }, hours, now, 'stay_open_if_viewers').lateFinishPolicy).toBeUndefined();
+    expect(resolveScreening(approved, { ...hours, state: 'closed', bar: null }, now, 'stay_open_if_viewers').canBookForScreening).toBe(false);
+  });
+});
