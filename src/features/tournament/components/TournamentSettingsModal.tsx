@@ -12,6 +12,7 @@ import {
   disableFeedApiKey,
 } from '@/app/actions/tournament';
 import { TournamentImageUploads } from './TournamentImageUploads';
+import { TournamentScheduleDefault, parsePostLeadHours } from './TournamentScheduleDefault';
 
 interface TournamentSettingsModalProps {
   tournament: Tournament;
@@ -27,7 +28,7 @@ export function TournamentSettingsModal({
   const [name, setName] = useState(tournament.name);
   const [houseRulesText, setHouseRulesText] = useState(tournament.houseRulesText ?? '');
   const [postTemplate, setPostTemplate] = useState(tournament.postTemplate);
-  const [postLeadHours, setPostLeadHours] = useState(tournament.postLeadHours);
+  const [postLeadHours, setPostLeadHours] = useState(String(tournament.postLeadHours));
   const [platforms, setPlatforms] = useState(tournament.platforms);
   const [saving, setSaving] = useState(false);
   const [imagesUploading, setImagesUploading] = useState(false);
@@ -57,7 +58,7 @@ export function TournamentSettingsModal({
     setName(tournament.name);
     setHouseRulesText(tournament.houseRulesText ?? '');
     setPostTemplate(tournament.postTemplate);
-    setPostLeadHours(tournament.postLeadHours);
+    setPostLeadHours(String(tournament.postLeadHours));
     setPlatforms(tournament.platforms);
     setFeedApiKey(tournament.feedApiKey);
     setFeedKeyVisible(false);
@@ -70,6 +71,8 @@ export function TournamentSettingsModal({
   if (!open) return null;
 
   async function handleSave() {
+    const leadHours = parsePostLeadHours(postLeadHours);
+    if (leadHours === null) return;
     setSaving(true);
     setError(null);
     try {
@@ -77,7 +80,7 @@ export function TournamentSettingsModal({
         name,
         houseRulesText: houseRulesText || null,
         postTemplate,
-        postLeadHours,
+        postLeadHours: leadHours,
         platforms,
       });
       if (!result.success) {
@@ -271,37 +274,7 @@ export function TournamentSettingsModal({
             />
           </div>
 
-          <div>
-            <label
-              className="block text-sm font-medium mb-1"
-              style={{ color: 'var(--c-ink)' }}
-            >
-              Post Lead Time
-            </label>
-            <div className="flex items-center gap-2">
-              <input
-                type="number"
-                value={postLeadHours}
-                onChange={(e) =>
-                  setPostLeadHours(Math.max(1, Math.min(168, parseInt(e.target.value) || 24)))
-                }
-                className="w-20 px-3 py-2 text-sm"
-                style={{
-                  borderRadius: 'var(--r-md)',
-                  border: '1px solid var(--c-line)',
-                  color: 'var(--c-ink)',
-                }}
-                min={1}
-                max={168}
-              />
-              <span
-                className="text-sm"
-                style={{ color: 'var(--c-ink-3)' }}
-              >
-                hours before kick-off
-              </span>
-            </div>
-          </div>
+          <TournamentScheduleDefault value={postLeadHours} onChange={setPostLeadHours} />
 
           <div>
             <label
@@ -360,12 +333,6 @@ export function TournamentSettingsModal({
                 </button>
               ))}
             </div>
-            <p
-              className="text-xs mt-1"
-              style={{ color: 'var(--c-ink-3)' }}
-            >
-              Lead time changes apply to future generation only.
-            </p>
           </div>
         </div>
 
@@ -607,7 +574,7 @@ export function TournamentSettingsModal({
           </button>
           <button
             onClick={handleSave}
-            disabled={saving || imagesUploading || !name.trim() || !postTemplate.trim() || platforms.length === 0}
+            disabled={saving || imagesUploading || parsePostLeadHours(postLeadHours) === null || !name.trim() || !postTemplate.trim() || platforms.length === 0}
             className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white disabled:opacity-50 transition-colors"
             style={{
               backgroundColor: 'var(--c-orange)',
