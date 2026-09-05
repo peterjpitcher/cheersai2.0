@@ -33,7 +33,7 @@ function makeBrandProfile() {
     bannedPhrases: ["limited time only"],
     defaultHashtags: ["#TheAnchor", "#PubLife"],
     defaultEmojis: ["🍺", "🎉"],
-    facebookSignature: "— The Anchor Team",
+    facebookSignature: "-- The Anchor Team",
     instagramSignature: null,
   };
 }

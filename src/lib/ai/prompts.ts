@@ -36,17 +36,17 @@ export function buildInstantPostPrompt({ brand, input, platform, scheduledFor, c
   const systemLines = [
     "You are CheersAI, writing social media copy on behalf of a single-owner British pub team.",
     "Use British English throughout.",
-    'Write as the pub team in first-person plural. Use "we" as the subject ("We\'re serving..."), "us" as the object ("join us", "come to us", "find us"), and "our" as the possessive ("our kitchen", "our garden"). Never use "we" in object position — "come to we" is always wrong; "come to us" or "join us" is always right.',
-    'Third-party subject sentences about guests are allowed and natural: "Kids are welcome", "Everyone\'s invited", "All ages welcome", "Bring the whole family" — these do not need to be rewritten into first person.',
+    'Write as the pub team in first-person plural. Use "we" as the subject ("We\'re serving..."), "us" as the object ("join us", "come to us", "find us"), and "our" as the possessive ("our kitchen", "our garden"). Never use "we" in object position, "come to we" is always wrong; "come to us" or "join us" is always right.',
+    'Third-party subject sentences about guests are allowed and natural: "Kids are welcome", "Everyone\'s invited", "All ages welcome", "Bring the whole family", these do not need to be rewritten into first person.',
     'The venue name may appear in ONLY these three positions: (1) an opening hook where the name reads as an invitation (e.g. "Join us at The Anchor this Sunday"), (2) a location reference where the name is the clearest way to direct someone (e.g. "Find us at The Anchor"), (3) a sign-off or closing tag if a signature is provided.',
     'Never open a body copy sentence with the venue name as the grammatical subject. WRONG: "The Anchor is serving roast beef this Sunday." RIGHT: "We\'re serving roast beef this Sunday."',
     venueName
-      ? `The venue is called "${venueName}". Use this name only in the three permitted positions above — never as the subject of a body copy sentence.`
+      ? `The venue is called "${venueName}". Use this name only in the three permitted positions above, never as the subject of a body copy sentence.`
       : "Do not name the venue.",
     "Keep copy warm, human, and helpful.",
     `Tone profile: ${TONE_PROFILE}`,
     "Output only the final caption text. No labels, no quotes, no commentary.",
-    "Write plain text only — no markdown formatting (no **bold**, *italics*, # headings or backticks). Platforms display these symbols literally.",
+    "Write plain text only, no markdown formatting (no **bold**, *italics*, # headings or backticks). Platforms display these symbols literally.",
     "If a price, cost, or specific offer detail is provided, you MUST include it in the final copy.",
     describeToneTargets(brand),
     formatListLine("Do not mention", brand.bannedTopics),
@@ -66,7 +66,7 @@ export function buildInstantPostPrompt({ brand, input, platform, scheduledFor, c
     typeof context?.pillarNudge === "string" ? context.pillarNudge.trim() : null;
 
   const sections: string[] = [
-    input.title?.trim() ? `Title (for context only — do not copy verbatim or use as sentence subject): ${input.title.trim()}` : null,
+    input.title?.trim() ? `Title (for context only, do not copy verbatim or use as sentence subject): ${input.title.trim()}` : null,
     input.prompt?.trim() ? `Request: ${input.prompt.trim()}` : null,
     brandLines.length ? `Brand voice:\n${brandLines.join("\n")}` : null,
     buildMediaLine(input),
@@ -96,7 +96,7 @@ function buildPlatformGuidance(
           ? "Include a CTA and 2-3 relevant hashtags if it feels natural."
           : "Include a CTA and keep copy hashtag-free.",
         "Where natural, close with a question or opinion prompt that invites comments (e.g., 'What's your order?', 'Who's joining us?'). Facebook rewards posts that generate replies.",
-        "Write as if talking to a regular — conversational, not announcement-style.",
+        "Write as if talking to a regular, conversational, not announcement-style.",
         formatOptionalLine("Append this exact signature verbatim at the end if it fits naturally (do not rephrase it)", brand.facebookSignature),
       ]
         .filter(Boolean)
@@ -104,7 +104,7 @@ function buildPlatformGuidance(
     case "instagram": {
       const hasLink = Boolean(input.linkInBioUrl || input.ctaUrl);
       return [
-        "The first line must stop the scroll. Front-load the hook — only the first 125 characters show before 'more'.",
+        "The first line must stop the scroll. Front-load the hook, only the first 125 characters show before 'more'.",
         "Aim for 60-80 words with line breaks.",
         "Use line breaks to create scannable structure. One thought per line.",
         "Do not include URLs, bare domains, booking links, or 'book at [website]' wording.",
@@ -183,14 +183,14 @@ function describeAdjustments(
   if (platform === "facebook") {
     if (input.ctaUrl) {
       lines.push(
-        "If a CTA URL is provided, include a clear call to action aligned with the CTA label/objective, but do not include the URL—our system appends it.",
+        "If a CTA URL is provided, include a clear call to action aligned with the CTA label/objective, but do not include the URL, our system appends it.",
       );
     } else {
       lines.push("Include a clear CTA suited to the venue (link optional).");
     }
   } else if (platform === "instagram") {
     if (input.linkInBioUrl || input.ctaUrl) {
-      lines.push("Do not include any URLs, bare domains, or direct booking links—reference our link in bio instead.");
+      lines.push("Do not include any URLs, bare domains, or direct booking links, reference our link in bio instead.");
       lines.push("If a CTA label is provided, align the final link-in-bio line with it (e.g. Book now, Find out more).");
     } else {
       lines.push("Do not include URLs or link-in-bio language.");
@@ -314,7 +314,7 @@ function buildContextBlock({
 
   const slot = extractContextString(context, "slot");
   if (slot && !/^manual-\d+$/i.test(slot) && !/^custom-\d+$/i.test(slot)) {
-    lines.push(`Campaign timing phase (internal guidance only — never use the word "slot" or this label verbatim in the copy): ${slot}.`);
+    lines.push(`Campaign timing phase (internal guidance only, never use the word "slot" or this label verbatim in the copy): ${slot}.`);
   }
 
   if (!lines.length) return null;
@@ -350,20 +350,20 @@ Example 1 (Facebook, Sunday roast event):
 Join us for a proper Sunday roast this weekend. We're serving up slow-roasted beef with all the trimmings, including our massive Yorkies. It's the perfect way to gather the family before the week starts again. Book your table now to avoid missing out.
 
 Example 2 (Instagram, sport):
-The Six Nations is back on our screens. We'll be showing every match live — grab a pint and settle in for the action. Who are you backing this year?
+The Six Nations is back on our screens. We'll be showing every match live. Grab a pint and settle in for the action. Who are you backing this year?
 
 Example 3 (Facebook, casual midweek):
 Looking for the perfect spot for a midweek catch-up? Our burger and pint night is just the ticket. Great food, cold drinks, and even better company. See you at the bar!
 
-Grammar rules — strictly follow these:
+Grammar rules, strictly follow these:
 - "we" is a SUBJECT pronoun: "We're serving...", "We'll be showing..."
 - "us" is an OBJECT pronoun: "Join us", "Come to us", "Find us", "See you with us"
-- NEVER write "come to we" or "join we" — these are always grammatically wrong
+- NEVER write "come to we" or "join we", these are always grammatically wrong
 - Third-party subjects about guests are fine: "Kids are welcome", "Bring the whole crew", "All ages welcome"
 
-POV guidance — wrong vs right:
+POV guidance, wrong vs right:
 WRONG: "Come to we this Friday for quiz night. The Anchor is hosting a great event. The Anchor welcomes everyone."
-RIGHT: "Come to us this Friday for quiz night. We're hosting a great night — everyone's welcome, bring the whole crew."
+RIGHT: "Come to us this Friday for quiz night. We're hosting a great night, everyone's welcome, bring the whole crew."
 `.trim();
 }
 
@@ -381,24 +381,25 @@ const CONTENT_TYPE_CONTEXT: Record<ContentType, string> = {
 
 const PLATFORM_RULES = [
   'Facebook: target 80-140 words for announcements and 50-90 words for reminders. Conversational tone. Put hashtags only in facebook.hashtags and CTA wording only in facebook.cta_text.',
-  'Facebook: where natural, close the body with a short question or opinion prompt that invites comments (e.g. "Who\'s on your team?", "What\'s your go-to order?") — posts that get replies reach more people.',
+  'Facebook: where natural, close the body with a short question or opinion prompt that invites comments (e.g. "Who\'s on your team?", "What\'s your go-to order?"), posts that get replies reach more people.',
   'Instagram: target 45-90 words. First line must hook within 125 characters. Use short line breaks. Put hashtags only in instagram.hashtags and booking wording only in instagram.link_in_bio_line.',
   'Do not clone the same caption twice. Facebook can be fuller and conversational, while Instagram should be hook-led and scannable.',
 ].join('\n');
 
-// House style for pub social copy — keeps copy warm, local and plain-speaking,
+// House style for pub social copy, keeps copy warm, local and plain-speaking,
 // and counteracts any "premium/sophisticated" pull from a mis-set tone.
 const PUB_WRITING_RULES = [
   'Keep sentences short and easy to read.',
-  "Lead with why it'll be a good time — the fun, the people, the reason to come.",
-  'Open with the most interesting specific detail as the hook — never a generic greeting or a formulaic opener like "Get ready" or "Don\'t miss".',
+  "Lead with why it'll be a good time, the fun, the people, the reason to come.",
+  'Open with the most interesting specific detail as the hook, never a generic greeting or a formulaic opener like "Get ready" or "Don\'t miss".',
   'Include the key details clearly: what it is, the date, the time, the price if relevant, and how to book or join.',
   'Never put URLs, bare domains, markdown links, source citations, or old booking links in any body copy. The system owns final CTA URLs.',
   'For Instagram, booking/joining instructions must only point people to the link in bio. Never put a URL, bare domain, booking link, or booking website in Instagram copy.',
   'Do not invent operational details. Only mention bookings, limited spaces, walk-ins, arrival rules, food service times, prices, hosts, age rules, or capacity if they are explicitly supplied in the brief.',
-  'When you state a specific event date, write it in full and properly cased as "Weekday Nth Month" — for example "Friday 17th July". Never abbreviate or upper-case it (never "FRI 17 JUL"), and never put a vague "this" or "next" in front of that specific date, which can wrongly imply the wrong week. Use "tonight" or "tomorrow" only when the post itself publishes on that day. (For a weekly recurring event with no fixed date, natural day-of-week wording like "this Friday" is fine.)',
-  'Sound like a real person talking to a regular — warm, local and plain-speaking.',
+  'When you state a specific event date, write it in full and properly cased as "Weekday Nth Month", for example "Friday 17th July". Never abbreviate or upper-case it (never "FRI 17 JUL"), and never put a vague "this" or "next" in front of that specific date, which can wrongly imply the wrong week. Use "tonight" or "tomorrow" only when the post itself publishes on that day. (For a weekly recurring event with no fixed date, natural day-of-week wording like "this Friday" is fine.)',
+  'Sound like a real person talking to a regular, warm, local and plain-speaking.',
   'Do not be posh, corporate or salesy. Avoid words like premium, elevated, curated, sophisticated, exclusive and "hidden gem".',
+  'Never use an em dash. Use a comma, a colon, brackets or a new sentence instead.',
   'Do not over-explain or pad the copy.',
 ].join('\n');
 
@@ -420,7 +421,7 @@ export function buildSystemPrompt(
     'Generate platform-specific copy for Facebook and Instagram from a single brief.',
     'Use British English throughout.',
     'Write in first-person plural ("we", "our", "us"). Never use "we" in object position.',
-    'Write plain text only. Do not use markdown formatting — no **bold**, *italics*, _underscores_, # headings or backticks. Social platforms display these symbols literally.',
+    'Write plain text only. Do not use markdown formatting, no **bold**, *italics*, _underscores_, # headings or backticks. Social platforms display these symbols literally.',
     'Use short paragraphs separated by line breaks so the copy is easy to scan. Avoid one solid block of text.',
     '',
     `Content type: ${contentType}`,
@@ -446,7 +447,7 @@ export function buildSystemPrompt(
   lines.push('', 'Writing rules:', PUB_WRITING_RULES);
 
   // Brand-specific voice configured in Settings → Brand Voice. The banned
-  // phrase list always includes the system clichés — the post-process scrubs
+  // phrase list always includes the system clichés, the post-process scrubs
   // them deterministically, so the model must be steered away from them here
   // or whole sentences get rewritten/removed after generation.
   const brandLines = [
@@ -557,7 +558,7 @@ export function buildUserPrompt(
     sections.push(`Time: ${brief.time}`);
   }
 
-  // Schedule context — prefer context.scheduledAt over brief.scheduledFor to avoid duplicates
+  // Schedule context, prefer context.scheduledAt over brief.scheduledFor to avoid duplicates
   const scheduleIso = context?.scheduledAt ?? (brief.contentType === 'instant_post' ? brief.scheduledFor : null);
   if (scheduleIso) {
     const scheduleDt = DateTime.fromISO(scheduleIso, { zone: DEFAULT_TIMEZONE });
@@ -573,7 +574,7 @@ export function buildUserPrompt(
     if (eventStart.isValid) {
       const absoluteDate = formatEventDateLong(eventStart);
       sections.push(
-        `Event date: ${absoluteDate} at ${formatFriendlyTimeFromZoned(eventStart)} (${DEFAULT_TIMEZONE}). When the copy states the date, write it in full exactly as "${absoluteDate}" — never abbreviated or upper-cased, and never prefixed with a vague "this" or "next".`
+        `Event date: ${absoluteDate} at ${formatFriendlyTimeFromZoned(eventStart)} (${DEFAULT_TIMEZONE}). When the copy states the date, write it in full exactly as "${absoluteDate}", never abbreviated or upper-cased, and never prefixed with a vague "this" or "next".`
       );
     }
   }
@@ -619,7 +620,7 @@ export function buildUserPrompt(
     'Accuracy guardrails: do not invent booking requirements, limited availability, walk-in rules, food service times, prices, host names, age rules, or venue logistics unless they are stated in this brief. If a detail is not supplied, leave it out.',
   );
 
-  // Temporal framing — gives the AI label-specific narrative context for multi-date schedules
+  // Temporal framing, gives the AI label-specific narrative context for multi-date schedules
   if (context?.slotLabel) {
     const temporal = buildTemporalInstructions(context.slotLabel);
     if (temporal) {
@@ -633,7 +634,7 @@ export function buildUserPrompt(
       const parts = [`${i + 1}. ${m.mediaType === 'video' ? 'Video' : 'Image'}: ${m.fileName}`];
       if (m.tags.length) parts.push(`tags: ${m.tags.join(', ')}`);
       if (m.aspectClass) parts.push(`format: ${m.aspectClass}`);
-      return parts.join(' — ');
+      return parts.join(' | ');
     });
     sections.push(
       `Attached media (${context.media.length} item${context.media.length === 1 ? '' : 's'}):\n${mediaLines.join('\n')}\nUse media metadata only when it is explicit; do not invent visual details that are not present in the filename or tags.`

@@ -73,6 +73,85 @@ function normaliseApostrophes(value: string): string {
   return value.replace(CURLY_APOSTROPHES, "'");
 }
 
+// House style bans the em dash (U+2014) in published copy. It is written as a
+// unicode escape throughout, because this repo's own source must not contain
+// the character literally either.
+const EM_DASH = "\u2014";
+// A line that opens with an em dash is an attribution or signature line. The
+// signature form used everywhere else in this codebase is the double hyphen.
+const ATTRIBUTION_DASH = /^([ \t]*)\u2014[ \t]*/gm;
+// A dash between two numbers is a range, e.g. "6pm to 8pm", so it reads as "to".
+const NUMERIC_RANGE_DASH = /(\d(?:\s?[ap]m)?)[ \t]*\u2014[ \t]*(\d)/gi;
+
+export function containsEmDash(value: string): boolean {
+  return value.includes(EM_DASH);
+}
+
+/**
+ * Swap em dashes for the punctuation a person would have used, so generated
+ * copy is repaired rather than rejected. Attribution lines take the double
+ * hyphen and number ranges take "to"; every other dash becomes a comma, a colon
+ * or a sentence break depending on the clauses either side of it.
+ */
+export function replaceEmDashes(value: string): string {
+  if (!containsEmDash(value)) return value;
+  const withoutSpecialCases = value
+    .replace(ATTRIBUTION_DASH, "$1-- ")
+    .replace(NUMERIC_RANGE_DASH, "$1 to $2");
+  return replaceSentenceEmDashes(withoutSpecialCases);
+}
+
+function replaceSentenceEmDashes(value: string): string {
+  const parts = value.split(EM_DASH);
+  if (parts.length === 1) return value;
+
+  let output = parts[0];
+
+  for (let index = 1; index < parts.length; index += 1) {
+    const left = output.replace(/[ \t]+$/, "");
+    const right = parts[index].replace(/^[ \t]+/, "");
+
+    // Nothing to attach the dash to on one side, or the model already wrote the
+    // real punctuation next to it. Drop the dash on its own.
+    if (!left.trim().length || !right.length || /^[.!?,;:\n]/.test(right)) {
+      output = left + right;
+      continue;
+    }
+    if (/[.!?,;:]$/.test(left)) {
+      output = `${left} ${right}`;
+      continue;
+    }
+
+    if (trailingClause(left).includes(",")) {
+      // The clause already carries a comma, so a second one would read as a
+      // splice. Start a new sentence instead.
+      output = `${left}. ${capitaliseFirst(right)}`;
+    } else if (leadingClause(right).includes(",")) {
+      // The dash is introducing a series ("the lot: food, drinks and music"),
+      // which is what a colon is for.
+      output = `${left}: ${right}`;
+    } else {
+      output = `${left}, ${right}`;
+    }
+  }
+
+  return output;
+}
+
+/** The run of text back to the start of the sentence the dash sits in. */
+function trailingClause(value: string): string {
+  return /[^.!?\n]*$/.exec(value)?.[0] ?? value;
+}
+
+/** The run of text forward to the end of the sentence the dash sits in. */
+function leadingClause(value: string): string {
+  return /^[^.!?\n]*/.exec(value)?.[0] ?? value;
+}
+
+function capitaliseFirst(value: string): string {
+  return value.replace(/^\p{Ll}/u, (character) => character.toUpperCase());
+}
+
 const SENTENCE_BOUNDARY = /(?<=[.!?])\s+/;
 
 /**
@@ -199,6 +278,8 @@ export function postProcessGeneratedCopy({
   output = stripMarkdown(output);
   output = normaliseWhitespace(output);
   output = normaliseTimes(output);
+  // Runs before the sentence-level steps below so they see real boundaries.
+  output = replaceEmDashes(output);
 
   if (bannedTopics?.length) {
     output = removeBannedPhraseSentences(output, bannedTopics);
@@ -404,6 +485,10 @@ function processPlatformBody(
   // Strip markdown the platforms would otherwise render literally (e.g. **bold**)
   let output = stripMarkdown(body);
 
+  // House style bans the em dash. Swap it for the mark a person would have used
+  // before the sentence-level steps below run, so they see real boundaries.
+  output = replaceEmDashes(output);
+
   // Replace known clichés with natural alternatives first (keeps the sentence
   // intact), then drop the whole containing sentence for any banned phrase
   // left over — deleting just the phrase produces broken grammar ("Bring your
@@ -430,10 +515,11 @@ function processPlatformBody(
     output = stripBareBookingCtaLines(output);
   }
 
-  // Append platform signature if provided
+  // Append platform signature if provided. The signature is user-supplied, so
+  // it gets the same em dash treatment as the body.
   const signature = config.platformSignatures[platform];
   if (signature) {
-    output = `${output}\n${signature}`;
+    output = `${output}\n${replaceEmDashes(signature)}`;
   }
 
   return sanitizePublishBody(platform as PublishingPlatform, output);

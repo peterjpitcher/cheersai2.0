@@ -1,6 +1,11 @@
 import { DateTime } from "luxon";
 
-import { removeBannedPhraseSentences, removeSentencesMatching } from "@/lib/ai/postprocess";
+import {
+  containsEmDash,
+  removeBannedPhraseSentences,
+  removeSentencesMatching,
+  replaceEmDashes,
+} from "@/lib/ai/postprocess";
 import { applyProofPoints, lintProofPoints, type ProofPointUsage } from "@/lib/ai/proof-points";
 import { BANNED_PHRASES, detectBannedPhrases, reduceHype, scrubBannedPhrases } from "@/lib/ai/voice";
 import type { InstantPostAdvancedOptions } from "@/lib/create/schema";
@@ -268,6 +273,14 @@ export function applyChannelRules({
     }
   }
 
+  // House style bans the em dash, so it is swapped for the comma, colon or
+  // sentence break a person would have used rather than failing the copy.
+  const dashesReplaced = replaceEmDashes(output);
+  if (dashesReplaced !== output) {
+    output = dashesReplaced;
+    repairs.push("em_dashes_replaced");
+  }
+
   output = normalizePunctuation(output);
   const deduped = collapseRepeatedWords(output);
   if (deduped !== output) {
@@ -480,6 +493,13 @@ export function lintContent({
   if (contract.maxChars && charCount > contract.maxChars) {
     const code = "char_limit";
     issues.push({ code, message: "Copy exceeds the hard length cap.", severity: resolveSeverity(code) });
+  }
+
+  // A warning, not an error: applyChannelRules repairs em dashes rather than
+  // rejecting the copy, so this only reports copy that skipped the repair.
+  if (containsEmDash(trimmed)) {
+    const code = "em_dash";
+    issues.push({ code, message: "Em dashes are not allowed in copy.", severity: resolveSeverity(code) });
   }
 
   if (/\.\.\.+$/.test(trimmed) || /…$/.test(trimmed)) {

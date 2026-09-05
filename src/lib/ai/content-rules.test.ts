@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { applyChannelRules } from './content-rules';
+import { applyChannelRules, hasBlockingIssues, lintContent } from './content-rules';
 
 describe('applyChannelRules — link-in-bio removal on Facebook', () => {
   it('removes the whole link-in-bio sentence rather than leaving a broken fragment', () => {
@@ -40,5 +40,56 @@ describe('applyChannelRules — disallowed claim removal', () => {
     expect(result.body).not.toMatch(/spaces are limited/i);
     expect(result.body.trim()).not.toMatch(/^[,;:]/);
     expect(result.body).toMatch(/book early/i);
+  });
+});
+
+describe('applyChannelRules and lintContent: em dash house style', () => {
+  // Built from the code point so this file never holds a literal em dash.
+  const dash = String.fromCharCode(0x2014);
+
+  it('repairs an em dash instead of leaving it in the copy', () => {
+    const result = applyChannelRules({
+      body: `Quiz night is back ${dash} first round at 7pm.`,
+      platform: 'facebook',
+      placement: 'feed',
+    });
+    expect(result.body).not.toContain(dash);
+    expect(result.body).toContain('Quiz night is back, first round at 7pm.');
+    expect(result.repairs).toContain('em_dashes_replaced');
+  });
+
+  it('does not record the repair when the copy has no em dash', () => {
+    const result = applyChannelRules({
+      body: 'Quiz night is back, first round at 7pm.',
+      platform: 'facebook',
+      placement: 'feed',
+    });
+    expect(result.repairs).not.toContain('em_dashes_replaced');
+  });
+
+  it('flags an em dash as a warning rather than a blocking error', () => {
+    const result = lintContent({
+      body: `Quiz night is back ${dash} first round at 7pm.`,
+      platform: 'facebook',
+      placement: 'feed',
+    });
+    const issue = result.issues.find((entry) => entry.code === 'em_dash');
+    expect(issue).toBeDefined();
+    expect(issue?.severity).toBe('warning');
+    expect(hasBlockingIssues(result)).toBe(false);
+  });
+
+  it('raises no em dash issue for copy that has already been repaired', () => {
+    const repaired = applyChannelRules({
+      body: `Roast from 1pm ${dash} book ahead.`,
+      platform: 'facebook',
+      placement: 'feed',
+    });
+    const result = lintContent({
+      body: repaired.body,
+      platform: 'facebook',
+      placement: 'feed',
+    });
+    expect(result.issues.map((entry) => entry.code)).not.toContain('em_dash');
   });
 });
