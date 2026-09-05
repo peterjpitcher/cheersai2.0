@@ -33,7 +33,7 @@ function makeBrandProfile() {
     bannedPhrases: ["limited time only"],
     defaultHashtags: ["#TheAnchor", "#PubLife"],
     defaultEmojis: ["🍺", "🎉"],
-    facebookSignature: "— The Anchor Team",
+    facebookSignature: "-- The Anchor Team",
     instagramSignature: null,
   };
 }
@@ -141,13 +141,25 @@ describe("Copy Intelligence: content pillar inference", () => {
 // --- 3. Spread-Evenly Scheduling ---
 
 describe("Spread-evenly scheduling", () => {
+  // The scheduler does its day arithmetic in the venue timezone, so fixtures and
+  // assertions are anchored there. Using `new Date(y, m, d)` and `getDate()` read
+  // the process timezone instead, which made these tests pass under Europe/London
+  // and fail under UTC, the zone the serverless runtime actually uses.
+  const VENUE_TZ = "Europe/London";
+  const venueDate = (year: number, month: number, day: number): Date =>
+    DateTime.fromObject({ year, month, day }, { zone: VENUE_TZ }).toJSDate();
+  const venueDayOfMonth = (d: Date): number =>
+    DateTime.fromJSDate(d, { zone: VENUE_TZ }).day;
+  const venueDayKey = (d: Date): string =>
+    DateTime.fromJSDate(d, { zone: VENUE_TZ }).toFormat("yyyy-MM-dd");
+
   it("distributes posts across empty days in a week", () => {
     const config: SpreadConfig = {
       postsPerWeek: 3,
       platforms: ["facebook", "instagram"],
       staggerPlatforms: true,
-      windowStart: new Date(2026, 3, 6), // Monday 6 Apr 2026
-      windowEnd: new Date(2026, 3, 12),  // Sunday 12 Apr 2026
+      windowStart: venueDate(2026, 4, 6), // Monday 6 Apr 2026
+      windowEnd: venueDate(2026, 4, 12),  // Sunday 12 Apr 2026
     };
 
     const slots = buildSpreadEvenlySlots(config, []);
@@ -155,14 +167,16 @@ describe("Spread-evenly scheduling", () => {
     // Should create 3 slots total (postsPerWeek = 3)
     expect(slots).toHaveLength(3);
 
-    // All slots should be within the window
+    // All slots should fall on a day inside the window, compared as venue days
+    // rather than raw instants: a slot sits at the start of its venue day, which
+    // can precede the window's own instant once the zones differ.
     for (const slot of slots) {
-      expect(slot.date.getTime()).toBeGreaterThanOrEqual(config.windowStart.getTime());
-      expect(slot.date.getTime()).toBeLessThanOrEqual(config.windowEnd.getTime());
+      expect(venueDayKey(slot.date) >= venueDayKey(config.windowStart)).toBe(true);
+      expect(venueDayKey(slot.date) <= venueDayKey(config.windowEnd)).toBe(true);
     }
 
     // With staggering, platforms should be on different days where possible
-    const days = new Set(slots.map((s) => s.date.toISOString().slice(0, 10)));
+    const days = new Set(slots.map((s) => venueDayKey(s.date)));
     expect(days.size).toBeGreaterThanOrEqual(2);
   });
 
@@ -171,20 +185,20 @@ describe("Spread-evenly scheduling", () => {
       postsPerWeek: 1,
       platforms: ["facebook"],
       staggerPlatforms: false,
-      windowStart: new Date(2026, 3, 6),
-      windowEnd: new Date(2026, 3, 12),
+      windowStart: venueDate(2026, 4, 6),
+      windowEnd: venueDate(2026, 4, 12),
     };
 
     const existingPosts = [
-      { scheduledFor: new Date(2026, 3, 6), platform: "facebook", placement: "feed" },
-      { scheduledFor: new Date(2026, 3, 7), platform: "facebook", placement: "feed" },
+      { scheduledFor: venueDate(2026, 4, 6), platform: "facebook", placement: "feed" },
+      { scheduledFor: venueDate(2026, 4, 7), platform: "facebook", placement: "feed" },
     ];
 
     const slots = buildSpreadEvenlySlots(config, existingPosts);
     expect(slots).toHaveLength(1);
 
     // Should not pick Monday (6th) or Tuesday (7th) since they already have posts
-    const chosenDay = slots[0]!.date.getDate();
+    const chosenDay = venueDayOfMonth(slots[0]!.date);
     expect(chosenDay).not.toBe(6);
     expect(chosenDay).not.toBe(7);
   });

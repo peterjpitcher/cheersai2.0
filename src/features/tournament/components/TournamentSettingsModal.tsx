@@ -295,6 +295,7 @@ export function TournamentSettingsModal({
               Post Template{' '}
               <span style={{ color: 'var(--c-ink-3)' }}>({postTemplate.length}/500)</span>
             </label>
+            {tournament.sport === 'rugby_union' && <p className="text-xs mb-2" style={{ color: 'var(--c-ink-3)' }}>Rugby posts use fixed wording from verified game, opening and kitchen details. This custom template and house rules apply to football posts only.</p>}
             <textarea
               value={postTemplate}
               onChange={(e) => setPostTemplate(e.target.value.slice(0, 500))}

@@ -1,6 +1,11 @@
 import { DateTime } from "luxon";
 
-import { removeBannedPhraseSentences, removeSentencesMatching } from "@/lib/ai/postprocess";
+import {
+  containsEmDash,
+  removeBannedPhraseSentences,
+  removeSentencesMatching,
+  replaceEmDashes,
+} from "@/lib/ai/postprocess";
 import { applyProofPoints, lintProofPoints, type ProofPointUsage } from "@/lib/ai/proof-points";
 import { BANNED_PHRASES, detectBannedPhrases, reduceHype, scrubBannedPhrases } from "@/lib/ai/voice";
 import type { InstantPostAdvancedOptions } from "@/lib/create/schema";
@@ -31,7 +36,7 @@ export interface LintResult {
   };
 }
 
-/** Hard-failure lint codes — content would look broken or violate brand rules. */
+/** Hard-failure lint codes, content would look broken or violate brand rules. */
 const BLOCKING_LINT_CODES = new Set(["blocked_tokens", "banned_phrases"]);
 
 function resolveSeverity(code: string): LintSeverity {
@@ -208,7 +213,7 @@ export function applyChannelRules({
   }
 
   // Banned phrases with no inline replacement (e.g. "you won't regret it",
-  // "hidden gem") take their whole sentence with them — deleting only the
+  // "hidden gem") take their whole sentence with them, deleting only the
   // phrase leaves broken grammar.
   const withoutBannedSentences = removeBannedPhraseSentences(output, BANNED_PHRASES);
   if (withoutBannedSentences !== output) {
@@ -255,7 +260,7 @@ export function applyChannelRules({
   }
 
   if (!contract.allowLinkInBio) {
-    // Drop the whole sentence, not just the phrase — deleting "link in our bio"
+    // Drop the whole sentence, not just the phrase, deleting "link in our bio"
     // mid-sentence left broken grammar ("Find the to book.").
     const removal = removeSentencesMatching(output, (text) => {
       LINK_IN_BIO_PATTERN.lastIndex = 0;
@@ -266,6 +271,14 @@ export function applyChannelRules({
       output = removal.value;
       repairs.push("link_in_bio_removed");
     }
+  }
+
+  // House style bans the em dash, so it is swapped for the comma, colon or
+  // sentence break a person would have used rather than failing the copy.
+  const dashesReplaced = replaceEmDashes(output);
+  if (dashesReplaced !== output) {
+    output = dashesReplaced;
+    repairs.push("em_dashes_replaced");
   }
 
   output = normalizePunctuation(output);
@@ -480,6 +493,13 @@ export function lintContent({
   if (contract.maxChars && charCount > contract.maxChars) {
     const code = "char_limit";
     issues.push({ code, message: "Copy exceeds the hard length cap.", severity: resolveSeverity(code) });
+  }
+
+  // A warning, not an error: applyChannelRules repairs em dashes rather than
+  // rejecting the copy, so this only reports copy that skipped the repair.
+  if (containsEmDash(trimmed)) {
+    const code = "em_dash";
+    issues.push({ code, message: "Em dashes are not allowed in copy.", severity: resolveSeverity(code) });
   }
 
   if (/\.\.\.+$/.test(trimmed) || /…$/.test(trimmed)) {
@@ -729,7 +749,7 @@ function formatDayName(date: Date) {
 
 /**
  * Tidy the fragment left when a disallowed claim is deleted from a body that was
- * a single sentence — drop an orphaned leading connective/punctuation
+ * a single sentence, drop an orphaned leading connective/punctuation
  * (", so book early." -> "Book early.") rather than shipping a broken fragment.
  */
 function cleanClaimFragment(value: string): string {
@@ -754,7 +774,7 @@ function stripDisallowedClaims(value: string, allowedCodes: string[] = []) {
     }
     rule.pattern.lastIndex = 0;
     // Unverified claims usually sit mid-sentence ("Spaces are limited, so book
-    // early") — deleting the phrase alone leaves fragments, so the whole
+    // early"), deleting the phrase alone leaves fragments, so the whole
     // sentence goes. Fall back to phrase deletion if that would empty the copy.
     const removal = removeSentencesMatching(output, (text) => {
       rule.pattern.lastIndex = 0;

@@ -1,3 +1,5 @@
+import { checkTournamentContentById } from '@/lib/tournament/content-freshness';
+vi.mock('@/lib/tournament/content-freshness', () => ({ checkTournamentContentById: vi.fn().mockResolvedValue(null) }));
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { processPublishJob } from './handler';
 import '@/lib/providers/errors';
@@ -171,6 +173,7 @@ vi.mock('./state-machine', () => ({
 }));
 
 beforeEach(() => {
+    vi.mocked(checkTournamentContentById).mockResolvedValue(null);
   vi.clearAllMocks();
   mockPublishPost.mockResolvedValue({ platformPostId: 'fb-post-123', url: 'https://fb.com/post/123' });
 });
@@ -216,4 +219,10 @@ describe('handler', () => {
       expect(transitionStatus).toHaveBeenCalled();
     });
   });
+  it('blocks stale screening after enqueue without calling the provider', async () => {
+    vi.mocked(checkTournamentContentById).mockResolvedValue('Kitchen times changed. Review required.');
+    await expect(processPublishJob('job_001')).rejects.toThrow('Kitchen times changed');
+    expect(mockPublishPost).not.toHaveBeenCalled();
+  });
+
 });

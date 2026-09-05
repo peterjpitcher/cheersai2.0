@@ -20,6 +20,7 @@ function slugify(text: string): string {
 export function CreateTournamentModal({ open, onClose }: CreateTournamentModalProps) {
   const router = useRouter();
   const dialogRef = useRef<HTMLDivElement>(null);
+  const [sport, setSport] = useState<'football' | 'rugby_union'>('football');
   const [name, setName] = useState('');
   const [slug, setSlug] = useState('');
   const [slugManual, setSlugManual] = useState(false);
@@ -58,6 +59,7 @@ export function CreateTournamentModal({ open, onClose }: CreateTournamentModalPr
     setError(null);
     try {
       const result = await createTournament({
+        sport,
         name,
         slug,
         postTemplate,
@@ -106,6 +108,7 @@ export function CreateTournamentModal({ open, onClose }: CreateTournamentModalPr
         </div>
 
         <div className="space-y-4">
+          <label className="block text-sm">Sport<select className="block w-full p-2" value={sport} onChange={event => { setSport(event.target.value as 'football' | 'rugby_union'); setPostTemplate('{team_a} v {team_b}\n{date} at {time}\n{booking_url}'); }}><option value="football">Football</option><option value="rugby_union">Rugby union</option></select></label>
           <div>
             <label
               className="block text-sm font-medium mb-1"
@@ -166,6 +169,7 @@ export function CreateTournamentModal({ open, onClose }: CreateTournamentModalPr
               Post Template{' '}
               <span style={{ color: 'var(--c-ink-3)' }}>({postTemplate.length}/500)</span>
             </label>
+            {sport === 'rugby_union' && <p className="text-xs mb-2" style={{ color: 'var(--c-ink-3)' }}>Rugby posts use fixed wording from verified game, opening and kitchen details. This custom template and house rules apply to football posts only.</p>}
             <textarea
               value={postTemplate}
               onChange={(e) => setPostTemplate(e.target.value.slice(0, 500))}

@@ -1,22 +1,22 @@
 import { z } from "zod";
 
 /**
- * Eight hook strategies — each has a prompt instruction that tells the AI
+ * Eight hook strategies, each has a prompt instruction that tells the AI
  * how to open the post.
  */
 export const HOOK_STRATEGIES = {
   question: "Open with a question that invites a response from the reader.",
-  bold_statement: "Open with a confident, opinionated statement — own it.",
+  bold_statement: "Open with a confident, opinionated statement, own it.",
   direct_address:
     "Open by speaking directly to a specific group (e.g., families, dog owners, rugby fans).",
   curiosity_gap:
-    "Open by teasing something without revealing it all — make them want to read on.",
+    "Open by teasing something without revealing it all, make them want to read on.",
   seasonal:
     "Open with a reference to the weather, season, time of year, or a timely local moment.",
   scarcity:
     "Open by highlighting limited availability, time pressure, or high demand.",
   behind_scenes:
-    "Open as if sharing an insider glimpse — something the reader wouldn't normally see.",
+    "Open as if sharing an insider glimpse, something the reader wouldn't normally see.",
   social_proof:
     "Open by referencing popularity, customer love, or high demand for this.",
 } as const;
@@ -56,7 +56,7 @@ export function selectHookStrategy(recentHooks: string[]): HookStrategy {
   const candidates = HOOK_STRATEGY_KEYS.filter((k) => !avoid.has(k));
 
   if (candidates.length === 0) {
-    // Defensive fallback — should never happen with 8 strategies and lookback 3
+    // Defensive fallback, should never happen with 8 strategies and lookback 3
     return HOOK_STRATEGY_KEYS[Math.floor(Math.random() * HOOK_STRATEGY_KEYS.length)]!;
   }
 

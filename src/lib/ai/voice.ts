@@ -108,7 +108,7 @@ export const BANNED_PHRASE_REPLACEMENTS: Array<{ pattern: RegExp; replacement: s
   { pattern: /\belectrifying night\b/gi, replacement: "lively night" },
   { pattern: /\bonce[- ]in[- ]a[- ]lifetime\b/gi, replacement: "special" },
   { pattern: /\bbest in town\b/gi, replacement: "local favourite" },
-  // "you won't regret it" has no inline replacement — an empty replacement here
+  // "you won't regret it" has no inline replacement, an empty replacement here
   // left orphan punctuation. removeBannedPhraseSentences (postprocess) drops
   // the whole sentence instead.
   // Extended replacements for newly banned phrases

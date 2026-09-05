@@ -1,3 +1,4 @@
+import { checkTournamentContentById } from '@/lib/tournament/content-freshness';
 /**
  * Core publish pipeline handler (PUB-01, PUB-02, PUB-04).
  * Implements the full idempotent pipeline:
@@ -175,6 +176,9 @@ export async function processPublishJob(jobId: string): Promise<ProcessResult> {
         false, // not retryable -- content must be fixed
       );
     }
+
+    const screeningIssue = await checkTournamentContentById(db, typedJob.account_id, typedJob.content_item_id);
+    if (screeningIssue) throw new ProviderError(screeningIssue, typedJob.platform, ErrorClassification.CONTENT_REJECTED, false);
 
     let result;
     const contentType = payload.contentType;

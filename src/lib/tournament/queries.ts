@@ -7,6 +7,7 @@ import type {
   TournamentStatus,
   TournamentRound,
   FixtureContentStatus,
+  FixtureScreeningFields,
 } from '@/types/tournament';
 
 // --- snake_case DB row → camelCase TypeScript mappers ---
@@ -15,6 +16,7 @@ function mapTournament(row: Record<string, unknown>): Tournament {
   return {
     id: row.id as string,
     accountId: row.account_id as string,
+    sport: row.sport === 'rugby_union' ? 'rugby_union' : 'football',
     name: row.name as string,
     slug: row.slug as string,
     status: row.status as TournamentStatus,
@@ -34,6 +36,21 @@ function mapFixture(row: Record<string, unknown>): TournamentFixture {
   return {
     id: row.id as string,
     tournamentId: row.tournament_id as string,
+    importKey: (row.import_key as FixtureScreeningFields['importKey']) ?? null,
+    roundNumber: (row.round_number as FixtureScreeningFields['roundNumber']) ?? null,
+    finalPosition: (row.final_position as FixtureScreeningFields['finalPosition']) ?? null,
+    plannedEndAt: (row.planned_end_at as FixtureScreeningFields['plannedEndAt']) ?? null,
+    matchState: (row.match_state as FixtureScreeningFields['matchState']) ?? 'scheduled',
+    screeningDecision: (row.screening_decision as FixtureScreeningFields['screeningDecision']) ?? 'unconfirmed',
+    broadcastDecision: (row.broadcast_decision as FixtureScreeningFields['broadcastDecision']) ?? 'unconfirmed',
+    linearChannel: (row.linear_channel as FixtureScreeningFields['linearChannel']) ?? null,
+    screenLabel: (row.screen_label as FixtureScreeningFields['screenLabel']) ?? null,
+    commentary: (row.commentary as FixtureScreeningFields['commentary']) ?? 'unconfirmed',
+    sourceUrl: (row.source_url as FixtureScreeningFields['sourceUrl']) ?? null,
+    sourceCheckedAt: (row.source_checked_at as FixtureScreeningFields['sourceCheckedAt']) ?? null,
+    broadcastCheckedAt: (row.broadcast_checked_at as FixtureScreeningFields['broadcastCheckedAt']) ?? null,
+    screeningConfirmedAt: (row.screening_confirmed_at as FixtureScreeningFields['screeningConfirmedAt']) ?? null,
+    contentRevision: (row.content_revision as FixtureScreeningFields['contentRevision']) ?? 1,
     matchNumber: row.match_number as number,
     round: row.round as TournamentRound,
     groupName: (row.group_name as string) ?? null,

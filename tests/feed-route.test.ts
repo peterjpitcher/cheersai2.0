@@ -396,3 +396,38 @@ describe('GET /api/feed/[tournamentId]', () => {
     });
   });
 });
+
+describe('schema 2 screening feed', () => {
+  beforeEach(() => vi.mocked(isRateLimited).mockResolvedValue(false));
+  it('resolves a slug only with that exact tournament key and retains unconfirmed fixtures', async () => {
+    fromCallCount = 0;
+    mockFromResults = [
+      { data: { id: VALID_UUID, account_id: 'account', slug: 'nations-championship-2026' }, error: null },
+      { data: { ...TOURNAMENT_ROW, account_id: 'account', slug: 'nations-championship-2026', sport: 'rugby_union', updated_at: '2026-09-05T00:00:00Z' }, error: null },
+      { data: FIXTURE_ROWS, error: null },
+    ];
+    const response = await GET(...makeRequest('nations-championship-2026', { apiKey: VALID_KEY, query: '?schema=2&showing=all' }));
+    expect(response.status).toBe(200);
+    expect(response.headers.get('cache-control')).toBe('no-store');
+    const body = await response.json();
+    expect(body.schemaVersion).toBe(2);
+    expect(body.fixtures).toHaveLength(1);
+    expect(body.fixtures[0].screening.canBookForScreening).toBe(false);
+    expect(body.fixtures[0].hours.state).toBe('unknown');
+    expect(JSON.stringify(body)).not.toContain(VALID_KEY);
+  });
+  it('does not let an existing tournament key access a different slug', async () => {
+    seedMocks({ data: { id: VALID_UUID, account_id: 'account', slug: 'world-cup' }, error: null });
+    const response = await GET(...makeRequest('nations-championship-2026', { apiKey: VALID_KEY, query: '?schema=2&showing=all' }));
+    expect(response.status).toBe(401);
+  });
+  it('does not expose an inactive tournament', async () => {
+    fromCallCount = 0;
+    mockFromResults = [
+      { data: { id: VALID_UUID, account_id: 'account', slug: 'nations-championship-2026' }, error: null },
+      { data: { ...TOURNAMENT_ROW, account_id: 'account', sport: 'rugby_union', status: 'draft' }, error: null },
+    ];
+    const response = await GET(...makeRequest('nations-championship-2026', { apiKey: VALID_KEY, query: '?schema=2&showing=all' }));
+    expect(response.status).toBe(404);
+  });
+});

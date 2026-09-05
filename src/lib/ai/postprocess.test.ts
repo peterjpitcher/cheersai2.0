@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
 import type { AiGenerationResponse } from './schemas';
-import { postprocessCopy, removeBannedPhraseSentences, type PostprocessConfig } from './postprocess';
+import {
+  containsEmDash,
+  postprocessCopy,
+  removeBannedPhraseSentences,
+  replaceEmDashes,
+  type PostprocessConfig,
+} from './postprocess';
 
 function makeConfig(overrides?: Partial<PostprocessConfig>): PostprocessConfig {
   return {
@@ -452,5 +458,87 @@ describe('removeBannedPhraseSentences', () => {
   it('strips a banned phrase written with a curly apostrophe in the single-sentence fallback', () => {
     // Phrase stored with a straight apostrophe, model output uses a curly one.
     expect(removeBannedPhraseSentences('You won’t regret it.', ["you won't regret it"])).toBe('.');
+  });
+});
+
+describe('replaceEmDashes', () => {
+  // The character is built from its code point so this file, like the rest of
+  // the repo's source, never contains a literal em dash.
+  const dash = String.fromCharCode(0x2014);
+
+  it('leaves copy without an em dash exactly as it was', () => {
+    const body = 'Quiz night is back on Thursday. Doors at 7pm.';
+    expect(replaceEmDashes(body)).toBe(body);
+  });
+
+  it('uses a comma for a plain two-clause dash', () => {
+    expect(replaceEmDashes(`Quiz night is back ${dash} first round at 7pm.`)).toBe(
+      'Quiz night is back, first round at 7pm.',
+    );
+  });
+
+  it('uses a colon when the dash introduces a series', () => {
+    expect(replaceEmDashes(`Everything is on ${dash} food, drinks and music.`)).toBe(
+      'Everything is on: food, drinks and music.',
+    );
+  });
+
+  it('starts a new sentence when the clause before it already has a comma', () => {
+    expect(
+      replaceEmDashes(`Quiz night, live music and food ${dash} every Thursday from 8pm.`),
+    ).toBe('Quiz night, live music and food. Every Thursday from 8pm.');
+  });
+
+  it('turns an attribution line into the double hyphen signature form', () => {
+    expect(replaceEmDashes(`Great night ahead.\n${dash} The Anchor Team`)).toBe(
+      'Great night ahead.\n-- The Anchor Team',
+    );
+  });
+
+  it('reads a dash between two times as a range', () => {
+    expect(replaceEmDashes(`Happy hour 5pm ${dash} 7pm.`)).toBe('Happy hour 5pm to 7pm.');
+  });
+
+  it('drops the dash when the model already wrote the real punctuation next to it', () => {
+    expect(replaceEmDashes(`Doors at 6pm, ${dash} music from 8pm.`)).toBe(
+      'Doors at 6pm, music from 8pm.',
+    );
+  });
+
+  it('handles several dashes in one body', () => {
+    expect(
+      replaceEmDashes(`Roast from 1pm ${dash} book ahead. Live music after ${dash} free entry.`),
+    ).toBe('Roast from 1pm, book ahead. Live music after, free entry.');
+  });
+
+  it('reports whether a string carries an em dash', () => {
+    expect(containsEmDash(`Book now ${dash} tables go fast.`)).toBe(true);
+    expect(containsEmDash('Book now, tables go fast.')).toBe(false);
+  });
+});
+
+describe('postprocessCopy em dash handling', () => {
+  const dash = String.fromCharCode(0x2014);
+
+  it('removes em dashes from generated bodies rather than rejecting the copy', () => {
+    const raw = makeRawCopy({
+      facebook: {
+        body: `Sunday roast is on ${dash} carved to order from 1pm.`,
+        cta_text: null,
+        hashtags: [],
+      },
+    });
+    const result = postprocessCopy(raw, makeConfig());
+    expect(result.copy.facebook.body).not.toContain(dash);
+    expect(result.copy.facebook.body).toContain('Sunday roast is on, carved to order from 1pm.');
+  });
+
+  it('rewrites an em dash signature to the double hyphen form', () => {
+    const config = makeConfig({
+      platformSignatures: { facebook: `${dash} The Anchor Team` },
+    });
+    const result = postprocessCopy(makeRawCopy(), config);
+    expect(result.copy.facebook.body).not.toContain(dash);
+    expect(result.copy.facebook.body).toContain('-- The Anchor Team');
   });
 });

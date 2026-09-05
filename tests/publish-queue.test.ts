@@ -1,3 +1,5 @@
+import { legacyTournamentContentIssue } from '../supabase/functions/publish-queue/tournament-freshness';
+vi.mock('../supabase/functions/publish-queue/tournament-freshness', () => ({ legacyTournamentContentIssue: vi.fn().mockResolvedValue(null) }));
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { PublishQueueWorker, createDefaultConfig, redactUrlSecrets } from "../supabase/functions/publish-queue/worker";
 import { MetaGraphApiError } from "../supabase/functions/publish-queue/providers/meta-error";
@@ -44,6 +46,7 @@ describe("PublishQueueWorker", () => {
 
     beforeEach(() => {
         vi.clearAllMocks();
+        vi.mocked(legacyTournamentContentIssue).mockResolvedValue(null);
         mockSupabase.from.mockReset();
         mockSupabase.storage.from.mockReset();
         mockSupabase.rpc.mockReset();
@@ -143,7 +146,8 @@ describe("PublishQueueWorker", () => {
             }));
         });
 
-        it("processes a valid facebook job successfully", async () => {
+        it.each([false, true])("checks screening freshness before a facebook provider call, stale=%s", async (stale) => {
+            if (stale) vi.mocked(legacyTournamentContentIssue).mockResolvedValue('Kitchen changed. Review required.');
             // 1. Mock jobs fetch
             const job = {
                 id: "job-1",
@@ -250,7 +254,8 @@ describe("PublishQueueWorker", () => {
 
             const result = await worker.processDueJobs();
             expect(result.processed).toBe(1);
-            expect(publishSpy).toHaveBeenCalled();
+            if (stale) expect(publishSpy).not.toHaveBeenCalled();
+            else expect(publishSpy).toHaveBeenCalled();
         });
 
         it("handles retry logic on network failure", async () => {

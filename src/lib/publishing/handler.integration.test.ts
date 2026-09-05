@@ -1,3 +1,5 @@
+import { checkTournamentContentById } from '@/lib/tournament/content-freshness';
+vi.mock('@/lib/tournament/content-freshness', () => ({ checkTournamentContentById: vi.fn().mockResolvedValue(null) }));
 /**
  * Pipeline handler integration tests (processPublishJob).
  * Validates the full pipeline flow: load job -> guard duplicates -> transition
@@ -163,6 +165,7 @@ describe('processPublishJob (integration)', () => {
   setupMswLifecycle();
 
   beforeEach(() => {
+    vi.mocked(checkTournamentContentById).mockResolvedValue(null);
     vi.clearAllMocks();
     supabaseUpdateCalls.length = 0;
     supabaseInsertCalls.length = 0;
@@ -237,4 +240,10 @@ describe('processPublishJob (integration)', () => {
     expect(attemptInsert).toBeDefined();
     expect(attemptInsert!.data.attempt_number).toBe(1);
   });
+  it('blocks stale screening after enqueue without calling the provider', async () => {
+    vi.mocked(checkTournamentContentById).mockResolvedValue('Kitchen times changed. Review required.');
+    await expect(processPublishJob('job_001')).rejects.toThrow('Kitchen times changed');
+    expect(mockPublishPost).not.toHaveBeenCalled();
+  });
+
 });

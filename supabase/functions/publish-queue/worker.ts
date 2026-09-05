@@ -3,6 +3,7 @@
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { DateTime } from "https://esm.sh/luxon@3.7.2";
 
+import { legacyTournamentContentIssue } from "./tournament-freshness.ts";
 import { publishToFacebook } from "./providers/facebook.ts";
 import { publishToInstagram } from "./providers/instagram.ts";
 import { resolveConnectionMetadata } from "./metadata.ts";
@@ -866,6 +867,12 @@ export class PublishQueueWorker {
             connectionMetadata: metadataResult.metadata,
             placement: content.placement,
         };
+
+        const screeningIssue = await legacyTournamentContentIssue(this.supabase, content.account_id, content.prompt_context);
+        if (screeningIssue) {
+            await this.handleFailure({ jobId: job.id, content, attempt: currentAttempt, now, message: screeningIssue, retryable: false });
+            return;
+        }
 
         try {
             const providerResponse = await this.publishByPlatform(content.platform, request);

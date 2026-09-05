@@ -3,7 +3,7 @@
  *
  * Given a signed image URL, asks OpenAI for a short human-friendly name and a
  * handful of keyword tags. Used to auto-label images uploaded via the /library
- * page, where — unlike the create wizard — there is no campaign name to tag with.
+ * page, where, unlike the create wizard, there is no campaign name to tag with.
  *
  * Mirrors `generate.ts`: `chat.completions.parse()` + `zodResponseFormat` for
  * validated structured output, with a 30-second abort timeout.
@@ -17,7 +17,7 @@ import { getOpenAIClient } from './client';
 /** Max number of AI-suggested tags applied to an asset. */
 export const MAX_MEDIA_TAGS = 6;
 
-/** Cap on the generated file name length (label only — the storage path is sanitised separately). */
+/** Cap on the generated file name length (label only, the storage path is sanitised separately). */
 const MAX_FILE_NAME_LENGTH = 80;
 
 /**
@@ -27,7 +27,7 @@ const MAX_FILE_NAME_LENGTH = 80;
 const UNSAFE_FILENAME_CHARS = /[^\p{L}\p{N} '&(),.-]/gu;
 
 // OpenAI structured outputs require all fields present (no `.optional()`); keep the
-// object flat — Zod v4 unions emit `oneOf`, which OpenAI strict mode rejects.
+// object flat, Zod v4 unions emit `oneOf`, which OpenAI strict mode rejects.
 const MediaTagResponseSchema = z.object({
   name: z
     .string()
@@ -86,7 +86,7 @@ export async function generateMediaNameAndTags(
             role: 'user',
             content: [
               { type: 'text', text: USER_PROMPT },
-              // `detail: 'low'` keeps token cost and latency down — tagging does not need fine detail.
+              // `detail: 'low'` keeps token cost and latency down, tagging does not need fine detail.
               { type: 'image_url', image_url: { url: input.imageUrl, detail: 'low' } },
             ],
           },
