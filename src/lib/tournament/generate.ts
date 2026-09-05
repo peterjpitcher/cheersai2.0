@@ -192,13 +192,14 @@ export function buildTournamentOverlayData({
   tournament,
   fixture,
 }: {
-  tournament: Pick<Tournament, 'houseRulesText'>;
+  tournament: Pick<Tournament, 'name' | 'houseRulesText'>;
   fixture: Pick<TournamentFixture, 'teamA' | 'teamB' | 'kickOffAt' | 'round' | 'groupName'>;
 }): OverlayData {
   const kickOff = new Date(fixture.kickOffAt);
   const kickOffDt = DateTime.fromJSDate(kickOff, { zone: 'Europe/London' });
 
   return {
+    tournamentName: tournament.name,
     teamA: displayTeamName(fixture.teamA),
     teamB: displayTeamName(fixture.teamB),
     dateDisplay: kickOffDt.toFormat('EEEE d MMMM'),
