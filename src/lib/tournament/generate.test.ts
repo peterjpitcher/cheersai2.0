@@ -208,3 +208,37 @@ describe('owner-approved rugby copy', () => {
     expect(payload.body).not.toMatch(/Screen:|commentary|null|undefined/i);
   });
 });
+
+
+describe('rugby menu links follow actual food service', () => {
+  it.each([
+    ['2026-11-08', '15:10', '13:00', '18:00', 'known', '/sunday-roast'],
+    ['2026-11-08', '20:10', '13:00', '18:00', 'known', '/sunday-roast'],
+    ['2026-11-07', '16:40', '12:00', '19:00', 'known', '/food-menu'],
+    ['2026-11-08', '15:10', '13:00', '18:00', 'unknown', null],
+    ['2026-11-08', '15:10', null, null, 'known', null],
+  ] as const)('uses the correct menu for %s %s with kitchen state %s', (date, kick, start, end, kitchenState, menu) => {
+    const game = { ...fixture, kickOffAt: `${date}T${kick}:00Z`, showing: true, teamsConfirmed: true, screeningDecision: 'unconfirmed', broadcastDecision: 'confirmed', broadcastCheckedAt: '2026-09-05T09:00:00Z', screeningConfirmedAt: '2026-09-05T09:00:00Z' } as TournamentFixture;
+    const facts = toScreeningFacts(game, 'rugby_union');
+    const hours: ScreeningDayHours = { date, state: 'open', regularOpensAt: `${date}T12:00:00Z`, bar: { startAt: `${date}T12:00:00Z`, endAt: `${date}T22:00:00Z` }, kitchen: start && end ? [{ startAt: `${date}T${start}:00Z`, endAt: `${date}T${end}:00Z` }] : [], kitchenState, hasSpecialHours: false, fingerprint: 'verified-menu-hours' };
+    const screened = { ...facts, hours, screening: resolveScreening(facts, hours, new Date('2026-09-05T09:00:00Z')) };
+    const payload = buildTournamentContentPayload({ tournament, fixture: game, screened, platform: 'facebook', placement: 'feed', scheduledFor: new Date('2026-11-06T09:00:00Z') });
+    if (menu) {
+      expect(payload.body).toContain(`https://www.the-anchor.pub${menu}`);
+      expect(payload.body).not.toContain(menu === '/sunday-roast' ? '/food-menu' : '/sunday-roast');
+    } else expect(payload.body).not.toMatch(/View the .*menu/);
+    const instagram = buildTournamentContentPayload({ tournament, fixture: game, screened, platform: 'instagram', placement: 'feed', scheduledFor: new Date('2026-11-06T09:00:00Z') });
+    expect(instagram.body).not.toMatch(/https?:|View the .*menu:/);
+    expect(lintContent({ body: payload.body, platform: 'facebook', placement: 'feed', context: payload.promptContext, scheduledFor: new Date('2026-11-06T09:00:00Z') }).pass).toBe(true);
+  });
+});
+
+
+it.each([
+  { source: 'campaign', screening_sport: 'rugby_union', screening_menu_url: 'https://www.the-anchor.pub/sunday-roast' },
+  { source: 'tournament', screening_sport: 'football', screening_menu_url: 'https://www.the-anchor.pub/sunday-roast' },
+  { source: 'tournament', screening_sport: 'rugby_union', screening_menu_url: 'https://unapproved.example/menu' },
+])('does not widen menu permissions to unrelated content %j', context => {
+  const result = lintContent({ body: `View the menu: ${context.screening_menu_url}. Book a table: https://www.the-anchor.pub/book-table`, platform: 'facebook', placement: 'feed', context: { ...context, ctaUrl: 'https://www.the-anchor.pub/book-table' }, scheduledFor: new Date('2026-11-06T09:00:00Z') });
+  expect(result.issues.some(issue => issue.code === 'url_disallowed')).toBe(true);
+});
