@@ -211,70 +211,6 @@ export async function updateTournamentStatus(
 }
 
 // ---------------------------------------------------------------------------
-// updateTournamentBaseImages
-// ---------------------------------------------------------------------------
-
-export async function updateTournamentBaseImages(
-  tournamentId: string,
-  squareImageId: string | null,
-  storyImageId: string | null,
-): Promise<{ success: boolean; error?: string }> {
-  try {
-    const { supabase, accountId } = await requireAuthContext();
-
-    const tournament = await getTournamentById(supabase, tournamentId, accountId);
-    if (!tournament) return { success: false, error: 'Tournament not found' };
-
-    // Validate each image belongs to this account with correct properties
-    const idsToValidate: Array<{ id: string; expectedAspect: string }> = [];
-    if (squareImageId) idsToValidate.push({ id: squareImageId, expectedAspect: 'square' });
-    if (storyImageId) idsToValidate.push({ id: storyImageId, expectedAspect: 'story' });
-
-    for (const { id, expectedAspect } of idsToValidate) {
-      const { data: asset, error: assetError } = await supabase
-        .from('media_assets')
-        .select('id, account_id, media_type, aspect_class, hidden_at')
-        .eq('id', id)
-        .maybeSingle();
-
-      if (assetError || !asset) {
-        return { success: false, error: `Image not found: ${id}` };
-      }
-      if (asset.account_id !== accountId) {
-        return { success: false, error: 'Image does not belong to this account' };
-      }
-      if (asset.media_type !== 'image') {
-        return { success: false, error: 'Selected asset is not an image' };
-      }
-      if (asset.aspect_class !== expectedAspect) {
-        return { success: false, error: `Expected ${expectedAspect} image, got ${asset.aspect_class}` };
-      }
-      if (asset.hidden_at !== null) {
-        return { success: false, error: 'Selected image has been hidden' };
-      }
-    }
-
-    const { error } = await supabase
-      .from('tournaments')
-      .update({
-        base_image_square_id: squareImageId,
-        base_image_story_id: storyImageId,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', tournamentId)
-      .eq('account_id', accountId);
-
-    if (error) return { success: false, error: error.message };
-
-    revalidatePath(`/tournaments/${tournamentId}`);
-
-    return { success: true };
-  } catch (err) {
-    return { success: false, error: err instanceof Error ? err.message : String(err) };
-  }
-}
-
-// ---------------------------------------------------------------------------
 // createFixture
 // ---------------------------------------------------------------------------
 
@@ -864,58 +800,6 @@ export async function toggleFixtureShowing(
   } catch (err) {
     return { success: false, error: err instanceof Error ? err.message : String(err) };
   }
-}
-
-// ---------------------------------------------------------------------------
-// getMediaAssetsForPicker
-// ---------------------------------------------------------------------------
-
-export interface PickerAsset {
-  id: string;
-  fileName: string;
-  aspectClass: 'square' | 'story' | 'landscape';
-  previewUrl: string;
-}
-
-export async function getMediaAssetsForPicker(): Promise<PickerAsset[]> {
-  const { supabase, accountId } = await requireAuthContext();
-
-  const { data, error } = await supabase
-    .from('media_assets')
-    .select('id, file_name, aspect_class, storage_path')
-    .eq('account_id', accountId)
-    .eq('media_type', 'image')
-    .in('aspect_class', ['square', 'story'])
-    .is('hidden_at', null)
-    .not('tags', 'cs', '{Tournament}')
-    .not('storage_path', 'like', 'tournaments/%')
-    .order('uploaded_at', { ascending: false })
-    .limit(50);
-
-  if (error || !data?.length) return [];
-
-  const paths = data.map((r) => r.storage_path as string);
-  const { data: signed } = await supabase.storage
-    .from(MEDIA_BUCKET)
-    .createSignedUrls(paths, 600);
-
-  const urlMap = new Map<string, string>();
-  if (signed) {
-    for (const entry of signed) {
-      if (entry?.path && entry.signedUrl && !entry.error) {
-        urlMap.set(entry.path, entry.signedUrl);
-      }
-    }
-  }
-
-  return data
-    .map((row) => ({
-      id: row.id as string,
-      fileName: row.file_name as string,
-      aspectClass: (row.aspect_class ?? 'square') as PickerAsset['aspectClass'],
-      previewUrl: urlMap.get(row.storage_path as string) ?? '',
-    }))
-    .filter((a) => a.previewUrl);
 }
 
 // ---------------------------------------------------------------------------
