@@ -151,7 +151,7 @@ export function buildTournamentContentPayload({
   }
   const templateBody = interpolatePostTemplate(tournament.postTemplate, templateVars);
   const rawBody = screened
-    ? [`${fixture.teamA} v ${fixture.teamB}`, `${kickOffDt.toFormat('EEEE d MMMM')}, kick-off ${kickOffDt.toFormat('HH:mm')}.`, screened.screening.openingLabel, `Screen: ${screened.screenLabel}. ${screened.commentary === 'on' ? 'Commentary on.' : screened.commentary === 'off' ? 'Without commentary.' : 'Commentary to be confirmed.'}`, screened.screening.foodPromotion.message, screened.screening.foodPromotion.kind === 'during_screening' || screened.screening.foodPromotion.kind === 'before_match' ? 'View the menu: https://www.the-anchor.pub/food-menu' : null, `Book a table for this game: ${promptContext.ctaUrl}`].filter(Boolean).join('\n\n')
+    ? [`${fixture.teamA} v ${fixture.teamB}`, `${kickOffDt.toFormat('EEEE d MMMM')}, kick-off ${kickOffDt.toFormat('HH:mm')}.`, screened.screening.openingLabel, [screened.screenLabel ? `Screen: ${screened.screenLabel}.` : null, screened.commentary === 'on' ? 'Commentary on.' : screened.commentary === 'off' ? 'Without commentary.' : null].filter(Boolean).join(' '), screened.screening.foodPromotion.message, screened.screening.foodPromotion.kind === 'during_screening' || screened.screening.foodPromotion.kind === 'before_match' ? 'View the menu: https://www.the-anchor.pub/food-menu' : null, `Book a table for this game: ${promptContext.ctaUrl}`].filter(Boolean).join('\n\n')
     : placement === 'feed'
     ? buildTournamentFeedBody({ templateBody, fixture })
     : templateBody;

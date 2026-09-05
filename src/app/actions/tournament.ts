@@ -758,7 +758,7 @@ export async function toggleFixtureShowing(
     if (!fixture) return { success: false, error: 'Fixture not found' };
 
     if (tournament.sport === 'rugby_union') {
-      await saveRugbyFixture(supabase, tournament, fixture, { ...fixture, screeningDecision: showing ? 'confirmed' : 'not_showing', screeningConfirmedAt: showing ? new Date().toISOString() : fixture.screeningConfirmedAt }, {}, fixture.contentRevision);
+      await saveRugbyFixture(supabase, tournament, fixture, { ...fixture, showing, screeningDecision: showing ? (fixture.screeningDecision === 'confirmed' ? 'confirmed' : 'unconfirmed') : 'not_showing', screeningConfirmedAt: showing ? new Date().toISOString() : fixture.screeningConfirmedAt }, {}, fixture.contentRevision);
       revalidatePath(`/tournaments/${tournamentId}`);
       return { success: true };
     }

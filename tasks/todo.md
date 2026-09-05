@@ -39,3 +39,9 @@ permanent.
 - [x] Exercise upload, replacement, errors and library exclusion; run release gates.
 
 Local verification: ci:verify passed (2,098 tests passed, three skipped), 30 focused backend/route tests and eight UI tests passed. Isolated Chromium exercised uploads, replacement, recovery and mobile layout. Production storage writes were not used for tests.
+
+## Terrestrial rugby bookings
+- [ ] Support owner booking approval separately from detailed screen setup.
+- [ ] Accept bookings within existing hours with accurate food and partial-coverage wording.
+- [ ] Test and deploy website and Cheers compatibility.
+- [ ] Apply the approved November fixture decisions and verify live booking entry points without creating bookings.

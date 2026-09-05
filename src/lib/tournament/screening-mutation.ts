@@ -7,6 +7,7 @@ import { areBothTeamsConfirmed } from './placeholder';
 
 export async function prepareRugbyFixture(db: SupabaseClient, tournament: Tournament, candidate: TournamentFixture): Promise<Record<string, unknown>> {
   if (candidate.teamsConfirmed && !areBothTeamsConfirmed(candidate.teamA, candidate.teamB)) throw new Error('Final opponents must be verified before confirming teams.');
+  if (candidate.showing && !candidate.screeningConfirmedAt) candidate = { ...candidate, screeningConfirmedAt: new Date().toISOString() };
   const [projected] = await projectTournamentFixtures(db, tournament, [candidate]);
   if (candidate.screeningDecision === 'confirmed' && candidate.matchState !== 'finished' && candidate.matchState !== 'cancelled') {
     if (!projected.screening.canBookForScreening) throw new Error(`Cannot confirm this screening: ${projected.screening.status}. Check channel, verification, screen allocation, planned end and existing opening hours.`);
@@ -17,7 +18,8 @@ export async function prepareRugbyFixture(db: SupabaseClient, tournament: Tourna
     if (commentaryCollision) throw new Error('Another overlapping game already has commentary. Confirm the audio allocation first.');
   }
   const fields: Array<keyof FixtureScreeningFields> = ['importKey','roundNumber','finalPosition','plannedEndAt','matchState','screeningDecision','broadcastDecision','linearChannel','screenLabel','commentary','sourceUrl','sourceCheckedAt','broadcastCheckedAt','screeningConfirmedAt'];
-  const payload: Record<string, unknown> = { showing: projected.screening.canBookForScreening, teams_confirmed: candidate.teamsConfirmed };
+  const terminal = candidate.matchState === 'finished' || candidate.matchState === 'cancelled' || candidate.screeningDecision === 'not_showing' || candidate.broadcastDecision === 'not_linear';
+  const payload: Record<string, unknown> = { showing: !terminal && (candidate.showing === true || projected.screening.canBookForScreening), teams_confirmed: candidate.teamsConfirmed };
   for (const field of fields) if (candidate[field] !== undefined) payload[field.replace(/[A-Z]/g, char => `_${char.toLowerCase()}`)] = candidate[field];
   return payload;
 }

@@ -23,6 +23,10 @@ export async function projectTournamentFixtures(db: SupabaseClient, tournament: 
     const hours = days.get(date) ?? unknownScreeningHours(date);
     const facts = toScreeningFacts(fixture, tournament.sport);
     const screening = resolveScreening(facts, hours, now);
-    return { ...facts, coverage: screening.status === 'confirmed_partial' ? 'from_opening' : 'full', hours, screening };
+    const startsLate = Boolean(screening.screeningStartAt && Date.parse(screening.screeningStartAt) > Date.parse(facts.kickOffAt));
+    const plannedEnd = facts.plannedEndAt ? Date.parse(facts.plannedEndAt) : Date.parse(facts.kickOffAt) + 120 * 60_000;
+    const endsEarly = Boolean(screening.screeningEndAt && Date.parse(screening.screeningEndAt) < plannedEnd);
+    const coverage = startsLate && endsEarly ? 'from_opening_until_closing' : startsLate ? 'from_opening' : endsEarly ? 'until_closing' : 'full';
+    return { ...facts, coverage, hours, screening };
   });
 }

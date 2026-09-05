@@ -1,5 +1,5 @@
 /** Bump when rugby feed, story, overlay or channel rendering rules change. */
-export const NATIONS_TEMPLATE_VERSION = 'nations-screening-v1';
+export const NATIONS_TEMPLATE_VERSION = 'nations-screening-v2';
 const ORIGIN = 'https://www.the-anchor.pub';
 const PAGE = '/live-sport/nations-championship';
 

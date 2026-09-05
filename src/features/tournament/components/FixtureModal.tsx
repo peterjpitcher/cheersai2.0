@@ -138,7 +138,7 @@ export function FixtureModal({
   }
 
   const isValid = teamA.trim() && teamB.trim() && kickOffAt && matchNumber > 0;
-  const canSaveAndGenerate = Boolean(onSaveAndGenerate && isValid && (sport === 'rugby_union' ? screening.screeningDecision === 'confirmed' : showing) && teamsConfirmed);
+  const canSaveAndGenerate = Boolean(onSaveAndGenerate && isValid && showing && teamsConfirmed);
 
   async function handleSave() {
     setSaving(true);
@@ -329,12 +329,17 @@ export function FixtureModal({
 
           {sport === 'rugby_union' && <fieldset className="space-y-3 border p-3" style={{ borderColor: 'var(--c-line)' }}>
             <legend className="font-semibold">Rugby screening</legend>
-            <p className="text-sm">Opening and kitchen times remain unchanged. Earlier games show from opening with the start missed.</p>
-            {(['importKey', 'linearChannel', 'screenLabel', 'sourceUrl'] as const).map(field => <label key={field} className="block text-sm">{{ importKey: 'Stable import key', linearChannel: 'Verified linear TV channel', screenLabel: 'Screen allocation', sourceUrl: 'Fixture source URL' }[field]}<input className="block w-full px-3 py-2" style={inputStyle} value={screening[field] ?? ''} onChange={event => setScreening(old => ({ ...old, [field]: event.target.value || null }))} /></label>)}
+            <p className="text-sm">Approve showing below to accept bookings once terrestrial coverage is verified. The exact channel, screen, commentary and planned finish can be added later.</p>
+            <p className="text-sm">Opening and kitchen times remain unchanged. Earlier games show from opening with the start missed. Coverage stops when the pub closes.</p>
+            {(['importKey', 'linearChannel', 'screenLabel', 'sourceUrl'] as const).map(field => <label key={field} className="block text-sm">{{ importKey: 'Stable import key', linearChannel: 'TV channel (optional)', screenLabel: 'Screen allocation (optional)', sourceUrl: 'Fixture source URL' }[field]}<input className="block w-full px-3 py-2" style={inputStyle} value={screening[field] ?? ''} onChange={event => setScreening(old => ({ ...old, [field]: event.target.value || null }))} /></label>)}
             {(['roundNumber', 'finalPosition'] as const).map(field => <label key={field} className="block text-sm">{field === 'roundNumber' ? 'Round number' : 'Final placing'}<input type="number" min="1" max="6" className="block w-full px-3 py-2" style={inputStyle} value={screening[field] ?? ''} onChange={event => setScreening(old => ({ ...old, [field]: event.target.value ? Number(event.target.value) : null }))} /></label>)}
-            <label className="block text-sm">Planned screening end (London time)<input type="datetime-local" className="block w-full px-3 py-2" style={inputStyle} value={screening.plannedEndAt ? toDatetimeLocal(screening.plannedEndAt) : ''} onChange={event => setScreening(old => ({ ...old, plannedEndAt: event.target.value ? fromDatetimeLocal(event.target.value) : null }))} /></label>
-            {(['matchState', 'screeningDecision', 'broadcastDecision', 'commentary'] as const).map(field => <label key={field} className="block text-sm">{{ matchState: 'Match state', screeningDecision: 'Pub screening decision', broadcastDecision: 'Broadcast verification', commentary: 'Commentary' }[field]}<select className="block w-full px-3 py-2" style={inputStyle} value={screening[field] ?? (field === 'matchState' ? 'scheduled' : 'unconfirmed')} onChange={event => setScreening(old => ({ ...old, [field]: event.target.value, ...(field === 'screeningDecision' ? { screeningConfirmedAt: event.target.value === 'confirmed' ? new Date().toISOString() : null } : {}), ...(field === 'broadcastDecision' ? { broadcastCheckedAt: event.target.value === 'confirmed' ? new Date().toISOString() : null } : {}) }))}>
-              {(field === 'matchState' ? ['scheduled','in_progress','finished','cancelled'] : field === 'screeningDecision' ? ['unconfirmed','confirmed','not_showing'] : field === 'broadcastDecision' ? ['unconfirmed','confirmed','not_linear'] : ['unconfirmed','on','off']).map(value => <option key={value} value={value}>{value.replaceAll('_',' ')}</option>)}
+            <label className="block text-sm">Planned screening end (optional, London time)<input type="datetime-local" className="block w-full px-3 py-2" style={inputStyle} value={screening.plannedEndAt ? toDatetimeLocal(screening.plannedEndAt) : ''} onChange={event => setScreening(old => ({ ...old, plannedEndAt: event.target.value ? fromDatetimeLocal(event.target.value) : null }))} /></label>
+            {(['matchState', 'screeningDecision', 'broadcastDecision', 'commentary'] as const).map(field => <label key={field} className="block text-sm">{{ matchState: 'Match state', screeningDecision: 'Detailed screen setup', broadcastDecision: 'Broadcast verification', commentary: 'Commentary (optional)' }[field]}<select className="block w-full px-3 py-2" style={inputStyle} value={screening[field] ?? (field === 'matchState' ? 'scheduled' : 'unconfirmed')} onChange={event => {
+              const value = event.target.value;
+              if (field === 'screeningDecision' && value === 'not_showing') setShowing(false);
+              setScreening(old => ({ ...old, [field]: value, ...(field === 'screeningDecision' && value === 'not_showing' ? { screeningConfirmedAt: null } : {}), ...(field === 'broadcastDecision' ? { broadcastCheckedAt: value === 'confirmed' ? DateTime.utc().toISO() : null } : {}) }));
+            }}>
+              {(field === 'matchState' ? ['scheduled','in_progress','finished','cancelled'] : field === 'screeningDecision' ? ['unconfirmed','confirmed','not_showing'] : field === 'broadcastDecision' ? ['unconfirmed','confirmed','not_linear'] : ['unconfirmed','on','off']).map(value => <option key={value} value={value}>{field === 'screeningDecision' && value === 'confirmed' ? 'Full screen setup confirmed' : value.replaceAll('_',' ')}</option>)}
             </select></label>)}
             <label className="block text-sm"><input type="checkbox" checked={Boolean(screening.sourceCheckedAt)} onChange={event => setScreening(old => ({ ...old, sourceCheckedAt: event.target.checked ? new Date().toISOString() : null }))} /> I have checked the fixture source</label>
             <button type="button" className="underline text-sm" onClick={async () => { if (!tournamentId) return; const result = await getFixtureScreeningPreview(tournamentId, buildFormData()); setHoursPreview(result.screening ? `${result.screening.openingLabel}. ${result.screening.kitchenLabel}. ${result.screening.foodPromotion.message ?? ''}` : result.error ?? 'Hours unavailable'); }}>Check current opening and food service</button>
@@ -342,18 +347,28 @@ export function FixtureModal({
           </fieldset>}
 
           <div className="flex items-center gap-6">
-            {sport !== 'rugby_union' && <label
+            {<label
               className="flex items-center gap-2 text-sm"
               style={{ color: 'var(--c-ink-2)' }}
             >
               <input
                 type="checkbox"
                 checked={showing}
-                onChange={(e) => setShowing(e.target.checked)}
+                onChange={(e) => {
+                  const approved = e.target.checked;
+                  setShowing(approved);
+                  if (sport === 'rugby_union') {
+                    setScreening(old => ({
+                      ...old,
+                      screeningConfirmedAt: approved ? DateTime.utc().toISO() : null,
+                      screeningDecision: approved ? 'unconfirmed' : 'not_showing',
+                    }));
+                  }
+                }}
                 className="rounded"
                 style={{ borderColor: 'var(--c-line-2)' }}
               />
-              Showing at venue
+              {sport === 'rugby_union' ? 'Showing at venue: approve match bookings' : 'Showing at venue'}
             </label>}
             {(initial || sport === 'rugby_union') && (
               <label

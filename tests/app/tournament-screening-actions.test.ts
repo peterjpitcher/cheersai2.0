@@ -56,4 +56,17 @@ describe('shared rugby mutations', () => {
     expect(await prepareRugbyFixture(db, tournament, fixture)).toMatchObject({ showing: true });
   });
 
+  it('retains the owner approval when opening hours are temporarily unavailable', async () => {
+    vi.mocked(projectTournamentFixtures).mockResolvedValue([{ screening: { status: 'hours_unknown', canBookForScreening: false } }] as Awaited<ReturnType<typeof projectTournamentFixtures>>);
+    const candidate = { ...fixture, showing: true, screeningDecision: 'unconfirmed' as const, plannedEndAt: null, screenLabel: null };
+    expect(await prepareRugbyFixture(db, tournament, candidate)).toMatchObject({ showing: true, screening_confirmed_at: expect.any(String) });
+  });
+  it.each([
+    { matchState: 'finished' }, { matchState: 'cancelled' },
+    { screeningDecision: 'not_showing' }, { broadcastDecision: 'not_linear' },
+  ] as const)('clears owner approval for a terminal or withdrawn screening %j', async change => {
+    vi.mocked(projectTournamentFixtures).mockResolvedValue([{ screening: { status: 'not_showing', canBookForScreening: false } }] as Awaited<ReturnType<typeof projectTournamentFixtures>>);
+    expect(await prepareRugbyFixture(db, tournament, { ...fixture, showing: true, screeningDecision: 'unconfirmed', ...change })).toMatchObject({ showing: false });
+  });
+
 });
