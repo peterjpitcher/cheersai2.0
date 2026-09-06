@@ -1468,6 +1468,67 @@ describe('getCalendarItemsAction', () => {
     expect(result.data?.map((item) => item.id)).toEqual(['active-1']);
   });
 
+  it.each(['facebook', 'instagram'])('uses story artwork for %s while retaining feed originals', async (platform) => {
+    const rows = ['feed', 'story'].map((placement) => ({
+      id: placement, platform, placement, status: 'posted',
+      scheduled_for: '2026-06-15T06:00:00.000Z',
+      content_media_attachments: [{ media_id: 'media-1', position: 0,
+        media_library: { id: 'media-1', file_url: 'uploads/square.jpg', file_type: 'image/jpeg' } }],
+    }));
+    supabaseMock.mock.order = vi.fn().mockResolvedValue({ data: rows, error: null });
+    supabaseMock.enqueueResult({ data: [{ id: 'media-1', storage_path: 'uploads/square.jpg',
+      media_type: 'image', derived_variants: { story: 'derived/story.jpg', square: 'derived/square.jpg' } }], error: null });
+    const createSignedUrls = vi.fn(async (paths: string[]) => ({
+      data: paths.map((path) => ({ path, signedUrl: `https://signed.example.com/${path}`, error: null })), error: null,
+    }));
+    supabaseMock.mock.storage = { from: vi.fn(() => ({ createSignedUrls })) };
+
+    const { getCalendarItemsAction } = await import('@/app/actions/content');
+    const result = await getCalendarItemsAction('2026-06-01T00:00:00Z', '2026-06-30T23:59:59Z');
+    expect(result.error).toBeUndefined();
+    expect(result.data?.map((item) => item.mediaPreview?.url)).toEqual([
+      'https://signed.example.com/uploads/square.jpg', 'https://signed.example.com/derived/story.jpg',
+    ]);
+    const assetQuery = supabaseMock.calls.findIndex((call) => call.method === 'from' && call.args[0] === 'media_assets');
+    expect(assetQuery).toBeGreaterThanOrEqual(0);
+    expect(supabaseMock.calls.slice(assetQuery)).toContainEqual({ method: 'eq', args: ['account_id', 'acc-1'] });
+  });
+
+  it.each(['missing asset', 'missing derivative', 'failed story signing', 'failed asset lookup', 'failed signing'])(
+    'handles %s without claiming the wrong story preview', async (scenario) => {
+      supabaseMock.mock.order = vi.fn().mockResolvedValue({ data: [{
+        id: 'story', platform: 'instagram', placement: 'story', status: 'scheduled',
+        scheduled_for: '2026-06-15T06:00:00Z',
+        content_media_attachments: [{ media_id: 'media-1', position: 0,
+          media_library: { file_url: 'uploads/original.jpg', file_type: 'image/jpeg' } }],
+      }], error: null });
+      supabaseMock.enqueueResult({
+        data: scenario === 'missing asset' ? [] : [{ id: 'media-1', storage_path: 'uploads/original.jpg',
+          media_type: 'image', derived_variants: scenario === 'missing derivative' ? {} : { story: 'derived/story.jpg' } }],
+        error: scenario === 'failed asset lookup' ? { message: 'Asset lookup failed' } : null,
+      });
+      const createSignedUrls = vi.fn(async (paths: string[]) => ({
+        data: paths.map((path) => ({ path,
+          signedUrl: `https://signed.example.com/${path}`,
+          error: path === 'derived/story.jpg' ? 'Not found' : null,
+        })),
+        error: scenario === 'failed signing' ? { message: 'Signing failed' } : null,
+      }));
+      supabaseMock.mock.storage = { from: vi.fn(() => ({ createSignedUrls })) };
+      const { getCalendarItemsAction } = await import('@/app/actions/content');
+      const result = await getCalendarItemsAction('2026-06-01T00:00:00Z', '2026-06-30T23:59:59Z');
+      if (scenario === 'failed asset lookup') {
+        expect(result.error).toBe('Asset lookup failed');
+        expect(createSignedUrls).not.toHaveBeenCalled();
+      } else {
+        expect(result.error).toBeUndefined();
+        expect(result.data?.[0].mediaPreview).toEqual(scenario === 'failed signing' ? null : {
+          url: 'https://signed.example.com/uploads/original.jpg', mediaType: 'image',
+        });
+      }
+    },
+  );
+
   it('returns signed media preview URLs instead of raw storage paths', async () => {
     (supabaseMock.mock as Record<string, unknown>).order = vi.fn((...args: unknown[]) => {
       supabaseMock.calls.push({ method: 'order', args });
