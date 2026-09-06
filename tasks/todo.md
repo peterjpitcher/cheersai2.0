@@ -74,3 +74,8 @@ No environment values, secrets, database records or feature flag settings change
 - [x] Add scoped conditional late-finish feed and social wording with tests.
 - [x] Verify lint, types, London and UTC tests and build. Both zones: 2,214 passed, three skipped.
 - [ ] Deploy compatible website, Cheers and worker; regenerate existing content and check live.
+
+## Story calendar artwork
+- [x] Verify live assets and trace the calendar preview mismatch.
+- [x] Add regression coverage and use placement-aware asset previews.
+- [ ] Run full verification, deploy and check the production create calendar.

@@ -5,6 +5,7 @@ import { DateTime } from 'luxon';
 
 import { requireAuthContext } from '@/lib/auth/server';
 import { contentBriefSchema } from '@/features/create/schemas/content-schemas';
+import { resolvePreviewCandidates } from '@/lib/library/data';
 import { getContentForCalendar } from '@/lib/content/queries';
 import { buildGenerationTemporalContext } from '@/lib/create/temporal-context';
 import { enqueueAndDispatch } from '@/lib/publishing/queue';
@@ -90,11 +91,6 @@ function platformsForPlacement(
     return platforms.filter((platform) => platform === 'facebook' || platform === 'instagram');
   }
   return platforms;
-}
-
-function normaliseStoragePath(path: string): string {
-  const prefix = `${MEDIA_BUCKET}/`;
-  return path.startsWith(prefix) ? path.slice(prefix.length) : path;
 }
 
 // ---------------------------------------------------------------------------
@@ -469,7 +465,30 @@ export async function getCalendarItemsAction(
     }
 
     const rowsList = ((rows ?? []) as Record<string, unknown>[]).filter((row) => !row.deleted_at);
-    const previewRefs = new Map<string, { path: string; mediaType: 'image' | 'video' }>();
+    // The legacy library stores only the original. Story derivatives live on
+    // media_assets, so resolve each preview using its content placement.
+    const assetIds = [...new Set(rowsList.flatMap((row) => {
+      const attachments = row.content_media_attachments as Array<{ media_id: string }> | null;
+      return (attachments ?? []).map((attachment) => attachment.media_id);
+    }))];
+    type CalendarAsset = {
+      id: string;
+      storage_path: string;
+      media_type: string;
+      derived_variants: Record<string, string> | null;
+    };
+    const assetsById = new Map<string, CalendarAsset>();
+    if (assetIds.length) {
+      const { data: assets, error: assetError } = await supabase
+        .from('media_assets')
+        .select('id, storage_path, media_type, derived_variants')
+        .eq('account_id', accountId)
+        .in('id', assetIds)
+        .returns<CalendarAsset[]>();
+      if (assetError) return { error: assetError.message };
+      for (const asset of assets ?? []) assetsById.set(asset.id, asset);
+    }
+    const previewRefs = new Map<string, { paths: string[]; mediaType: 'image' | 'video' }>();
     const previewPaths = new Set<string>();
 
     for (const row of rowsList) {
@@ -479,17 +498,23 @@ export async function getCalendarItemsAction(
       const sorted = [...attachments].sort(
         (a, b) => ((a.position as number) ?? 0) - ((b.position as number) ?? 0),
       );
-      const firstMedia = sorted[0]?.media_library as Record<string, unknown> | null;
-      const fileUrl = typeof firstMedia?.file_url === 'string' ? firstMedia.file_url : null;
+      const attachment = sorted[0];
+      const asset = assetsById.get(attachment?.media_id as string);
+      const firstMedia = attachment?.media_library as Record<string, unknown> | null;
+      const fileUrl = asset?.storage_path ?? (typeof firstMedia?.file_url === 'string' ? firstMedia.file_url : null);
       if (!fileUrl) continue;
 
-      const path = normaliseStoragePath(fileUrl);
+      const paths = resolvePreviewCandidates({
+        storagePath: fileUrl,
+        derivedVariants: asset?.derived_variants ?? {},
+        placement: row.placement === 'story' ? 'story' : 'feed',
+      }).map((candidate) => candidate.path);
       const fileType = typeof firstMedia?.file_type === 'string' ? firstMedia.file_type : '';
       previewRefs.set(row.id as string, {
-        path,
-        mediaType: fileType.startsWith('video') ? 'video' : 'image',
+        paths,
+        mediaType: asset ? (asset.media_type === 'video' ? 'video' : 'image') : (fileType.startsWith('video') ? 'video' : 'image'),
       });
-      previewPaths.add(path);
+      for (const path of paths) previewPaths.add(path);
     }
 
     const signedPreviewByPath = new Map<string, string>();
@@ -528,7 +553,7 @@ export async function getCalendarItemsAction(
 
       let mediaPreview: CalendarItemDisplay['mediaPreview'] = null;
       const previewRef = previewRefs.get(row.id as string);
-      const signedPreviewUrl = previewRef ? signedPreviewByPath.get(previewRef.path) : null;
+      const signedPreviewUrl = previewRef?.paths.map((path) => signedPreviewByPath.get(path)).find(Boolean);
       if (previewRef && signedPreviewUrl) {
         mediaPreview = {
           url: signedPreviewUrl,
