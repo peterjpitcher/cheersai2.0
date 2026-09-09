@@ -293,7 +293,7 @@ describe("buildUserPrompt", () => {
     expect(prompt).toContain("This post publishes on Tuesday 26th May at 10am.");
     expect(prompt).toContain("The event is on Wednesday 27th May at 7pm, the day after this post publishes.");
     expect(prompt).toContain('You may describe it as happening "tomorrow".');
-    expect(prompt).toContain('Do not describe it as happening "today" or "tonight"');
+    expect(prompt).toContain('Do not describe it as happening "today", "tonight", "this Wednesday" or "next Wednesday"');
     // The internal enum label used to leak into the prompt.
     expect(prompt).not.toContain("Timing label:");
     // The raw ISO date was a second, differently formatted copy of the same fact.

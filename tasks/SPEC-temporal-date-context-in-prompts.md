@@ -256,7 +256,7 @@ This takes the duplicate `describeEventTimingCue` (`service.ts:525`) with it, wh
 
 ## 5. Deferred, with reasons
 
-- **Phase 2, natural relative wording.** Approved (D1), deferred so that Phase 1 has one acceptance oracle. Needs its own vocabulary table covering 7 or more days, where the image label already emits `NEXT <weekday>`.
+- ~~**Phase 2, natural relative wording.**~~ Delivered, see section 8.
 - **Phase 3, schedule drift.** Blocked on a real per-body provenance contract. The review is right that `ai_generation_params.generationContext.scheduledAt` is written to the **draft** content id (`ai-generate.ts:111`), while `createScheduledBatch` (`content.ts:876`) then inserts separate rows per slot, platform and placement that do not carry it. There is therefore no reliable per-caption baseline today, and any drift check built on the draft field would compare against the wrong slot. Phase 3 must first define and persist a per-item generation reference. Its coverage must also include approve-now, automatic retry (`handler.ts:256`), tournament publish-now (`tournament.ts:695`) and delayed queue delivery, not just manual reschedule.
 - **Promotion start versus end, and noon events.** The review showed a promotion post can carry overlay `THIS SATURDAY` (start) alongside an instruction about ending Wednesday 30 September (end), and that a noon event labelled `TODAY` still permits "tonight". Both are real. Phase 1's timing block states the facts and derives its forbidden list from the same gap the label uses, which removes the "tonight" case; the start-versus-end modelling is a Phase 2 concern.
 
@@ -275,3 +275,53 @@ This takes the duplicate `describeEventTimingCue` (`service.ts:525`) with it, wh
 ## 7. Rollback
 
 Revert. Phase 1 persists no new state and applies no migration. Prompt changes affect only later generations. The post-processing change affects bodies generated after it. The validation change only lifts blocks, so a revert restores the previous, stricter behaviour without leaving anything stranded. Copy already generated is never rewritten.
+
+## 8. Phase 2: natural relative wording (delivered)
+
+House style now allows a landlord's phrasing where it is true. The review's R07 asked for a vocabulary table per phase and a policy for seven days or more; this is it.
+
+### 8.1 The vocabulary table
+
+| Gap from publish day to the subject | Overlay label | Caption may say | Must state the date |
+|---|---|---|---|
+| Same day, evening subject | `TONIGHT` | "tonight" | no |
+| Same day, daytime subject | `TODAY` | "today" | no |
+| Same day, promotion (runs to end of day) | `LAST DAY` | "today" or "tonight" | no |
+| Next day | `TOMORROW` / `TOMORROW NIGHT` | "tomorrow" | no |
+| 2 to 6 days | `THIS <WEEKDAY>` | "this Saturday" | no |
+| Next calendar week | `NEXT <WEEKDAY>` | "next Saturday" | **yes** |
+| Further out | the absolute date | nothing relative | **yes** |
+| After the subject has passed | none | nothing relative | yes |
+
+"Next Saturday" is genuinely ambiguous in British English, so it has to be paired with the date. Inside the week it does not: "quiz night this Saturday, doors at seven" is complete on its own, and forcing a date into it makes the copy worse. That is why the requirement is banded rather than blanket.
+
+### 8.2 Agreement with the image is structural, not a rule
+
+The permitted wording is read **off the overlay label itself** (`allowedFromProximityLabel`), not recomputed. `getProximityLabel` already owns the day banding, including the calendar-week arithmetic that separates "this Saturday" from "next Saturday" across a DST boundary. Deriving the caption vocabulary from the same string means the caption and the image cannot drift apart, and the week logic is not duplicated a third time.
+
+Where no label maps (a promotion's `3 DAYS LEFT`, or no label at all) the wording falls back to the day gap, which covers 0 to 6 days and permits nothing beyond that. Seven days and out needs the week arithmetic, so without a label it stays conservative rather than guessing.
+
+**Promotions deliberately do not read the label.** Before a promotion starts the overlay describes its **start** ("THIS FRIDAY") while the caption talks about the **deadline**. Those are different facts about different dates, not a contradiction, which is the distinction the review's R08 asked for. The promotion caption takes its wording from the gap to the end date alone.
+
+### 8.3 Reconciliation, not stripping
+
+`normaliseEventDatePhrasing` previously deleted every "this/next `<weekday>`". It now:
+
+- leaves a relative form that matches what is permitted;
+- corrects the wrong qualifier, "next Saturday" to "this Saturday", rather than deleting the phrase;
+- collapses a relative form to the full date when no relative form is permitted (the old behaviour, still correct for a post three weeks out);
+- drops the qualifier when it is run straight into the date ("this Friday 17th July"), which is the construction that implies the wrong week;
+- keeps the separated form ("this Friday, 17th July") and fixes its ordinal;
+- still normalises abbreviated and non-ordinal dates, and still ignores unrelated weekdays such as "every Friday".
+
+It is idempotent: running it on its own output changes nothing, asserted by test. It defaults to an empty permitted list, so any caller that does not pass one keeps the old strip behaviour exactly.
+
+### 8.4 Bounds, per the review's R13
+
+- Mutation is bounded to the event's own weekday and its own date. Unrelated claims are never touched.
+- Nothing is ever appended. The "state the date" requirement is carried by the prompt and is not deterministically enforced, because appending a sentence after the length clamp would invalidate copy that had already been accepted. That is a stated limit, not an oversight.
+- The house rule permits "this Friday, 17th July" and forbids "this Friday 17th July". One is a separated pair, the other reads as a single phrase naming a week that may be wrong.
+
+### 8.5 Not included
+
+No lint rule was added for "relative form used but the date is missing". `day_name_mismatch` is already advisory and nothing surfaces advisories in the UI yet, so a second unsurfaced advisory would be code without a consumer. The deterministic reconciliation above already prevents the dangerous case, which is a relative form that is untrue.

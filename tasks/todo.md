@@ -167,3 +167,47 @@ Two decisions changed during implementation, both recorded in the spec:
 Deferred, unchanged from the spec: Phase 2 (natural relative wording, approved but needs its own vocabulary table) and Phase 3 (drift detection, blocked on a per-body provenance contract that does not exist yet).
 
 Not done, deliberately: `buildInstantPostPrompt` and `postProcessGeneratedCopy` are now unused by application code but kept, because their helpers are interleaved with live v2 code and an integration test still exercises the former.
+
+---
+
+# Plan: temporal date context, Phase 2 (2026-09-09)
+
+Natural relative wording in captions. Approved as D1 in `tasks/SPEC-temporal-date-context-in-prompts.md`, delivered as section 8 of that spec. Builds on Phase 1 (branch `fix/temporal-date-context-phase-1`, PR #56, unmerged).
+
+- [x] Vocabulary read off the overlay label itself, so caption and image agree by construction rather than by a rule
+- [x] Fallback to the day gap for 0 to 6 days when no label maps; conservative beyond that rather than duplicating the week arithmetic a third time
+- [x] Promotions take their wording from the deadline, not the overlay's start label (review R08)
+- [x] Banded date requirement: optional inside the week, mandatory from "next <weekday>" out
+- [x] House rule rewritten: relative wording allowed, "this Friday, 17th July" allowed, "this Friday 17th July" still banned
+- [x] `normaliseEventDatePhrasing` reconciles instead of stripping, and is idempotent
+- [x] `allowedRelativeWording` threaded from the server action into post-processing
+- [x] Tests: vocabulary table across the gap range, structural overlay agreement, reconciliation, idempotency, promotion start-versus-end
+- [x] `npm run ci:verify` green: 2205 tests under Europe/London, 2205 under UTC
+
+## Results
+
+The caption may now say what the image says. At five days out the image reads `THIS SATURDAY` and the caption may too, where before it was forced to "Saturday 19th September" and any "this Saturday" the model produced was deleted.
+
+Verified vocabulary, event on Saturday 19 September at 7pm:
+
+| Post publishes | Overlay | Caption may say | Date required |
+|---|---|---|---|
+| 19 Sep 07:00 | `TONIGHT` | "tonight" | no |
+| 18 Sep | `TOMORROW NIGHT` | "tomorrow" | no |
+| 17 Sep | `THIS SATURDAY` | "this Saturday" | no |
+| 13 Sep | `THIS SATURDAY` | "this Saturday" | no |
+| 12 Sep | `NEXT SATURDAY` | "next Saturday" | yes |
+| 30 Aug | `SATURDAY 19TH SEPTEMBER` | nothing relative | yes |
+| 20 Sep (past) | none | nothing relative | yes |
+
+Reconciliation, event Friday 17th July, "this Friday" permitted:
+
+| Model wrote | Result |
+|---|---|
+| "Join us this Friday" | unchanged |
+| "Next Friday we are hosting" | "This Friday we are hosting" |
+| "this Friday 17th July" | "Friday 17th July" |
+| "this Friday, 17 July" | "this Friday, 17th July" |
+| "every Friday" | unchanged |
+
+Not done, deliberately: no lint rule for "relative form used without the date". `day_name_mismatch` is already an unsurfaced advisory, so a second one would be code without a consumer, and the reconciler already prevents the dangerous case.

@@ -397,7 +397,8 @@ const PUB_WRITING_RULES = [
   'Never put URLs, bare domains, markdown links, source citations, or old booking links in any body copy. The system owns final CTA URLs.',
   'For Instagram, booking/joining instructions must only point people to the link in bio. Never put a URL, bare domain, booking link, or booking website in Instagram copy.',
   'Do not invent operational details. Only mention bookings, limited spaces, walk-ins, arrival rules, food service times, prices, hosts, age rules, or capacity if they are explicitly supplied in the brief.',
-  'When you state a specific event date, write it in full and properly cased as "Weekday Nth Month", for example "Friday 17th July". Never abbreviate or upper-case it (never "FRI 17 JUL"), and never put a vague "this" or "next" in front of that specific date, which can wrongly imply the wrong week. Use "tonight" or "tomorrow" only when the post itself publishes on that day. (For a weekly recurring event with no fixed date, natural day-of-week wording like "this Friday" is fine.)',
+  'Talk about when something is happening the way a landlord would: "tonight", "tomorrow", "this Saturday". Use only the wording the timing block says is true for this post, and follow the timing block on whether the full date is needed as well.',
+  'Write any specific date in full and properly cased as "Weekday Nth Month", for example "Friday 17th July". Never abbreviate or upper-case it (never "FRI 17 JUL"), and never run a relative word straight into it (never "this Friday 17th July"): use one or the other, or separate them, as in "this Friday, 17th July".',
   'Sound like a real person talking to a regular, warm, local and plain-speaking.',
   'Do not be posh, corporate or salesy. Avoid words like premium, elevated, curated, sophisticated, exclusive and "hidden gem".',
   'Never use an em dash. Use a comma, a colon, brackets or a new sentence instead.',
@@ -496,6 +497,7 @@ export function buildUserPrompt(
     absoluteDateLabel?: string;
     allowedRelativeWording?: string[];
     forbiddenRelativeWording?: string[];
+    requiresAbsoluteDate?: boolean;
     media?: Array<{
       id: string;
       fileName: string;
@@ -696,7 +698,9 @@ function buildTimingBlock(brief: ContentBrief, context?: TimingBlockContext): st
     ?? (subject ? formatEventDateLong(subject) : null);
   if (absoluteDateLabel) {
     lines.push(
-      `When the copy states that date, write it in full as "${absoluteDateLabel}". Never abbreviate or upper-case it (never "FRI 17 JUL"), and never put a vague "this" or "next" in front of it.`,
+      context?.requiresAbsoluteDate === false
+        ? `State the date as "${absoluteDateLabel}" if you state it at all. Never abbreviate or upper-case it (never "FRI 17 JUL"), and never run a relative word straight into it (never "this Friday 17th July").`
+        : `State the full date at least once, written as "${absoluteDateLabel}". Never abbreviate or upper-case it (never "FRI 17 JUL"), and never run a relative word straight into it (never "this Friday 17th July").`,
     );
   }
 
@@ -708,7 +712,7 @@ function buildTimingBlock(brief: ContentBrief, context?: TimingBlockContext): st
         forbidden: context.forbiddenRelativeWording ?? [],
       }
     : publishAt && subject
-      ? splitRelativeWording(publishAt, subject)
+      ? splitRelativeWording(publishAt, subject, { proximityLabel: context?.proximityLabel })
       : null;
 
   if (wording) {

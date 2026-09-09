@@ -403,6 +403,69 @@ describe('postprocessCopy', () => {
       expect(result.copy.facebook.body).toBe('Join us Friday 17th July from 8pm.');
     });
 
+    describe('when relative wording is permitted', () => {
+      const THIS_FRIDAY = ['this Friday'];
+      const NEXT_FRIDAY = ['next Friday'];
+      const body = (text: string) =>
+        makeRawCopy({ facebook: { body: text, cta_text: 'Book now', hashtags: [] } });
+
+      it('leaves the permitted relative form alone', () => {
+        const result = postprocessCopy(
+          body('Join us this Friday for a proper throwback night.'),
+          makeConfig({ eventStartIso: EVENT, allowedRelativeWording: THIS_FRIDAY }),
+        );
+        expect(result.copy.facebook.body).toBe('Join us this Friday for a proper throwback night.');
+      });
+
+      it('corrects the wrong qualifier rather than deleting the phrase', () => {
+        const result = postprocessCopy(
+          body('Next Friday we are hosting Music Bingo Night.'),
+          makeConfig({ eventStartIso: EVENT, allowedRelativeWording: THIS_FRIDAY }),
+        );
+        expect(result.copy.facebook.body).toBe('This Friday we are hosting Music Bingo Night.');
+      });
+
+      it('corrects the qualifier in the other direction too', () => {
+        const result = postprocessCopy(
+          body('Join us this Friday for a proper throwback night.'),
+          makeConfig({ eventStartIso: EVENT, allowedRelativeWording: NEXT_FRIDAY }),
+        );
+        expect(result.copy.facebook.body).toBe('Join us next Friday for a proper throwback night.');
+      });
+
+      it('drops the qualifier when it is run straight into the date', () => {
+        // "this Friday 17th July" reads as one phrase and can imply the wrong week.
+        const result = postprocessCopy(
+          body('Join us this Friday 17th July from 8pm.'),
+          makeConfig({ eventStartIso: EVENT, allowedRelativeWording: THIS_FRIDAY }),
+        );
+        expect(result.copy.facebook.body).toBe('Join us Friday 17th July from 8pm.');
+      });
+
+      it('keeps the separated form and fixes its ordinal', () => {
+        const result = postprocessCopy(
+          body('Join us this Friday, 17 July, from 8pm.'),
+          makeConfig({ eventStartIso: EVENT, allowedRelativeWording: THIS_FRIDAY }),
+        );
+        expect(result.copy.facebook.body).toBe('Join us this Friday, 17th July, from 8pm.');
+      });
+
+      it('is idempotent on its own output', () => {
+        const config = makeConfig({ eventStartIso: EVENT, allowedRelativeWording: THIS_FRIDAY });
+        const once = postprocessCopy(body('Next Friday, 17 July, we are hosting Music Bingo.'), config);
+        const twice = postprocessCopy(body(once.copy.facebook.body), config);
+        expect(twice.copy.facebook.body).toBe(once.copy.facebook.body);
+      });
+
+      it('still leaves unrelated weekday mentions untouched', () => {
+        const result = postprocessCopy(
+          body('Our kitchen is open every Friday until late.'),
+          makeConfig({ eventStartIso: EVENT, allowedRelativeWording: THIS_FRIDAY }),
+        );
+        expect(result.copy.facebook.body).toContain('every Friday');
+      });
+    });
+
     it('leaves unrelated weekday mentions ("every Friday") untouched', () => {
       const raw = makeRawCopy({
         facebook: { body: 'Our kitchen is open every Friday until late.', cta_text: 'Book now', hashtags: [] },
