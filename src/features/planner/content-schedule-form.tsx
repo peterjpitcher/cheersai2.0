@@ -78,10 +78,18 @@ export function PlannerContentScheduleForm({
         setTime(nextTime);
         setBaseline({ date: nextDate, time: nextTime });
         const friendly = scheduled.toFormat("cccc d LLLL yyyy · HH:mm");
-        setFeedback(`Scheduled for ${friendly}`);
-        toast.success("Schedule updated", {
-          description: `Post will go out at ${friendly} (${timezoneLabel}).`,
-        });
+        const warning = "warning" in result && typeof result.warning === "string" ? result.warning : null;
+        setFeedback(warning ? `Scheduled for ${friendly}. ${warning}` : `Scheduled for ${friendly}`);
+        // Warn but do not block: the new time is already saved. Copy is frozen
+        // at generation while the image label is recomputed at publish, so a
+        // move can leave the caption and the image contradicting each other.
+        if (warning) {
+          toast.info("Schedule updated, but check the copy", { description: warning, durationMs: 9000 });
+        } else {
+          toast.success("Schedule updated", {
+            description: `Post will go out at ${friendly} (${timezoneLabel}).`,
+          });
+        }
         if (returnToPlannerAfterSave) {
           setShouldReturnToPlanner(true);
         } else {
