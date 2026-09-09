@@ -92,9 +92,13 @@ describe('post-now temporal framing', () => {
 
     // The regression: a null schedule used to mean "the event is live".
     expect(context.timingLabel).toBe('early_awareness');
-    expect(context.forbiddenRelativeWording).toEqual(['today', 'tonight', 'tomorrow']);
+    // Eleven days out lands in the next calendar week, so the natural form is
+    // "next Saturday", matching the overlay label exactly.
+    expect(context.allowedRelativeWording).toEqual(['next Saturday']);
+    expect(context.proximityLabel).toBe('NEXT SATURDAY');
+    expect(context.requiresAbsoluteDate).toBe(true);
     expect(prompt).not.toContain('happening now');
-    expect(prompt).toContain('Do not describe it as happening "today", "tonight" or "tomorrow"');
+    expect(prompt).toContain('Do not describe it as happening "today", "tonight", "tomorrow" or "this Saturday"');
     // The publish anchor may legitimately say "today", so assert on the event
     // claim rather than on the whole prompt containing the word.
     expect(prompt).toContain('The event is on Saturday 19th September at 7pm, 11 days after this post publishes.');
@@ -125,48 +129,63 @@ describe('day-gap matrix', () => {
     allowed: string[];
     forbidden: string[];
     gapPhrase: string;
+    needsDate: boolean;
   }> = [
     {
       label: 'day after the event',
       scheduledAt: '2026-09-20T10:00:00+01:00',
       allowed: [],
-      forbidden: ['today', 'tonight', 'tomorrow'],
+      forbidden: ['today', 'tonight', 'tomorrow', 'this Saturday', 'next Saturday'],
       gapPhrase: 'the day before this post publishes',
+      needsDate: true,
     },
     {
       label: 'event day, morning',
       scheduledAt: '2026-09-19T07:00:00+01:00',
       allowed: ['tonight'],
-      forbidden: ['today', 'tomorrow'],
+      forbidden: ['today', 'tomorrow', 'this Saturday', 'next Saturday'],
       gapPhrase: 'the same day this post publishes',
+      needsDate: false,
     },
     {
       label: 'day before',
       scheduledAt: '2026-09-18T10:00:00+01:00',
       allowed: ['tomorrow'],
-      forbidden: ['today', 'tonight'],
+      forbidden: ['today', 'tonight', 'this Saturday', 'next Saturday'],
       gapPhrase: 'the day after this post publishes',
+      needsDate: false,
     },
     {
       label: 'two days before',
       scheduledAt: '2026-09-17T10:00:00+01:00',
-      allowed: [],
-      forbidden: ['today', 'tonight', 'tomorrow'],
+      allowed: ['this Saturday'],
+      forbidden: ['today', 'tonight', 'tomorrow', 'next Saturday'],
       gapPhrase: '2 days after this post publishes',
+      needsDate: false,
     },
     {
       label: 'six days before',
       scheduledAt: '2026-09-13T10:00:00+01:00',
-      allowed: [],
-      forbidden: ['today', 'tonight', 'tomorrow'],
+      allowed: ['this Saturday'],
+      forbidden: ['today', 'tonight', 'tomorrow', 'next Saturday'],
       gapPhrase: '6 days after this post publishes',
+      needsDate: false,
+    },
+    {
+      label: 'seven days before, the next calendar week',
+      scheduledAt: '2026-09-12T10:00:00+01:00',
+      allowed: ['next Saturday'],
+      forbidden: ['today', 'tonight', 'tomorrow', 'this Saturday'],
+      gapPhrase: '7 days after this post publishes',
+      needsDate: true,
     },
     {
       label: 'twenty-one days before',
       scheduledAt: '2026-08-29T10:00:00+01:00',
       allowed: [],
-      forbidden: ['today', 'tonight', 'tomorrow'],
+      forbidden: ['today', 'tonight', 'tomorrow', 'this Saturday', 'next Saturday'],
       gapPhrase: '21 days after this post publishes',
+      needsDate: true,
     },
   ];
 
@@ -175,9 +194,13 @@ describe('day-gap matrix', () => {
       const { context, prompt } = promptFor(eventBrief('2026-09-19'), testCase.scheduledAt);
       expect(context.allowedRelativeWording).toEqual(testCase.allowed);
       expect(context.forbiddenRelativeWording).toEqual(testCase.forbidden);
+      expect(context.requiresAbsoluteDate).toBe(testCase.needsDate);
       expect(context.absoluteDateLabel).toBe('Saturday 19th September');
       expect(prompt).toContain(testCase.gapPhrase);
       expect(prompt).toContain('Timing (Europe/London):');
+      expect(prompt).toContain(
+        testCase.needsDate ? 'State the full date at least once' : 'if you state it at all',
+      );
     });
   }
 
@@ -190,7 +213,13 @@ describe('day-gap matrix', () => {
   it('permits both same-day forms for a promotion, which runs to end of day', () => {
     const { context } = promptFor(promotionBrief('2026-09-19'), '2026-09-19T09:00:00+01:00');
     expect(context.allowedRelativeWording).toEqual(['today', 'tonight']);
-    expect(context.forbiddenRelativeWording).toEqual(['tomorrow']);
+    expect(context.forbiddenRelativeWording).toEqual(['tomorrow', 'this Saturday', 'next Saturday']);
+  });
+
+  it('permits "this <weekday>" for a promotion deadline inside the week', () => {
+    const { context } = promptFor(promotionBrief('2026-09-19'), '2026-09-14T10:00:00+01:00');
+    expect(context.allowedRelativeWording).toEqual(['this Saturday']);
+    expect(context.requiresAbsoluteDate).toBe(false);
   });
 });
 
@@ -268,5 +297,62 @@ describe('British Summer Time boundaries', () => {
     const { prompt } = promptFor(eventBrief('2026-03-29', '19:00'), '2026-03-27T10:00:00+00:00');
     expect(prompt).toContain('Sunday 29th March');
     expect(prompt).toContain('2 days after this post publishes');
+  });
+});
+
+describe('caption wording agrees with the image overlay', () => {
+  // The overlay label already encodes the day banding, including the calendar
+  // week arithmetic that separates "this Saturday" from "next Saturday". The
+  // caption vocabulary is derived from that same label, so agreement is
+  // structural rather than a rule two pieces of code have to keep in step.
+  const relativeLabel = /^(TODAY|TONIGHT|TOMORROW|TOMORROW NIGHT|THIS [A-Z]+|NEXT [A-Z]+)$/;
+
+  const schedules = [
+    '2026-09-19T07:00:00+01:00',
+    '2026-09-19T18:30:00+01:00',
+    '2026-09-18T10:00:00+01:00',
+    '2026-09-17T10:00:00+01:00',
+    '2026-09-14T10:00:00+01:00',
+    '2026-09-13T10:00:00+01:00',
+    '2026-09-12T10:00:00+01:00',
+    '2026-09-09T10:00:00+01:00',
+    '2026-08-29T10:00:00+01:00',
+    '2026-09-20T10:00:00+01:00',
+    null,
+  ];
+
+  for (const scheduledAt of schedules) {
+    it(`matches the overlay for ${scheduledAt ?? 'post-now'}`, () => {
+      const { context } = promptFor(eventBrief('2026-09-19'), scheduledAt);
+      const label = context.proximityLabel ?? null;
+      const allowed = context.allowedRelativeWording ?? [];
+
+      if (label && relativeLabel.test(label)) {
+        // "TOMORROW NIGHT" permits "tomorrow": the caption keeps its own voice,
+        // it just must not make a different claim.
+        expect(allowed).toHaveLength(1);
+        expect(label.toLowerCase()).toContain(allowed[0].toLowerCase());
+      } else {
+        // An absolute-date or absent label means no relative form is true.
+        expect(allowed).toEqual([]);
+      }
+    });
+  }
+
+  it('never permits a form the overlay contradicts', () => {
+    for (const scheduledAt of schedules) {
+      const { context } = promptFor(eventBrief('2026-09-19'), scheduledAt);
+      for (const forbidden of context.forbiddenRelativeWording ?? []) {
+        expect(context.allowedRelativeWording ?? []).not.toContain(forbidden);
+      }
+    }
+  });
+
+  it('keeps the promotion caption on the deadline, not the overlay start label', () => {
+    // A promotion that has not started shows its START on the image while the
+    // caption talks about the DEADLINE. Different facts, not a contradiction.
+    const { context } = promptFor(promotionBrief('2026-09-30'), '2026-09-28T10:00:00+01:00');
+    expect(context.allowedRelativeWording).toEqual(['this Wednesday']);
+    expect(context.absoluteDateLabel).toBe('Wednesday 30th September');
   });
 });

@@ -56,6 +56,8 @@ export interface GenerationTemporalContext {
   allowedRelativeWording?: string[];
   /** Relative wording that would be false for this post. */
   forbiddenRelativeWording?: string[];
+  /** True when relative wording alone is ambiguous and the date must appear too. */
+  requiresAbsoluteDate?: boolean;
 }
 
 interface BuildGenerationTemporalContextInput {
@@ -140,36 +142,109 @@ function isEvening(dt: DateTime): boolean {
   return dt.hour >= EVENING_THRESHOLD_HOUR;
 }
 
+export interface RelativeWording {
+  /** Relative wording that is true for this post. */
+  allowed: string[];
+  /** Relative wording that would be false for this post. */
+  forbidden: string[];
+  /**
+   * True when relative wording alone would leave the reader guessing, so the
+   * copy has to state the calendar date as well.
+   *
+   * Inside a week "this Saturday" is unambiguous on its own, which is how a pub
+   * actually writes. Beyond it "next Saturday" is not, and further out there is
+   * no natural relative form at all.
+   */
+  requiresAbsoluteDate: boolean;
+}
+
+/**
+ * Read the permitted wording straight off the image overlay label.
+ *
+ * The label already encodes the day banding (getProximityLabel), including the
+ * calendar-week arithmetic that separates "this Saturday" from "next Saturday"
+ * across a DST boundary. Deriving the caption vocabulary from the same string
+ * makes agreement between the caption and the image structural rather than a
+ * rule two pieces of code have to keep in step.
+ */
+function allowedFromProximityLabel(
+  label: string | null | undefined,
+  weekday: string,
+): string[] | null {
+  if (!label) return null;
+  const upper = label.trim().toUpperCase();
+  const weekdayUpper = weekday.toUpperCase();
+
+  if (upper === 'TODAY') return ['today'];
+  if (upper === 'TONIGHT') return ['tonight'];
+  if (upper === 'TOMORROW' || upper === 'TOMORROW NIGHT') return ['tomorrow'];
+  if (upper === `THIS ${weekdayUpper}`) return [`this ${weekday}`];
+  if (upper === `NEXT ${weekdayUpper}`) return [`next ${weekday}`];
+  return null;
+}
+
+function allowedFromDayGap(
+  gap: number,
+  target: DateTime,
+  weekday: string,
+  sameDayForms?: 'auto' | 'both',
+): string[] {
+  if (gap === 0) {
+    // A promotion runs to the end of its last day, so "today" and "tonight" are
+    // both true. An event happens at a time, so only one of them is.
+    return sameDayForms === 'both'
+      ? ['today', 'tonight']
+      : [isEvening(target) ? 'tonight' : 'today'];
+  }
+  if (gap === 1) return ['tomorrow'];
+  if (gap >= 2 && gap <= 6) return [`this ${weekday}`];
+  // Seven days out and beyond, the week arithmetic lives in getProximityLabel.
+  // Without a label to read it from, permit nothing rather than guess.
+  return [];
+}
+
 /**
  * Split the relative vocabulary into what is true and what is false for a post
  * that publishes `publishAt` about something happening at `target`.
- *
- * Banding matches getProximityLabel so the caption and the image strip can never
- * make contradictory claims. Phase 1 permits no "this/next <weekday>" form: the
- * house style is the full absolute date outside the same-day and next-day cases.
  */
 export function splitRelativeWording(
   publishAt: DateTime,
   target: DateTime,
-  options?: { sameDayForms?: 'auto' | 'both' },
-): { allowed: string[]; forbidden: string[] } {
+  options?: { sameDayForms?: 'auto' | 'both'; proximityLabel?: string | null },
+): RelativeWording {
   const gap = dayDiff(publishAt, target);
-  const allowed: string[] = [];
+  const weekday = formatWeekday(target);
+  const allowed =
+    allowedFromProximityLabel(options?.proximityLabel, weekday)
+    ?? allowedFromDayGap(gap, target, weekday, options?.sameDayForms);
 
-  if (gap === 0) {
-    // A promotion runs to the end of its last day, so "today" and "tonight" are
-    // both true. An event happens at a time, so only one of them is.
-    if (options?.sameDayForms === 'both') {
-      allowed.push('today', 'tonight');
-    } else {
-      allowed.push(isEvening(target) ? 'tonight' : 'today');
-    }
-  } else if (gap === 1) {
-    allowed.push('tomorrow');
-  }
+  return {
+    allowed,
+    forbidden: relativeFormsFor(weekday).filter((form) => !allowed.includes(form)),
+    requiresAbsoluteDate: !(gap >= 0 && gap <= 6),
+  };
+}
 
-  const forbidden = RELATIVE_FORMS.filter((form) => !allowed.includes(form));
-  return { allowed, forbidden: [...forbidden] };
+/**
+ * Wording for a weekly recurrence, which has no fixed calendar date.
+ *
+ * Only the overlay label is available here: the next occurrence is resolved
+ * inside getProximityLabel. A recurrence never needs an absolute date, which is
+ * the carve-out the house style has always made for it.
+ */
+function weeklyRelativeWording(label: string): RelativeWording {
+  const weekday = label.trim().toUpperCase().replace(/^(THIS|NEXT)\s+/, '');
+  const titled = weekday.charAt(0) + weekday.slice(1).toLowerCase();
+  const allowed = allowedFromProximityLabel(label, titled) ?? [];
+  return {
+    allowed,
+    forbidden: relativeFormsFor(titled).filter((form) => !allowed.includes(form)),
+    requiresAbsoluteDate: false,
+  };
+}
+
+function relativeFormsFor(weekday: string): string[] {
+  return [...RELATIVE_FORMS, `this ${weekday}`, `next ${weekday}`];
 }
 
 function describeEventTimingCue(
@@ -232,14 +307,14 @@ function describeEventTimingCue(
     return {
       temporalProximity: 'building excitement, save the date',
       timingLabel: 'building',
-      temporalInstruction: 'Build anticipation and lead with the date from the timing block above.',
+      temporalInstruction: 'Build anticipation. Take the timing wording from the timing block above.',
     };
   }
 
   return {
     temporalProximity: 'awareness, curiosity, early-bird appeal',
     timingLabel: 'early_awareness',
-    temporalInstruction: 'This is an early awareness post. Use the calendar date from the timing block, never vague wording like "soon".',
+    temporalInstruction: 'This is an early awareness post. Take the timing wording from the timing block above, and never write vague wording like "soon".',
   };
 }
 
@@ -281,14 +356,14 @@ function describePromotionTimingCue(
     return {
       temporalProximity: 'momentum, clear deadline, value-led',
       timingLabel: 'promotion_this_week',
-      temporalInstruction: 'Keep the offer moving without overstating urgency. Take the deadline from the timing block above.',
+      temporalInstruction: 'Keep the offer moving without overstating urgency. Take the deadline wording from the timing block above.',
     };
   }
 
   return {
     temporalProximity: 'value-led, awareness, deadline-aware',
     timingLabel: 'promotion_early',
-    temporalInstruction: 'Reinforce the value of the offer and state the deadline from the timing block above.',
+    temporalInstruction: 'Reinforce the value of the offer and take the deadline wording from the timing block above.',
   };
 }
 
@@ -347,14 +422,16 @@ export function buildGenerationTemporalContext({
   if (contentType === 'event') {
     const eventStart = buildEventStart(brief);
     if (!eventStart) return publishFacts;
-    const wording = splitRelativeWording(publishAt, eventStart);
+    const proximityLabel = previewLabel();
+    const wording = splitRelativeWording(publishAt, eventStart, { proximityLabel });
     return {
       ...publishFacts,
       eventStart: eventStart.toISO() ?? undefined,
       absoluteDateLabel: formatEventDateLong(eventStart),
       allowedRelativeWording: wording.allowed,
       forbiddenRelativeWording: wording.forbidden,
-      proximityLabel: previewLabel(),
+      requiresAbsoluteDate: wording.requiresAbsoluteDate,
+      proximityLabel,
       ...describeEventTimingCue(publishAt, eventStart),
     };
   }
@@ -366,6 +443,10 @@ export function buildGenerationTemporalContext({
 
     const startDate = readString(brief.startDate);
     const startAt = parseInDefaultZone(startDate);
+    // No proximity label is passed here on purpose. Before a promotion starts
+    // the overlay describes its START ("THIS FRIDAY") while the caption talks
+    // about the DEADLINE. Those are different facts, not a contradiction, so the
+    // caption's wording comes from the gap to the end date alone.
     const wording = splitRelativeWording(publishAt, endAt, { sameDayForms: 'both' });
 
     return {
@@ -376,6 +457,7 @@ export function buildGenerationTemporalContext({
       absoluteDateLabel: formatEventDateLong(endAt),
       allowedRelativeWording: wording.allowed,
       forbiddenRelativeWording: wording.forbidden,
+      requiresAbsoluteDate: wording.requiresAbsoluteDate,
       proximityLabel: previewLabel(),
       ...describePromotionTimingCue(publishAt, endAt),
     };
@@ -384,11 +466,15 @@ export function buildGenerationTemporalContext({
   if (contentType === 'weekly_recurring') {
     const proximityLabel = previewLabel();
     if (!proximityLabel) return publishFacts;
+    const wording = weeklyRelativeWording(proximityLabel);
     return {
       ...publishFacts,
       proximityLabel,
+      allowedRelativeWording: wording.allowed,
+      forbiddenRelativeWording: wording.forbidden,
+      requiresAbsoluteDate: wording.requiresAbsoluteDate,
       temporalProximity: 'routine, familiar, timely reminder',
-      temporalInstruction: `This recurring event is ${proximityLabel.toLowerCase()}. Use that relative timing naturally where it fits.`,
+      temporalInstruction: 'Write this as a familiar, routine reminder. Take the timing wording from the timing block above.',
     };
   }
 

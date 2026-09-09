@@ -49,9 +49,12 @@ describe('create temporal context', () => {
     expect(context.temporalInstruction).not.toContain('this Wednesday');
     // The canonical date and the vocabulary rules come through as facts.
     expect(context.absoluteDateLabel).toBe('Wednesday 27th May');
-    expect(context.allowedRelativeWording).toEqual([]);
-    expect(context.forbiddenRelativeWording).toEqual(['today', 'tonight', 'tomorrow']);
-    // The overlay label (image) keeps the relative form.
+    // The caption may now use the same relative form the overlay shows.
+    expect(context.allowedRelativeWording).toEqual(['this Wednesday']);
+    expect(context.forbiddenRelativeWording).toEqual([
+      'today', 'tonight', 'tomorrow', 'next Wednesday',
+    ]);
+    expect(context.requiresAbsoluteDate).toBe(false);
     expect(context.proximityLabel).toBe('THIS WEDNESDAY');
   });
 

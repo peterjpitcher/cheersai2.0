@@ -115,6 +115,7 @@ export async function generateContent(
       defaultCta: voiceConfig.defaultCta,
       ctaLinks: brief.ctaLinks ?? null,
       eventStartIso: temporal.eventStart ?? null,
+      allowedRelativeWording: temporal.allowedRelativeWording,
     });
 
     // Store generation params and draft copy on content_items
@@ -201,6 +202,7 @@ export async function regenerateWithModifier(
       defaultCta: voiceConfig.defaultCta,
       ctaLinks: brief.ctaLinks ?? null,
       eventStartIso: temporal.eventStart ?? null,
+      allowedRelativeWording: temporal.allowedRelativeWording,
     });
 
     // Store generation params with modifier

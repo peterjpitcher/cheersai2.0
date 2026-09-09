@@ -356,17 +356,35 @@ export interface PostprocessConfig {
   ctaLinks?: PlatformCtaLinks | null;
   /** Event start ISO (when present, event-date phrasing is normalised in the body). */
   eventStartIso?: string | null;
+  /** Relative wording that is true for this post, e.g. ["this Saturday"]. */
+  allowedRelativeWording?: string[];
 }
 
 /**
- * Deterministically normalise how the event date is written in body copy so the
- * output does not depend on the model following instructions. Rewrites relative
- * ("this/next Friday"), abbreviated ("FRI 17 JUL"), and non-ordinal ("Friday 17
- * July") references to the event's own weekday/date into the canonical absolute
- * form, e.g. "Friday 17th July". Only the event's weekday is targeted, so
- * unrelated mentions ("every Friday") are left untouched.
+ * Reconcile how the event date is written in body copy, so the output does not
+ * depend on the model following instructions.
+ *
+ * This used to delete every "this/next <weekday>" outright, which is why the
+ * caption said "Saturday 19th September" while the image said "THIS SATURDAY".
+ * Natural relative wording is now allowed where it is true, so this reconciles
+ * instead of stripping:
+ *
+ * - a relative form that matches what is permitted is left alone;
+ * - the wrong qualifier is corrected ("next Saturday" to "this Saturday");
+ * - a relative form with no permitted counterpart collapses to the full date;
+ * - a relative word run straight into the date ("this Friday 17th July") loses
+ *   the qualifier, since that is the construction that implies the wrong week;
+ * - abbreviated and non-ordinal dates still normalise to "Friday 17th July".
+ *
+ * Only the event's own weekday is targeted, so unrelated mentions ("every
+ * Friday", a Sunday roast) are untouched. Idempotent: running it twice on its
+ * own output changes nothing.
  */
-function normaliseEventDatePhrasing(body: string, eventStartIso: string): string {
+function normaliseEventDatePhrasing(
+  body: string,
+  eventStartIso: string,
+  allowedRelativeWording: string[] = [],
+): string {
   const dt = DateTime.fromISO(eventStartIso, { zone: DEFAULT_TIMEZONE }).setLocale("en-GB");
   if (!dt.isValid) return body;
 
@@ -375,18 +393,47 @@ function normaliseEventDatePhrasing(body: string, eventStartIso: string): string
   const monthLong = dt.toFormat("LLLL");
   const monthShort = monthLong.slice(0, 3);
   const absolute = formatEventDateLong(dt);
+  const ordinalDay = absolute.replace(`${weekdayLong} `, "").replace(` ${monthLong}`, "");
 
   const esc = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const weekday = `(?:${esc(weekdayLong)}|${esc(weekdayShort)})`;
   const month = `(?:${esc(monthLong)}|${esc(monthShort)})`;
   const dayNum = `${dt.day}(?:st|nd|rd|th)?`;
 
-  // Rule 1: a relative qualifier + the event weekday (optionally trailed by the
-  // date itself) collapses to the absolute date, catches "this Friday",
-  // "Next Friday, 17th July", and the "this FRI 17 JUL" overlay-label leak.
+  const permitted = new Set(allowedRelativeWording.map((form) => form.toLowerCase()));
+  const allows = (qualifier: string) => permitted.has(`${qualifier} ${weekdayLong.toLowerCase()}`);
+  const matchCase = (sample: string, value: string) =>
+    sample[0] === sample[0]?.toUpperCase() ? value[0].toUpperCase() + value.slice(1) : value;
+
+  // Rule 1: reconcile a relative qualifier in front of the event's own weekday,
+  // optionally trailed by the date itself.
   let out = body.replace(
-    new RegExp(`\\b(?:this|next)\\s+${weekday}\\b(?:[.,\\s]+${dayNum}\\s+${month})?`, "gi"),
-    absolute,
+    new RegExp(
+      `\\b(this|next)\\s+${weekday}\\b(\\s*,\\s*${dayNum}\\s+${month}|\\s+${dayNum}\\s+${month})?`,
+      "gi",
+    ),
+    (match, qualifierRaw: string, trailingRaw?: string) => {
+      const qualifier = qualifierRaw.toLowerCase();
+      const trailing = trailingRaw ?? "";
+      const glued = trailing.length > 0 && !trailing.includes(",");
+
+      // "this Friday 17th July" reads as one phrase and implies a week that may
+      // be wrong. The date alone is unambiguous.
+      if (glued) return absolute;
+
+      const separatedDate = trailing ? `, ${ordinalDay} ${monthLong}` : "";
+
+      if (allows(qualifier)) {
+        return `${matchCase(qualifierRaw, qualifier)} ${weekdayLong}${separatedDate}`;
+      }
+
+      const other = qualifier === "this" ? "next" : "this";
+      if (allows(other)) {
+        return `${matchCase(qualifierRaw, other)} ${weekdayLong}${separatedDate}`;
+      }
+
+      return absolute;
+    },
   );
 
   // Rule 2: an abbreviated or non-ordinal event date normalises to the ordinal
@@ -450,9 +497,12 @@ export function postprocessCopy(
   // Deterministically fix event-date phrasing so the output does not rely on the
   // model following the prompt instructions.
   const eventStartIso = config.eventStartIso;
-  const facebookFinal = eventStartIso ? normaliseEventDatePhrasing(facebook, eventStartIso) : facebook;
+  const allowedWording = config.allowedRelativeWording ?? [];
+  const facebookFinal = eventStartIso
+    ? normaliseEventDatePhrasing(facebook, eventStartIso, allowedWording)
+    : facebook;
   const instagramFinal = eventStartIso
-    ? normaliseEventDatePhrasing(instagramBody, eventStartIso)
+    ? normaliseEventDatePhrasing(instagramBody, eventStartIso, allowedWording)
     : instagramBody;
 
   return {
