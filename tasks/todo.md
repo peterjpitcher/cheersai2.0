@@ -211,3 +211,36 @@ Reconciliation, event Friday 17th July, "this Friday" permitted:
 | "every Friday" | unchanged |
 
 Not done, deliberately: no lint rule for "relative form used without the date". `day_name_mismatch` is already an unsurfaced advisory, so a second one would be code without a consumer, and the reconciler already prevents the dangerous case.
+
+---
+
+# Plan: temporal date context, Phase 3 (2026-09-09)
+
+Reschedule drift warning. Decision D3, warn first. Delivered as section 9 of `tasks/SPEC-temporal-date-context-in-prompts.md`. Stacked on Phase 2.
+
+- [x] Establish whether a per-body provenance contract is needed. It is not: wording relative to publication never goes stale, only wording about a fixed subject can, so the check needs the brief (already on every row) and the proposed instant
+- [x] Pure evaluator `evaluateTemporalDrift`, reporting only wording the new time makes false
+- [x] "Book today" and similar reader-facing calls to action excluded, they stay true whenever the post goes out
+- [x] `evaluated: false` kept distinct from `stale: false`, so an unreadable body is never reported as checked and fine
+- [x] Wired into `updatePlannerContentSchedule`, evaluated against the reserved slot rather than the requested time
+- [x] Wired into `retryPublishJob`, evaluated against now
+- [x] Surfaced in the post drawer, the schedule form and the retry button; warns, never blocks
+- [x] Tests: 13 evaluator cases, 4 action-wiring cases including a failed read
+- [x] `npm run ci:verify` green: 2222 tests under Europe/London, 2222 under UTC
+
+## Results
+
+Moving a Friday event post from Thursday to Monday now says so, instead of silently publishing a caption reading "tomorrow" under an image strip reading THIS FRIDAY.
+
+| Copy | Move | Result |
+|---|---|---|
+| "Quiz night is tomorrow" | Fri 18th to Mon 14th | warns, names "tomorrow" |
+| "Quiz night is tomorrow" | Fri 18th, an hour later | silent |
+| "lands on Saturday 19th September" | any | silent |
+| "Book your table today" | any | silent |
+| "Quiz night is today" | off the event day | warns |
+| instant post, no event date | any | not evaluated |
+
+Not done, deliberately: automatic retries and delayed queue delivery (background paths with no audience for a UI warning, they need an alert and a decision about holding delivery); tournament publish-now; one-click regeneration (a whole journey, not a button); a severity system in preflight.
+
+Verification limit: the toast and the retry-button line were not exercised in a browser. The planner is behind login and no test credentials were used. Typecheck, lint and a clean dev-server compile are the only evidence for the rendering itself.

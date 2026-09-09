@@ -257,7 +257,7 @@ This takes the duplicate `describeEventTimingCue` (`service.ts:525`) with it, wh
 ## 5. Deferred, with reasons
 
 - ~~**Phase 2, natural relative wording.**~~ Delivered, see section 8.
-- **Phase 3, schedule drift.** Blocked on a real per-body provenance contract. The review is right that `ai_generation_params.generationContext.scheduledAt` is written to the **draft** content id (`ai-generate.ts:111`), while `createScheduledBatch` (`content.ts:876`) then inserts separate rows per slot, platform and placement that do not carry it. There is therefore no reliable per-caption baseline today, and any drift check built on the draft field would compare against the wrong slot. Phase 3 must first define and persist a per-item generation reference. Its coverage must also include approve-now, automatic retry (`handler.ts:256`), tournament publish-now (`tournament.ts:695`) and delayed queue delivery, not just manual reschedule.
+- ~~**Phase 3, schedule drift.**~~ Delivered, see section 9. The provenance problem below dissolved on closer inspection; the reasoning is kept because it explains why the delivered design looks different from the one first proposed. Original note: blocked on a real per-body provenance contract. The review is right that `ai_generation_params.generationContext.scheduledAt` is written to the **draft** content id (`ai-generate.ts:111`), while `createScheduledBatch` (`content.ts:876`) then inserts separate rows per slot, platform and placement that do not carry it. There is therefore no reliable per-caption baseline today, and any drift check built on the draft field would compare against the wrong slot. Phase 3 must first define and persist a per-item generation reference. Its coverage must also include approve-now, automatic retry (`handler.ts:256`), tournament publish-now (`tournament.ts:695`) and delayed queue delivery, not just manual reschedule.
 - **Promotion start versus end, and noon events.** The review showed a promotion post can carry overlay `THIS SATURDAY` (start) alongside an instruction about ending Wednesday 30 September (end), and that a noon event labelled `TODAY` still permits "tonight". Both are real. Phase 1's timing block states the facts and derives its forbidden list from the same gap the label uses, which removes the "tonight" case; the start-versus-end modelling is a Phase 2 concern.
 
 ## 6. Test requirements for Phase 1
@@ -325,3 +325,51 @@ It is idempotent: running it on its own output changes nothing, asserted by test
 ### 8.5 Not included
 
 No lint rule was added for "relative form used but the date is missing". `day_name_mismatch` is already advisory and nothing surfaces advisories in the UI yet, so a second unsurfaced advisory would be code without a consumer. The deterministic reconciliation above already prevents the dangerous case, which is a relative form that is untrue.
+
+## 9. Phase 3: schedule drift (delivered)
+
+### 9.1 The provenance problem dissolved
+
+The plan was to store, on every saved body, the publish instant it was written for, then compare that baseline against the current schedule. The review was right that no such per-caption baseline exists: generation context is written to the **draft** content id (`ai-generate.ts`), while `createScheduledBatch` (`content.ts`) inserts separate rows per slot, platform and placement.
+
+Building that contract turned out to be unnecessary, because of a property of the wording itself:
+
+> Wording that is relative to **publication** never goes stale on its own. "Book today" means the day the reader sees it, whenever that is. Only wording about a **fixed subject** can become untrue.
+
+So the question is not "what was this written for?" but "is what it says true at the new time?", and that needs no baseline: it needs the brief (already on every row in `prompt_context.brief`) and the proposed publish instant. An absolute date such as "Saturday 19th September" stays true however the post moves, and never warns.
+
+That also answers the review's noise concern (R15) structurally rather than by tuning a threshold. The check does not fire on the presence of a temporal keyword. It fires only when the body contains wording the new time makes **false**, computed from the same permitted vocabulary the generator used.
+
+### 9.2 What it does
+
+`evaluateTemporalDrift` (`src/lib/publishing/temporal-drift.ts`) is a pure function. It rebuilds the temporal context for the proposed instant, takes `forbiddenRelativeWording`, and reports any of those phrases that actually appear in the body.
+
+| Situation | Result |
+|---|---|
+| Copy says "tomorrow", post moves off the day before | warns |
+| Copy says "this Saturday", event is no longer this week | warns |
+| Copy says "Saturday 19th September" | never warns |
+| Copy says "book your table today" | never warns, it addresses the reader |
+| Copy says "today" as a claim about the event | warns |
+| Instant post with no fixed subject | not evaluated |
+| No brief, or the body cannot be read | not evaluated |
+
+`evaluated: false` means "nothing was checked", and is deliberately distinct from `stale: false`. It is never reported to the user as reassurance, which is what the review asked for.
+
+### 9.3 Where it is wired
+
+- **`updatePlannerContentSchedule`.** Evaluated against `desiredStart`, the slot actually reserved, not the requested time (review R05). Slot reservation can shift a feed post by minutes, and on a day boundary that changes what the wording means. Returned as `warning`, surfaced by both reschedule surfaces (the post drawer and the schedule form).
+- **`retryPublishJob`.** Evaluated against now, because a retry delivers now rather than at the time the copy was written for. A post that failed on Thursday and is retried on Saturday can publish wording that has gone out of date. Surfaced under the retry button.
+
+Both warn and neither blocks, per decision D3. In both cases the action has already succeeded by the time the warning is produced; stopping either would strand work. A failed read returns no warning rather than failing the action.
+
+### 9.4 Deliberately not covered
+
+- **Automatic retries** (`handler.ts`) and **delayed queue delivery**. These are background paths with nobody at the keyboard, so a UI warning has no audience. Doing this properly means an alert or a log, and a decision about whether delivery should ever be held back. That is its own change.
+- **Tournament publish-now** (`tournament.ts`), which resets `scheduled_for` to now. Same evaluator would apply; it was left out to keep this change to the two paths a person actually drives.
+- **Automatic regeneration.** The warning tells the owner; it does not rewrite approved copy behind them. The review's R11 is right that one-click regeneration is a whole journey (preview, accept, preserve manual edits, handle failure and concurrency), not a button.
+- **A severity system in preflight.** The warning is returned from the action rather than routed through `getPublishReadinessIssues`, precisely because that path blocks. Giving preflight real severities is worth doing, but it is not needed to deliver this.
+
+### 9.5 Verification limit
+
+The evaluator, the two server actions and the failed-read path are covered by tests. The rendered toast and the retry-button line were **not** exercised in a browser: the planner is behind login and no test credentials were used. Type checking, linting and a clean dev-server compile are the only evidence for the rendering itself.

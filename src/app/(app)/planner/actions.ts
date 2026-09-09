@@ -8,6 +8,7 @@ import { DateTime } from "luxon";
 
 import { enqueueAndDispatch } from "@/lib/publishing/queue";
 import { getPublishReadinessIssues } from "@/lib/publishing/preflight";
+import { evaluateTemporalDrift, type TemporalDriftResult } from "@/lib/publishing/temporal-drift";
 import { requireAuthContext } from "@/lib/auth/server";
 import { DEFAULT_TIMEZONE } from "@/lib/constants";
 import { BANNER_EDITABLE_STATUSES } from "@/lib/scheduling/banner-config";
@@ -1063,10 +1064,10 @@ export async function updatePlannerContentSchedule(payload: unknown) {
 
   const { data: content, error: contentError } = await supabase
     .from("content_items")
-    .select("id, status, placement, platform, campaign_id, account_id")
+    .select("id, status, placement, platform, campaign_id, account_id, prompt_context")
     .eq("id", contentId)
     .eq("account_id", accountId)
-    .maybeSingle<{ id: string; status: string; placement: "feed" | "story"; platform: "facebook" | "instagram"; campaign_id: string | null; account_id: string }>();
+    .maybeSingle<{ id: string; status: string; placement: "feed" | "story"; platform: "facebook" | "instagram"; campaign_id: string | null; account_id: string; prompt_context: Record<string, unknown> | null }>();
 
   if (contentError) {
     throw contentError;
@@ -1160,6 +1161,21 @@ export async function updatePlannerContentSchedule(payload: unknown) {
     return { error: readinessIssues.map((issue) => issue.message).join(" ") } as const;
   }
 
+  // Evaluated against desiredStart, the slot actually reserved above, not the
+  // time that was requested: slot reservation can move a feed post by minutes,
+  // and on a day boundary that changes what the copy's wording means.
+  //
+  // This warns and never blocks. The copy is frozen at generation while the
+  // image's proximity label is recomputed at publish, so a move can leave the
+  // caption saying "tomorrow" under a strip that now reads THIS FRIDAY. The
+  // owner is told; the reschedule still goes through.
+  const drift = await evaluateScheduleDrift({
+    supabase,
+    contentId,
+    promptContext: content.prompt_context,
+    publishAt: desiredStart,
+  });
+
   const nowIso = new Date().toISOString();
 
   const contentUpdate: Record<string, unknown> = {
@@ -1231,7 +1247,46 @@ export async function updatePlannerContentSchedule(payload: unknown) {
     ok: true as const,
     scheduledFor: scheduledIso,
     timezone,
+    warning: drift.stale ? drift.message : null,
   };
+}
+
+/**
+ * Check whether the saved copy still tells the truth at a proposed publish time.
+ *
+ * The content item is already confirmed to belong to the active brand by the
+ * caller, so the variant is safe to look up by content_item_id. A read failure
+ * is reported as "not evaluated" rather than as "no drift": we say nothing
+ * rather than implying the copy was checked and passed.
+ */
+async function evaluateScheduleDrift({
+  supabase,
+  contentId,
+  promptContext,
+  publishAt,
+}: {
+  supabase: Awaited<ReturnType<typeof requireAuthContext>>["supabase"];
+  contentId: string;
+  promptContext: Record<string, unknown> | null;
+  publishAt: DateTime;
+}): Promise<TemporalDriftResult> {
+  try {
+    const { data, error } = await supabase
+      .from("content_variants")
+      .select("body")
+      .eq("content_item_id", contentId)
+      .order("updated_at", { ascending: false })
+      .limit(1)
+      .maybeSingle<{ body: string | null }>();
+
+    if (error || !data?.body) {
+      return { stale: false, evaluated: false, untrue: [], message: null };
+    }
+
+    return evaluateTemporalDrift({ body: data.body, promptContext, publishAt });
+  } catch {
+    return { stale: false, evaluated: false, untrue: [], message: null };
+  }
 }
 
 export async function createPlannerContent(payload: unknown) {

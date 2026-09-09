@@ -17,10 +17,12 @@ interface RetryButtonProps {
 export function RetryButton({ jobId, onRetried }: RetryButtonProps): React.JSX.Element {
   const [state, setState] = useState<'idle' | 'loading' | 'retrying' | 'error'>('idle');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [warningMessage, setWarningMessage] = useState<string | null>(null);
 
   async function handleRetry() {
     setState('loading');
     setErrorMessage(null);
+    setWarningMessage(null);
 
     try {
       const result = await retryPublishJob(jobId);
@@ -31,6 +33,10 @@ export function RetryButton({ jobId, onRetried }: RetryButtonProps): React.JSX.E
         return;
       }
 
+      // Advisory only: the retry is already dispatched. A retry delivers now,
+      // not at the time the copy was written for, so the wording can have gone
+      // out of date.
+      setWarningMessage(result.warning ?? null);
       setState('retrying');
       onRetried?.();
     } catch {
@@ -59,6 +65,9 @@ export function RetryButton({ jobId, onRetried }: RetryButtonProps): React.JSX.E
       </button>
       {state === 'error' && errorMessage && (
         <p className="text-xs" style={{ color: 'var(--c-claret)' }}>{errorMessage}</p>
+      )}
+      {state === 'retrying' && warningMessage && (
+        <p className="text-xs" role="status" style={{ color: 'var(--c-ink-2)' }}>{warningMessage}</p>
       )}
     </div>
   );

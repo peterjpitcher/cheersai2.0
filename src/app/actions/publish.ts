@@ -10,6 +10,9 @@ import { createServiceSupabaseClient } from '@/lib/supabase/service';
 import { transitionStatus } from '@/lib/publishing/state-machine';
 import { dispatchToQStash } from '@/lib/publishing/dispatch';
 import { logPublishAuditEvent } from '@/lib/publishing/audit';
+import { evaluateTemporalDrift } from '@/lib/publishing/temporal-drift';
+import { DateTime } from 'luxon';
+import { DEFAULT_TIMEZONE } from '@/lib/constants';
 
 type PublishJobRow = {
   id: string;
@@ -21,7 +24,9 @@ type PublishJobRow = {
   max_retries: number;
 };
 
-export async function retryPublishJob(jobId: string): Promise<{ success?: boolean; error?: string }> {
+export async function retryPublishJob(
+  jobId: string,
+): Promise<{ success?: boolean; error?: string; warning?: string }> {
   const { accountId } = await requireAuthContext();
   const db = createServiceSupabaseClient();
 
@@ -65,5 +70,53 @@ export async function retryPublishJob(jobId: string): Promise<{ success?: boolea
     details: { manual: true },
   });
 
-  return { success: true };
+  // A retry delivers now, not at the time the copy was written for, so a post
+  // that failed on Thursday and is retried on Saturday can publish wording that
+  // is no longer true. Warn, never block: the retry has already been dispatched
+  // and stopping it would strand a failed post.
+  const warning = await describeRetryDrift(db, accountId, job.content_item_id);
+
+  return warning ? { success: true, warning } : { success: true };
+}
+
+/**
+ * Does the saved copy still tell the truth if it goes out now?
+ *
+ * Uses the service-role client, so both reads are scoped by account explicitly.
+ * Any failure here returns no warning rather than blocking the retry: this is
+ * advisory, and a retry must not fail because a warning could not be computed.
+ */
+async function describeRetryDrift(
+  db: ReturnType<typeof createServiceSupabaseClient>,
+  accountId: string,
+  contentItemId: string,
+): Promise<string | undefined> {
+  try {
+    const { data: item } = await db
+      .from('content_items')
+      .select('prompt_context')
+      .eq('id', contentItemId)
+      .eq('account_id', accountId)
+      .maybeSingle<{ prompt_context: Record<string, unknown> | null }>();
+
+    const { data: variant } = await db
+      .from('content_variants')
+      .select('body')
+      .eq('content_item_id', contentItemId)
+      .order('updated_at', { ascending: false })
+      .limit(1)
+      .maybeSingle<{ body: string | null }>();
+
+    if (!variant?.body) return undefined;
+
+    const drift = evaluateTemporalDrift({
+      body: variant.body,
+      promptContext: item?.prompt_context ?? null,
+      publishAt: DateTime.now().setZone(DEFAULT_TIMEZONE),
+    });
+
+    return drift.stale ? (drift.message ?? undefined) : undefined;
+  } catch {
+    return undefined;
+  }
 }

@@ -403,7 +403,14 @@ function InlineScheduleEditor({
           toast.error('Could not update', { description: result.error });
           return;
         }
-        toast.success('Schedule updated');
+        // Warn but do not block: the reschedule has already been saved. The
+        // copy is frozen at generation while the image label is recomputed at
+        // publish, so a move can leave the two contradicting each other.
+        if ('warning' in result && typeof result.warning === 'string' && result.warning) {
+          toast.info('Schedule updated, but check the copy', { description: result.warning, durationMs: 9000 });
+        } else {
+          toast.success('Schedule updated');
+        }
         setEditing(false);
         queryClient.invalidateQueries({ queryKey: ['content-detail', contentId] });
         router.refresh();
