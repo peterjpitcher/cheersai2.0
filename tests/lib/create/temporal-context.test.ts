@@ -43,9 +43,14 @@ describe('create temporal context', () => {
     });
 
     expect(context.timingLabel).toBe('building');
-    // Body copy uses the full absolute date, never a misleading "this"/"next".
-    expect(context.temporalInstruction).toContain('Wednesday 27th May');
+    // The instruction carries narrative intent only. Every date fact lives in
+    // the timing block, so the two can no longer contradict each other.
+    expect(context.temporalInstruction).toContain('timing block');
     expect(context.temporalInstruction).not.toContain('this Wednesday');
+    // The canonical date and the vocabulary rules come through as facts.
+    expect(context.absoluteDateLabel).toBe('Wednesday 27th May');
+    expect(context.allowedRelativeWording).toEqual([]);
+    expect(context.forbiddenRelativeWording).toEqual(['today', 'tonight', 'tomorrow']);
     // The overlay label (image) keeps the relative form.
     expect(context.proximityLabel).toBe('THIS WEDNESDAY');
   });

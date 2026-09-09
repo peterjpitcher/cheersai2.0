@@ -238,19 +238,62 @@ describe("content rules", () => {
     expect(lint.issues.some((issue) => issue.code === "banned_phrases")).toBe(true);
   });
 
-  it("replaces day names when they do not match the reference date", () => {
-    const scheduledFor = new Date("2026-02-05T12:00:00Z"); // Thursday in Europe/London
+  it("replaces a single day name that does not match the event date", () => {
     const { body } = applyChannelRules({
       body: "Join us this Friday for a pint.",
       platform: "facebook",
       placement: "feed",
-      context: {},
+      context: { eventStart: "2026-02-05T19:00:00+00:00" }, // Thursday
       advanced: { includeHashtags: false, includeEmojis: false },
-      scheduledFor,
+      scheduledFor: new Date("2026-02-03T12:00:00Z"),
     });
 
     expect(body).toContain("Thursday");
     expect(body).not.toContain("Friday");
+  });
+
+  it("does not rewrite a day name against the publish date alone", () => {
+    // "Live music Saturday" scheduled for a Tuesday is not a mistake: the
+    // publish day is not the subject of the post. This used to become
+    // "Live music Tuesday".
+    const { body } = applyChannelRules({
+      body: "Live music Saturday with the band.",
+      platform: "facebook",
+      placement: "feed",
+      context: {},
+      advanced: { includeHashtags: false, includeEmojis: false },
+      scheduledFor: new Date("2026-02-03T12:00:00Z"), // Tuesday
+    });
+
+    expect(body).toContain("Saturday");
+    expect(body).not.toContain("Tuesday");
+  });
+
+  it("leaves copy alone when it names two different days", () => {
+    // Previously deleted every weekday, producing "Join us . roast follows."
+    const { body } = applyChannelRules({
+      body: "Join us Saturday. Sunday roast follows.",
+      platform: "facebook",
+      placement: "feed",
+      context: { eventStart: "2026-02-07T19:00:00+00:00" }, // Saturday
+      advanced: { includeHashtags: false, includeEmojis: false },
+      scheduledFor: new Date("2026-02-03T12:00:00Z"),
+    });
+
+    expect(body).toBe("Join us Saturday. Sunday roast follows.");
+  });
+
+  it("leaves copy alone when there is no structured date to judge against", () => {
+    const { body } = applyChannelRules({
+      body: "Join us Saturday for live music.",
+      platform: "facebook",
+      placement: "feed",
+      context: {},
+      advanced: { includeHashtags: false, includeEmojis: false },
+      scheduledFor: null,
+    });
+
+    expect(body).toBe("Join us Saturday for live music.");
   });
 });
 
@@ -429,5 +472,94 @@ describe("removeTrailingEllipses", () => {
 
   it("leaves string without ellipsis unchanged", () => {
     expect(removeTrailingEllipses("Hello")).toBe("Hello");
+  });
+});
+
+describe("day-name lint", () => {
+  const lint = (body: string, context: Record<string, unknown> | null, scheduledFor: Date | null) =>
+    lintContent({ body, platform: "facebook", placement: "feed", context, scheduledFor });
+
+  const dayIssue = (result: ReturnType<typeof lint>) =>
+    result.issues.find((issue) => issue.code === "day_name_mismatch");
+
+  it("no longer blocks copy that names a second, legitimate day", () => {
+    // The event is Saturday; the Sunday roast is real copy, not a mistake.
+    // A set of dates cannot know that Sunday is legitimate, so the mismatch is
+    // still reported, but it must not stop the post being approved. Before this
+    // change, naming any second weekday failed the lint and blocked approval.
+    const result = lint(
+      "Our quiz lands on Saturday 19th September at 7pm. Stick around, our Sunday roast is served from noon the day after.",
+      { eventStart: "2026-09-19T19:00:00+01:00" },
+      new Date("2026-09-14T10:00:00+01:00"),
+    );
+
+    expect(dayIssue(result)?.message).toContain("sunday");
+    expect(result.pass).toBe(true);
+  });
+
+  it("accepts weekly recurring wording that names the occurrence day", () => {
+    // The post publishes Monday about a Wednesday recurrence. Blocking this
+    // told the owner to regenerate copy the generator was told to produce.
+    const result = lint(
+      "Quiz night is back this Wednesday at 7pm. Bring your sharpest team and settle in with a pint.",
+      { occurrenceDate: "2026-09-16T19:00:00+01:00" },
+      new Date("2026-09-14T09:00:00+01:00"),
+    );
+
+    expect(dayIssue(result)).toBeUndefined();
+    expect(result.pass).toBe(true);
+  });
+
+  it("accepts a mention of the day the post itself goes out", () => {
+    const result = lint(
+      "Booking for Saturday 19th September? Our lines are open Monday for anyone who wants a table.",
+      { eventStart: "2026-09-19T19:00:00+01:00" },
+      new Date("2026-09-14T10:00:00+01:00"),
+    );
+
+    expect(dayIssue(result)).toBeUndefined();
+  });
+
+  it("still reports a day that matches nothing in the brief", () => {
+    const result = lint(
+      "Our quiz lands on Thursday at 7pm. Bring your sharpest team and settle in with a pint.",
+      { eventStart: "2026-09-19T19:00:00+01:00" },
+      new Date("2026-09-14T10:00:00+01:00"),
+    );
+
+    expect(dayIssue(result)?.message).toContain("thursday");
+  });
+
+  it("reports the day mismatch without blocking approval", () => {
+    // Advisory: preflight turns a failed lint into a hard block, and a weekday
+    // the brief does not list is too often legitimate copy to stop a post.
+    const result = lint(
+      "Our quiz lands on Thursday at 7pm. Bring your sharpest team and settle in with a pint.",
+      { eventStart: "2026-09-19T19:00:00+01:00" },
+      new Date("2026-09-14T10:00:00+01:00"),
+    );
+
+    expect(dayIssue(result)).toBeDefined();
+    expect(result.pass).toBe(true);
+  });
+
+  it("says nothing about weekdays when the brief supplies no structured date", () => {
+    const result = lint(
+      "Live music is back on Saturday with the band taking over the back bar from eight.",
+      null,
+      new Date("2026-09-15T18:00:00+01:00"),
+    );
+
+    expect(dayIssue(result)).toBeUndefined();
+  });
+
+  it("still blocks on a genuinely broken body", () => {
+    const result = lint(
+      "Join us undefined for the quiz.",
+      { eventStart: "2026-09-19T19:00:00+01:00" },
+      new Date("2026-09-14T10:00:00+01:00"),
+    );
+
+    expect(result.pass).toBe(false);
   });
 });

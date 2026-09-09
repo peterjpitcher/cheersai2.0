@@ -15,21 +15,40 @@ import { buildSystemPrompt, buildUserPrompt } from '@/lib/ai/prompts';
 import { getTemperature } from '@/lib/ai/temperature';
 import { BANNED_PHRASES, type BrandVoiceConfig } from '@/lib/ai/voice';
 import { requireAuthContext } from '@/lib/auth/server';
+import { buildGenerationTemporalContext } from '@/lib/create/temporal-context';
+import type { GenerationTemporalContext } from '@/lib/create/temporal-context';
 import type { BrandProfile } from '@/lib/settings/data';
 
-/** Optional media + schedule context passed from the create wizard. */
+/**
+ * Optional media + schedule context passed from the create wizard.
+ *
+ * Only mediaIds, scheduledAt and slotLabel are honoured. Every temporal fact is
+ * derived here on the server from the brief plus scheduledAt, so one clock and
+ * one implementation feed the prompt, the post-processor and the stored
+ * generation params. The wizard no longer computes them in the browser.
+ */
 interface GenerationContextInput {
   mediaIds?: string[];
   scheduledAt?: string | null;
   slotLabel?: string; // e.g. "Event day", "2 weeks out", "Launch", "Week 3"
-  eventStart?: string;
-  promotionStart?: string;
-  promotionEnd?: string;
-  promotionDateMode?: 'range' | 'ends_on';
-  temporalProximity?: string;
-  timingLabel?: string;
-  temporalInstruction?: string;
-  proximityLabel?: string | null;
+}
+
+/**
+ * Derive every temporal fact server-side.
+ *
+ * An absent scheduledAt means "publish now" and resolves against the server
+ * clock. An unparseable scheduledAt yields no temporal claims at all rather
+ * than being mistaken for "now".
+ */
+function resolveTemporalContext(
+  brief: ContentBrief,
+  context?: GenerationContextInput,
+): GenerationTemporalContext {
+  return buildGenerationTemporalContext({
+    contentType: brief.contentType,
+    brief: brief as unknown as Record<string, unknown>,
+    scheduledAt: context?.scheduledAt,
+  });
 }
 
 // Default post-processing limits per platform
@@ -72,18 +91,12 @@ export async function generateContent(
     const mediaMetadata = await loadMediaMetadata(supabase, accountId, context?.mediaIds);
 
     const systemPrompt = buildSystemPrompt(brief.contentType, brief.tone, voiceConfig, brand);
+    const temporal = resolveTemporalContext(brief, context);
     const userPrompt = buildUserPrompt(brief, undefined, {
       scheduledAt: context?.scheduledAt,
       media: mediaMetadata.length > 0 ? mediaMetadata : undefined,
       slotLabel: context?.slotLabel,
-      eventStart: context?.eventStart,
-      promotionStart: context?.promotionStart,
-      promotionEnd: context?.promotionEnd,
-      promotionDateMode: context?.promotionDateMode,
-      temporalProximity: context?.temporalProximity,
-      timingLabel: context?.timingLabel,
-      temporalInstruction: context?.temporalInstruction,
-      proximityLabel: context?.proximityLabel,
+      ...temporal,
     });
     const temperature = getTemperature(brief.contentType);
 
@@ -101,7 +114,7 @@ export async function generateContent(
       platformSignatures: voiceConfig.platformSignatures,
       defaultCta: voiceConfig.defaultCta,
       ctaLinks: brief.ctaLinks ?? null,
-      eventStartIso: context?.eventStart ?? null,
+      eventStartIso: temporal.eventStart ?? null,
     });
 
     // Store generation params and draft copy on content_items
@@ -114,14 +127,7 @@ export async function generateContent(
             mediaIds: context?.mediaIds,
             scheduledAt: context?.scheduledAt,
             slotLabel: context?.slotLabel,
-            eventStart: context?.eventStart,
-            promotionStart: context?.promotionStart,
-            promotionEnd: context?.promotionEnd,
-            promotionDateMode: context?.promotionDateMode,
-            temporalProximity: context?.temporalProximity,
-            timingLabel: context?.timingLabel,
-            temporalInstruction: context?.temporalInstruction,
-            proximityLabel: context?.proximityLabel,
+            ...temporal,
             mediaMetadata: mediaMetadata.length > 0 ? mediaMetadata : undefined,
           },
           temperature,
@@ -171,18 +177,12 @@ export async function regenerateWithModifier(
     const mediaMetadata = await loadMediaMetadata(supabase, accountId, context?.mediaIds);
 
     const systemPrompt = buildSystemPrompt(brief.contentType, brief.tone, voiceConfig, brand);
+    const temporal = resolveTemporalContext(brief, context);
     const userPrompt = buildUserPrompt(brief, modifier, {
       scheduledAt: context?.scheduledAt,
       media: mediaMetadata.length > 0 ? mediaMetadata : undefined,
       slotLabel: context?.slotLabel,
-      eventStart: context?.eventStart,
-      promotionStart: context?.promotionStart,
-      promotionEnd: context?.promotionEnd,
-      promotionDateMode: context?.promotionDateMode,
-      temporalProximity: context?.temporalProximity,
-      timingLabel: context?.timingLabel,
-      temporalInstruction: context?.temporalInstruction,
-      proximityLabel: context?.proximityLabel,
+      ...temporal,
     });
     const temperature = getTemperature(brief.contentType);
 
@@ -200,7 +200,7 @@ export async function regenerateWithModifier(
       platformSignatures: voiceConfig.platformSignatures,
       defaultCta: voiceConfig.defaultCta,
       ctaLinks: brief.ctaLinks ?? null,
-      eventStartIso: context?.eventStart ?? null,
+      eventStartIso: temporal.eventStart ?? null,
     });
 
     // Store generation params with modifier
@@ -214,14 +214,7 @@ export async function regenerateWithModifier(
             mediaIds: context?.mediaIds,
             scheduledAt: context?.scheduledAt,
             slotLabel: context?.slotLabel,
-            eventStart: context?.eventStart,
-            promotionStart: context?.promotionStart,
-            promotionEnd: context?.promotionEnd,
-            promotionDateMode: context?.promotionDateMode,
-            temporalProximity: context?.temporalProximity,
-            timingLabel: context?.timingLabel,
-            temporalInstruction: context?.temporalInstruction,
-            proximityLabel: context?.proximityLabel,
+            ...temporal,
             mediaMetadata: mediaMetadata.length > 0 ? mediaMetadata : undefined,
           },
           temperature,

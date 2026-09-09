@@ -39,6 +39,9 @@ export interface LintResult {
 /** Hard-failure lint codes, content would look broken or violate brand rules. */
 const BLOCKING_LINT_CODES = new Set(["blocked_tokens", "banned_phrases"]);
 
+/** Issues that are reported but never fail the lint. */
+const ADVISORY_LINT_CODES = new Set(["day_name_mismatch"]);
+
 function resolveSeverity(code: string): LintSeverity {
   return BLOCKING_LINT_CODES.has(code) ? "error" : "warning";
 }
@@ -227,7 +230,7 @@ export function applyChannelRules({
     repairs.push("hype_reduced");
   }
 
-  const dayNormalized = normalizeDayNames(output, resolveReferenceDate(context, scheduledFor, output));
+  const dayNormalized = normalizeDayNames(output, resolveSubjectDate(context, output));
   if (dayNormalized.changed && dayNormalized.action) {
     output = dayNormalized.value;
     repairs.push(dayNormalized.action);
@@ -426,10 +429,16 @@ export function lintContent({
     issues.push({ code, message: "Disallowed claim detected for missing field.", severity: resolveSeverity(code) });
   }
 
-  const dayLint = validateDayNames(trimmed, resolveReferenceDate(context, scheduledFor, trimmed));
+  const dayLint = validateDayNames(trimmed, resolveSubjectDates(context), scheduledFor);
   if (!dayLint.pass) {
     const code = "day_name_mismatch";
-    issues.push({ code, message: "Day name does not match the scheduled or event date.", severity: resolveSeverity(code) });
+    issues.push({
+      code,
+      message: dayLint.unexpected?.length
+        ? `Copy mentions ${dayLint.unexpected.join(" and ")}, which matches no date in the brief.`
+        : "Day name does not match the scheduled or event date.",
+      severity: resolveSeverity(code),
+    });
   }
 
   if (platform !== "instagram" && hasLinkInBio) {
@@ -516,7 +525,10 @@ export function lintContent({
     issues.push({ code, message: "Repeated word sequence detected.", severity: resolveSeverity(code) });
   }
 
-  const pass = issues.length === 0;
+  // day_name_mismatch is advisory: a weekday the brief does not mention is often
+  // legitimate copy (a Sunday roast plugged in a Saturday event post), so it is
+  // reported but must not stop the post being approved or rescheduled.
+  const pass = issues.every((issue) => ADVISORY_LINT_CODES.has(issue.code));
 
   return {
     pass,
@@ -677,9 +689,16 @@ function ensureFinalPunctuation(value: string) {
   return lines.join("\n");
 }
 
-function resolveReferenceDate(
+/**
+ * The one structured date a weekday mention most likely refers to.
+ *
+ * Deliberately excludes the publish date. A post's own publish day is not its
+ * subject: "live music Saturday" scheduled for a Tuesday must not be rewritten
+ * to "live music Tuesday", which is what happened when scheduledFor was used as
+ * a fallback here.
+ */
+function resolveSubjectDate(
   context?: Record<string, unknown> | null,
-  scheduledFor?: Date | null,
   body?: string,
 ) {
   const eventStart = parseIsoDate(getContextString(context, "eventStart"));
@@ -695,10 +714,18 @@ function resolveReferenceDate(
     if (promotionStart) return promotionStart;
     if (promotionEnd) return promotionEnd;
   }
-  if (scheduledFor instanceof Date && !Number.isNaN(scheduledFor.getTime())) {
-    return scheduledFor;
-  }
   return null;
+}
+
+/** Every structured date a weekday in the copy could legitimately be naming. */
+function resolveSubjectDates(context?: Record<string, unknown> | null): Date[] {
+  const keys = ["eventStart", "occurrenceDate", "promotionStart", "promotionEnd"];
+  const dates: Date[] = [];
+  for (const key of keys) {
+    const parsed = parseIsoDate(getContextString(context, key));
+    if (parsed) dates.push(parsed);
+  }
+  return dates;
 }
 
 function parseIsoDate(value: string | null) {
@@ -707,42 +734,89 @@ function parseIsoDate(value: string | null) {
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
+/**
+ * Correct a mistaken weekday, but never delete one.
+ *
+ * The previous implementation deleted every weekday token whenever the copy
+ * mentioned two different days, or whenever it had no reference date. That
+ * turned "Join us Saturday. Sunday roast follows." into "Join us . roast
+ * follows." and shipped it. Deletion is never the right repair: a pub post that
+ * legitimately names two days (the event and the roast that follows it) is
+ * correct copy, and a body with no reference date cannot be judged at all.
+ *
+ * Replacement survives for the one case where the correction is well founded:
+ * exactly one weekday in the whole body, and it disagrees with the structured
+ * event date. There, the mention is almost certainly the event itself. It also
+ * keeps copy that today gets auto-repaired from newly failing the day-name lint.
+ */
 function normalizeDayNames(value: string, referenceDate: Date | null) {
   const matches = Array.from(value.matchAll(DAY_PATTERN)).map((match) => match[0]);
   if (!matches.length) return { value, changed: false };
 
-  if (!referenceDate) {
-    const removed = value.replace(DAY_PATTERN, "").replace(/\s{2,}/g, " ").trim();
-    return { value: removed, changed: true, action: "day_names_removed" as const };
-  }
+  // Nothing to judge against: leave the owner's words alone.
+  if (!referenceDate) return { value, changed: false };
 
   const computed = formatDayName(referenceDate);
   const computedLower = computed.toLowerCase();
   const unique = new Set(matches.map((m) => m.toLowerCase()));
 
-  if (unique.size === 1) {
-    const current = [...unique][0];
-    if (current !== computedLower) {
-      const replaced = value.replace(DAY_PATTERN, computed);
-      return { value: replaced, changed: true, action: "day_name_replaced" as const };
-    }
-    return { value, changed: false };
-  }
+  // Two or more distinct days: we cannot tell which one names the event, so we
+  // must not touch either. The lint reports it instead.
+  if (unique.size !== 1) return { value, changed: false };
 
-  const removed = value.replace(DAY_PATTERN, "").replace(/\s{2,}/g, " ").trim();
-  return { value: removed, changed: true, action: "day_names_removed" as const };
+  const current = [...unique][0];
+  if (current === computedLower) return { value, changed: false };
+
+  const replaced = value.replace(DAY_PATTERN, computed);
+  return { value: replaced, changed: true, action: "day_name_replaced" as const };
 }
 
-function validateDayNames(value: string, referenceDate: Date | null) {
+const DAY_ABBREVIATIONS: Record<string, string> = {
+  mon: "monday",
+  tue: "tuesday",
+  tues: "tuesday",
+  wed: "wednesday",
+  thu: "thursday",
+  thur: "thursday",
+  thurs: "thursday",
+  fri: "friday",
+  sat: "saturday",
+  sun: "sunday",
+};
+
+function canonicalDayName(token: string): string {
+  const lower = token.toLowerCase();
+  return DAY_ABBREVIATIONS[lower] ?? lower;
+}
+
+/**
+ * Report weekday mentions that match no date the brief actually supplies.
+ *
+ * Checks against the full set of structured dates plus the publish day, rather
+ * than one reference date, so copy that legitimately names two days ("quiz
+ * Saturday, roast Sunday") is no longer reported. With no structured date there
+ * is nothing to contradict, so nothing is reported: this judges copy against
+ * supplied facts, it does not verify free text.
+ */
+function validateDayNames(
+  value: string,
+  subjectDates: Date[],
+  scheduledFor?: Date | null,
+): { pass: boolean; unexpected?: string[] } {
   const matches = Array.from(value.matchAll(DAY_PATTERN)).map((match) => match[0]);
   if (!matches.length) return { pass: true };
-  if (!referenceDate) return { pass: false };
-  const computed = formatDayName(referenceDate).toLowerCase();
-  const unique = new Set(matches.map((m) => m.toLowerCase()));
-  if (unique.size === 1) {
-    return { pass: unique.has(computed) };
+  if (!subjectDates.length) return { pass: true };
+
+  const legitimate = new Set(subjectDates.map((date) => formatDayName(date).toLowerCase()));
+  if (scheduledFor instanceof Date && !Number.isNaN(scheduledFor.getTime())) {
+    legitimate.add(formatDayName(scheduledFor).toLowerCase());
   }
-  return { pass: unique.size === 1 && unique.has(computed) };
+
+  const unexpected = [...new Set(matches.map(canonicalDayName))].filter(
+    (day) => !legitimate.has(day),
+  );
+  if (!unexpected.length) return { pass: true };
+  return { pass: false, unexpected };
 }
 
 function formatDayName(date: Date) {
