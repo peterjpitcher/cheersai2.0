@@ -3,6 +3,7 @@ import { DateTime } from "luxon";
 import { buildTemporalInstructions } from "@/lib/ai/temporal-instructions";
 import { BANNED_PHRASES, PREFERRED_PHRASES, TONE_PROFILE, type BrandVoiceConfig, buildVoiceInstructions } from "@/lib/ai/voice";
 import { DEFAULT_TIMEZONE } from "@/lib/constants";
+import { calendarDayGap, splitRelativeWording } from "@/lib/create/temporal-context";
 import type { InstantPostInput } from "@/lib/create/schema";
 import type { BrandProfile } from "@/lib/settings/data";
 import { formatEventDateLong, formatFriendlyTimeFromZoned } from "@/lib/utils/date";
@@ -337,11 +338,11 @@ function extractContextString(context: Record<string, unknown> | undefined, key:
 
 function formatDateTime(date: Date) {
   const zoned = DateTime.fromJSDate(date, { zone: DEFAULT_TIMEZONE });
-  return `${zoned.setLocale("en-GB").toFormat("cccc d LLLL")} at ${formatFriendlyTimeFromZoned(zoned)}`;
+  return `${formatEventDateLong(zoned)} at ${formatFriendlyTimeFromZoned(zoned)}`;
 }
 
 function formatDate(date: Date) {
-  return DateTime.fromJSDate(date, { zone: DEFAULT_TIMEZONE }).setLocale("en-GB").toFormat("cccc d LLLL");
+  return formatEventDateLong(DateTime.fromJSDate(date, { zone: DEFAULT_TIMEZONE }));
 }
 
 function getFewShotExamples() {
@@ -490,6 +491,11 @@ export function buildUserPrompt(
     timingLabel?: string;
     temporalInstruction?: string;
     proximityLabel?: string | null;
+    effectivePublishAt?: string;
+    publishAtKind?: 'scheduled' | 'now';
+    absoluteDateLabel?: string;
+    allowedRelativeWording?: string[];
+    forbiddenRelativeWording?: string[];
     media?: Array<{
       id: string;
       fileName: string;
@@ -535,10 +541,11 @@ export function buildUserPrompt(
     sections.push(ctaInstruction);
   }
 
-  // Content-type-specific fields
+  // Content-type-specific fields. The event date is deliberately NOT pushed as a
+  // raw ISO string here: the timing block below states it once, in house style,
+  // so the model has no second, differently formatted copy of it to echo.
   if (brief.contentType === 'event') {
     sections.push(`Event name: ${brief.eventName}`);
-    sections.push(`Event date: ${brief.eventDate}`);
     sections.push(`Event time: ${brief.eventTime}`);
     if (brief.venue) sections.push(`Venue: ${brief.venue}`);
     if (brief.eventEndDate) sections.push(`Event end date: ${brief.eventEndDate}`);
@@ -558,62 +565,28 @@ export function buildUserPrompt(
     sections.push(`Time: ${brief.time}`);
   }
 
-  // Schedule context, prefer context.scheduledAt over brief.scheduledFor to avoid duplicates
-  const scheduleIso = context?.scheduledAt ?? (brief.contentType === 'instant_post' ? brief.scheduledFor : null);
-  if (scheduleIso) {
-    const scheduleDt = DateTime.fromISO(scheduleIso, { zone: DEFAULT_TIMEZONE });
-    if (scheduleDt.isValid) {
-      sections.push(
-        `Post scheduled for ${scheduleDt.setLocale('en-GB').toFormat("cccc d LLLL 'at' h:mma")} (${DEFAULT_TIMEZONE}).`
-      );
-    }
+  // One timing block owns every date claim in the prompt. Previously the same
+  // facts arrived as five separate lines ("Post scheduled for", two differently
+  // formatted "Event date" lines, "Timing tone", "Timing label", "Relative date
+  // wording") which could and did contradict each other.
+  //
+  // NOTE: context.proximityLabel (e.g. "THIS FRIDAY", "FRIDAY 17TH JULY") is the
+  // uppercase image-overlay label. It is deliberately NOT injected here: telling
+  // the model to echo it leaked abbreviated/relative date styling into the body
+  // copy ("this FRI 17 JUL").
+  const timingBlock = buildTimingBlock(brief, context);
+  if (timingBlock) {
+    sections.push(timingBlock);
   }
 
-  if (context?.eventStart) {
-    const eventStart = DateTime.fromISO(context.eventStart, { zone: DEFAULT_TIMEZONE });
-    if (eventStart.isValid) {
-      const absoluteDate = formatEventDateLong(eventStart);
-      sections.push(
-        `Event date: ${absoluteDate} at ${formatFriendlyTimeFromZoned(eventStart)} (${DEFAULT_TIMEZONE}). When the copy states the date, write it in full exactly as "${absoluteDate}", never abbreviated or upper-cased, and never prefixed with a vague "this" or "next".`
-      );
-    }
-  }
-
-  if (context?.promotionStart || context?.promotionEnd) {
-    const parts: string[] = [];
-    const start = context.promotionStart
-      ? DateTime.fromISO(context.promotionStart, { zone: DEFAULT_TIMEZONE })
-      : null;
-    const end = context.promotionEnd
-      ? DateTime.fromISO(context.promotionEnd, { zone: DEFAULT_TIMEZONE })
-      : null;
-    if (start?.isValid) {
-      parts.push(`starts ${start.setLocale('en-GB').toFormat('cccc d LLLL')}`);
-    }
-    if (end?.isValid) {
-      parts.push(`ends ${end.setLocale('en-GB').toFormat('cccc d LLLL')}`);
-    }
-    if (parts.length) {
-      sections.push(`Promotion timing: ${parts.join(', ')}.`);
-    }
+  // Narrative intent only. Every factual date claim lives in the timing block
+  // above, so these two can no longer contradict each other.
+  if (context?.temporalInstruction) {
+    sections.push(`Timing intent: ${context.temporalInstruction}`);
   }
 
   if (context?.temporalProximity) {
     sections.push(`Timing tone: ${context.temporalProximity}.`);
-  }
-
-  if (context?.timingLabel) {
-    sections.push(`Timing label: ${context.timingLabel}.`);
-  }
-
-  // NOTE: context.proximityLabel (e.g. "THIS FRIDAY", "FRIDAY 17TH JULY") is the
-  // uppercase image-overlay label. It is deliberately NOT injected here: telling
-  // the model to echo it leaked abbreviated/relative date styling into the body
-  // copy ("this FRI 17 JUL"). Body copy uses the full absolute date from the
-  // "Event date" line and the temporal instruction below.
-
-  if (context?.temporalInstruction) {
-    sections.push(`Relative date wording: ${context.temporalInstruction}`);
   }
 
   sections.push(
@@ -647,6 +620,115 @@ export function buildUserPrompt(
   }
 
   return sections.join('\n');
+}
+
+type TimingBlockContext = Parameters<typeof buildUserPrompt>[2];
+
+function toZoned(iso: string | null | undefined): DateTime | null {
+  if (!iso) return null;
+  const dt = DateTime.fromISO(iso, { zone: DEFAULT_TIMEZONE });
+  return dt.isValid ? dt : null;
+}
+
+/** Plain-English gap, e.g. "5 days after this post publishes". */
+function describeGap(publishAt: DateTime, target: DateTime): string | null {
+  const gap = calendarDayGap(publishAt, target);
+  if (gap === 0) return 'the same day this post publishes';
+  if (gap === 1) return 'the day after this post publishes';
+  if (gap === -1) return 'the day before this post publishes';
+  if (gap > 1) return `${gap} days after this post publishes`;
+  return `${Math.abs(gap)} days before this post publishes`;
+}
+
+/**
+ * The single source of every date claim in the user prompt.
+ *
+ * States when the post goes out, when the thing being promoted happens, how far
+ * apart they are, the house-style form of the date, and which relative words
+ * would be false. The permitted and forbidden vocabulary comes from
+ * splitRelativeWording, the same day banding that drives the image overlay
+ * label, so the caption and the image can never make contradictory claims.
+ */
+function buildTimingBlock(brief: ContentBrief, context?: TimingBlockContext): string | null {
+  const publishAt = toZoned(
+    context?.effectivePublishAt
+      ?? context?.scheduledAt
+      ?? (brief.contentType === 'instant_post' ? brief.scheduledFor : null),
+  );
+
+  const eventAt = toZoned(context?.eventStart)
+    ?? (brief.contentType === 'event' && brief.eventDate && brief.eventTime
+      ? toZoned(`${brief.eventDate}T${brief.eventTime}`)
+      : null);
+  const promotionStart = toZoned(context?.promotionStart);
+  const promotionEnd = toZoned(context?.promotionEnd);
+
+  const lines: string[] = [];
+
+  if (publishAt) {
+    const when = `${formatEventDateLong(publishAt)} at ${formatFriendlyTimeFromZoned(publishAt)}`;
+    lines.push(
+      context?.publishAtKind === 'now'
+        ? `This post publishes immediately, today, ${when}.`
+        : `This post publishes on ${when}.`,
+    );
+  }
+
+  const subject = eventAt ?? promotionEnd;
+
+  if (eventAt) {
+    const gap = publishAt ? describeGap(publishAt, eventAt) : null;
+    const at = `${formatEventDateLong(eventAt)} at ${formatFriendlyTimeFromZoned(eventAt)}`;
+    lines.push(gap ? `The event is on ${at}, ${gap}.` : `The event is on ${at}.`);
+  }
+
+  if (promotionStart || promotionEnd) {
+    const parts: string[] = [];
+    if (promotionStart) parts.push(`starts ${formatEventDateLong(promotionStart)}`);
+    if (promotionEnd) parts.push(`ends ${formatEventDateLong(promotionEnd)}`);
+    const gap = publishAt && promotionEnd ? describeGap(publishAt, promotionEnd) : null;
+    lines.push(gap ? `The promotion ${parts.join(', ')}, ${gap}.` : `The promotion ${parts.join(', ')}.`);
+  }
+
+  if (!lines.length) return null;
+
+  const absoluteDateLabel = context?.absoluteDateLabel
+    ?? (subject ? formatEventDateLong(subject) : null);
+  if (absoluteDateLabel) {
+    lines.push(
+      `When the copy states that date, write it in full as "${absoluteDateLabel}". Never abbreviate or upper-case it (never "FRI 17 JUL"), and never put a vague "this" or "next" in front of it.`,
+    );
+  }
+
+  // Fall back to computing the vocabulary here when the caller did not supply
+  // it, so there is exactly one implementation of the banding rules.
+  const wording = context?.forbiddenRelativeWording || context?.allowedRelativeWording
+    ? {
+        allowed: context.allowedRelativeWording ?? [],
+        forbidden: context.forbiddenRelativeWording ?? [],
+      }
+    : publishAt && subject
+      ? splitRelativeWording(publishAt, subject)
+      : null;
+
+  if (wording) {
+    if (wording.allowed.length) {
+      lines.push(`You may describe it as happening ${quoteList(wording.allowed)}.`);
+    }
+    if (wording.forbidden.length) {
+      lines.push(
+        `Do not describe it as happening ${quoteList(wording.forbidden)}: that would be untrue for this post.`,
+      );
+    }
+  }
+
+  return `Timing (${DEFAULT_TIMEZONE}):\n${lines.map((line) => `- ${line}`).join('\n')}`;
+}
+
+function quoteList(values: string[]): string {
+  const quoted = values.map((value) => `"${value}"`);
+  if (quoted.length === 1) return quoted[0];
+  return `${quoted.slice(0, -1).join(', ')} or ${quoted[quoted.length - 1]}`;
 }
 
 function buildCtaInstruction(contentType: ContentType, ctaLinks?: PlatformCtaLinks | null) {

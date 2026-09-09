@@ -65,6 +65,9 @@ jobs:
           path: node_modules
           key: modules-${{ hashFiles('package-lock.json') }}
       - run: npm run test:ci
+      # Serverless runs under UTC while the venue timezone is Europe/London.
+      # Date logic that only passes in one zone is a live defect, so both run.
+      - run: npm run test:utc
     env:
       NODE_ENV: test
 

@@ -2,20 +2,26 @@ import { describe, it, expect } from 'vitest';
 import { buildTemporalInstructions } from '@/lib/ai/temporal-instructions';
 
 describe('buildTemporalInstructions', () => {
-  it('returns present-tense instruction for Event day', () => {
+  it('returns event-day narrative purpose without issuing date wording', () => {
     const result = buildTemporalInstructions('Event day');
-    expect(result).toContain('present tense');
-    expect(result).toContain('today');
+    expect(result).toContain('day of the event');
+    expect(result).toContain('timing block');
+    // The timing block owns every date claim, so this must not name one.
+    expect(result).not.toMatch(/\btomorrow\b|\btonight\b/i);
   });
 
-  it('returns countdown instruction for N days to go', () => {
+  it('defers the countdown to the timing block for N days to go', () => {
     const result = buildTemporalInstructions('2 days to go');
     expect(result).toContain('remaining time');
+    expect(result).toContain('timing block');
+    // Previously said "just 2 days away", contradicting the timing block.
+    expect(result).not.toContain('2 days away');
   });
 
-  it('returns countdown instruction for N weeks to go', () => {
+  it('defers the countdown to the timing block for N weeks to go', () => {
     const result = buildTemporalInstructions('1 week to go');
     expect(result).toContain('remaining time');
+    expect(result).not.toContain('1 weeks away');
   });
 
   it('returns urgency instruction for Last chance', () => {
@@ -23,14 +29,16 @@ describe('buildTemporalInstructions', () => {
     expect(result).toContain('deadline');
   });
 
-  it('returns forward-looking instruction for hype labels', () => {
+  it('returns lead-up purpose for hype labels without a countdown', () => {
     const result = buildTemporalInstructions('Hype week');
-    expect(result).toContain('forward-looking');
+    expect(result).toContain('lead-up post');
+    expect(result).toContain('without stating a countdown');
   });
 
-  it('returns forward-looking instruction for week labels', () => {
+  it('returns lead-up purpose for week labels without a countdown', () => {
     const result = buildTemporalInstructions('Week 3');
-    expect(result).toContain('forward-looking');
+    expect(result).toContain('lead-up post');
+    expect(result).toContain('Week 3');
   });
 
   it('returns generic slot purpose for unknown labels', () => {

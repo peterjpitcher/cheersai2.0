@@ -522,17 +522,12 @@ export function GenerateStep({
           const slotIso = publishMode === 'now' && slot.key === 'now'
             ? null
             : slotToIso(slot);
-          const temporalContext = buildGenerationTemporalContext({
-            contentType: contentBrief.contentType,
-            brief: contentBrief as Record<string, unknown>,
-            scheduledAt: slotIso,
-          });
-
+          // Timing facts are derived server-side from the brief plus slotIso so
+          // the browser clock never decides what "now" means.
           const result = await generateContent(contentId, contentBrief, {
             mediaIds: selectedMediaIds,
             scheduledAt: slotIso,
             slotLabel: slot.label,
-            ...temporalContext,
           });
 
           const prev = byKey.get(slot.key)!;
@@ -607,24 +602,17 @@ export function GenerateStep({
       const slotIso = publishMode === 'now' && slot.key === 'now'
         ? null
         : slotToIso(slot);
-      const temporalContext = buildGenerationTemporalContext({
-        contentType: contentBrief.contentType,
-        brief: contentBrief as Record<string, unknown>,
-        scheduledAt: slotIso,
-      });
-
+      // See the batch path above: the server owns every temporal fact.
       const result = modifier
         ? await regenerateWithModifier(contentId, contentBrief, modifier, {
             mediaIds: selectedMediaIds,
             scheduledAt: slotIso,
             slotLabel: slot.label,
-            ...temporalContext,
           })
         : await generateContent(contentId, contentBrief, {
             mediaIds: selectedMediaIds,
             scheduledAt: slotIso,
             slotLabel: slot.label,
-            ...temporalContext,
           });
 
       const finalCopies = generatedSlotCopies.map(sc => {

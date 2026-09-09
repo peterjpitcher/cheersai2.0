@@ -288,11 +288,20 @@ describe("buildUserPrompt", () => {
     });
 
     expect(prompt).toContain("Timing tone: anticipation");
-    expect(prompt).toContain("Timing label: tomorrow");
+    // One timing block owns every date claim.
+    expect(prompt).toContain("Timing (Europe/London):");
+    expect(prompt).toContain("This post publishes on Tuesday 26th May at 10am.");
+    expect(prompt).toContain("The event is on Wednesday 27th May at 7pm, the day after this post publishes.");
+    expect(prompt).toContain('You may describe it as happening "tomorrow".');
+    expect(prompt).toContain('Do not describe it as happening "today" or "tonight"');
+    // The internal enum label used to leak into the prompt.
+    expect(prompt).not.toContain("Timing label:");
+    // The raw ISO date was a second, differently formatted copy of the same fact.
+    expect(prompt).not.toContain("Event date: 2026-05-27");
     // The uppercase overlay label must NOT be fed into the body prompt — it was
     // leaking abbreviated/relative date styling ("this FRI 17 JUL") into copy.
     expect(prompt).not.toContain("Overlay label:");
-    expect(prompt).toContain("Relative date wording: The event is tomorrow");
+    expect(prompt).toContain("Timing intent: Write this as a next-day reminder");
     expect(prompt).toContain("Accuracy guardrails");
     expect(prompt).toContain("do not invent booking requirements");
   });
