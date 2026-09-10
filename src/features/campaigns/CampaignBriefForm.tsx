@@ -11,6 +11,7 @@ import type {
   AiCampaignPayload,
   AudienceMode,
   BudgetType,
+  DeliverySchedule,
   FoodBookingBrief,
   FoodServiceHours,
   FoodServiceKey,
@@ -18,6 +19,7 @@ import type {
   PaidCampaignKind,
   PaidMediaPlan,
   ResolvedMetaInterest,
+  RunDay,
 } from '@/types/campaigns';
 import type { MediaAssetSummary } from '@/lib/library/data';
 import {
@@ -32,6 +34,14 @@ import {
 } from '@/app/(app)/create/actions';
 import { calculateInclusiveDurationDays } from '@/lib/campaigns/phases';
 import { calculateFoodBookingPhases } from '@/lib/campaigns/food-booking-phases';
+import {
+  RUN_DAY_LABELS,
+  RUN_DAY_ORDER,
+  describeDeliverySchedule,
+  formatDeliveryHour,
+  listScheduledDeliveryDates,
+  validateDeliverySchedule,
+} from '@/lib/campaigns/delivery-schedule';
 import { DEFAULT_FOOD_SERVICE_HOURS } from '@/lib/campaigns/food-schedule';
 import { buildBriefFromEvent, deriveStartDate } from './event-import-utils';
 import { CampaignTree } from './CampaignTree';
@@ -78,6 +88,13 @@ const FOOD_DAY_WEIGHTING_OPTIONS: Array<{ value: FoodBookingBrief['dayWeighting'
   { value: 'boost_quiet', label: 'Boost quiet days' },
   { value: 'manual', label: 'Manual' },
 ];
+
+// Evergreen delivery schedule: whole hours only (Meta's rule). A window starts at 00:00 to
+// 23:00 and ends at 01:00 to midnight (24). The controls start as "all day", no days chosen.
+const SCHEDULE_START_HOURS = Array.from({ length: 24 }, (_, hour) => hour);
+const SCHEDULE_END_HOURS = Array.from({ length: 24 }, (_, index) => index + 1);
+const DEFAULT_SCHEDULE_START_HOUR = 0;
+const DEFAULT_SCHEDULE_END_HOUR = 24;
 
 /** Initial editable copy of the default service hours, in display order. */
 function buildInitialFoodServices(): FoodServiceHours[] {
@@ -196,6 +213,13 @@ export function CampaignBriefForm({ mediaLibrary }: CampaignBriefFormProps) {
   const [interestResolutionWarning, setInterestResolutionWarning] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Evergreen delivery schedule (off by default). No day is pre-ticked, so every delivery
+  // day is a deliberate choice.
+  const [scheduleEnabled, setScheduleEnabled] = useState(false);
+  const [scheduleDays, setScheduleDays] = useState<RunDay[]>([]);
+  const [scheduleStartHour, setScheduleStartHour] = useState(DEFAULT_SCHEDULE_START_HOUR);
+  const [scheduleEndHour, setScheduleEndHour] = useState(DEFAULT_SCHEDULE_END_HOUR);
+
   // Food booking sub-form state.
   const [foodServices, setFoodServices] = useState<FoodServiceHours[]>(buildInitialFoodServices);
   const [bookingUrl, setBookingUrl] = useState(DEFAULT_FOOD_BOOKING_URL);
@@ -227,6 +251,27 @@ export function CampaignBriefForm({ mediaLibrary }: CampaignBriefFormProps) {
       return null;
     }
   }, [startDate, endDate]);
+
+  // The schedule sent to generate and save: evergreen with the box ticked, otherwise none.
+  const deliverySchedule = useMemo<DeliverySchedule | null>(() => {
+    if (campaignKind !== 'evergreen' || !scheduleEnabled) return null;
+    return {
+      days: RUN_DAY_ORDER.filter((day) => scheduleDays.includes(day)),
+      startHour: scheduleStartHour,
+      endHour: scheduleEndHour,
+    };
+  }, [campaignKind, scheduleEnabled, scheduleDays, scheduleStartHour, scheduleEndHour]);
+
+  // Same rules the server applies on generate, save and publish.
+  const deliveryScheduleError = useMemo(
+    () => validateDeliverySchedule(deliverySchedule, { campaignKind, budgetType, startDate, endDate }),
+    [deliverySchedule, campaignKind, budgetType, startDate, endDate],
+  );
+
+  const scheduledDeliveryDayCount = useMemo(() => {
+    if (!deliverySchedule || !startDate || !endDate) return 0;
+    return listScheduledDeliveryDates(deliverySchedule, startDate, endDate).length;
+  }, [deliverySchedule, startDate, endDate]);
 
   const missingCreativeCount = useMemo(() => {
     if (!aiPayload) return 0;
@@ -345,6 +390,26 @@ export function CampaignBriefForm({ mediaLibrary }: CampaignBriefFormProps) {
     setInterestResolutionWarning(null);
   }
 
+  function resetDeliverySchedule() {
+    setScheduleEnabled(false);
+    setScheduleDays([]);
+    setScheduleStartHour(DEFAULT_SCHEDULE_START_HOUR);
+    setScheduleEndHour(DEFAULT_SCHEDULE_END_HOUR);
+  }
+
+  function handleScheduleToggle(next: boolean) {
+    setScheduleEnabled(next);
+    // Meta only runs chosen days and hours on a total (lifetime) budget.
+    if (next) setBudgetType('LIFETIME');
+  }
+
+  function toggleScheduleDay(day: RunDay, next: boolean) {
+    setScheduleDays((current) => {
+      const others = current.filter((existing) => existing !== day);
+      return next ? [...others, day] : others;
+    });
+  }
+
   async function handleGenerate() {
     const validationError = validateBriefForm();
     if (validationError) {
@@ -372,6 +437,7 @@ export function CampaignBriefForm({ mediaLibrary }: CampaignBriefFormProps) {
       sourceType: campaignKind === 'event' ? 'management_event' : 'custom_promotion',
       sourceId,
       sourceSnapshot,
+      deliverySchedule,
     });
 
     if ('error' in result) {
@@ -418,6 +484,7 @@ export function CampaignBriefForm({ mediaLibrary }: CampaignBriefFormProps) {
       sourceType: campaignKind === 'event' ? 'management_event' : 'custom_promotion',
       sourceId,
       sourceSnapshot: resolvedSourceSnapshot ?? sourceSnapshot ?? {},
+      deliverySchedule,
     });
 
     if ('error' in result) {
@@ -572,6 +639,8 @@ export function CampaignBriefForm({ mediaLibrary }: CampaignBriefFormProps) {
       }
     }
 
+    if (deliveryScheduleError) return deliveryScheduleError;
+
     return null;
   }
 
@@ -593,6 +662,8 @@ export function CampaignBriefForm({ mediaLibrary }: CampaignBriefFormProps) {
                   setCampaignKind(kind);
                   setAudienceMode(defaultAudienceMode(kind));
                   resetGeneratedState();
+                  // A delivery schedule belongs to one evergreen brief; changing type drops it.
+                  resetDeliverySchedule();
                   if (kind !== 'event') {
                     setSourceId(null);
                     setSourceSnapshot(null);
@@ -893,8 +964,10 @@ export function CampaignBriefForm({ mediaLibrary }: CampaignBriefFormProps) {
             <div className="flex overflow-hidden" style={{ borderRadius: 'var(--r-md)', border: '1px solid var(--c-line)' }}>
               <button
                 type="button"
+                aria-pressed={budgetType === 'DAILY'}
                 onClick={() => setBudgetType('DAILY')}
-                className="flex-1 py-2 text-sm font-medium transition-colors"
+                disabled={deliverySchedule !== null}
+                className="flex-1 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50"
                 style={{
                   backgroundColor: budgetType === 'DAILY' ? 'var(--c-orange)' : 'var(--c-card)',
                   color: budgetType === 'DAILY' ? 'white' : 'var(--c-ink)',
@@ -904,6 +977,7 @@ export function CampaignBriefForm({ mediaLibrary }: CampaignBriefFormProps) {
               </button>
               <button
                 type="button"
+                aria-pressed={budgetType === 'LIFETIME'}
                 onClick={() => setBudgetType('LIFETIME')}
                 className="flex-1 py-2 text-sm font-medium transition-colors"
                 style={{
@@ -915,6 +989,11 @@ export function CampaignBriefForm({ mediaLibrary }: CampaignBriefFormProps) {
                 Total
               </button>
             </div>
+            {deliverySchedule !== null && (
+              <p className="mt-1 text-xs" style={{ color: 'var(--c-ink-3)' }}>
+                Chosen days and hours need a total budget.
+              </p>
+            )}
           </div>
         </div>
 
@@ -964,6 +1043,101 @@ export function CampaignBriefForm({ mediaLibrary }: CampaignBriefFormProps) {
             </div>
           )}
         </div>
+
+        {campaignKind === 'evergreen' && (
+          <div
+            className="space-y-3 p-4"
+            style={{ borderRadius: 'var(--r-xl)', border: '1px solid var(--c-line)', backgroundColor: 'var(--c-paper)' }}
+          >
+            <div className="space-y-1">
+              <label className="flex items-center gap-2 text-sm font-semibold" style={{ color: 'var(--c-ink)' }}>
+                <input
+                  type="checkbox"
+                  checked={scheduleEnabled}
+                  onChange={(e) => handleScheduleToggle(e.target.checked)}
+                  className="h-4 w-4"
+                  style={{ accentColor: 'var(--c-orange)' }}
+                />
+                Only deliver on chosen days and hours
+              </label>
+              <p className="text-xs" style={{ color: 'var(--c-ink-3)' }}>
+                Meta only shows the ads on these days, between these hours, UK time. Needs a total budget.
+              </p>
+            </div>
+
+            {scheduleEnabled && (
+              <>
+                <fieldset>
+                  <legend className="block text-xs font-medium mb-1.5" style={{ color: 'var(--c-ink-2)' }}>
+                    Delivery days
+                  </legend>
+                  <div className="flex flex-wrap gap-x-4 gap-y-2">
+                    {RUN_DAY_ORDER.map((day) => (
+                      <label key={day} className="flex items-center gap-1.5 text-sm" style={{ color: 'var(--c-ink)' }}>
+                        <input
+                          type="checkbox"
+                          checked={scheduleDays.includes(day)}
+                          onChange={(e) => toggleScheduleDay(day, e.target.checked)}
+                          className="h-4 w-4"
+                          style={{ accentColor: 'var(--c-orange)' }}
+                        />
+                        {RUN_DAY_LABELS[day]}
+                      </label>
+                    ))}
+                  </div>
+                </fieldset>
+
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div>
+                    <label className="block text-xs font-medium mb-1" style={{ color: 'var(--c-ink-2)' }} htmlFor="schedule-start-hour">
+                      Start hour
+                    </label>
+                    <select
+                      id="schedule-start-hour"
+                      value={String(scheduleStartHour)}
+                      onChange={(e) => setScheduleStartHour(Number(e.target.value))}
+                      className="w-full px-3 py-2 text-sm transition-all"
+                      style={inputStyle}
+                      onFocus={handleInputFocus}
+                      onBlur={handleInputBlur}
+                    >
+                      {SCHEDULE_START_HOURS.map((hour) => (
+                        <option key={hour} value={hour}>{formatDeliveryHour(hour)}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium mb-1" style={{ color: 'var(--c-ink-2)' }} htmlFor="schedule-end-hour">
+                      End hour
+                    </label>
+                    <select
+                      id="schedule-end-hour"
+                      value={String(scheduleEndHour)}
+                      onChange={(e) => setScheduleEndHour(Number(e.target.value))}
+                      className="w-full px-3 py-2 text-sm transition-all"
+                      style={inputStyle}
+                      onFocus={handleInputFocus}
+                      onBlur={handleInputBlur}
+                    >
+                      {SCHEDULE_END_HOURS.map((hour) => (
+                        <option key={hour} value={hour}>{formatDeliveryHour(hour)}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <p
+                  className="text-xs"
+                  role="status"
+                  style={{ color: deliveryScheduleError ? 'var(--c-claret)' : 'var(--c-ink-3)' }}
+                >
+                  {deliveryScheduleError
+                    ?? (deliverySchedule ? `Ads will only show ${describeDeliverySchedule(deliverySchedule)}, UK time.` : null)}
+                </p>
+              </>
+            )}
+          </div>
+        )}
 
         {campaignKind === 'event' && (
           <div className="max-w-xs">
@@ -1053,6 +1227,11 @@ export function CampaignBriefForm({ mediaLibrary }: CampaignBriefFormProps) {
             )}
             {interestResolutionWarning && (
               <p style={{ color: 'var(--c-orange-hi)' }}>{interestResolutionWarning}</p>
+            )}
+            {deliverySchedule && (
+              <p>
+                {`Delivery: ${describeDeliverySchedule(deliverySchedule)}, UK time (${scheduledDeliveryDayCount} delivery day${scheduledDeliveryDayCount === 1 ? '' : 's'} in these dates)`}
+              </p>
             )}
             {campaignKind === 'event' && aiPayload.media_plan && (
               <div className="pt-2">

@@ -85,8 +85,10 @@ No other generation check starts running on save.
 **UI** (PR 4, evergreen only). A checkbox "Only deliver on chosen days and hours", off by default.
 When on: seven day checkboxes (none ticked to start, so every delivery day is a deliberate choice)
 and start and end hour selects in whole hours (00:00 to 24:00 to start). Turning it on forces the
-Total budget and disables Daily. The schedule clears when the campaign type changes, is sent to
-both the generate and save actions, and shows under Campaign checks on the review screen.
+Total budget and disables Daily. A line under the controls shows the schedule in words, or the
+reason it cannot be used, and Generate stays disabled until it can. The schedule clears when the
+campaign type changes, is sent to both the generate and save actions, and shows under Campaign
+checks on the review screen with the number of delivery days in the flight.
 
 ## Delivery and deploy order
 
