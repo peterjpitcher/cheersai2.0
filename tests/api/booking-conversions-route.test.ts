@@ -192,4 +192,121 @@ describe('POST /api/booking-conversions', () => {
     const statusUpdate = captured.updates[0]!;
     expect(statusUpdate.payload).toMatchObject({ capi_status: 'failed', capi_error: 'Invalid pixel' });
   });
+
+  // Regression: the-anchor.pub posts every confirmed booking twice under one reference
+  // -- server-side on confirmation, then again from the browser. Between July and
+  // September 2026 the browser post carried `tickets: null`, `value: 0` and no booking
+  // date, and the upsert wrote those over the real figures. The upsert must be additive:
+  // a column a post knows nothing about is left out of the statement entirely.
+  describe('a second post for the same booking', () => {
+    // The site's server-side send: party size, party size x GBP 25, the booking date.
+    const serverPost = {
+      bookingId: 'TB-DUPLICATE',
+      bookingType: 'table' as const,
+      tickets: 6,
+      value: 150,
+      currency: 'GBP',
+      // Late-evening BST, so the stored date differs from the UTC calendar date if it
+      // is ever parsed as an instant. It must read 2026-08-15 under TZ=Europe/London
+      // and TZ=UTC alike.
+      eventDate: '2026-08-15T23:30:00+01:00',
+      foodIntent: 'sunday_roast',
+      utmCampaign: 'august-roast',
+      metaConsentGranted: true,
+      fbp: 'fb.1.1.1',
+    };
+
+    // The browser send for the same booking reference: it knows the reference and the
+    // attribution cookie, and nothing about the covers.
+    const browserPost = {
+      bookingId: 'TB-DUPLICATE',
+      bookingType: 'table' as const,
+      tickets: null,
+      value: 0,
+      metaConsentGranted: true,
+      fbp: 'fb.1.1.1',
+    };
+
+    it('stores the party size, value and booking date the first post supplies', async () => {
+      await POST(makeRequest(serverPost));
+
+      expect(captured.upserts[0]!.payload).toMatchObject({
+        booking_id: 'TB-DUPLICATE',
+        booking_type: 'table',
+        tickets: 6,
+        value: 150,
+        currency: 'GBP',
+        event_date: '2026-08-15',
+        food_intent: 'sunday_roast',
+      });
+      expect(captured.upserts[0]!.options).toEqual({ onConflict: 'account_id,booking_id' });
+    });
+
+    it('never blanks the party size, value or booking date an earlier post filled', async () => {
+      await POST(makeRequest(serverPost));
+      await POST(makeRequest(browserPost));
+
+      const second = captured.upserts[1]!.payload;
+      // Omitted, not nulled: PostgREST only puts payload keys into ON CONFLICT DO
+      // UPDATE SET, so leaving them out preserves what the first post stored.
+      expect('tickets' in second).toBe(false);
+      expect('value' in second).toBe(false);
+      expect('event_date' in second).toBe(false);
+      expect('food_intent' in second).toBe(false);
+      // The currency fallback must not overwrite a stored currency either.
+      expect('currency' in second).toBe(false);
+      // Still the same row, still deduplicated on the booking reference.
+      expect(second).toMatchObject({
+        account_id: ACCOUNT_ID,
+        booking_id: 'TB-DUPLICATE',
+        meta_event_id: 'TB-DUPLICATE',
+        booking_type: 'table',
+      });
+      expect(captured.upserts[1]!.options).toEqual({ onConflict: 'account_id,booking_id' });
+    });
+
+    it('treats a zero value as unknown rather than as worth nothing', async () => {
+      await POST(makeRequest({ bookingId: 'TB-ZERO', bookingType: 'table', value: 0, tickets: 4 }));
+
+      const payload = captured.upserts[0]!.payload;
+      expect('value' in payload).toBe(false);
+      // A party size is still a fact, so it is written.
+      expect(payload).toMatchObject({ tickets: 4 });
+    });
+
+    it('still writes attribution a later post does know about', async () => {
+      await POST(makeRequest(serverPost));
+      await POST(makeRequest({ ...browserPost, utmSource: 'facebook', fbclid: 'fb-123' }));
+
+      expect(captured.upserts[1]!.payload).toMatchObject({
+        utm_source: 'facebook',
+        fbclid: 'fb-123',
+      });
+      // The first post's campaign is left alone rather than nulled.
+      expect('utm_campaign' in captured.upserts[1]!.payload).toBe(false);
+    });
+
+    it('keeps consent gating unchanged: a post without consent still clears the identifiers', async () => {
+      await POST(makeRequest(serverPost));
+      await POST(makeRequest({ ...browserPost, metaConsentGranted: false, fbp: 'fb.1.1.1' }));
+
+      expect(captured.upserts[1]!.payload).toMatchObject({
+        meta_consent_granted: false,
+        fbp: null,
+        fbc: null,
+        client_user_agent: null,
+      });
+    });
+
+    it('forwards the booking value to CAPI as unknown rather than as zero', async () => {
+      await POST(makeRequest(browserPost));
+
+      expect(forwardToCapiMock).toHaveBeenCalledTimes(1);
+      expect(forwardToCapiMock.mock.calls[0]![0].conversion).toMatchObject({
+        bookingId: 'TB-DUPLICATE',
+        metaEventId: 'TB-DUPLICATE',
+        value: null,
+      });
+    });
+  });
 });
