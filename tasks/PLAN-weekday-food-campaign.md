@@ -35,6 +35,24 @@ Tuesday 15 September; nothing spent yet.
   lunch"; dinner: Var 1 "No cooking tonight", Var 2 "Midweek dinner and a pint", Var 3 "Proper pub
   dinner"). The app's angle labels in ad names and `utm_content` are AI leftovers (Lunch B Var 3
   says "Performer or theme"); ignore them.
+- Tie-up checks, 10 September, all read only unless stated:
+  - Meta: every automatic creative change (Advantage+ creative, text optimisation, image
+    enhancement) is opted out on all 12 ads. Advantage+ audience is on but has nothing to widen
+    (fixed radius and minimum age, no interests).
+  - The app: no cron can change these campaigns; the optimiser only writes suggestions.
+  - Short links: all 16 live, none expires.
+  - Booking system: lunch 12:00 to 14:30 and dinner 16:00 to 20:30 on the ad days, drinks only on
+    Mondays.
+  - Menu and hours: every price and time in the copy and image labels matches the live menu and
+    hours.
+  - Website: the "Next event" pop-up is now hidden on `/lunch-and-dinner`, where it covered the Book
+    button on phones (the-anchor.pub #165, live).
+  - Ad account: its spending limit is £500 with £0 spent against it, exactly the test budget. If all
+    four campaigns stop delivering at once, check the limit first.
+  - Facebook Page: its opening hours were out of date on 10 September (4pm opening Tuesday to
+    Thursday).
+  - Readouts: scheduled as one-time Claude tasks at 09:00 on 21 and 28 September and on 5, 12 and
+    19 October. Queries: `tasks/READOUT-weekday-food-queries.md`.
 Brief: `tasks/ADS-weekday-food.md`. Standing reference: `tasks/ADS-PLAYBOOK-the-anchor.md`.
 
 ---
