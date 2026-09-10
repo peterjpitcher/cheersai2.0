@@ -7,7 +7,8 @@ Spec: `tasks/SPEC-evergreen-delivery-schedule.md`. Four stacked PRs; merging dep
       verify script; applied from scratch on a local database (whole chain), verify passed,
       `supabase db lint` clean for the new column
 - [ ] Apply the migration to production (before PR 2 merges), then run the verify script
-- [ ] PR 2: module, type, Meta client guards, save, publish with read-back and rollback
+- [x] PR 2: module, type, Meta client guards, save, publish with read-back and rollback
+      (`ci:verify` green: 236 files, 2319 tests, both time zones; build clean)
 - [ ] PR 3: prompt line, `off_schedule_day` check, save-time re-check
 - [ ] PR 4: brief form controls and review display
 

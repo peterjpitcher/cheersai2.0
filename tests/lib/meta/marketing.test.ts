@@ -8,9 +8,12 @@ import {
   createMetaAdCreative,
   createMetaCampaign,
   createMetaAdSet,
+  fetchMetaAdSetSchedule,
   fetchMetaObjectInsights,
   MetaApiError,
   searchMetaInterests,
+  type CreateAdSetParams,
+  type MetaAdSetScheduleEntry,
 } from '@/lib/meta/marketing';
 
 describe('createMetaCampaign', () => {
@@ -325,6 +328,162 @@ describe('createMetaAdSet', () => {
     const body = new URLSearchParams(init?.body as string);
     expect(body.has('min_budget')).toBe(false);
     expect(body.has('max_budget')).toBe(false);
+  });
+});
+
+describe('createMetaAdSet delivery schedule (day parting)', () => {
+  // Weekday lunch: Tuesday to Friday, 09:00 to 14:00 in ad account time.
+  const LUNCH_SCHEDULE: MetaAdSetScheduleEntry[] = [
+    { start_minute: 540, end_minute: 840, days: [2, 3, 4, 5], timezone_type: 'ADVERTISER' },
+  ];
+
+  const lifetimeAdSet: CreateAdSetParams = {
+    accessToken: 'test-token',
+    adAccountId: 'act_123',
+    campaignId: 'campaign_123',
+    name: 'Weekday Lunch',
+    targeting: { age_min: 18, age_max: 65, geo_locations: { countries: ['GB'] } },
+    optimisationGoal: 'LINK_CLICKS',
+    bidStrategy: 'LOWEST_COST_WITHOUT_CAP',
+    lifetimeBudget: 180,
+    startTime: '2026-09-14T23:00:00.000Z',
+    endTime: '2026-10-09T23:00:00.000Z',
+    status: 'PAUSED',
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ id: 'adset_123' }),
+    } as Response);
+  });
+
+  it('sends pacing_type day_parting and the adset_schedule on a lifetime budget', async () => {
+    await createMetaAdSet({ ...lifetimeAdSet, schedule: LUNCH_SCHEDULE });
+
+    const [, init] = vi.mocked(global.fetch).mock.calls[0];
+    const body = new URLSearchParams(init?.body as string);
+    expect(body.get('pacing_type')).toBe('["day_parting"]');
+    expect(JSON.parse(body.get('adset_schedule') ?? 'null')).toEqual(LUNCH_SCHEDULE);
+    expect(body.get('lifetime_budget')).toBe('18000');
+    expect(body.get('end_time')).toBe('2026-10-09T23:00:00.000Z');
+    expect(body.has('daily_budget')).toBe(false);
+  });
+
+  it('sends a byte-for-byte unchanged body when there is no schedule', async () => {
+    await createMetaAdSet(lifetimeAdSet);
+
+    // Exactly the fields, order and encoding the client sent before schedules existed.
+    const expected = new URLSearchParams();
+    expected.set('access_token', 'test-token');
+    expected.set('name', 'Weekday Lunch');
+    expected.set('campaign_id', 'campaign_123');
+    expected.set('targeting', JSON.stringify({ age_min: 18, age_max: 65, geo_locations: { countries: ['GB'] } }));
+    expected.set('optimization_goal', 'LINK_CLICKS');
+    expected.set('billing_event', 'IMPRESSIONS');
+    expected.set('bid_strategy', 'LOWEST_COST_WITHOUT_CAP');
+    expected.set('start_time', '2026-09-14T23:00:00.000Z');
+    expected.set('status', 'PAUSED');
+    expected.set('lifetime_budget', '18000');
+    expected.set('end_time', '2026-10-09T23:00:00.000Z');
+
+    const [url, init] = vi.mocked(global.fetch).mock.calls[0];
+    expect(url).toBe('https://graph.facebook.com/v24.0/act_123/adsets');
+    expect(init?.body).toBe(expected.toString());
+
+    // An explicit undefined schedule is the same as none.
+    await createMetaAdSet({ ...lifetimeAdSet, schedule: undefined });
+    expect(vi.mocked(global.fetch).mock.calls[1]?.[1]?.body).toBe(expected.toString());
+  });
+
+  it.each<[string, Partial<CreateAdSetParams>]>([
+    ['a daily budget', { lifetimeBudget: undefined, dailyBudget: 10 }],
+    ['both daily and lifetime budgets', { dailyBudget: 10 }],
+    ['no lifetime budget', { lifetimeBudget: undefined }],
+    ['campaign budget optimisation', { lifetimeBudget: undefined, parentUsesCampaignBudgetOptimization: true }],
+    ['an empty schedule', { schedule: [] }],
+  ])('throws before any request when the schedule comes with %s', async (_label, overrides) => {
+    await expect(
+      createMetaAdSet({ ...lifetimeAdSet, schedule: LUNCH_SCHEDULE, ...overrides }),
+    ).rejects.toThrow(MetaApiError);
+    expect(vi.mocked(global.fetch)).not.toHaveBeenCalled();
+  });
+
+  it('keeps the existing end date guard: a scheduled lifetime ad set without an end time is refused', async () => {
+    await expect(
+      createMetaAdSet({ ...lifetimeAdSet, endTime: undefined, schedule: LUNCH_SCHEDULE }),
+    ).rejects.toThrow('Lifetime budget ad sets require an end date');
+    expect(vi.mocked(global.fetch)).not.toHaveBeenCalled();
+  });
+});
+
+describe('fetchMetaAdSetSchedule', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    global.fetch = vi.fn();
+  });
+
+  it('reads pacing_type and adset_schedule for the ad set', async () => {
+    vi.mocked(global.fetch).mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        id: 'adset_123',
+        pacing_type: ['day_parting'],
+        adset_schedule: [{ start_minute: 540, end_minute: 840, days: [2, 3, 4, 5], timezone_type: 'ADVERTISER' }],
+      }),
+    } as Response);
+
+    const result = await fetchMetaAdSetSchedule('adset_123', 'token');
+
+    expect(result).toEqual({
+      pacingType: ['day_parting'],
+      adsetSchedule: [{ start_minute: 540, end_minute: 840, days: [2, 3, 4, 5], timezone_type: 'ADVERTISER' }],
+    });
+    const [url, init] = vi.mocked(global.fetch).mock.calls[0];
+    const parsed = new URL(String(url));
+    expect(parsed.pathname).toBe('/v24.0/adset_123');
+    expect(parsed.searchParams.get('fields')).toBe('pacing_type,adset_schedule');
+    expect(init).toEqual(expect.objectContaining({ method: 'GET' }));
+  });
+
+  it('normalises numbers sent as text and a lower-case time zone type', async () => {
+    vi.mocked(global.fetch).mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        pacing_type: ['day_parting'],
+        adset_schedule: [{ start_minute: '540', end_minute: '840', days: ['2', 3], timezone_type: 'advertiser' }],
+      }),
+    } as Response);
+
+    const result = await fetchMetaAdSetSchedule('adset_123', 'token');
+
+    expect(result.adsetSchedule).toEqual([
+      { start_minute: 540, end_minute: 840, days: [2, 3], timezone_type: 'ADVERTISER' },
+    ]);
+  });
+
+  it('returns empty values when Meta omits the fields, so they can never match a schedule', async () => {
+    vi.mocked(global.fetch).mockResolvedValue({
+      ok: true,
+      json: async () => ({ id: 'adset_123', adset_schedule: [{ days: [2] }] }),
+    } as Response);
+
+    const result = await fetchMetaAdSetSchedule('adset_123', 'token');
+
+    expect(result.pacingType).toEqual([]);
+    expect(result.adsetSchedule[0]!.timezone_type).toBe('');
+    expect(Number.isNaN(result.adsetSchedule[0]!.start_minute)).toBe(true);
+    expect(Number.isNaN(result.adsetSchedule[0]!.end_minute)).toBe(true);
+  });
+
+  it('throws MetaApiError when Meta rejects the read', async () => {
+    vi.mocked(global.fetch).mockResolvedValue({
+      ok: false,
+      json: async () => ({ error: { message: 'Unsupported get request', code: 100 } }),
+    } as Response);
+
+    await expect(fetchMetaAdSetSchedule('adset_123', 'token')).rejects.toThrow(MetaApiError);
   });
 });
 

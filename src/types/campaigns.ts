@@ -22,6 +22,18 @@ export type FoodDecisionStage =
 export type RunDay =
   | 'monday' | 'tuesday' | 'wednesday' | 'thursday' | 'friday' | 'saturday' | 'sunday';
 
+/**
+ * Evergreen only: the days and whole hours a Meta ad set may deliver ("day parting"), in the
+ * ad account's time zone (Europe/London). endHour is exclusive and may be 24. Stored in
+ * meta_campaigns.delivery_schedule; null there means deliver at any time.
+ * Rules live in src/lib/campaigns/delivery-schedule.ts.
+ */
+export interface DeliverySchedule {
+  days: RunDay[];
+  startHour: number;
+  endHour: number;
+}
+
 export interface FoodServiceHours {
   serviceKey: FoodServiceKey;
   enabled: boolean;

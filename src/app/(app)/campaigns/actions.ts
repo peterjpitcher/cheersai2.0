@@ -21,6 +21,10 @@ import {
   fetchFoodBookingInsights,
 } from '@/lib/campaigns/food-booking-insights';
 import { generateCampaign } from '@/lib/campaigns/generate';
+import {
+  normaliseDeliverySchedule,
+  validateDeliverySchedule,
+} from '@/lib/campaigns/delivery-schedule';
 import { applyDeterministicCampaignNames } from '@/lib/campaigns/naming';
 import {
   buildAdUtmContentKey,
@@ -85,6 +89,7 @@ import type {
   Ad,
   AdStatus,
   CtaType,
+  DeliverySchedule,
   PaidCampaignKind,
   GeoRadiusMiles,
   AudienceMode,
@@ -116,6 +121,8 @@ interface GenerateCampaignInput {
   sourceType?: string | null;
   sourceId?: string | null;
   sourceSnapshot?: Record<string, unknown> | null;
+  // Evergreen only: the days and hours the ad set may deliver. Null or absent: no schedule.
+  deliverySchedule?: DeliverySchedule | null;
 }
 
 interface SaveCampaignMeta {
@@ -135,6 +142,8 @@ interface SaveCampaignMeta {
   sourceType?: string | null;
   sourceId?: string | null;
   sourceSnapshot?: Record<string, unknown> | null;
+  // Evergreen only: the days and hours the ad set may deliver. Null or absent: no schedule.
+  deliverySchedule?: DeliverySchedule | null;
 }
 
 interface GenerateCampaignSuccess {
@@ -433,6 +442,28 @@ function validatePaidDestinationAttribution(
   throw new Error('Paid CTA URL must be a trusted Meta short link or an Anchor URL with campaign attribution.');
 }
 
+/**
+ * Server-side guard for an evergreen delivery schedule, shared by generate and save. The
+ * client runs the same rules, but server action input is untrusted. No schedule passes.
+ */
+function assertValidDeliverySchedule(input: {
+  campaignKind: PaidCampaignKind;
+  budgetType: BudgetType;
+  startDate: string;
+  endDate: string;
+  deliverySchedule?: DeliverySchedule | null;
+}): void {
+  const scheduleError = validateDeliverySchedule(input.deliverySchedule ?? null, {
+    campaignKind: input.campaignKind,
+    budgetType: input.budgetType,
+    startDate: input.startDate,
+    endDate: input.endDate,
+  });
+  if (scheduleError) {
+    throw new Error(scheduleError);
+  }
+}
+
 function validatePaidCampaignMeta(meta: SaveCampaignMeta): void {
   const destinationUrl = validateDestinationUrl(meta.destinationUrl);
   validatePaidDestinationAttribution(destinationUrl, meta.sourceSnapshot);
@@ -442,6 +473,8 @@ function validatePaidCampaignMeta(meta: SaveCampaignMeta): void {
   if (meta.budgetAmount <= 0) {
     throw new Error('Budget must be greater than 0.');
   }
+
+  assertValidDeliverySchedule(meta);
 
   if (audienceMode === 'local_interests' && normaliseResolvedInterests(meta.resolvedInterests ?? []).length === 0) {
     throw new Error('No Meta interests were resolved. Switch Audience to Local only and regenerate before publishing.');
@@ -624,6 +657,8 @@ export async function generateCampaignAction(
   const venueLocation = postingDefaults?.venue_location?.trim() || 'Configured local venue';
 
   try {
+    // Before anything external: a bad schedule must not create a short link or reach OpenAI.
+    assertValidDeliverySchedule(input);
     const destination = await resolvePaidDestination(input);
     const audienceMode = validateAudienceMode(input.audienceMode);
     const mediaPlan = input.campaignKind === 'event'
@@ -764,6 +799,9 @@ export async function saveCampaignDraft(
 
   try {
     validatePaidCampaignMeta(meta);
+    const deliverySchedule = meta.deliverySchedule
+      ? normaliseDeliverySchedule(meta.deliverySchedule)
+      : null;
 
     // Insert campaign row
     const audienceMode = validateAudienceMode(meta.audienceMode);
@@ -835,6 +873,9 @@ export async function saveCampaignDraft(
           audienceInterestKeywords,
           resolvedInterests,
         },
+        // Only sent when there is a schedule, so a campaign without one is saved with
+        // exactly the fields it had before the column existed.
+        ...(deliverySchedule ? { delivery_schedule: deliverySchedule } : {}),
       })
       .select('id')
       .single<{ id: string }>();

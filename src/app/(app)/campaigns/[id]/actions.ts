@@ -16,14 +16,25 @@ import {
   createMetaAdCreative,
   createMetaAdSet,
   createMetaCampaign,
+  fetchMetaAdSetSchedule,
   MetaApiError,
   pauseMetaObject,
   searchMetaGeoLocations,
   setMetaObjectStatus,
   uploadMetaImage,
   type CreateCampaignParams,
+  type MetaAdSetScheduleEntry,
   type MetaGeoLocation,
 } from '@/lib/meta/marketing';
+import {
+  DELIVERY_SCHEDULE_TIMEZONE,
+  describeDeliverySchedule,
+  isDeliverySchedule,
+  metaAdSetScheduleMatches,
+  normaliseDeliverySchedule,
+  toMetaAdSetSchedule,
+  validateDeliverySchedule,
+} from '@/lib/campaigns/delivery-schedule';
 import { createServiceSupabaseClient } from '@/lib/supabase/service';
 import { logPublishAuditEvent } from '@/lib/publishing/audit';
 import { syncMetaCampaignPerformance } from '@/lib/campaigns/performance-sync';
@@ -62,6 +73,8 @@ interface CampaignRow {
   start_date: string;
   end_date: string | null;
   destination_url: string | null;
+  // jsonb, untrusted until validateDeliverySchedule passes; null means no schedule.
+  delivery_schedule?: unknown;
 }
 
 interface AdRow {
@@ -127,6 +140,9 @@ interface PublishAdAccountRow {
   meta_pixel_id: string | null;
   conversion_event_name: string | null;
   conversion_optimisation_enabled: boolean | null;
+  // The ad account's time zone as saved from Meta's timezone_name. A delivery schedule is
+  // sent in ADVERTISER time, so it is only published when this is Europe/London.
+  timezone?: string | null;
 }
 
 interface PublishConversionSetup {
@@ -286,6 +302,62 @@ function validateBookingConversionPreflight(
   return `Booking campaigns are blocked until conversion tracking is ready. ${issueText} Configure the Meta pixel and Purchase event in Connections before spending.`;
 }
 
+/**
+ * A stored delivery schedule must still pass every rule (it is untrusted jsonb, and the
+ * campaign's budget or dates may not suit it), and the ad account must be on Europe/London,
+ * because the schedule is sent in the ad account's time (ADVERTISER). Runs before any Meta
+ * call. Campaigns without a schedule are not checked, so they publish exactly as before.
+ */
+function validateDeliverySchedulePreflight(
+  campaign: CampaignRow,
+  adAccount: PublishAdAccountRow,
+): string | null {
+  if (campaign.delivery_schedule === null || campaign.delivery_schedule === undefined) return null;
+
+  const scheduleError = validateDeliverySchedule(campaign.delivery_schedule, {
+    campaignKind: campaign.campaign_kind,
+    budgetType: campaign.budget_type,
+    startDate: campaign.start_date,
+    endDate: campaign.end_date,
+  });
+  if (scheduleError) {
+    return `This campaign's delivery days and hours cannot be published: ${scheduleError}`;
+  }
+
+  if (adAccount.timezone !== DELIVERY_SCHEDULE_TIMEZONE) {
+    const current = adAccount.timezone ? `is ${adAccount.timezone}` : 'is not recorded';
+    return `Delivery days and hours run on the Meta ad account's time zone, which ${current}. It must be ${DELIVERY_SCHEDULE_TIMEZONE}: change it in Meta if needed, select the ad account again in Connections, then publish.`;
+  }
+
+  return null;
+}
+
+/**
+ * Confirm Meta stored the delivery schedule it was sent for this ad set. Throws on a
+ * mismatch or a failed read, which sends publishCampaign into its rollback (pause what was
+ * created, return the campaign to draft) before anything is switched on.
+ */
+async function verifyMetaAdSetSchedule(args: {
+  metaAdSetId: string;
+  adSetName: string;
+  accessToken: string;
+  expected: MetaAdSetScheduleEntry[];
+  description: string;
+}): Promise<void> {
+  const readBack = await fetchMetaAdSetSchedule(args.metaAdSetId, args.accessToken);
+  if (metaAdSetScheduleMatches(args.expected, readBack)) return;
+
+  console.error('[publishCampaign] Meta delivery schedule mismatch', {
+    metaAdSetId: args.metaAdSetId,
+    expected: args.expected,
+    pacingType: readBack.pacingType,
+    adsetSchedule: readBack.adsetSchedule,
+  });
+  throw new Error(
+    `Meta did not confirm the delivery schedule for "${args.adSetName}" (expected ${args.description}, UK time). Nothing was switched on and the campaign is back in draft.`,
+  );
+}
+
 // ---------------------------------------------------------------------------
 // publishCampaign
 // ---------------------------------------------------------------------------
@@ -300,7 +372,8 @@ function validateBookingConversionPreflight(
  *  4. Fetch Facebook page connection for pageId
  *  5. Fetch ad_sets with nested ads
  *  6. Create Meta campaign (PAUSED while building) — store meta_campaign_id
- *  7. For each ad_set: create Meta ad set, then for each ad with a media asset
+ *  7. For each ad_set: create Meta ad set (with its delivery schedule, if any, which
+ *     is read back from Meta and must match), then for each ad with a media asset
  *     upload image → create creative → create ad (ACTIVE)
  *  8. Activate Meta ads, ad sets, and campaign after all objects are ready
  *  9. Mark local campaign ACTIVE on success
@@ -697,7 +770,7 @@ export async function publishCampaign(
   const { data: campaign, error: campaignError } = await supabase
     .from('meta_campaigns')
     .select(
-      'id, account_id, meta_campaign_id, name, objective, special_ad_category, budget_type, budget_amount, geo_radius_miles, audience_mode, resolved_interests, campaign_kind, source_snapshot, start_date, end_date, destination_url',
+      'id, account_id, meta_campaign_id, name, objective, special_ad_category, budget_type, budget_amount, geo_radius_miles, audience_mode, resolved_interests, campaign_kind, source_snapshot, start_date, end_date, destination_url, delivery_schedule',
     )
     .eq('id', campaignId)
     .eq('account_id', accountId)
@@ -723,7 +796,7 @@ export async function publishCampaign(
 
   const { data: adAccount } = await supabase
     .from('meta_ad_accounts')
-    .select('access_token, meta_account_id, meta_pixel_id, conversion_event_name, conversion_optimisation_enabled')
+    .select('access_token, meta_account_id, meta_pixel_id, conversion_event_name, conversion_optimisation_enabled, timezone')
     .eq('account_id', accountId)
     .single<PublishAdAccountRow>();
 
@@ -818,13 +891,21 @@ export async function publishCampaign(
 
   const preflightError =
     validatePublishPreflight(campaign, adSets) ??
-    validateBookingConversionPreflight(campaign, adAccount, conversionSetup);
+    validateBookingConversionPreflight(campaign, adAccount, conversionSetup) ??
+    validateDeliverySchedulePreflight(campaign, adAccount);
   if (preflightError) {
     await setPublishError(preflightError);
     return { error: preflightError };
   }
 
   const baseLinkUrl = campaign.destination_url as string;
+
+  // The preflight has validated any stored schedule, so this is either a valid schedule or
+  // null. Null keeps ad set creation exactly as it was: no schedule field and no read-back.
+  const deliverySchedule = isDeliverySchedule(campaign.delivery_schedule)
+    ? normaliseDeliverySchedule(campaign.delivery_schedule)
+    : null;
+  const metaAdSetSchedule = deliverySchedule ? toMetaAdSetSchedule(deliverySchedule) : null;
 
   try {
     // Audit: a genuine publish attempt begins here (after all pre-publish validation has
@@ -981,6 +1062,9 @@ export async function publishCampaign(
           endTime: resolveAdSetEndTime(adSet, campaign),
           status: 'PAUSED',
           promotedObject,
+          // Evergreen delivery schedule (day parting). Only present when the campaign has
+          // one, so every other ad set is created with exactly the fields it had before.
+          ...(metaAdSetSchedule ? { schedule: metaAdSetSchedule } : {}),
         });
 
         metaAdSetId = metaAdSet.id;
@@ -999,6 +1083,19 @@ export async function publishCampaign(
             optimisation_goal: optimisationGoal,
           })
           .eq('id', adSet.id);
+      }
+
+      // Scheduled campaigns: confirm Meta holds the schedule before this ad set gets ads or
+      // anything is switched on. Covers a resumed ad set too, so a retry never activates one
+      // created without the schedule. A mismatch throws into the rollback below.
+      if (metaAdSetSchedule && deliverySchedule) {
+        await verifyMetaAdSetSchedule({
+          metaAdSetId,
+          adSetName: adSet.name,
+          accessToken,
+          expected: metaAdSetSchedule,
+          description: describeDeliverySchedule(deliverySchedule),
+        });
       }
 
       metaAdSetIdsToActivate.add(metaAdSetId);

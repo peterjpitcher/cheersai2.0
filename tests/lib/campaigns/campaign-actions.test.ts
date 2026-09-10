@@ -789,3 +789,131 @@ describe('saveCampaignDraft', () => {
     mockSupabase.eq.mockReturnThis();
   });
 });
+
+describe('evergreen delivery schedule on generate and save', () => {
+  // Weekday lunch on the 15 September to 9 October 2026 flight, total budget.
+  const lunchSchedule = {
+    days: ['friday', 'tuesday', 'thursday', 'wednesday'] as Array<'tuesday' | 'wednesday' | 'thursday' | 'friday'>,
+    startHour: 9,
+    endHour: 14,
+  };
+  const evergreenMeta = {
+    campaignKind: 'evergreen' as const,
+    promotionName: 'Weekday Lunch',
+    budgetAmount: 180,
+    budgetType: 'LIFETIME' as const,
+    geoRadiusMiles: 5 as const,
+    audienceMode: 'local_only' as const,
+    startDate: '2026-09-15',
+    endDate: '2026-10-09',
+    problemBrief: 'Now serving lunch Tuesday to Friday.',
+    destinationUrl: 'https://l.the-anchor.pub/ma-lunch',
+    sourceType: 'custom_promotion',
+  };
+  const emptyPayload = {
+    objective: 'OUTCOME_TRAFFIC' as const,
+    rationale: 'Traffic campaign.',
+    campaign_name: 'Weekday Lunch',
+    special_ad_category: 'NONE' as const,
+    ad_sets: [],
+  };
+
+  function campaignInsertArgs(): Record<string, unknown> {
+    const call = mockSupabase.insert.mock.calls[0];
+    if (!call) throw new Error('meta_campaigns was not inserted');
+    return call[0] as Record<string, unknown>;
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    // Flush any queued one-off results left by earlier tests before setting defaults.
+    mockMaybeSingle.mockReset();
+    mockSingle.mockReset();
+    vi.mocked(createServiceSupabaseClient).mockReturnValue(mockSupabase as never);
+    mockMaybeSingle.mockResolvedValue({ data: null, error: null });
+    mockSingle.mockResolvedValue({ data: { id: 'campaign-new' }, error: null });
+  });
+
+  it('saves the schedule, days in week order, on an evergreen total-budget draft', async () => {
+    const result = await saveCampaignDraft(emptyPayload, { ...evergreenMeta, deliverySchedule: lunchSchedule });
+
+    expect(result).toEqual({ campaignId: 'campaign-new' });
+    expect(campaignInsertArgs().delivery_schedule).toEqual({
+      days: ['tuesday', 'wednesday', 'thursday', 'friday'],
+      startHour: 9,
+      endHour: 14,
+    });
+  });
+
+  it('leaves the column out entirely when there is no schedule, so the insert is unchanged', async () => {
+    const result = await saveCampaignDraft(emptyPayload, { ...evergreenMeta, deliverySchedule: null });
+
+    expect(result).toEqual({ campaignId: 'campaign-new' });
+    expect('delivery_schedule' in campaignInsertArgs()).toBe(false);
+  });
+
+  it.each<[string, Record<string, unknown>, RegExp]>([
+    ['a daily budget', { budgetType: 'DAILY' }, /need a total budget/],
+    ['an event campaign', { campaignKind: 'event', adsStopTime: '19:00' }, /only available for evergreen/],
+    ['no chosen days', { deliverySchedule: { ...lunchSchedule, days: [] } }, /at least one delivery day/],
+    ['half hours', { deliverySchedule: { ...lunchSchedule, startHour: 9.5 } }, /whole hours/],
+    ['a flight with no scheduled day', { startDate: '2026-09-19', endDate: '2026-09-21' }, /None of the chosen delivery days/],
+  ])('refuses to save a schedule with %s, before writing anything', async (_label, overrides, message) => {
+    const result = await saveCampaignDraft(emptyPayload, {
+      ...evergreenMeta,
+      deliverySchedule: lunchSchedule,
+      ...overrides,
+    } as Parameters<typeof saveCampaignDraft>[1]);
+
+    expect((result as { error: string }).error).toMatch(message);
+    expect(mockSupabase.insert).not.toHaveBeenCalled();
+  });
+
+  it('refuses a schedule on a daily budget before creating a short link or calling the AI', async () => {
+    mockMaybeSingle
+      .mockResolvedValueOnce({ data: { setup_complete: true, meta_account_id: 'act_123', access_token: 'token' } })
+      .mockResolvedValueOnce({ data: { venue_location: 'Stanwell Moor' } });
+    mockSingle.mockResolvedValueOnce({ data: { display_name: 'The Anchor' } });
+
+    const result = await generateCampaignAction({
+      ...evergreenMeta,
+      destinationUrl: 'https://www.the-anchor.pub/lunch-and-dinner',
+      budgetType: 'DAILY',
+      deliverySchedule: lunchSchedule,
+    });
+
+    expect((result as { error: string }).error).toMatch(/need a total budget/);
+    expect(createManagementMetaAdsLink).not.toHaveBeenCalled();
+    expect(generateCampaign).not.toHaveBeenCalled();
+  });
+
+  it('lets a valid schedule through to generation', async () => {
+    mockMaybeSingle
+      .mockResolvedValueOnce({ data: { setup_complete: true, meta_account_id: 'act_123', access_token: 'token' } })
+      .mockResolvedValueOnce({ data: { venue_location: 'Stanwell Moor' } });
+    mockSingle.mockResolvedValueOnce({ data: { display_name: 'The Anchor' } });
+    vi.mocked(getManagementConnectionConfig).mockResolvedValueOnce({
+      baseUrl: 'https://management.example.com',
+      apiKey: 'key',
+      enabled: true,
+    });
+    vi.mocked(createManagementMetaAdsLink).mockResolvedValueOnce({
+      shortUrl: 'https://l.the-anchor.pub/ma-lunch',
+      shortCode: 'ma-lunch',
+      destinationUrl: 'https://www.the-anchor.pub/lunch-and-dinner',
+      utmDestinationUrl: 'https://www.the-anchor.pub/lunch-and-dinner?utm_source=facebook',
+      alreadyExists: false,
+      variants: [],
+    });
+    vi.mocked(generateCampaign).mockResolvedValueOnce(emptyPayload as never);
+
+    const result = await generateCampaignAction({
+      ...evergreenMeta,
+      destinationUrl: 'https://www.the-anchor.pub/lunch-and-dinner',
+      deliverySchedule: lunchSchedule,
+    });
+
+    expect(result).not.toHaveProperty('error');
+    expect(generateCampaign).toHaveBeenCalledTimes(1);
+  });
+});
