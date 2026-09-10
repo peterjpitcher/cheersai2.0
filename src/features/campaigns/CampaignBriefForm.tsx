@@ -32,7 +32,7 @@ import {
   getManagementEventPrefill,
   type ManagementActionError,
 } from '@/app/(app)/create/actions';
-import { calculateInclusiveDurationDays } from '@/lib/campaigns/phases';
+import { calculateInclusiveDurationDays, MAX_EVERGREEN_DAYS } from '@/lib/campaigns/phases';
 import { calculateFoodBookingPhases } from '@/lib/campaigns/food-booking-phases';
 import {
   RUN_DAY_LABELS,
@@ -633,7 +633,7 @@ export function CampaignBriefForm({ mediaLibrary }: CampaignBriefFormProps) {
     if (campaignKind === 'evergreen') {
       try {
         const days = calculateInclusiveDurationDays(startDate, endDate);
-        if (days > 30) return 'Evergreen campaigns can run for a maximum of 30 days.';
+        if (days > MAX_EVERGREEN_DAYS) return `Evergreen campaigns can run for a maximum of ${MAX_EVERGREEN_DAYS} days.`;
       } catch {
         return 'Campaign end date must be on or after the start date.';
       }
@@ -1036,8 +1036,8 @@ export function CampaignBriefForm({ mediaLibrary }: CampaignBriefFormProps) {
                 onBlur={handleInputBlur}
               />
               {campaignKind === 'evergreen' && (
-                <p className="mt-1 text-xs" style={{ color: durationDays && durationDays > 30 ? 'var(--c-claret)' : 'var(--c-ink-3)' }}>
-                  {durationDays ? `${durationDays} day${durationDays === 1 ? '' : 's'} selected. Maximum 30.` : 'Maximum 30 days.'}
+                <p className="mt-1 text-xs" style={{ color: durationDays && durationDays > MAX_EVERGREEN_DAYS ? 'var(--c-claret)' : 'var(--c-ink-3)' }}>
+                  {durationDays ? `${durationDays} day${durationDays === 1 ? '' : 's'} selected. Maximum ${MAX_EVERGREEN_DAYS}.` : `Maximum ${MAX_EVERGREEN_DAYS} days.`}
                 </p>
               )}
             </div>

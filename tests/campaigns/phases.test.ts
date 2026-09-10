@@ -86,9 +86,17 @@ describe('calculatePhases', () => {
     ]);
   });
 
-  it('caps evergreen campaigns at 30 inclusive days', () => {
-    expect(calculateInclusiveDurationDays('2026-03-01', '2026-03-30')).toBe(30);
-    expect(() => calculateEvergreenPhases('2026-03-01', '2026-03-31')).toThrow(/30 days/);
+  it('caps evergreen campaigns at 45 inclusive days', () => {
+    expect(calculateInclusiveDurationDays('2026-03-01', '2026-04-14')).toBe(45);
+    expect(() => calculateEvergreenPhases('2026-03-01', '2026-04-14')).not.toThrow();
+    expect(() => calculateEvergreenPhases('2026-03-01', '2026-04-15')).toThrow(/45 days/);
+  });
+
+  it('allows the weekday food test flight, Tuesday 15 September to Friday 16 October 2026', () => {
+    expect(calculateInclusiveDurationDays('2026-09-15', '2026-10-16')).toBe(32);
+    expect(calculateEvergreenPhases('2026-09-15', '2026-10-16')).toEqual([
+      expect.objectContaining({ phaseStart: '2026-09-15', phaseEnd: '2026-10-16' }),
+    ]);
   });
 });
 
