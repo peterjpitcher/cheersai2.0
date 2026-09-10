@@ -82,10 +82,10 @@ export function EngagementChart({ data, loading }: EngagementChartProps) {
                   Platform: {d.platform}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  Impressions: {d.impressions.toLocaleString()}
+                  Impressions: {d.impressions.toLocaleString("en-GB")}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  Engagement: {d.engagement.toLocaleString()}
+                  Engagement: {d.engagement.toLocaleString("en-GB")}
                 </p>
                 <p className="text-sm font-semibold text-foreground">
                   Rate: {d.engagementRate}%

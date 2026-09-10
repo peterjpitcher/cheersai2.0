@@ -25,6 +25,7 @@ import type { DesignStatus } from "@/components/ui/status";
 import { PlatformDot } from "@/components/ui/platform-dot";
 import { Button } from "@/components/ui/button";
 import { MediaFrameImage, MediaFrameVideo } from "@/components/media/media-frame";
+import { formatUkDateTime } from "@/lib/utils/date";
 
 /* ------------------------------------------------------------------ */
 /*  Status mapping: PlannerItem status → DesignStatus for Status chip  */
@@ -103,7 +104,7 @@ export default async function PlannerContentPage({
   const designStatus = toDesignStatus(detail.status);
   const isFailed = detail.status === "failed" || Boolean(detail.lastError);
   const providerResponse = detail.providerResponse ? JSON.stringify(detail.providerResponse, null, 2) : null;
-  const lastAttemptedLabel = detail.lastAttemptedAt ? new Date(detail.lastAttemptedAt).toLocaleString() : null;
+  const lastAttemptedLabel = detail.lastAttemptedAt ? formatUkDateTime(detail.lastAttemptedAt) : null;
   const countdown = scheduledLocal && scheduledLocal > DateTime.now() ? relativeCountdown(scheduledLocal) : null;
   const words = wordCount(detail.body);
   const heroImage = detail.media.length > 0 ? detail.media[0] : null;

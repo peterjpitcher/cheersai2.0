@@ -24,6 +24,7 @@ import { groupMediaAssetsByTag, UNTITLED_MEDIA_TAG } from "@/features/library/me
 import { MediaReplaceButton } from "@/features/library/media-replace-button";
 import { generateImageDerivatives } from "@/lib/library/client-derivatives";
 import type { MediaAssetSummary } from "@/lib/library/data";
+import { formatUkDate } from "@/lib/utils/date";
 
 /* ------------------------------------------------------------------ */
 /*  Constants                                                          */
@@ -892,7 +893,7 @@ export function MediaAssetGridClient({
                         {/* Status */}
                         <div className="flex items-center justify-between">
                           <span className="text-[10px] text-[var(--c-ink-4)]">
-                            {new Date(asset.uploadedAt).toLocaleDateString()}
+                            {formatUkDate(asset.uploadedAt)}
                           </span>
                           <span className="text-[10px] font-medium uppercase text-[var(--c-ink-3)]">
                             {statusLabel}

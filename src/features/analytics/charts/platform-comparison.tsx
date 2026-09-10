@@ -80,10 +80,10 @@ export function PlatformComparisonChart({ data, loading }: PlatformComparisonCha
               <div className="rounded-lg border border-border bg-popover p-3 shadow-md">
                 <p className="text-sm font-medium text-foreground">{d.platform}</p>
                 <p className="text-xs text-muted-foreground">
-                  Impressions: {d.impressions.toLocaleString()}
+                  Impressions: {d.impressions.toLocaleString("en-GB")}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  Engagement: {d.engagement.toLocaleString()}
+                  Engagement: {d.engagement.toLocaleString("en-GB")}
                 </p>
                 <p className="text-sm font-semibold text-foreground">
                   Rate: {d.rate}

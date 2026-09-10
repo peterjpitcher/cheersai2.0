@@ -3,6 +3,7 @@ import Link from "next/link";
 import { ConnectionMetadataForm } from "@/features/connections/connection-metadata-form";
 import { ConnectionOAuthButton } from "@/features/connections/connection-oauth-button";
 import { listConnectionSummaries } from "@/lib/connections/data";
+import { formatUkDate, formatUkDateTime } from "@/lib/utils/date";
 
 const STATUS_STYLES: Record<string, string> = {
   active: "bg-emerald-100 text-emerald-700",
@@ -105,7 +106,7 @@ export async function ConnectionCards() {
               {connection.lastSyncedAt ? (
                 <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
                   <dt>Last published</dt>
-                  <dd className="text-right">{new Date(connection.lastSyncedAt).toLocaleString()}</dd>
+                  <dd className="text-right">{formatUkDateTime(connection.lastSyncedAt)}</dd>
                 </div>
               ) : null}
               <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
@@ -165,7 +166,7 @@ function TokenExpiryLabel({ provider, expiresAt }: { provider: string; expiresAt
   }
 
   const daysUntil = Math.ceil((expiryDate.getTime() - now) / (1000 * 60 * 60 * 24));
-  const formatted = expiryDate.toLocaleDateString();
+  const formatted = formatUkDate(expiryDate);
 
   if (daysUntil <= EXPIRY_WARNING_DAYS) {
     return <span className="font-semibold text-amber-600">Expires {formatted}</span>;

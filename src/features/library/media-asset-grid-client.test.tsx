@@ -95,6 +95,43 @@ function asset(overrides: Partial<MediaAssetSummary> & Pick<MediaAssetSummary, "
   };
 }
 
+describe("MediaAssetGridClient upload date", () => {
+  const originalTimeZone = process.env.TZ;
+
+  afterEach(() => {
+    cleanup();
+    process.env.TZ = originalTimeZone;
+  });
+
+  // Renders the real grid with the process in a given time zone and returns the date
+  // printed on the card. The server renders in UTC and the browser in the viewer's zone;
+  // if the two strings differ, React throws away the server HTML (error #418) and a file
+  // just dropped into "Drop or upload" is lost.
+  function renderedUploadDate(timeZone: string): string {
+    process.env.TZ = timeZone;
+    renderWithToast(
+      <MediaAssetGridClient
+        assets={[
+          // 23:30 UTC on 5 September is 00:30 on 6 September in London (BST).
+          asset({ id: "late-upload", fileName: "Late upload.png", uploadedAt: "2026-09-05T23:30:00.000Z" }),
+        ]}
+        availableTags={["promo"]}
+      />,
+    );
+    const text = screen.getByText(/^\d{2}\/\d{2}\/\d{4}$/).textContent ?? "";
+    cleanup();
+    return text;
+  }
+
+  it("prints the same London calendar date under TZ=UTC and TZ=Europe/London", () => {
+    const utc = renderedUploadDate("UTC");
+    const london = renderedUploadDate("Europe/London");
+
+    expect(utc).toBe("06/09/2026");
+    expect(london).toBe(utc);
+  });
+});
+
 describe("MediaAssetGridClient image replacement", () => {
   beforeEach(() => {
     hideMediaAssetsMock.mockResolvedValue({ hiddenIds: [], notFound: [] });

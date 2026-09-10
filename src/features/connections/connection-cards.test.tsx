@@ -4,6 +4,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, cleanup } from "@testing-library/react";
 
+import { formatUkDate } from "@/lib/utils/date";
+
 /**
  * Tests for TokenExpiryLabel rendering inside ConnectionCards.
  *
@@ -93,7 +95,8 @@ describe("ConnectionCards — token expiry display", () => {
   it("renders expiry date with warning styling when within 7 days", async () => {
     const soon = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000);
     const soonIso = soon.toISOString();
-    const formatted = soon.toLocaleDateString();
+    // The same helper the card uses, so the expectation follows the real format (UK, London).
+    const formatted = formatUkDate(soon);
 
     mockListConnectionSummaries.mockResolvedValue([
       makeConnection({ provider: "instagram", expiresAt: soonIso }),
@@ -110,7 +113,7 @@ describe("ConnectionCards — token expiry display", () => {
   it("renders plain expiry date when more than 7 days away", async () => {
     const future = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
     const futureIso = future.toISOString();
-    const formatted = future.toLocaleDateString();
+    const formatted = formatUkDate(future);
 
     mockListConnectionSummaries.mockResolvedValue([
       makeConnection({ provider: "instagram", expiresAt: futureIso }),

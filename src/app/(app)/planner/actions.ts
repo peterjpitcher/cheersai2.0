@@ -15,6 +15,7 @@ import { BANNER_EDITABLE_STATUSES } from "@/lib/scheduling/banner-config";
 import { validateBannerText } from "@/lib/banner/text";
 import { listMediaAssets } from "@/lib/library/data";
 import { isSchemaMissingError } from "@/lib/supabase/errors";
+import { formatUkDateTime } from "@/lib/utils/date";
 
 const approveSchema = z.object({
   contentId: z.string().uuid(),
@@ -276,7 +277,7 @@ export async function approveDraftContent(payload: unknown) {
       account_id: accountId,
       category: "content_approved",
       message: scheduledIso
-        ? `Draft approved and scheduled for ${new Date(scheduledIso).toLocaleString()}`
+        ? `Draft approved and scheduled for ${formatUkDateTime(scheduledIso)}`
         : "Draft approved and queued to publish",
       metadata: {
         contentId,
