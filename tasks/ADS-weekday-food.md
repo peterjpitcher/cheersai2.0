@@ -15,10 +15,14 @@ Tuesday to Friday. The kitchen is closed on Mondays.
 What discovery found (10 September 2026, sources in brackets):
 
 - **Lunch is brand new.** Tuesday to Friday lunch started on 1 September 2026; before that the pub
-  opened at 4pm on those days (management app `business_hours_versions`). 7 bookings in its first
-  week. A launch problem: people do not know it exists.
-- **Dinner has a base.** About 25 booked covers a week over the last 12 weeks, half between 6pm and
-  8pm (management app `table_bookings`, 15 Jun to 6 Sep, cancelled and no-shows excluded).
+  opened at 4pm on those days (management app `business_hours_versions`). 7 lunch tables in its
+  first week (3 booked ahead, 4 walk-ins; 17 covers). A launch problem: people do not know it
+  exists.
+- **Dinner has a base.** About 21 food covers a week over the last 12 weeks (about 14 booked ahead
+  and 7 walk-ins logged by staff), about half between 6pm and 8pm (management app
+  `table_bookings`, 15 Jun to 6 Sep, 16:00 to 20:59, food only, cancelled and no-shows excluded).
+  Corrected 10 September: the first draft said "about 25 booked covers", which also counted
+  drinks tables and walk-ins.
 - **Food takings are growing.** Tuesday to Friday food takings average about £167 a day against £81
   a year earlier (cash-up `cashup_sales_breakdowns`; this year's rows submitted, not approved).
 - **No food campaign has ever run.** The August Cowboys & Queens ad that led with "Dinner 4pm" took
@@ -142,7 +146,9 @@ the AI picks anything else, regenerate.
 
 ## 7. Measurement
 
-**Baseline:** Tuesday 1 to Friday 11 September 2026, the two weeks since lunch launched.
+**Baseline:** Tuesday 1 to Friday 11 September 2026, the two weeks since lunch launched. Tested
+queries for every measure, and the baseline figures, are in `tasks/READOUT-weekday-food-queries.md`
+(re-run the baseline queries on or after Saturday 12 September, once the last two days are in).
 
 **Per ad (the test):** link click-through rate and cost per link click, compared within each
 campaign (messages) and across each pair (photos). Bookings carrying each ad's tracking tag are
