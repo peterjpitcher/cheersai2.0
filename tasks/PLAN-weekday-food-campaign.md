@@ -1,5 +1,9 @@
 # PLAN: Weekday lunch and dinner campaign, The Anchor
 
+> **Superseded for operations on 10 September 2026 by `tasks/RUNBOOK-weekday-food-campaign.md`.**
+> The build is finished. The workstream checklists and timeline below (including the old "six
+> ads" wording and the 15 September start) are the historical build record: do not execute them.
+
 Status: approved 10 September 2026; test design, £500 and 15 September to 16 October approved the
 same day (brief, sections 2 and 3). All four campaigns published 10 September; first delivery
 Tuesday 15 September; nothing spent yet.

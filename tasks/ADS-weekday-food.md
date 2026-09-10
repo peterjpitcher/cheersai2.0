@@ -1,9 +1,12 @@
 # ADS brief: Weekday lunch and dinner test, The Anchor
 
-Status: approved 10 September 2026 (test design, £500, 15 September to 16 October). All four
-campaigns published through the app on 10 September and all 12 ads approved by Meta the same day;
-first delivery Tuesday 15 September. Standing reference: `tasks/ADS-PLAYBOOK-the-anchor.md`. Build
-steps, Meta ids and progress: `tasks/PLAN-weekday-food-campaign.md`.
+Status: approved 10 September 2026 and published the same day. **Amended 10 September after an
+independent review: the current state, ids and rules are in `tasks/RUNBOOK-weekday-food-campaign.md`,
+which wins where this brief differs.** Amendments in short: the flight starts Friday 11 September
+(21 serving days); the audience no longer includes people only recently in the area; Audience
+Network is excluded; results are read as directional, not proof; the 70% mid-test pause rule is
+dropped (emergency pauses only); the owner's bar is £1 per extra cover; bookings carry ad tags only
+with marketing consent. Standing reference: `tasks/ADS-PLAYBOOK-the-anchor.md`.
 
 ---
 

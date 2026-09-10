@@ -4,3 +4,5 @@
 - Owner-approved terrestrial coverage is enough to accept match bookings. Exact TV channels, screen assignments and audio details must not delay bookings. Keep existing opening hours and show coverage limits clearly.
 
 - Distinguish usual closing and booking arrival limits from an owner-approved conditional late finish. The Anchor stays open to the end of a game if people are still in watching; kitchen service does not extend automatically. Never describe that as guaranteed late opening.
+
+- Menu descriptions in the management app can lag what the kitchen actually serves. On 10 September 2026 the owner confirmed an ad photo showed a pizza the pub sells (mushrooms, rocket, cherry tomatoes) though no menu description listed it. Before calling a food image inaccurate, ask the owner; then get the menu description updated so the ad, the menu and the website agree.
