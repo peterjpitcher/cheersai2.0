@@ -1,3 +1,16 @@
+# Feature: evergreen delivery schedule, no Mondays (2026-09-10)
+
+Spec: `tasks/SPEC-evergreen-delivery-schedule.md`. Four stacked PRs; merging deploys.
+
+## Tasks
+- [x] PR 1: spec, migration `20260910103048_meta_campaigns_delivery_schedule.sql`, schema doc,
+      verify script; applied from scratch on a local database (whole chain), verify passed,
+      `supabase db lint` clean for the new column
+- [ ] Apply the migration to production (before PR 2 merges), then run the verify script
+- [ ] PR 2: module, type, Meta client guards, save, publish with read-back and rollback
+- [ ] PR 3: prompt line, `off_schedule_day` check, save-time re-check
+- [ ] PR 4: brief form controls and review display
+
 # Fix: Instagram story failed with Meta code 9004 (2026-09-04)
 
 ## Problem
