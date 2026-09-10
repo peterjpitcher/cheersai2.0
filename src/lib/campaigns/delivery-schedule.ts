@@ -206,11 +206,16 @@ export function toMetaAdSetSchedule(schedule: DeliverySchedule): MetaAdSetSchedu
   ];
 }
 
+// Keyed on day and minutes only. The time zone type is deliberately not compared: publish
+// refuses unless the ad account is on Europe/London, and every campaign targets a small
+// radius around the venue in Great Britain, so ADVERTISER time and USER (viewer) time are
+// the same clock. Meta may also leave the field out of a read-back, and that must not strand
+// a correct schedule in draft.
 function expandScheduleEntries(entries: MetaAdSetScheduleEntry[]): string[] {
   const keys = new Set<string>();
   for (const entry of entries) {
     for (const day of entry.days) {
-      keys.add(`${day}|${entry.start_minute}|${entry.end_minute}|${entry.timezone_type.toUpperCase()}`);
+      keys.add(`${day}|${entry.start_minute}|${entry.end_minute}`);
     }
   }
   return [...keys].sort();
@@ -218,8 +223,8 @@ function expandScheduleEntries(entries: MetaAdSetScheduleEntry[]): string[] {
 
 /**
  * True when what Meta reports for an ad set is the schedule that was sent: day parting on,
- * and exactly the same windows, day by day, in the same time zone type. Compared per day so
- * Meta may group or order the windows differently. Anything missing counts as a mismatch.
+ * and exactly the same windows, day by day. Compared per day so Meta may group or order the
+ * windows differently. Anything missing counts as a mismatch.
  */
 export function metaAdSetScheduleMatches(
   expected: MetaAdSetScheduleEntry[],

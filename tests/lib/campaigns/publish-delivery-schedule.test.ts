@@ -294,6 +294,23 @@ describe('publishCampaign with a delivery schedule', () => {
     expect(args.endTime).toBe('2026-10-31T00:00:00.000Z'); // 31 Oct 00:00 GMT
   });
 
+  it('publishes when Meta reads the schedule back without a time zone type, or as viewer time', async () => {
+    for (const timezoneType of ['', 'USER']) {
+      vi.clearAllMocks();
+      queuePublishLookups();
+      stubMetaCreateSuccess();
+      vi.mocked(marketing.fetchMetaAdSetSchedule).mockResolvedValue({
+        pacingType: ['day_parting'],
+        adsetSchedule: [{ ...META_LUNCH_SCHEDULE[0]!, timezone_type: timezoneType }],
+      });
+
+      const result = await publishCampaign('campaign-123');
+
+      expect(result).toEqual({ success: true });
+      expect(marketing.setMetaObjectStatus).toHaveBeenCalledWith('meta_camp_123', 'token', 'ACTIVE');
+    }
+  });
+
   it('confirms the schedule on a resumed ad set too, so a retry never activates one without it', async () => {
     queuePublishLookups({
       campaign: { meta_campaign_id: 'meta_camp_existing' },
@@ -369,10 +386,6 @@ describe('publishCampaign rolls back when Meta does not confirm the schedule', (
       adsetSchedule: [{ ...META_LUNCH_SCHEDULE[0]!, days: [1, 2, 3, 4, 5] }],
     }],
     ['drops day parting', { pacingType: ['standard'], adsetSchedule: META_LUNCH_SCHEDULE }],
-    ['reports the viewer time zone', {
-      pacingType: ['day_parting'],
-      adsetSchedule: [{ ...META_LUNCH_SCHEDULE[0]!, timezone_type: 'USER' }],
-    }],
     ['returns no schedule', { pacingType: [], adsetSchedule: [] }],
   ])('pauses what was created and returns to draft when Meta %s', async (_label, readBack) => {
     queuePublishLookups();

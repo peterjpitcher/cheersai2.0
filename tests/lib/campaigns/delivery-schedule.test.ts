@@ -196,14 +196,22 @@ describe('metaAdSetScheduleMatches', () => {
     expect(metaAdSetScheduleMatches(sent, readBack(perDay))).toBe(true);
   });
 
+  // Campaigns only target a radius in Great Britain and publish requires a Europe/London ad
+  // account, so viewer time and account time are the same clock; the type is not compared.
+  it.each<[string, ReturnType<typeof readBack>]>([
+    ['the USER time zone type', readBack([{ ...sent[0]!, timezone_type: 'USER' }])],
+    ['no time zone type', readBack([{ ...sent[0]!, timezone_type: '' }])],
+  ])('matches a read-back with %s when the days and minutes agree', (_label, actual) => {
+    expect(metaAdSetScheduleMatches(sent, actual)).toBe(true);
+  });
+
   it.each<[string, ReturnType<typeof readBack>]>([
     ['no day parting', readBack(sent, [])],
     ['standard pacing', readBack(sent, ['standard'])],
     ['different minutes', readBack([{ ...sent[0]!, end_minute: 900 }])],
     ['an added Monday', readBack([{ ...sent[0]!, days: [1, 2, 3, 4, 5] }])],
     ['a missing Friday', readBack([{ ...sent[0]!, days: [2, 3, 4] }])],
-    ['the USER time zone', readBack([{ ...sent[0]!, timezone_type: 'USER' }])],
-    ['no time zone type', readBack([{ ...sent[0]!, timezone_type: '' }])],
+    ['a Monday and no time zone type', readBack([{ ...sent[0]!, days: [1, 2, 3, 4, 5], timezone_type: '' }])],
     ['unreadable minutes', readBack([{ ...sent[0]!, start_minute: Number.NaN }])],
     ['no schedule at all', readBack([])],
   ])('rejects a read-back with %s', (_label, actual) => {
