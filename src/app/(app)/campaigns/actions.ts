@@ -22,6 +22,8 @@ import {
 } from '@/lib/campaigns/food-booking-insights';
 import { generateCampaign } from '@/lib/campaigns/generate';
 import {
+  describeOffScheduleCopyProblem,
+  findOffScheduleCopy,
   normaliseDeliverySchedule,
   validateDeliverySchedule,
 } from '@/lib/campaigns/delivery-schedule';
@@ -691,6 +693,9 @@ export async function generateCampaignAction(
       eventBookingInsights: input.campaignKind === 'event'
         ? formatEventBookingInsightsForCampaignPrompt(eventBookingInsights)
         : null,
+      deliverySchedule: input.deliverySchedule
+        ? normaliseDeliverySchedule(input.deliverySchedule)
+        : null,
     });
     const conversionConfig = buildConversionOptimisationConfig(adAccount);
     const ruledPayload = applyDeterministicPaidRules(rawPayload, {
@@ -802,6 +807,16 @@ export async function saveCampaignDraft(
     const deliverySchedule = meta.deliverySchedule
       ? normaliseDeliverySchedule(meta.deliverySchedule)
       : null;
+
+    // Copy edited by hand on the review screen skips every generation check, so re-run the
+    // one check a schedule adds: no ad may name a day the campaign never runs on. The other
+    // generation checks deliberately stay generation-only.
+    if (deliverySchedule) {
+      const offScheduleCopy = findOffScheduleCopy(payload, deliverySchedule);
+      if (offScheduleCopy.length > 0) {
+        throw new Error(describeOffScheduleCopyProblem(offScheduleCopy, deliverySchedule));
+      }
+    }
 
     // Insert campaign row
     const audienceMode = validateAudienceMode(meta.audienceMode);

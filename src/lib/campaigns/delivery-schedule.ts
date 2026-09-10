@@ -2,7 +2,7 @@ import { DateTime } from 'luxon';
 
 import { DEFAULT_TIMEZONE } from '@/lib/constants';
 import type { MetaAdSetScheduleEntry, MetaAdSetScheduleReadBack } from '@/lib/meta/marketing';
-import type { DeliverySchedule, RunDay } from '@/types/campaigns';
+import type { AiCampaignPayload, DeliverySchedule, RunDay } from '@/types/campaigns';
 
 /**
  * Delivery schedules for evergreen Meta campaigns: the days and whole hours an ad set may
@@ -282,4 +282,139 @@ export function describeDeliverySchedule(schedule: DeliverySchedule): string {
 
 function formatLongDate(date: DateTime): string {
   return date.setLocale('en-GB').toFormat('d LLLL yyyy');
+}
+
+// ─── Ad copy ─────────────────────────────────────────────────────────────────
+// A scheduled ad only runs on its chosen days, so its copy must not promise any other day.
+
+// Abbreviations that count as a day in ad copy. Only the capitalised ("Sat") or all-capitals
+// ("SAT") forms count, so ordinary words such as "in the sun" or "we sat down" never do.
+const DAY_ABBREVIATIONS: Record<RunDay, readonly string[]> = {
+  monday: ['Mon'],
+  tuesday: ['Tue', 'Tues'],
+  wednesday: ['Wed', 'Weds'],
+  thursday: ['Thu', 'Thur', 'Thurs'],
+  friday: ['Fri'],
+  saturday: ['Sat'],
+  sunday: ['Sun'],
+};
+
+const WEEKDAYS: readonly RunDay[] = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'];
+
+function offScheduleDayPatterns(schedule: DeliverySchedule): RegExp[] {
+  const chosen = new Set<RunDay>(schedule.days);
+  const patterns: RegExp[] = [];
+
+  for (const day of RUN_DAY_ORDER) {
+    if (chosen.has(day)) continue;
+    // Full names in any case, singular, plural or possessive: "Monday", "mondays", "Monday's".
+    patterns.push(new RegExp(`\\b${RUN_DAY_LABELS[day]}s?\\b`, 'gi'));
+    for (const abbreviation of DAY_ABBREVIATIONS[day]) {
+      // Not part of a longer word or a contraction: "Monster", "C'mon" and "Sun's" do not count.
+      patterns.push(new RegExp(
+        `(?<![\\p{L}\\p{N}'’])(?:${abbreviation}|${abbreviation.toUpperCase()})(?![\\p{L}\\p{N}'’])`,
+        'gu',
+      ));
+    }
+  }
+
+  if (!chosen.has('saturday') || !chosen.has('sunday')) {
+    patterns.push(/\bweek-?ends?\b/gi);
+  }
+  if (chosen.size < RUN_DAY_ORDER.length) {
+    patterns.push(/\bevery\s*-?\s*day\b/gi, /\bdaily\b/gi, /\b(?:7|seven)\s+days\s+a\s+week\b/gi);
+  }
+
+  return patterns;
+}
+
+/**
+ * The words in this copy that promise delivery outside the schedule, in the order they
+ * appear: a day that is not scheduled (its full name, or a capitalised abbreviation such as
+ * "Mon"), "weekend" unless both weekend days are scheduled, and "every day", "everyday",
+ * "daily" or "7 days a week" unless all seven days are. Empty when the copy is fine.
+ */
+export function findOffScheduleDayTerms(text: string, schedule: DeliverySchedule): string[] {
+  const found: Array<{ index: number; term: string }> = [];
+  for (const pattern of offScheduleDayPatterns(schedule)) {
+    for (const match of text.matchAll(pattern)) {
+      found.push({ index: match.index ?? 0, term: match[0] });
+    }
+  }
+
+  const seen = new Set<string>();
+  return found
+    .sort((a, b) => a.index - b.index)
+    .map((entry) => entry.term)
+    .filter((term) => {
+      const key = term.toLowerCase().replace(/\s+/g, ' ');
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+}
+
+export interface OffScheduleCopyFinding {
+  adSetName: string;
+  adName: string;
+  terms: string[];
+}
+
+/** Every ad whose headline, primary text or description mentions a day outside the schedule. */
+export function findOffScheduleCopy(
+  payload: Pick<AiCampaignPayload, 'ad_sets'>,
+  schedule: DeliverySchedule,
+): OffScheduleCopyFinding[] {
+  const findings: OffScheduleCopyFinding[] = [];
+  for (const adSet of payload.ad_sets) {
+    for (const ad of adSet.ads) {
+      const terms = findOffScheduleDayTerms(`${ad.headline}\n${ad.primary_text}\n${ad.description}`, schedule);
+      if (terms.length > 0) {
+        findings.push({ adSetName: adSet.name, adName: ad.name, terms });
+      }
+    }
+  }
+  return findings;
+}
+
+/** The message shown when saved copy mentions days the campaign never runs on. */
+export function describeOffScheduleCopyProblem(
+  findings: OffScheduleCopyFinding[],
+  schedule: DeliverySchedule,
+): string {
+  const ads = findings.map((finding) => `"${finding.adName}" (${finding.terms.join(', ')})`);
+  return `This campaign only shows ${describeDeliverySchedule(schedule)}, UK time, but some ad copy says otherwise: ${joinWithAnd(ads)}. Edit the copy, then save again.`;
+}
+
+function joinWithOr(parts: string[]): string {
+  if (parts.length <= 1) return parts.join('');
+  if (parts.length === 2) return `${parts[0]} or ${parts[1]}`;
+  return `${parts.slice(0, -1).join(', ')}, or ${parts[parts.length - 1]}`;
+}
+
+/** What copy for this schedule must never mention, for example ["Monday", "the weekend", "every day"]. */
+export function listOffScheduleMentions(schedule: DeliverySchedule): string[] {
+  const chosen = new Set<RunDay>(schedule.days);
+  const mentions = WEEKDAYS.filter((day) => !chosen.has(day)).map((day) => RUN_DAY_LABELS[day]);
+
+  const saturdayOff = !chosen.has('saturday');
+  const sundayOff = !chosen.has('sunday');
+  if (saturdayOff && !sundayOff) mentions.push(RUN_DAY_LABELS.saturday);
+  if (sundayOff && !saturdayOff) mentions.push(RUN_DAY_LABELS.sunday);
+  if (saturdayOff || sundayOff) mentions.push('the weekend');
+  if (chosen.size < RUN_DAY_ORDER.length) mentions.push('every day');
+
+  return mentions;
+}
+
+/**
+ * The line the copy prompt gets, for example "These ads only show Tuesday to Friday, 09:00 to
+ * 14:00; never mention Monday, the weekend, or every day."
+ */
+export function describeDeliveryScheduleForCopy(schedule: DeliverySchedule): string {
+  const when = describeDeliverySchedule(schedule);
+  const mentions = listOffScheduleMentions(schedule);
+  return mentions.length > 0
+    ? `These ads only show ${when}; never mention ${joinWithOr(mentions)}.`
+    : `These ads only show ${when}.`;
 }

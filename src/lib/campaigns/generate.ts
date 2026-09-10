@@ -5,6 +5,7 @@ import type {
   AdTargeting,
   AiCampaignPayload,
   BudgetType,
+  DeliverySchedule,
   FoodAdWindow,
   FoodDecisionStage,
   FoodServiceHours,
@@ -12,6 +13,11 @@ import type {
   PaidCampaignKind,
   PaidMediaPlan,
 } from '@/types/campaigns';
+import {
+  describeDeliverySchedule,
+  describeDeliveryScheduleForCopy,
+  findOffScheduleDayTerms,
+} from '@/lib/campaigns/delivery-schedule';
 import { normaliseAudienceKeywords } from '@/lib/campaigns/interest-targeting';
 import { DEFAULT_FOOD_SERVICE_HOURS, lastOrdersOrDefault } from '@/lib/campaigns/food-schedule';
 import {
@@ -40,6 +46,9 @@ interface GenerateInput {
   // food_booking only: the brief's own service hours, so copy reflects the venue's real
   // service/last-orders times instead of the default schedule (CR-3).
   foodServices?: FoodServiceHours[];
+  // evergreen only: the days and hours the ad set delivers. The prompt is told, and copy
+  // naming any other day fails the off_schedule_day check. Null or absent: no schedule.
+  deliverySchedule?: DeliverySchedule | null;
 }
 
 export const DEFAULT_META_TARGETING: AdTargeting = {
@@ -62,7 +71,8 @@ export interface AdCopyValidationIssue {
     | 'food_tonight'
     | 'food_last_orders'
     | 'food_wrong_service'
-    | 'vague_headline';
+    | 'vague_headline'
+    | 'off_schedule_day';
   message: string;
   adSetName?: string;
   adName?: string;
@@ -286,6 +296,8 @@ export function validateCampaignCopy(
     decisionStage?: FoodDecisionStage | null;
     /** The campaign brief, so headlines can be checked for naming something real. */
     problemBrief?: string | null;
+    /** Evergreen delivery schedule: copy must not name a day the ads never run on. */
+    deliverySchedule?: DeliverySchedule | null;
   },
 ): AdCopyValidationIssue[] {
   const issues: AdCopyValidationIssue[] = [];
@@ -353,6 +365,23 @@ export function validateCampaignCopy(
           adSetName: adSet.name,
           adName: ad.name,
         });
+      }
+      // Scheduled evergreen ads only run on their chosen days, so naming another day (or the
+      // weekend, or "every day") would promise something the venue does not offer then.
+      // Same helper as the save-time re-check in saveCampaignDraft.
+      if (options?.deliverySchedule) {
+        const offScheduleTerms = findOffScheduleDayTerms(
+          `${ad.headline}\n${ad.primary_text}\n${ad.description}`,
+          options.deliverySchedule,
+        );
+        if (offScheduleTerms.length > 0) {
+          issues.push({
+            code: 'off_schedule_day',
+            message: `These ads only show ${describeDeliverySchedule(options.deliverySchedule)}, so remove "${offScheduleTerms.join('", "')}".`,
+            adSetName: adSet.name,
+            adName: ad.name,
+          });
+        }
       }
       if (options?.requireBookNow && ad.cta !== 'BOOK_NOW') {
         issues.push({
@@ -456,6 +485,9 @@ export async function generateCampaign(input: GenerateInput): Promise<AiCampaign
   const foodContext = input.campaignKind === 'food_booking'
     ? formatFoodWindowsForPrompt(input.foodWindows ?? [], input.foodHooks ?? [], input.destinationUrl, input.foodServices ?? [])
     : '';
+  const deliveryScheduleLine = input.deliverySchedule
+    ? describeDeliveryScheduleForCopy(input.deliverySchedule)
+    : '';
 
   const userPrompt = `Campaign type: ${input.campaignKind}
 Promotion name: ${input.promotionName}
@@ -466,7 +498,9 @@ Paid CTA URL: ${input.destinationUrl}
 Conversion context: ${bookingOptimised
     ? 'This campaign optimises for OFFSITE Purchase conversions — completed bookings tracked on the destination site. Meta will show these ads to people likely to BOOK, so every ad must sell the completed booking (apply the CONVERSION COPY PRINCIPLES), not just the click.'
     : 'No booking-conversion tracking exists for this destination, so the campaign optimises for link clicks. Write copy that earns a high-intent click.'}
-${cashOnArrival ? `
+${deliveryScheduleLine ? `
+DELIVERY SCHEDULE: ${deliveryScheduleLine}
+` : ''}${cashOnArrival ? `
 PAYMENT MODE: Cash on arrival — every ad primary_text MUST include "No payment now" or "pay on arrival". Ads without this will be rejected.
 ` : ''}${eventContext ? `
 Imported/event context:
@@ -590,6 +624,7 @@ The ads array must contain EXACTLY 3 entries per ad set. Each must have a differ
     eventDate: textValue(input.sourceSnapshot?.eventDate),
     cashOnArrival,
     problemBrief: input.problemBrief,
+    deliverySchedule: input.deliverySchedule ?? null,
   };
 
   const copyIssues = validateCampaignCopy(payload, validationOptions);
