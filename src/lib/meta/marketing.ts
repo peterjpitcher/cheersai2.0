@@ -58,6 +58,30 @@ export interface CreateAdSetParams {
   parentUsesCampaignBudgetOptimization?: boolean;
   minBudget?: number;
   maxBudget?: number;
+  // Delivery schedule ("day parting"): the ad set only delivers inside these windows. Meta
+  // only accepts it on an ad set that owns a lifetime budget (so it also has an end_time)
+  // and is not under campaign budget optimisation, where pacing belongs to the campaign.
+  // createMetaAdSet refuses anything else before sending. Absent means no schedule, and the
+  // request is exactly what it was before this field existed.
+  schedule?: MetaAdSetScheduleEntry[];
+}
+
+/**
+ * One Meta ad set delivery window (an `adset_schedule` entry). Minutes count from midnight
+ * in the time zone named by `timezone_type` (USER or ADVERTISER); `days` run 0 (Sunday) to
+ * 6 (Saturday). Meta only takes whole hours, so minutes are multiples of 60.
+ */
+export interface MetaAdSetScheduleEntry {
+  start_minute: number;
+  end_minute: number;
+  days: number[];
+  timezone_type: string;
+}
+
+/** What Meta reports for an ad set's delivery schedule, read back after creation. */
+export interface MetaAdSetScheduleReadBack {
+  pacingType: string[];
+  adsetSchedule: MetaAdSetScheduleEntry[];
 }
 
 export interface CreateAdCreativeParams {
@@ -353,7 +377,17 @@ export async function createMetaAdSet(
     parentUsesCampaignBudgetOptimization,
     minBudget,
     maxBudget,
+    schedule,
   } = params;
+
+  if (schedule !== undefined) {
+    assertAdSetScheduleAllowed({
+      schedule,
+      dailyBudget,
+      lifetimeBudget,
+      parentUsesCampaignBudgetOptimization,
+    });
+  }
 
   const body: Record<string, unknown> = {
     name,
@@ -398,7 +432,85 @@ export async function createMetaAdSet(
     }
   }
 
+  // Appended last so a request without a schedule keeps its exact field order and content.
+  if (schedule !== undefined) {
+    body.pacing_type = ['day_parting'];
+    body.adset_schedule = schedule;
+  }
+
   return metaPost<{ id: string }>(`/${adAccountId}/adsets`, accessToken, body);
+}
+
+/**
+ * Meta only runs an ad set schedule on a lifetime budget owned by the ad set. Refuse the
+ * combinations it would reject, or silently ignore, before anything is sent.
+ */
+function assertAdSetScheduleAllowed(args: {
+  schedule: MetaAdSetScheduleEntry[];
+  dailyBudget?: number;
+  lifetimeBudget?: number;
+  parentUsesCampaignBudgetOptimization?: boolean;
+}): void {
+  if (args.schedule.length === 0) {
+    throw new MetaApiError('A delivery schedule needs at least one delivery window.', 100);
+  }
+  if (args.parentUsesCampaignBudgetOptimization) {
+    throw new MetaApiError(
+      'A delivery schedule cannot go on an ad set under campaign budget optimisation; Meta takes it on the campaign.',
+      100,
+    );
+  }
+  if (args.dailyBudget !== undefined) {
+    throw new MetaApiError(
+      'A delivery schedule needs a lifetime budget. Meta does not allow chosen days and hours on a daily budget.',
+      100,
+    );
+  }
+  if (args.lifetimeBudget === undefined) {
+    throw new MetaApiError('A delivery schedule needs a lifetime budget on the ad set.', 100);
+  }
+}
+
+function toNumberOrNaN(value: unknown): number {
+  if (typeof value === 'number') return value;
+  if (typeof value === 'string' && value.trim()) return Number(value);
+  return Number.NaN;
+}
+
+function normaliseAdSetScheduleEntry(value: unknown): MetaAdSetScheduleEntry {
+  const entry = value && typeof value === 'object' ? (value as Record<string, unknown>) : {};
+  return {
+    start_minute: toNumberOrNaN(entry.start_minute),
+    end_minute: toNumberOrNaN(entry.end_minute),
+    days: Array.isArray(entry.days) ? entry.days.map(toNumberOrNaN) : [],
+    // A missing time zone type stays empty so it can never match what was sent.
+    timezone_type: typeof entry.timezone_type === 'string' ? entry.timezone_type.toUpperCase() : '',
+  };
+}
+
+/**
+ * Read back an ad set's pacing and delivery schedule, so publish can confirm Meta stored the
+ * schedule it was sent before anything is switched on. Missing or malformed values come back
+ * empty or NaN, which never match a real schedule.
+ */
+export async function fetchMetaAdSetSchedule(
+  adSetId: string,
+  accessToken: string,
+): Promise<MetaAdSetScheduleReadBack> {
+  const response = await metaGet<{ pacing_type?: unknown; adset_schedule?: unknown }>(
+    `/${adSetId}`,
+    accessToken,
+    { fields: 'pacing_type,adset_schedule' },
+  );
+
+  return {
+    pacingType: Array.isArray(response.pacing_type)
+      ? response.pacing_type.filter((value): value is string => typeof value === 'string')
+      : [],
+    adsetSchedule: Array.isArray(response.adset_schedule)
+      ? response.adset_schedule.map(normaliseAdSetScheduleEntry)
+      : [],
+  };
 }
 
 export async function uploadMetaImage(
