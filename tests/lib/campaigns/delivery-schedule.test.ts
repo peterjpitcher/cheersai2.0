@@ -5,7 +5,12 @@ import {
   describeDeliveryDays,
   describeDeliveryHours,
   describeDeliverySchedule,
+  describeDeliveryScheduleForCopy,
+  describeOffScheduleCopyProblem,
+  findOffScheduleCopy,
+  findOffScheduleDayTerms,
   isDeliverySchedule,
+  listOffScheduleMentions,
   listScheduledDeliveryDates,
   metaAdSetScheduleMatches,
   normaliseDeliverySchedule,
@@ -244,5 +249,139 @@ describe('describeDeliverySchedule', () => {
     expect(describeDeliveryHours(18, 24)).toBe('18:00 to midnight');
     expect(describeDeliveryHours(0, 9)).toBe('00:00 to 09:00');
     expect(describeDeliveryHours(0, 24)).toBe('all day');
+  });
+});
+
+describe('findOffScheduleDayTerms (the off_schedule_day copy check)', () => {
+  it.each<[string, string[]]>([
+    ['Open Monday to Friday for lunch.', ['Monday']],
+    ['Not on mondays.', ['mondays']],
+    ["Monday's special is back.", ["Monday"]],
+    ['Lunch Mon-Fri, 12 to 3.', ['Mon']],
+    ['LUNCH MON TO FRI', ['MON']],
+    ['Open Sat. and Sun.', ['Sat', 'Sun']],
+    ['Book your Sunday roast now.', ['Sunday']],
+    ['Tuesday to Saturday, 12 to 3.', ['Saturday']],
+    ['Perfect for the weekend.', ['weekend']],
+    ['Great for weekends and week-ends.', ['weekends', 'week-ends']],
+    ['Serving food every day.', ['every day']],
+    ['Your everyday local.', ['everyday']],
+    ['Daily specials from £9.', ['Daily']],
+    ['Open 7 days a week, seven days a week.', ['7 days a week', 'seven days a week']],
+  ])('flags "%s" for a Tuesday to Friday schedule', (text, expected) => {
+    expect(findOffScheduleDayTerms(text, LUNCH)).toEqual(expected);
+  });
+
+  it('reports each term once, in the order it appears', () => {
+    expect(findOffScheduleDayTerms('Weekend lunch, Monday dinner, every day, weekend again, Monday.', LUNCH)).toEqual([
+      'Weekend',
+      'Monday',
+      'every day',
+    ]);
+  });
+
+  it.each([
+    'Lunch now served, Tue to Fri, 12 to 3',
+    "We're now serving lunch Tuesday to Friday, 12pm to 3pm. Free on-site parking, and dogs are welcome.",
+    'Dinner 4pm to 9pm, Tuesday to Friday',
+    'Wed and Thurs are quiz-free, Weds too.',
+    'Enjoy the sun terrace after you have sat down.',
+    "C'mon down, the Sun's out.",
+    'Monster burgers and satisfying sides, weekday favourites.',
+    'Fries on the side.',
+    'Sunny afternoons in Stanwell Moor.',
+  ])('does not flag "%s"', (text) => {
+    expect(findOffScheduleDayTerms(text, LUNCH)).toEqual([]);
+  });
+
+  it('allows the weekend only when both weekend days are scheduled', () => {
+    const weekend: DeliverySchedule = { days: ['saturday', 'sunday'], startHour: 12, endHour: 16 };
+    const saturdayOnly: DeliverySchedule = { days: ['saturday'], startHour: 12, endHour: 16 };
+
+    expect(findOffScheduleDayTerms('A proper weekend lunch.', weekend)).toEqual([]);
+    expect(findOffScheduleDayTerms('A proper weekend lunch.', saturdayOnly)).toEqual(['weekend']);
+    expect(findOffScheduleDayTerms('Saturday and Sunday lunch.', saturdayOnly)).toEqual(['Sunday']);
+  });
+
+  it('allows "every day" and "daily" only when all seven days are scheduled', () => {
+    const everyDay: DeliverySchedule = {
+      days: ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'],
+      startHour: 12,
+      endHour: 15,
+    };
+    expect(findOffScheduleDayTerms('Lunch every day, daily specials, open weekends.', everyDay)).toEqual([]);
+  });
+});
+
+describe('findOffScheduleCopy and describeOffScheduleCopyProblem', () => {
+  const ad = (name: string, headline: string, primaryText: string, description = 'Book now') => ({
+    name,
+    headline,
+    primary_text: primaryText,
+    description,
+    cta: 'BOOK_NOW' as const,
+    creative_brief: 'Dish photo',
+    angle: name,
+  });
+  const payload = {
+    ad_sets: [
+      {
+        name: 'Evergreen Test',
+        phase_label: 'Evergreen Test',
+        phase_start: '2026-09-15',
+        phase_end: '2026-10-09',
+        audience_description: 'Locals',
+        targeting: { age_min: 18, age_max: 65, geo_locations: { countries: ['GB'] } },
+        placements: 'AUTO' as const,
+        optimisation_goal: 'LINK_CLICKS',
+        bid_strategy: 'LOWEST_COST_WITHOUT_CAP',
+        ads: [
+          ad('Burger lunch', 'Lunch now served, Tue to Fri, 12 to 3', 'Burgers from £11, Tuesday to Friday.'),
+          ad('Wrap lunch', 'Wraps £10, served Mon to Fri', 'A fish finger wrap is £10.'),
+          ad('Pie lunch', 'Pies from £15', 'A proper pub lunch every day.', 'Weekend treat'),
+        ],
+      },
+    ],
+  };
+
+  it('finds the ads whose headline, primary text or description breaks the schedule', () => {
+    expect(findOffScheduleCopy(payload, LUNCH)).toEqual([
+      { adSetName: 'Evergreen Test', adName: 'Wrap lunch', terms: ['Mon'] },
+      { adSetName: 'Evergreen Test', adName: 'Pie lunch', terms: ['every day', 'Weekend'] },
+    ]);
+  });
+
+  it('explains which ads to fix, in plain English', () => {
+    expect(describeOffScheduleCopyProblem(findOffScheduleCopy(payload, LUNCH), LUNCH)).toBe(
+      'This campaign only shows Tuesday to Friday, 09:00 to 14:00, UK time, but some ad copy says otherwise: "Wrap lunch" (Mon) and "Pie lunch" (every day, Weekend). Edit the copy, then save again.',
+    );
+  });
+});
+
+describe('the delivery schedule prompt line', () => {
+  it('tells the AI the lunch schedule and what never to mention', () => {
+    expect(describeDeliveryScheduleForCopy(LUNCH)).toBe(
+      'These ads only show Tuesday to Friday, 09:00 to 14:00; never mention Monday, the weekend, or every day.',
+    );
+    expect(listOffScheduleMentions(DINNER)).toEqual(['Monday', 'the weekend', 'every day']);
+  });
+
+  it('names a single weekend day that is off, and nothing extra for a full week', () => {
+    expect(listOffScheduleMentions({ days: ['friday', 'saturday'], startHour: 12, endHour: 15 })).toEqual([
+      'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Sunday', 'the weekend', 'every day',
+    ]);
+    expect(describeDeliveryScheduleForCopy({
+      days: ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'],
+      startHour: 12,
+      endHour: 15,
+    })).toBe('These ads only show every day, 12:00 to 15:00.');
+  });
+
+  it('uses "or" between two items', () => {
+    expect(describeDeliveryScheduleForCopy({
+      days: ['tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'],
+      startHour: 12,
+      endHour: 15,
+    })).toBe('These ads only show Tuesday to Sunday, 12:00 to 15:00; never mention Monday or every day.');
   });
 });

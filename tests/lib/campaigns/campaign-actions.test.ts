@@ -915,5 +915,86 @@ describe('evergreen delivery schedule on generate and save', () => {
 
     expect(result).not.toHaveProperty('error');
     expect(generateCampaign).toHaveBeenCalledTimes(1);
+    // The copy step gets the schedule, days in week order, for the prompt and the copy check.
+    expect(generateCampaign).toHaveBeenCalledWith(expect.objectContaining({
+      deliverySchedule: { days: ['tuesday', 'wednesday', 'thursday', 'friday'], startHour: 9, endHour: 14 },
+    }));
+  });
+
+  describe('save-time copy re-check', () => {
+    function payloadWithAds(ads: Array<{ name: string; headline: string; primary_text: string; description: string }>) {
+      return {
+        ...emptyPayload,
+        ad_sets: [
+          {
+            name: 'Evergreen Test',
+            phase_label: 'Evergreen Test',
+            phase_start: '2026-09-15',
+            phase_end: '2026-10-09',
+            audience_description: 'Locals',
+            targeting: { age_min: 18, age_max: 65, geo_locations: { countries: ['GB'] } },
+            placements: 'AUTO' as const,
+            optimisation_goal: 'LINK_CLICKS',
+            bid_strategy: 'LOWEST_COST_WITHOUT_CAP',
+            ads: ads.map((ad, index) => ({
+              ...ad,
+              cta: 'BOOK_NOW' as const,
+              creative_brief: 'Dish photo',
+              angle: `Angle ${index + 1}`,
+            })),
+          },
+        ],
+      };
+    }
+
+    beforeEach(() => {
+      // The draft insert and the ad set insert both resolve through .select().single().
+      mockSingle.mockResolvedValue({ data: { id: 'row-id' }, error: null });
+    });
+
+    it('refuses hand-edited copy that names a day outside the schedule, before writing anything', async () => {
+      const payload = payloadWithAds([
+        { name: 'Burger lunch', headline: 'Lunch now served, Tue to Fri, 12 to 3', primary_text: 'Burgers from £11.', description: 'Book now' },
+        { name: 'Wrap lunch', headline: 'Wraps £10, Mon to Fri', primary_text: 'A fish finger wrap is £10.', description: 'Book now' },
+      ]);
+
+      const result = await saveCampaignDraft(payload, { ...evergreenMeta, deliverySchedule: lunchSchedule });
+
+      expect(result).toEqual({
+        error: 'This campaign only shows Tuesday to Friday, 09:00 to 14:00, UK time, but some ad copy says otherwise: "Wrap lunch" (Mon). Edit the copy, then save again.',
+      });
+      expect(mockSupabase.insert).not.toHaveBeenCalled();
+    });
+
+    it('saves hand-edited copy that stays inside the schedule', async () => {
+      const payload = payloadWithAds([
+        { name: 'Burger lunch', headline: 'Lunch now served, Tue to Fri, 12 to 3', primary_text: 'Burgers from £11, Tuesday to Friday.', description: 'Book now' },
+      ]);
+
+      const result = await saveCampaignDraft(payload, { ...evergreenMeta, deliverySchedule: lunchSchedule });
+
+      expect(result).toEqual({ campaignId: 'row-id' });
+    });
+
+    it('does not start enforcing the other generation checks on save', async () => {
+      // A generic phrase and a raw URL fail generation checks, but save has never run them.
+      const payload = payloadWithAds([
+        { name: 'Burger lunch', headline: "Don't miss out on lunch", primary_text: 'See https://www.the-anchor.pub for Tuesday lunch.', description: 'Book now' },
+      ]);
+
+      const result = await saveCampaignDraft(payload, { ...evergreenMeta, deliverySchedule: lunchSchedule });
+
+      expect(result).toEqual({ campaignId: 'row-id' });
+    });
+
+    it('does not check copy at all when there is no schedule', async () => {
+      const payload = payloadWithAds([
+        { name: 'Burger lunch', headline: 'Lunch Monday to Sunday', primary_text: 'Lunch every day.', description: 'Weekend treat' },
+      ]);
+
+      const result = await saveCampaignDraft(payload, { ...evergreenMeta, budgetType: 'DAILY', deliverySchedule: null });
+
+      expect(result).toEqual({ campaignId: 'row-id' });
+    });
   });
 });

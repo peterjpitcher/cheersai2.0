@@ -9,7 +9,7 @@ Spec: `tasks/SPEC-evergreen-delivery-schedule.md`. Four stacked PRs; merging dep
 - [ ] Apply the migration to production (before PR 2 merges), then run the verify script
 - [x] PR 2: module, type, Meta client guards, save, publish with read-back and rollback
       (`ci:verify` green: 236 files, 2319 tests, both time zones; build clean)
-- [ ] PR 3: prompt line, `off_schedule_day` check, save-time re-check
+- [x] PR 3: prompt line, `off_schedule_day` check, save-time re-check
 - [ ] PR 4: brief form controls and review display
 
 # Fix: Instagram story failed with Meta code 9004 (2026-09-04)
