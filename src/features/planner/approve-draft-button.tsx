@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { approveDraftContent } from "@/app/(app)/planner/actions";
 import { useToast } from "@/components/providers/toast-provider";
 import { Button } from "@/components/ui/button";
+import { formatUkDateTime } from "@/lib/utils/date";
 
 interface ApproveDraftButtonProps {
   contentId: string;
@@ -43,13 +44,13 @@ export function ApproveDraftButton({ contentId, disableRefresh = false, onApprov
         if (result?.status === "scheduled") {
           toast.success("Draft approved", {
             description: scheduledFor
-              ? `Scheduled for ${scheduledFor.toLocaleString()}`
+              ? `Scheduled for ${formatUkDateTime(scheduledFor)}`
               : "Queued to publish as soon as possible.",
           });
         } else {
           toast.info("Draft already processed", {
             description: scheduledFor
-              ? `Current status: ${result?.status} · ${scheduledFor.toLocaleString()}`
+              ? `Current status: ${result?.status} · ${formatUkDateTime(scheduledFor)}`
               : `Current status: ${result?.status ?? "unknown"}`,
           });
         }

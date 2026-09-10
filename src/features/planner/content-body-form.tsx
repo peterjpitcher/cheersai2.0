@@ -90,7 +90,7 @@ export function PlannerContentBodyForm({ contentId, initialBody, status, placeme
         />
       </label>
       <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
-        <span>{bodyLength.toLocaleString()} characters</span>
+        <span>{bodyLength.toLocaleString("en-GB")} characters</span>
         {isStory ? <span>Stories don’t require copy.</span> : !canEdit ? <span>This post can no longer be edited.</span> : null}
       </div>
       {!isStory ? (

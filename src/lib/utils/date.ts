@@ -74,3 +74,35 @@ export function formatEventDateLong(
   const month = dt.toFormat("LLLL");
   return `${weekday} ${dt.day}${ordinalSuffix(dt.day)} ${month}`;
 }
+
+function toLondonDateTime(input: Date | string): DateTime {
+  return input instanceof Date
+    ? DateTime.fromJSDate(input, { zone: DEFAULT_TIMEZONE })
+    : DateTime.fromISO(input, { zone: DEFAULT_TIMEZONE });
+}
+
+/**
+ * Format an instant as a UK date, "06/09/2026", on the Europe/London calendar.
+ *
+ * Use this instead of `toLocaleDateString()` in anything that renders on the
+ * server. There the runtime is UTC and en-US ("9/6/2026") while the browser is
+ * usually en-GB and London time, so a bare call makes the server HTML and the
+ * browser render disagree and React throws the server HTML away (error #418).
+ * Explicit tokens and zone give the same string in every runtime.
+ *
+ * Returns "" for input that is not a valid date.
+ */
+export function formatUkDate(input: Date | string): string {
+  const dt = toLondonDateTime(input);
+  return dt.isValid ? dt.toFormat("dd/MM/yyyy") : "";
+}
+
+/**
+ * Format an instant as a UK date and time, "06/09/2026, 14:30:15", in
+ * Europe/London time: the layout en-GB `toLocaleString()` gives in a UK
+ * browser, but identical on the server. Returns "" for an invalid date.
+ */
+export function formatUkDateTime(input: Date | string): string {
+  const dt = toLondonDateTime(input);
+  return dt.isValid ? dt.toFormat("dd/MM/yyyy, HH:mm:ss") : "";
+}

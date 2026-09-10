@@ -2,6 +2,9 @@
 
 import { useState } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
+import { DateTime } from 'luxon';
+
+import { DEFAULT_TIMEZONE } from '@/lib/constants';
 
 import type {
   AiCampaignPayload,
@@ -55,14 +58,21 @@ type SelectedNode =
   | { type: 'adset'; adsetIndex: number }
   | { type: 'ad'; adsetIndex: number; adIndex: number };
 
+// Phase dates are read on the London calendar with an explicit locale, so the server and the
+// browser print the same day and month. A bare Date with getDate() used the runtime's zone,
+// which shifts a day west of UTC and makes the server HTML disagree with the browser.
+function toPhaseDate(value: string): DateTime {
+  return DateTime.fromISO(value, { zone: DEFAULT_TIMEZONE }).setLocale('en-GB');
+}
+
 function formatPhaseRange(start: string, end: string | null): string {
-  const startDate = new Date(start);
-  const startDay = startDate.getDate();
-  const startMonth = startDate.toLocaleString('en-GB', { month: 'short' });
+  const startDate = toPhaseDate(start);
+  const startDay = startDate.day;
+  const startMonth = startDate.toFormat('LLL');
   if (!end) return `${startDay} ${startMonth}+`;
-  const endDate = new Date(end);
-  const endDay = endDate.getDate();
-  const endMonth = endDate.toLocaleString('en-GB', { month: 'short' });
+  const endDate = toPhaseDate(end);
+  const endDay = endDate.day;
+  const endMonth = endDate.toFormat('LLL');
   if (startMonth === endMonth) return `${startDay}–${endDay} ${startMonth}`;
   return `${startDay} ${startMonth}–${endDay} ${endMonth}`;
 }
