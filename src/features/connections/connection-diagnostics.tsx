@@ -1,11 +1,12 @@
 import { featureFlags } from "@/env";
 import { listConnectionDiagnostics } from "@/lib/connections/diagnostics";
+import { formatUkDateTime } from "@/lib/utils/date";
 
 function formatDate(value: string | null) {
   if (!value) return "–";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleString();
+  return formatUkDateTime(date);
 }
 
 export async function ConnectionDiagnostics() {
