@@ -1,8 +1,11 @@
 # Off-App Ads Playbook, The Anchor
 
-Standing reference for building paid Meta campaigns that the CheersAI wizard cannot produce.
+Standing reference for paid Meta campaigns: account facts, what the API layer can do, benchmarks,
+copy rules and the brief template. **The step-by-step process (build, launch, monitor, report) and
+the lessons learned are in `docs/runbooks/paid-meta-ads.md`: follow it for every campaign.**
 Verified against the live Supabase project `nbkjciurhvkfpcpatbnt` and `src/lib/meta/marketing.ts`
-on 2026-08-09. Re-verify the account facts before any campaign that spends money.
+on 2026-08-09; corrected on 2026-09-10. Re-verify the account facts before any campaign that
+spends money.
 
 ---
 
@@ -19,6 +22,7 @@ on 2026-08-09. Re-verify the account facts before any campaign that spends money
 | Conversions API token | present |
 | Configured conversion event | `Purchase` |
 | Conversion optimisation flag | **OFF** |
+| Account spending limit | £500 with £0 spent against it on 2026-09-10; check it sits above everything that will run before every launch |
 | Venue address | The Anchor, Horton Road, Stanwell Moor Village, TW19 6AQ |
 | Venue coordinates | 51.4625, -0.5021 |
 | Booking URL | https://www.the-anchor.pub/book-table |
@@ -39,12 +43,15 @@ Instagram publishes daily without issue.
 
 ## 2. What the app can already do, and where the edge is
 
-The wizard only produces two campaign kinds: `event` and `food_booking`. Anything else is
-off-app work and belongs here.
+The wizard offers `event` and `evergreen`, plus `food_booking` behind
+`NEXT_PUBLIC_ENABLE_FOOD_BOOKING`. Custom promotions build in the app as `evergreen` campaigns (see
+below); only what the API layer cannot do is genuinely off-app work.
 
-Off-app examples: Sunday roast, Christmas bookings, function room hire, new menu launch,
-beer garden, dog-friendly, live sport, recruitment, Heathrow parking, Mother's or Father's
-Day, gift vouchers, a general awareness push.
+Custom promotions that fit the evergreen route: Sunday roast, weekday food (built this way in
+September 2026), Christmas bookings, function room hire, new menu launch, beer garden,
+dog-friendly, live sport, Heathrow parking, Mother's or Father's Day, gift vouchers, a general
+awareness push. Recruitment ads may fall under a Meta special ad category (employment): check
+Meta's current rules and what the wizard supports before promising one.
 
 ### The API layer supports (in `src/lib/meta/marketing.ts`)
 
@@ -95,6 +102,10 @@ different publish behaviour, not merely a different label.
 - Objective and attribution window are immutable once the ad set exists. Getting these wrong
   means deleting and rebuilding, not editing.
 - Judge event and traffic ads on `inline_link_clicks`, never `clicks`.
+- Delivery schedules (Meta day parting) are supported since 2026-09-10 (cheersai2.0 #59 to #63):
+  lifetime budget only, whole hours, advertiser time; evergreen campaigns run at most 45 days.
+- Save & Publish builds the campaign paused, reads the schedule back from Meta, then switches it
+  live at once. There is no save-as-paused button.
 
 ---
 
@@ -105,12 +116,14 @@ different publish behaviour, not merely a different label.
 | OUTCOME_TRAFFIC | £27 to £30 | 17,300 to 17,500 | 196 to 197 | ~1.45% | £0.11 |
 | OUTCOME_SALES | £30 to £59 | 5,200 to 10,100 | 43 to 79 | 1.3% to 3.5% | £0.18 to £0.46 |
 
-Traffic buys roughly 3x the reach and 4x the clicks per pound. Every campaign to date shows
-**zero Purchase conversions**, because no booking has ever been attributed to a paid click.
-So conversion optimisation starves delivery and should stay off until the booking conversion
-pipeline proves it fires.
+Traffic buys roughly 3x the reach and 4x the clicks per pound. Meta reports **zero Purchase
+conversions** on every campaign to date. Four event bookings in July 2026 did carry paid ad tags,
+so the tagging works, but no table booking has, and most table bookings reached Meta at £0 in 2026
+(under investigation). Conversion optimisation starves delivery and should stay off.
 
-Default planning assumption: budget ÷ £0.12 = expected link clicks, on traffic.
+Default planning assumption: budget ÷ £0.14 = expected link clicks on traffic (the central case;
+give a range from 10p to 25p). A cost per extra cover needs a visit-to-booking rate on top, which is
+unmeasured: see the runbook's forecast rules.
 
 ---
 
@@ -119,7 +132,11 @@ Default planning assumption: budget ÷ £0.12 = expected link clicks, on traffic
 - Only 13 usable non-tournament images exist in the library (bar, kitchen, staff, pub,
   Sunday roast, quiz night, recruitment). The other 200 are tournament graphics.
 - I can generate banner overlays via `src/lib/banner/render-server.ts`, but not photography.
-- Ratio: 1:1 for feed, 9:16 if stories placements are included.
+- Ratio: 1:1 works in every placement when Meta's automatic creative changes are off (checked on
+  Meta's previews for 12 placements on 2026-09-10); Instagram Explore will not run it.
+- Since 2026-09-10 the library also holds four labelled weekday food ad images (cod and chips,
+  spicy chicken stack, stone-baked pizza, beef and ale pie). Peter's originals, including two
+  spares (fish finger wrap, bangers and mash), are in his "ads images" folder.
 - Any new campaign theme will likely need a fresh photo. Raise this per brief, at the point the
   theme is known, rather than asking for a speculative batch up front.
 
@@ -150,6 +167,10 @@ Free on-site parking.
 **Headlines must state a concrete fact** (a price, a time, a date, a dish, a number). No mood
 words standing alone.
 
+These rules are enforced by the organic copy generator (`src/lib/ai/voice.ts`) only. Ad generation
+does not use the banned list (and separately bans "walk-ins welcome"), and the wizard's AI copy and
+button are replaced by hand anyway, so check every ad's copy against this section yourself.
+
 ---
 
 ## 6. Brief template
@@ -178,7 +199,8 @@ MUST NOT SAY: <anything off limits beyond the standard banned list>
 3. A recorded row in `meta_campaigns` if we publish through the app, so the dashboard,
    performance sync and optimiser still see it. If we build it in Ads Manager instead, it is
    invisible to all three, and I will say so.
-4. Nothing goes live without your explicit go-ahead. Campaigns are created PAUSED by default.
+4. Nothing goes live without your explicit go-ahead. Save & Publish goes live at once, so I
+   only press it on your yes, after comparing the review screen with the approval page.
 
 ---
 
@@ -195,5 +217,6 @@ MUST NOT SAY: <anything off limits beyond the standard banned list>
 ## 9. Open risks to clear before spending
 
 - No custom audiences or retargeting exist. Every campaign is cold prospecting.
-- Booking attribution has never fired. Treat all conversion counts as unproven.
+- Bookings carry ad tags only when the visitor accepted marketing cookies (since 2026-09-10), and
+  Meta still counts no conversions. Treat every conversion count as a floor, never proof.
 - Venue coordinates must stay set in Settings, or publishing throws.

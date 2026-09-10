@@ -160,10 +160,10 @@ Framer Motion: page transitions and micro-interactions only; prefer `transform` 
 ## 9. Related documents
 
 - `docs/runbook.md`: monitoring, incident response, scheduled jobs, media pipeline, email alerts, connection metadata and diagnostics.
-- `docs/runbooks/`: `credential-rotation.md`, `publish-outage.md`, `token-reconnection.md`.
+- `docs/runbooks/`: `credential-rotation.md`, `publish-outage.md`, `token-reconnection.md`, `paid-meta-ads.md` (how to build, check, launch and run a paid campaign).
 - `docs/architecture/`: `overview.md`, `routes.md`, `server-actions.md`, `data-model.md`, `relationships.md`.
 - `docs/database-schema.md`, `supabase/SCHEMA.md`, `.claude/schema.md`: schema snapshots (the live database wins).
 - `docs/integration-spec.md`, `docs/api-feed.md`, `docs/api-contracts.md`: provider and API contracts (the GBP section is historical).
 - `docs/brand-writing-standard.md`, `docs/content-guidelines.md`, `docs/ui-guidelines.md`: copy and UI standards.
 - `docs/technical-design.md`, `docs/redesign-spec.md`, `docs/cheersai-rebuild-prd.md`: rebuild design history.
-- `tasks/ADS-PLAYBOOK-the-anchor.md`: verified paid-ads facts and brief template.
+- `tasks/ADS-PLAYBOOK-the-anchor.md`: verified paid-ads facts and brief template (process: `docs/runbooks/paid-meta-ads.md`).
