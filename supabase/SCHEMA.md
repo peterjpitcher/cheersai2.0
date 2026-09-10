@@ -527,8 +527,9 @@
 | metrics_conversions | numeric | NO | 0 |
 | metrics_cost_per_conversion | numeric | NO | 0 |
 | metrics_conversion_rate | numeric | NO | 0 |
+| delivery_schedule | jsonb | YES |  |
 
-> **RLS:** enabled (1 policies) | **FKs:** account_id -> auth.users(id) CASCADE | **Audit:** created_at
+> **RLS:** enabled (1 policies) | **FKs:** account_id -> auth.users(id) CASCADE | **Audit:** created_at | **Check:** delivery_schedule is null or a JSON object
 
 ### meta_optimisation_actions
 | Name | Type | Nullable | Default |
