@@ -54,7 +54,8 @@ const LUXON_WEEKDAYS: Record<RunDay, number> = {
   sunday: 7,
 };
 
-// Evergreen flights are capped at 30 days elsewhere; this only bounds the loop on bad input.
+// Evergreen flights are capped by MAX_EVERGREEN_DAYS in phases.ts; this only bounds the loop
+// on bad input.
 const MAX_FLIGHT_DAYS = 400;
 
 export interface DeliveryScheduleContext {

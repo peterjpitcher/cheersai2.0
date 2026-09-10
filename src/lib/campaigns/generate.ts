@@ -163,7 +163,7 @@ PHASE STRATEGY (adjust tone per phase):
 - day-of: final last-chance urgency — tonight/today only when the supplied event date is today
 - booking-push: direct booking push across the full event window; ask people to book now without pretending every day is "tonight"
 - closeout: combined tomorrow + final push; use urgency but keep timing accurate for the dates supplied
-- evergreen: durable offer-led creative that can run for up to 30 days without date-specific urgency unless the brief includes a real deadline
+- evergreen: durable offer-led creative that can run for several weeks without date-specific urgency unless the brief includes a real deadline
 
 META API VALUES:
 - If the destination is bookable, write for OUTCOME_SALES / OFFSITE_CONVERSIONS even if the final JSON schema still allows traffic values

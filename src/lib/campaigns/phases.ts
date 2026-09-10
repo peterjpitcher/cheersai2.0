@@ -9,7 +9,9 @@ export interface CampaignPhase {
 }
 
 const MS_PER_DAY = 1000 * 60 * 60 * 24;
-const MAX_EVERGREEN_DAYS = 30;
+// An app limit, not a Meta one: Meta ad sets can run for much longer. Six weeks covers a
+// four or five week test flight with room either side. Shared with the brief form.
+export const MAX_EVERGREEN_DAYS = 45;
 
 /**
  * Calculate campaign phases from start date, event date, and stop time.
@@ -97,7 +99,7 @@ export function calculateEvergreenPhases(
   const durationDays = calculateInclusiveDurationDays(startDate, endDate);
 
   if (durationDays > MAX_EVERGREEN_DAYS) {
-    throw new Error('Evergreen campaigns can run for a maximum of 30 days.');
+    throw new Error(`Evergreen campaigns can run for a maximum of ${MAX_EVERGREEN_DAYS} days.`);
   }
 
   return [

@@ -334,7 +334,7 @@ describe('generateCampaignAction', () => {
     });
   });
 
-  it('rejects evergreen campaigns longer than 30 days', async () => {
+  it('rejects evergreen campaigns longer than 45 days', async () => {
     mockMaybeSingle.mockResolvedValueOnce({
       data: { setup_complete: true, meta_account_id: 'act_123' },
     });
@@ -355,11 +355,11 @@ describe('generateCampaignAction', () => {
       budgetAmount: 20,
       budgetType: 'DAILY',
       startDate: '2026-04-01',
-      endDate: '2026-05-01',
+      endDate: '2026-05-16',
     });
 
     expect(result).toHaveProperty('error');
-    expect((result as { error: string }).error).toContain('30 days');
+    expect((result as { error: string }).error).toContain('45 days');
     expect(createManagementMetaAdsLink).not.toHaveBeenCalled();
   });
 
