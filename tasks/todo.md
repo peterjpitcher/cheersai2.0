@@ -13,8 +13,25 @@ Spec: `tasks/SPEC-brand-business-type.md`. Two stacked PRs; migration before eit
       version `20260922124618 brand_profile_business_type`, SHA-256 7e527ecd...8149; verify script
       passed on prod; The Anchor row unchanged; anon sees 0 rows
 - [x] PR 1 (#71) squash-merged to main as 7315301e
-- [ ] Merge PR 1 then PR 2; verify the deploy and the Settings page live
+- [x] PR 2 (#72) squash-merged as 48e172c9; production deploy dpl_8FuDRdnEkeGdyjYT2yBP3BVeFS9Z is Ready
+      and aliased to cheers.orangejelly.co.uk; the app's brand_profile selects run clean on prod
+      (The Anchor: 10 key phrases, tone 0.8, business type null). Settings UI not clicked through
+      live: the in-app browser is not signed in
 - [ ] Fill in Orange Jelly's business type and description once the brand exists
+
+# Default event venue per brand (2026-09-22)
+
+Spec: `tasks/SPEC-event-venue-default.md`. PRs #73 (migration + Settings) and #74 (wizard, stacked).
+
+- [x] Migration `20260922140000_posting_defaults_default_event_venue.sql` tested on scratch Postgres 17
+      (apply, Anchor-only backfill, re-run keeps edits, verify, rollback, empty database)
+- [x] #73 Settings field, save, loader, create-modal data; `ci:verify` green (2389 tests); CI green
+- [x] #74 wizard pre-fills from the brand default via `getContentTypeDefaults()`; `ci:verify` green
+- [x] Apply the migration to production (owner approved 2026-09-22): repo `20260922140000` = prod
+      version `20260922130310 posting_defaults_default_event_venue`, SHA-256 f653c30d...df79; verify
+      script passed on prod; The Anchor venue = "The Anchor, Stanwell Moor Village"; anon sees 0 rows
+- [x] #73 squash-merged as 7272b3d0
+- [ ] Merge #74; verify the deploy
 
 ---
 
