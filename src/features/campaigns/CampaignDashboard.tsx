@@ -1509,12 +1509,14 @@ function metricPill(tone: PerformanceTone) {
 }
 
 /**
- * A planned recommendation the owner can act on. A rewrite that fails the copy checks cannot be
- * approved, so it stays out of the queue, the count and the next action; the optimisation
- * history still shows it with the reason.
+ * A planned recommendation the owner can act on. A rewrite that fails the copy checks, or sits on
+ * a controlled-test campaign, cannot be approved, so it stays out of the queue, the count and the
+ * next action; the optimisation history still shows it with the reason.
  */
 function awaitsApproval(action: OptimisationActionSummary) {
-  return action.status === 'planned' && !action.copyProblems?.length;
+  if (action.status !== 'planned') return false;
+  if (action.actionType === 'copy_rewrite' && action.campaignControlledTest) return false;
+  return !action.copyProblems?.length;
 }
 
 function actionLabel(actionType: OptimisationActionSummary['actionType']) {
