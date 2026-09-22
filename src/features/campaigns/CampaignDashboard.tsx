@@ -1220,7 +1220,11 @@ function RecommendationPreview({ action }: { action: OptimisationActionSummary }
             Confidence: {Math.round(confidence * 100)}%
           </p>
         )}
-        {action.status === 'planned' && action.copyProblems?.length ? (
+        {action.status === 'planned' && action.campaignControlledTest ? (
+          <p className="text-xs" style={{ color: 'var(--c-ink-3)' }}>
+            Rewrites are off while this campaign is a controlled test.
+          </p>
+        ) : action.status === 'planned' && action.copyProblems?.length ? (
           <p className="text-xs" style={{ color: 'var(--c-claret)' }}>
             Cannot be applied: {action.copyProblems.join('; ')}.
           </p>
@@ -1235,14 +1239,18 @@ function RecommendationPreview({ action }: { action: OptimisationActionSummary }
         {action.replacementAdId && action.replacementAdStatus === 'PAUSED' && (
           <>
             <p className="text-xs" style={{ color: 'var(--c-ink-3)' }}>
-              Replacement ad created paused. Check it, then switch it on.
+              {action.campaignControlledTest
+                ? 'Replacement ad created paused. It stays off while this campaign is a controlled test.'
+                : 'Replacement ad created paused. Check it, then switch it on.'}
             </p>
-            <DashboardActionButton
-              run={() => activateOptimisationReplacementAd(action.id)}
-              label="Switch on replacement ad"
-              successMessage="Replacement ad switched on"
-              errorTitle="Could not switch on the replacement ad"
-            />
+            {!action.campaignControlledTest && (
+              <DashboardActionButton
+                run={() => activateOptimisationReplacementAd(action.id)}
+                label="Switch on replacement ad"
+                successMessage="Replacement ad switched on"
+                errorTitle="Could not switch on the replacement ad"
+              />
+            )}
           </>
         )}
         {action.replacementAdId && action.replacementAdStatus !== 'PAUSED' && (
