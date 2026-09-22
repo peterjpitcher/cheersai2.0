@@ -46,6 +46,8 @@ function getBrandProfileDefaultValues(data: BrandProfile): BrandProfileFormValue
     defaultEmojis: [...data.defaultEmojis],
     instagramSignature: data.instagramSignature,
     facebookSignature: data.facebookSignature,
+    businessType: data.businessType ?? "",
+    businessDescription: data.businessDescription ?? "",
   };
 }
 
@@ -90,6 +92,58 @@ export function BrandVoiceForm({ data }: BrandVoiceFormProps) {
 
   return (
     <form className="space-y-8" onSubmit={onSubmit} id="brand-voice">
+      <fieldset className="grid gap-4 p-6" style={fieldsetStyle}>
+        <legend className="text-lg font-semibold" style={{ color: "var(--c-ink)" }}>Your business</legend>
+        <div>
+          <label htmlFor="business-type" className="text-sm font-medium" style={{ color: "var(--c-ink-2)" }}>
+            Business type
+          </label>
+          <p className="text-xs" style={{ color: "var(--c-ink-3)" }}>
+            Leave blank if this brand is a pub. Otherwise say what the business is, for example
+            &ldquo;caf&eacute;&rdquo; or &ldquo;websites and applications company&rdquo;. The AI writes posts for this type of business.
+          </p>
+          <input
+            id="business-type"
+            type="text"
+            maxLength={60}
+            className="mt-2 w-full p-3 text-sm focus:outline-none"
+            style={{
+              ...textareaStyle,
+              outlineColor: "var(--c-orange)",
+            }}
+            {...form.register("businessType")}
+          />
+          {form.formState.errors.businessType?.message ? (
+            <p className="mt-1 text-xs" style={{ color: "var(--c-claret)" }}>
+              {form.formState.errors.businessType.message}
+            </p>
+          ) : null}
+        </div>
+        <div>
+          <label htmlFor="business-description" className="text-sm font-medium" style={{ color: "var(--c-ink-2)" }}>
+            About the business
+          </label>
+          <p className="text-xs" style={{ color: "var(--c-ink-3)" }}>
+            One or two factual sentences the AI can use as background. Up to 400 characters.
+          </p>
+          <textarea
+            id="business-description"
+            maxLength={400}
+            className="mt-2 min-h-[80px] w-full p-3 text-sm focus:outline-none"
+            style={{
+              ...textareaStyle,
+              outlineColor: "var(--c-orange)",
+            }}
+            {...form.register("businessDescription")}
+          />
+          {form.formState.errors.businessDescription?.message ? (
+            <p className="mt-1 text-xs" style={{ color: "var(--c-claret)" }}>
+              {form.formState.errors.businessDescription.message}
+            </p>
+          ) : null}
+        </div>
+      </fieldset>
+
       <fieldset className="grid gap-6 p-6" style={fieldsetStyle}>
         <legend className="text-lg font-semibold" style={{ color: "var(--c-ink)" }}>Tone sliders</legend>
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">

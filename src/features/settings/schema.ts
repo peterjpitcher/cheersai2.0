@@ -10,6 +10,10 @@ export const brandProfileFormSchema = z.object({
   defaultEmojis: z.array(z.string()).max(10, "Use 10 or fewer default emojis."),
   instagramSignature: z.string().optional(),
   facebookSignature: z.string().optional(),
+  // Blank means "a pub": the AI keeps its default pub house style. Limits match the
+  // brand_profile length checks.
+  businessType: z.string().trim().max(60, "Use 60 characters or fewer.").optional(),
+  businessDescription: z.string().trim().max(400, "Use 400 characters or fewer.").optional(),
 });
 
 export type BrandProfileFormValues = z.infer<typeof brandProfileFormSchema>;

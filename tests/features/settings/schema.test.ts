@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { postingDefaultsFormSchema } from "@/features/settings/schema";
+import { brandProfileFormSchema, postingDefaultsFormSchema } from "@/features/settings/schema";
 
 const basePostingDefaults = {
   timezone: "Europe/London",
@@ -77,5 +77,44 @@ describe("postingDefaultsFormSchema", () => {
 
     expect(result.success).toBe(false);
     expect(result.error?.issues.map((issue) => issue.message).join(" ")).toContain("UK latitude");
+  });
+});
+
+const baseBrandProfile = {
+  toneFormal: 0.5,
+  tonePlayful: 0.5,
+  keyPhrases: [],
+  bannedTopics: [],
+  bannedPhrases: [],
+  defaultHashtags: [],
+  defaultEmojis: [],
+};
+
+describe("brandProfileFormSchema business fields", () => {
+  it("trims the business type and description", () => {
+    const parsed = brandProfileFormSchema.parse({
+      ...baseBrandProfile,
+      businessType: "  websites and applications company  ",
+      businessDescription: "  We build websites.  ",
+    });
+
+    expect(parsed.businessType).toBe("websites and applications company");
+    expect(parsed.businessDescription).toBe("We build websites.");
+  });
+
+  it("allows both fields to be blank or missing, which means a pub", () => {
+    expect(brandProfileFormSchema.parse({ ...baseBrandProfile, businessType: "   " }).businessType).toBe("");
+    expect(brandProfileFormSchema.parse(baseBrandProfile).businessType).toBeUndefined();
+  });
+
+  it("enforces the same limits as the database checks", () => {
+    expect(brandProfileFormSchema.safeParse({ ...baseBrandProfile, businessType: "a".repeat(60) }).success).toBe(true);
+    expect(brandProfileFormSchema.safeParse({ ...baseBrandProfile, businessType: "a".repeat(61) }).success).toBe(false);
+    expect(
+      brandProfileFormSchema.safeParse({ ...baseBrandProfile, businessDescription: "b".repeat(400) }).success,
+    ).toBe(true);
+    expect(
+      brandProfileFormSchema.safeParse({ ...baseBrandProfile, businessDescription: "b".repeat(401) }).success,
+    ).toBe(false);
   });
 });

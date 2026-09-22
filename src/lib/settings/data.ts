@@ -13,6 +13,10 @@ export interface BrandProfile {
   defaultEmojis: string[];
   instagramSignature?: string;
   facebookSignature?: string;
+  /** What the brand is, e.g. "websites and applications company". Unset means a pub. */
+  businessType?: string;
+  /** One or two factual sentences of background for the AI. */
+  businessDescription?: string;
 }
 
 export interface PostingDefaults {
@@ -52,6 +56,8 @@ type BrandProfileRow = {
   default_emojis: string[] | null;
   instagram_signature: string | null;
   facebook_signature: string | null;
+  business_type: string | null;
+  business_description: string | null;
 };
 
 type PostingDefaultsRow = {
@@ -118,7 +124,7 @@ export async function getOwnerSettings(): Promise<OwnerSettings> {
     const { data: brandRow, error: brandError } = await supabase
       .from("brand_profile")
       .select(
-        "tone_formal, tone_playful, key_phrases, banned_topics, banned_phrases, default_hashtags, default_emojis, instagram_signature, facebook_signature",
+        "tone_formal, tone_playful, key_phrases, banned_topics, banned_phrases, default_hashtags, default_emojis, instagram_signature, facebook_signature, business_type, business_description",
       )
       .eq("account_id", accountId)
       .maybeSingle<BrandProfileRow>();
@@ -157,6 +163,8 @@ export async function getOwnerSettings(): Promise<OwnerSettings> {
       defaultEmojis: brandRow?.default_emojis ?? defaultBrand.defaultEmojis,
       instagramSignature: brandRow?.instagram_signature ?? defaultBrand.instagramSignature,
       facebookSignature: brandRow?.facebook_signature ?? defaultBrand.facebookSignature,
+      businessType: brandRow?.business_type ?? undefined,
+      businessDescription: brandRow?.business_description ?? undefined,
     };
 
     const posting: PostingDefaults = {

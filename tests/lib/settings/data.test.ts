@@ -143,6 +143,44 @@ describe("getOwnerSettings", () => {
     expect(result.venueLocation).toBeUndefined();
   });
 
+  it("maps the business type and description, leaving them unset when null", async () => {
+    accountsBuilder.maybeSingle.mockResolvedValue({ data: null, error: null });
+    linkInBioBuilder.maybeSingle.mockResolvedValue({ data: null, error: null });
+    postingBuilder.maybeSingle.mockResolvedValue({ data: null, error: null });
+    brandBuilder.maybeSingle.mockResolvedValue({
+      data: {
+        tone_formal: 0.5,
+        tone_playful: 0.5,
+        key_phrases: [],
+        banned_topics: [],
+        banned_phrases: [],
+        default_hashtags: [],
+        default_emojis: [],
+        instagram_signature: null,
+        facebook_signature: null,
+        business_type: "websites and applications company",
+        business_description: "We build websites.",
+      },
+      error: null,
+    });
+
+    const { getOwnerSettings } = await import("@/lib/settings/data");
+    const result = await getOwnerSettings();
+
+    expect(brandBuilder.select).toHaveBeenCalledWith(expect.stringContaining("business_type, business_description"));
+    expect(result.brand.businessType).toBe("websites and applications company");
+    expect(result.brand.businessDescription).toBe("We build websites.");
+
+    brandBuilder.maybeSingle.mockResolvedValue({
+      data: { tone_formal: 0.5, tone_playful: 0.5, business_type: null, business_description: null },
+      error: null,
+    });
+    const unset = await getOwnerSettings();
+
+    expect(unset.brand.businessType).toBeUndefined();
+    expect(unset.brand.businessDescription).toBeUndefined();
+  });
+
   it("returns undefined for new fields when posting_defaults row is missing", async () => {
     accountsBuilder.maybeSingle.mockResolvedValue({
       data: { timezone: "Europe/London", display_name: null },
