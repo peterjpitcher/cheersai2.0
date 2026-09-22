@@ -35,11 +35,11 @@
 - Consumes: production schema findings in the approved spec.
 - Produces: three zero-default engagement columns on campaigns, ad sets and ads.
 
-- [ ] **Step 1: Recheck production read-only**
+- [x] **Step 1: Recheck production read-only**
 
 Use Supabase `execute_sql` against `nbkjciurhvkfpcpatbnt`. Confirm the nine columns are absent and recheck views, functions, triggers, policies, row estimates and sizes. Stop if the live shape changes the risk.
 
-- [ ] **Step 2: Create the migration through the CLI**
+- [x] **Step 2: Create the migration through the CLI**
 
 ```bash
 npx supabase migration new campaign_engagement_metrics
@@ -47,7 +47,7 @@ npx supabase migration new campaign_engagement_metrics
 
 Record the generated filename in this plan before editing it. Never invent a migration timestamp.
 
-- [ ] **Step 3: Write the migration**
+- [x] **Step 3: Write the migration**
 
 ```sql
 alter table public.meta_campaigns
@@ -66,7 +66,7 @@ alter table public.ads
   add column if not exists metrics_shares integer not null default 0;
 ```
 
-- [ ] **Step 4: Write the verification script**
+- [x] **Step 4: Write the verification script**
 
 Create one `do $$` block that loops over the three tables and columns and raises on a missing or incorrect definition:
 
@@ -94,11 +94,11 @@ begin
 end $$;
 ```
 
-- [ ] **Step 5: Update the schema snapshot**
+- [x] **Step 5: Update the schema snapshot**
 
 Add the three fields after `metrics_clicks` in the `ad_sets`, `ads` and `meta_campaigns` sections of `supabase/SCHEMA.md`.
 
-- [ ] **Step 6: Rebuild and verify locally**
+- [x] **Step 6: Rebuild and verify locally**
 
 ```bash
 npm run db:rebuild
@@ -108,7 +108,7 @@ psql "$(supabase status -o env | sed -n 's/^DB_URL=//p')" -v ON_ERROR_STOP=1 -f 
 
 Expected: all commands exit zero. Confirm the temporary staged v1 baseline migration is absent from `git status`.
 
-- [ ] **Step 7: Commit the database foundation**
+- [x] **Step 7: Commit the database foundation**
 
 ```bash
 git add supabase/migrations/*_campaign_engagement_metrics.sql supabase/tests/campaign_engagement_metrics_verify.sql supabase/SCHEMA.md
@@ -129,7 +129,7 @@ Do not apply the migration to production.
 - Consumes: Meta `actions` entries.
 - Produces: `CampaignInsights.reactions`, `.comments`, `.shares` as numbers.
 
-- [ ] **Step 1: Extend the existing mapping test**
+- [x] **Step 1: Extend the existing mapping test**
 
 Add these fixtures and expected result fields:
 
@@ -145,17 +145,17 @@ comments: 4,
 shares: 2,
 ```
 
-- [ ] **Step 2: Add malformed and duplicate action coverage**
+- [x] **Step 2: Add malformed and duplicate action coverage**
 
 Use duplicate valid reactions, a negative comment, a non-numeric share, plus `post_engagement` and `page_engagement`. Assert valid duplicates sum, invalid values contribute zero, broad totals are ignored and purchases remain unchanged.
 
-- [ ] **Step 3: Confirm the focused test fails**
+- [x] **Step 3: Confirm the focused test fails**
 
 ```bash
 npm run test:ci -- tests/lib/meta/marketing.test.ts
 ```
 
-- [ ] **Step 4: Implement defensive parsing**
+- [x] **Step 4: Implement defensive parsing**
 
 ```ts
 function sumActionValues(
@@ -173,7 +173,7 @@ function sumActionValues(
 
 Add the three required properties to `CampaignInsights` and map them from `row?.actions`. Do not change purchase parsing.
 
-- [ ] **Step 5: Run and commit focused work**
+- [x] **Step 5: Run and commit focused work**
 
 ```bash
 npm run test:ci -- tests/lib/meta/marketing.test.ts
@@ -196,7 +196,7 @@ git commit -m "feat: map Meta campaign engagement actions"
 - Consumes: Task 1 columns and Task 2 `CampaignInsights` fields.
 - Produces: `CampaignPerformanceMetrics.reactions`, `.comments`, `.shares` at all three object levels.
 
-- [ ] **Step 1: Add failing sync assertions**
+- [x] **Step 1: Add failing sync assertions**
 
 Add the three fields to every `CampaignInsights` fixture. Use distinct values per campaign, ad set and ad response, then assert each update payload contains its matching values:
 
@@ -206,17 +206,17 @@ metrics_comments: 3,
 metrics_shares: 2,
 ```
 
-- [ ] **Step 2: Add failing row-mapper assertions**
+- [x] **Step 2: Add failing row-mapper assertions**
 
 Test numeric database fields. Test a legacy row with missing fields and require zeros.
 
-- [ ] **Step 3: Confirm focused failures**
+- [x] **Step 3: Confirm focused failures**
 
 ```bash
 npm run test:ci -- tests/lib/campaigns/performance-sync.test.ts tests/lib/campaigns/campaign-actions.test.ts
 ```
 
-- [ ] **Step 4: Extend persistence**
+- [x] **Step 4: Extend persistence**
 
 Add to `buildMetricsUpdate()`:
 
@@ -228,11 +228,11 @@ metrics_shares: insights.shares,
 
 Do not add them to `ad_metrics_history`.
 
-- [ ] **Step 5: Extend types, selects and mappers**
+- [x] **Step 5: Extend types, selects and mappers**
 
 Add required numeric fields to `CampaignPerformanceMetrics`, snake-case fields to the campaign, ad set and ad database row types, and the relevant Supabase select lists. Map each with `Number(row.metrics_* ?? 0)`. Update strict test fixtures with zero values.
 
-- [ ] **Step 6: Verify and commit**
+- [x] **Step 6: Verify and commit**
 
 ```bash
 npm run test:ci -- tests/lib/campaigns/performance-sync.test.ts tests/lib/campaigns/campaign-actions.test.ts
@@ -253,7 +253,7 @@ git commit -m "feat: persist campaign engagement metrics"
 - Consumes: reach, reactions, comments, shares and clicks from `CampaignPerformanceMetrics`.
 - Produces: Reach and Engagement columns with a labelled breakdown.
 
-- [ ] **Step 1: Write the failing populated-state test**
+- [x] **Step 1: Write the failing populated-state test**
 
 ```ts
 performance: {
@@ -268,17 +268,17 @@ performance: {
 
 Assert headers `Reach` and `Engagement`, reach `950`, engagement total `57`, breakdown `48 reactions · 6 comments · 3 shares`, and existing clicks `32`.
 
-- [ ] **Step 2: Write the zero-state test**
+- [x] **Step 2: Write the zero-state test**
 
 Assert `EMPTY_PERFORMANCE` shows total `0` and `0 reactions · 0 comments · 0 shares` rather than missing data.
 
-- [ ] **Step 3: Confirm the component test fails**
+- [x] **Step 3: Confirm the component test fails**
 
 ```bash
 npm run test:ci -- src/features/campaigns/CampaignDashboard.test.tsx
 ```
 
-- [ ] **Step 4: Implement the layout**
+- [x] **Step 4: Implement the layout**
 
 Order columns as Campaign, Status, Reach, Engagement, Clicks, CTR, Bookings, Cost/booking, Spend, Last sync, Actions. Increase the minimum width only enough to prevent collisions.
 
@@ -291,7 +291,7 @@ const detail = `${formatNumber(performance.reactions)} reactions · ${formatNumb
 
 Leave `compareCampaignScoreboard()` unchanged.
 
-- [ ] **Step 5: Verify and commit**
+- [x] **Step 5: Verify and commit**
 
 ```bash
 npm run test:ci -- src/features/campaigns/CampaignDashboard.test.tsx
@@ -311,13 +311,13 @@ git commit -m "feat: show campaign reach and engagement"
 - Consumes: Tasks 1 to 4.
 - Produces: verified local commits and a production approval packet, without applying or deploying.
 
-- [ ] **Step 1: Run the full repository gate**
+- [x] **Step 1: Run the full repository gate**
 
 ```bash
 npm run ci:verify
 ```
 
-- [ ] **Step 2: Review the complete change**
+- [x] **Step 2: Review the complete change**
 
 ```bash
 git diff origin/main...HEAD --check
@@ -327,7 +327,7 @@ rg -n "metrics_(reactions|comments|shares)" src tests supabase
 
 Confirm only planned files changed, `tasks/lessons.md` remains untouched, no secret is present, service-role reads remain account-scoped, and the staged baseline migration is absent.
 
-- [ ] **Step 3: Prepare but do not execute the production packet**
+- [x] **Step 3: Prepare but do not execute the production packet**
 
 ```bash
 shasum -a 256 supabase/migrations/*_campaign_engagement_metrics.sql
@@ -335,7 +335,7 @@ shasum -a 256 supabase/migrations/*_campaign_engagement_metrics.sql
 
 Recheck live schema and migration history. Present the project ref, exact file, checksum, SQL, lock assessment, local validation, rollback SQL and post-apply verification in one approval request. Stop for approval of that exact packet.
 
-- [ ] **Step 4: Record results and commit the plan update**
+- [x] **Step 4: Record results and commit the plan update**
 
 Record the generated migration filename, exact test totals and build result, tick completed steps, then commit only the plan:
 
@@ -345,3 +345,14 @@ git commit -m "docs: record engagement implementation verification"
 ```
 
 Production migration application and application deployment remain separate user-approved actions.
+
+## Implementation Results
+
+- Migration: `supabase/migrations/20260922034915_campaign_engagement_metrics.sql`
+- Migration SHA-256: `a173f83cf7f51271e2ee8e61fd1df18c9f790d93bed019ac9da49c41ab985b86`
+- Local database: rebuild passed; verification SQL passed; database lint exited zero with one existing unrelated `increment_rate_limit` warning.
+- Focused integration: 94 tests passed across eight files.
+- Full `npm run ci:verify`: lint and typecheck passed; 2,377 tests passed and 3 skipped in each timezone run; production build completed with 33 pages.
+- Independent review: no functional or data-integrity defects found. Three trailing spaces in the spec were removed before the final diff check.
+- Production read-only recheck: all nine columns remain absent; the latest applied migration remains `20260910113202`; the three tables are small and have no dependent views, materialised views, functions or triggers.
+- Production migration and application deployment have not been run.

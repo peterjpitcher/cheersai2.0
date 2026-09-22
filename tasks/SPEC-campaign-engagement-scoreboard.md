@@ -1,7 +1,7 @@
 # SPEC: Campaign Engagement Scoreboard
 
-**Status:** Draft for review  
-**Date:** 2026-09-22  
+**Status:** Draft for review
+**Date:** 2026-09-22
 **Project:** CheersAI 2.0 (`cheersai2.0` / `nbkjciurhvkfpcpatbnt`)
 
 ## 1. Summary
@@ -107,7 +107,7 @@ The table column order becomes:
 
 The Engagement cell shows a total as the primary number and a compact secondary breakdown, for example:
 
-`57`  
+`57`
 `48 reactions · 6 comments · 3 shares`
 
 Zero engagement is shown as `0` with the same labelled breakdown, not as missing data. Numbers use `en-GB` grouping. The table keeps horizontal scrolling at smaller widths, and the minimum width increases enough to prevent labels colliding.
