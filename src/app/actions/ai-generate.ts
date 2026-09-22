@@ -262,7 +262,7 @@ async function loadBrandProfile(
     const { data, error } = await supabase
       .from('brand_profile')
       .select(
-        'tone_formal, tone_playful, key_phrases, banned_topics, banned_phrases, default_hashtags, default_emojis, instagram_signature, facebook_signature',
+        'tone_formal, tone_playful, key_phrases, banned_topics, banned_phrases, default_hashtags, default_emojis, instagram_signature, facebook_signature, business_type, business_description',
       )
       .eq('account_id', accountId)
       .maybeSingle<{
@@ -275,6 +275,8 @@ async function loadBrandProfile(
         default_emojis: string[] | null;
         instagram_signature: string | null;
         facebook_signature: string | null;
+        business_type: string | null;
+        business_description: string | null;
       }>();
 
     if (error || !data) return defaults;
@@ -289,6 +291,8 @@ async function loadBrandProfile(
       defaultEmojis: data.default_emojis ?? [],
       instagramSignature: data.instagram_signature ?? undefined,
       facebookSignature: data.facebook_signature ?? undefined,
+      businessType: data.business_type ?? undefined,
+      businessDescription: data.business_description ?? undefined,
     };
   } catch {
     return defaults;

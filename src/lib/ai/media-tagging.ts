@@ -41,11 +41,22 @@ const MediaTagResponseSchema = z.object({
     ),
 });
 
-const SYSTEM_PROMPT =
-  'You label photos for a UK hospitality venue (pub, bar, or restaurant) media library. ' +
-  'Give each image a concise, descriptive title and a few practical keyword tags the owner ' +
-  'could search by. Be literal about what is shown; do not invent brand names or text that is ' +
-  'not visible. Use British English.';
+/**
+ * System prompt for tagging. Without a business type the brand is treated as a pub (the
+ * original wording, unchanged); with one, the library is described as that business's.
+ */
+export function buildMediaTaggingSystemPrompt(businessType?: string): string {
+  const type = businessType?.trim();
+  const library = type
+    ? `the media library of a UK business (${type}). `
+    : 'a UK hospitality venue (pub, bar, or restaurant) media library. ';
+  return (
+    `You label photos for ${library}` +
+    'Give each image a concise, descriptive title and a few practical keyword tags the owner ' +
+    'could search by. Be literal about what is shown; do not invent brand names or text that is ' +
+    'not visible. Use British English.'
+  );
+}
 
 const USER_PROMPT =
   'Provide a short title and 3 to 6 keyword tags for this image, following the schema.';
@@ -55,6 +66,8 @@ export interface GenerateMediaNameAndTagsInput {
   imageUrl: string;
   /** Optional model override; defaults to the configured copy model. */
   model?: string;
+  /** The brand's business type from Settings; unset means a pub. */
+  businessType?: string;
 }
 
 export interface MediaNameAndTags {
@@ -81,7 +94,7 @@ export async function generateMediaNameAndTags(
         model: input.model ?? process.env.OPENAI_MODEL ?? 'gpt-4o-mini',
         temperature: 0.3,
         messages: [
-          { role: 'system', content: SYSTEM_PROMPT },
+          { role: 'system', content: buildMediaTaggingSystemPrompt(input.businessType) },
           {
             role: 'user',
             content: [

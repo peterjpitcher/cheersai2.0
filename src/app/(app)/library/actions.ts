@@ -379,7 +379,17 @@ export async function autoNameAndTagMediaAsset(assetId: string): Promise<MediaAs
       return null;
     }
 
-    const suggestion = await generateMediaNameAndTags({ imageUrl });
+    // Describe the library as this brand's business; unset (or unreadable) means a pub.
+    const { data: brandRow } = await supabase
+      .from("brand_profile")
+      .select("business_type")
+      .eq("account_id", accountId)
+      .maybeSingle<{ business_type: string | null }>();
+
+    const suggestion = await generateMediaNameAndTags({
+      imageUrl,
+      businessType: brandRow?.business_type ?? undefined,
+    });
 
     const originalFileName = assetRow.file_name ?? assetId;
     const fileName = buildMediaFileName(suggestion.name, originalFileName);
