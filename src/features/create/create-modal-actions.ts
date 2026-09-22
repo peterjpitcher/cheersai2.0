@@ -44,5 +44,7 @@ export async function getCreateModalData() {
         plannerItems: plannerOverview.items,
         ownerTimezone: timezone,
         bannerDefaults,
+        // This brand's pre-filled venue for new event posts; empty when not set.
+        defaultEventVenue: ownerSettings.posting.defaultEventVenue ?? '',
     };
 }

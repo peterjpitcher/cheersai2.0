@@ -140,6 +140,7 @@ export async function updatePostingDefaults(formData: unknown) {
   const { accountId } = await requireAuthContext();
   const supabase = createServiceSupabaseClient();
   const venueLocation = parsed.venueLocation?.trim() || null;
+  const defaultEventVenue = parsed.defaultEventVenue?.trim() || null;
   const venueLatitude = parseOptionalCoordinate(parsed.venueLatitude);
   const venueLongitude = parseOptionalCoordinate(parsed.venueLongitude);
 
@@ -158,6 +159,7 @@ export async function updatePostingDefaults(formData: unknown) {
         instagram_location_id: parsed.instagramLocationId ?? null,
         default_posting_time: parsed.defaultPostingTime ?? null,
         venue_location: venueLocation,
+        default_event_venue: defaultEventVenue,
         venue_latitude: venueLatitude,
         venue_longitude: venueLongitude,
         notifications: {

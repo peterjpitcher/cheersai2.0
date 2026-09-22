@@ -636,6 +636,7 @@
 | banner_position | text | NO | 'right'::text |
 | banner_bg | text | NO | '#a57626'::text |
 | banner_text_colour | text | NO | '#FFFFFF'::text |
+| default_event_venue | text | YES |  |
 
 > **RLS:** enabled (1 policies) | **FKs:** account_id -> accounts(id) CASCADE | **Audit:** created_at, updated_at
 
