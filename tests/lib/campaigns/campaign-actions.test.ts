@@ -849,6 +849,8 @@ describe('applyOptimisationRecommendation', () => {
       .mockResolvedValueOnce({ data: liveWeekdayLunchAd, error: null })
       .mockResolvedValueOnce({ data: adSet, error: null })
       .mockResolvedValueOnce({ data: campaign, error: null })
+      // The claim on the recommendation, won.
+      .mockResolvedValueOnce({ data: { id: 'action-safe' }, error: null })
       .mockResolvedValueOnce({ data: { access_token: 'token', meta_account_id: 'act_123' }, error: null })
       .mockResolvedValueOnce({ data: { metadata: { pageId: 'page-1' } }, error: null });
   }
@@ -928,7 +930,9 @@ describe('applyOptimisationRecommendation', () => {
           campaign_kind: 'event',
         },
         error: null,
-      });
+      })
+      // The claim on the recommendation, won.
+      .mockResolvedValueOnce({ data: { id: 'action-1' }, error: null });
 
     const result = await applyOptimisationRecommendation('action-1');
 
@@ -978,6 +982,8 @@ describe('applyOptimisationRecommendation', () => {
       .mockResolvedValueOnce({ data: liveWeekdayLunchAd, error: null })
       .mockResolvedValueOnce({ data: liveWeekdayLunchAdSet, error: null })
       .mockResolvedValueOnce({ data: weekdayLunchCampaignRow, error: null })
+      // The claim on the recommendation, won.
+      .mockResolvedValueOnce({ data: { id: 'action-safe' }, error: null })
       .mockResolvedValueOnce({ data: { access_token: 'token', meta_account_id: 'act_123' }, error: null })
       .mockResolvedValueOnce({ data: { metadata: { pageId: 'page-1' } }, error: null });
     mockSingle
@@ -1107,6 +1113,46 @@ describe('applyOptimisationRecommendation', () => {
     expect(mockSupabase.insert).toHaveBeenCalledWith(expect.objectContaining({
       operation_type: 'optimisation_rewrite_apply_failed',
     }));
+  });
+
+  it('stops a second overlapping apply, so two replacements cannot share a key', async () => {
+    mockMaybeSingle
+      .mockResolvedValueOnce({ data: safeLiveProposalAction, error: null })
+      .mockResolvedValueOnce({ data: liveWeekdayLunchAd, error: null })
+      .mockResolvedValueOnce({ data: liveWeekdayLunchAdSet, error: null })
+      .mockResolvedValueOnce({ data: weekdayLunchCampaignRow, error: null })
+      // The claim, lost: another apply already moved this recommendation off 'planned'.
+      .mockResolvedValueOnce({ data: null, error: null });
+
+    const result = await applyOptimisationRecommendation('action-safe');
+
+    expect(result).toEqual({ error: expect.stringContaining('already being applied') });
+    expect(insertedReplacementRow()).toBeUndefined();
+    expect(createManagementMetaAdsLink).not.toHaveBeenCalled();
+    expect(uploadMetaImage).not.toHaveBeenCalled();
+    expect(createMetaAdCreative).not.toHaveBeenCalled();
+    expect(createMetaAd).not.toHaveBeenCalled();
+  });
+
+  it('hands the recommendation back when a read fails after the claim and nothing was created', async () => {
+    mockMaybeSingle
+      .mockResolvedValueOnce({ data: safeLiveProposalAction, error: null })
+      .mockResolvedValueOnce({ data: liveWeekdayLunchAd, error: null })
+      .mockResolvedValueOnce({ data: liveWeekdayLunchAdSet, error: null })
+      .mockResolvedValueOnce({ data: weekdayLunchCampaignRow, error: null })
+      .mockResolvedValueOnce({ data: { id: 'action-safe' }, error: null })
+      .mockResolvedValueOnce({ data: null, error: { message: 'meta_ad_accounts unavailable' } });
+
+    const result = await applyOptimisationRecommendation('action-safe');
+
+    expect(result).toEqual({ error: 'meta_ad_accounts unavailable' });
+    expect(mockSupabase.update).toHaveBeenCalledWith(expect.objectContaining({
+      status: 'planned',
+      applied_at: null,
+      error: 'meta_ad_accounts unavailable',
+    }));
+    expect(mockSupabase.update).not.toHaveBeenCalledWith(expect.objectContaining({ status: 'failed' }));
+    expect(createMetaAd).not.toHaveBeenCalled();
   });
 
   it('changes nothing and tells the user when it cannot record who is applying', async () => {

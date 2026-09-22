@@ -82,6 +82,14 @@ counted and reported the same way as every other ad.
      `source_snapshot` on the campaign (account-scoped), as publishing does. This happens before
      the replacement row is inserted.
    - Points the creative at `resolveAdLinkUrl(...)`.
+   - Claims the recommendation first, with a conditional update from `planned` to `applied` before
+     any side effect. Two overlapping applies (a double submission of the approve form) would
+     otherwise both read the campaign's keys, build the same "unique" key and create two
+     replacement ads sharing it. The loser stops and says so. A failure afterwards that created
+     nothing hands the claim back to `planned` with the reason, so it can be tried again; a
+     failure that reached Meta stays `failed`, as before. The `status` column allows only
+     `planned`, `applied`, `skipped` and `failed` (live check constraint), so there is no
+     in-flight value and no migration.
    - Fails closed: if the key list, the short link or the snapshot save fails, no replacement row
      is saved, Meta is not called, and the recommendation is marked failed with the reason, as for
      any other Apply failure. A later Meta failure deletes the row as before; the spare short link
@@ -128,6 +136,8 @@ are harmless (the key only adds attribution; the short link only redirects).
   - the replacement row is inserted with a `utm_content_key`, and the creative's `linkUrl` is the
     per-ad short link created for that key;
   - the key is unique when the campaign already uses the same key;
+  - a second overlapping apply stops at the claim and creates nothing;
+  - a read that fails after the claim hands the recommendation back to `planned`;
   - if the short link cannot be created, no Meta call is made, the row is deleted and the
     recommendation fails.
 - `tests/lib/campaigns/ad-attribution.test.ts`: `uniqueAdUtmContentKey`.

@@ -1835,6 +1835,38 @@ export async function applyOptimisationRecommendation(
     return failRecommendation(supabase, action.id, message);
   };
 
+  // Claim the recommendation before anything is created. Two overlapping applies (a double
+  // submission of the approve form) would otherwise both read the campaign's keys, build the same
+  // "unique" utm_content key and create two replacement ads sharing it, so a booking could be
+  // credited to the wrong one. Only the apply that flips 'planned' here carries on.
+  const { data: claimedAction, error: claimError } = await supabase
+    .from('meta_optimisation_actions')
+    .update({ status: 'applied', applied_at: new Date().toISOString(), error: null })
+    .eq('id', action.id)
+    .eq('account_id', accountId)
+    .eq('status', 'planned')
+    .select('id')
+    .maybeSingle<{ id: string }>();
+
+  if (claimError) {
+    await recordFailure(claimError.message);
+    return { error: claimError.message };
+  }
+  if (!claimedAction) {
+    return { error: 'This recommendation is already being applied.' };
+  }
+
+  // Hands the claim back, with the reason, after a failure that changed nothing, so the owner can
+  // try again. A failure that did reach Meta goes through fail() instead and stays failed.
+  const releaseClaim = async (message: string): Promise<{ error: string }> => {
+    await supabase
+      .from('meta_optimisation_actions')
+      .update({ status: 'planned', applied_at: null, error: message })
+      .eq('id', action.id)
+      .eq('account_id', accountId);
+    return { error: message };
+  };
+
   if (!ad.meta_ad_id || ad.status !== 'ACTIVE' || !adSet.meta_adset_id) {
     const { error: updateError } = await supabase
       .from('ads')
@@ -1850,7 +1882,7 @@ export async function applyOptimisationRecommendation(
 
     if (updateError) {
       await recordFailure(updateError.message);
-      return { error: updateError.message };
+      return releaseClaim(updateError.message);
     }
 
     await markRecommendationApplied(supabase, action.id, { replacementAdId: null });
@@ -1876,7 +1908,7 @@ export async function applyOptimisationRecommendation(
 
   if (adAccountError) {
     await recordFailure(adAccountError.message);
-    return { error: adAccountError.message };
+    return releaseClaim(adAccountError.message);
   }
   if (!adAccount?.access_token || !adAccount.meta_account_id) {
     return fail('Meta Ads account is not connected.');
@@ -1891,7 +1923,7 @@ export async function applyOptimisationRecommendation(
 
   if (fbError) {
     await recordFailure(fbError.message);
-    return { error: fbError.message };
+    return releaseClaim(fbError.message);
   }
   const pageId = fbConnection?.metadata?.pageId;
   if (!pageId) {
