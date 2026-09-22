@@ -7,11 +7,14 @@ import { z } from 'zod';
 import { env } from '@/env';
 import { logAdminEvent } from '@/lib/admin/audit';
 import { requireAuthContext } from '@/lib/auth/server';
+import { createLogger } from '@/lib/logging';
 import type { AuthContext } from '@/lib/auth/types';
 import { DEFAULT_TIMEZONE } from '@/lib/constants';
 import { generateIngestSecret } from '@/lib/security/signing';
 
 type ActionResult = { success?: boolean; error?: string };
+
+const logger = createLogger('admin');
 
 /**
  * Resolve an auth context and require the caller be a global super-admin.
@@ -59,11 +62,20 @@ export async function createBrand(input: {
       email: parsed.data.email,
       timezone: parsed.data.timezone,
       created_by_user_id: ctx.user.id,
+      // Legacy single-owner column, still NOT NULL on the live table. Access is by
+      // account_members, not this; the connection-expiry alert emails this login, so
+      // the creating admin gets those alerts for the new brand.
+      auth_user_id: ctx.user.id,
     })
     .select('id')
     .single<{ id: string }>();
 
   if (error || !data) {
+    logger.error('create brand failed', undefined, {
+      actorUserId: ctx.user.id,
+      code: error?.code,
+      reason: error?.message,
+    });
     return { error: 'Could not create the brand.' };
   }
 
