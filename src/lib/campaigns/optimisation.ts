@@ -2,6 +2,15 @@ import { z } from 'zod';
 import { createServiceSupabaseClient } from '@/lib/supabase/service';
 import { utmContentMatchesAd } from '@/lib/campaigns/ad-attribution';
 import { detectCreativeFatigue, type AdMetricsHistoryRow } from '@/lib/campaigns/creative-fatigue';
+import { headlineStatesAConcreteFact } from '@/lib/campaigns/generate';
+import {
+  GENERIC_URGENCY_PHRASES,
+  REWRITE_HEADLINE_MAX,
+  REWRITE_PRIMARY_TEXT_MAX,
+  WALK_IN_PATTERN,
+  findBannedPhrase,
+  findRewriteCopyProblems,
+} from '@/lib/campaigns/rewrite-copy';
 
 type SupabaseClientLike = ReturnType<typeof createServiceSupabaseClient>;
 
@@ -17,18 +26,11 @@ export type MetaOptimisationSeverity = 'info' | 'warning' | 'critical';
 
 const TRACKABLE_BOOKING_HOSTS = new Set(['the-anchor.pub', 'www.the-anchor.pub']);
 const TRACKABLE_SHORT_LINK_HOSTS = new Set(['l.the-anchor.pub', 'vip-club.uk', 'www.vip-club.uk']);
-const BANNED_GENERIC_PHRASES = [
-  "don't miss out",
-  "don't miss",
-  'join the fun',
-  'exciting',
-  'amazing',
-  'hurry',
-];
-const WALK_IN_PATTERN = /\bwalk-?ins?\s+(welcome|available|if space allows)\b/i;
 const PAY_ON_ARRIVAL_PATTERN = /\b(no payment now|pay.{0,40}(arrival|night|door)|cash.{0,30}(arrival|night|door))\b/i;
 const TEXT_DATE_PATTERN = /\b(\d{1,2})(?:st|nd|rd|th)?\s+(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|sept|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\b/gi;
-const ISO_DATE_PATTERN = /\b\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}(?::\d{2}(?:\.\d{3})?)?(?:Z|[+-]\d{2}:?\d{2})?)?\b/g;
+const BOOKING_INTENT_PATTERN = /\b(book|booking|reserve|reserved|ticket|tickets|seat|seats|table|tables|secure|spot|spots|purchase|buy)\b/i;
+// First person plural, per the ads playbook; added to evergreen rewrites that lack a booking ask.
+const EVERGREEN_BOOKING_LINE = "Book your table online and we'll have it ready for you.";
 const MIN_PAUSE_SPEND_WITH_SIBLING_BOOKING = 12;
 const MIN_PAUSE_CLICKS_WITH_SIBLING_BOOKING = 30;
 const MIN_LOW_CTR_IMPRESSIONS = 1000;
@@ -674,11 +676,11 @@ function evaluateCopyRewriteRecommendations(
 
   const criticalCopyFixes = activeAds
     .filter(({ ad }) => hasCriticalCopyMismatch(campaign, ad))
+    .map(({ adSet, ad }) => buildCopyRewriteDecision(campaign, adSet, ad, bookingSignal))
+    .filter((decision): decision is OptimisationDecision => decision !== null)
     .slice(0, 3);
 
-  if (criticalCopyFixes.length > 0) {
-    return criticalCopyFixes.map(({ adSet, ad }) => buildCopyRewriteDecision(campaign, adSet, ad, bookingSignal));
-  }
+  if (criticalCopyFixes.length > 0) return criticalCopyFixes;
 
   if (bookingSignal.blendedBookings > 0) return [];
   if (!hasEnoughSignalForCopyRewrite(campaign, activeAds.map((item) => item.ad))) return [];
@@ -691,8 +693,9 @@ function evaluateCopyRewriteRecommendations(
       if (rightWeak !== leftWeak) return rightWeak - leftWeak;
       return metric(right.ad.metrics_spend) - metric(left.ad.metrics_spend);
     })
-    .slice(0, 3)
-    .map(({ adSet, ad }) => buildCopyRewriteDecision(campaign, adSet, ad, bookingSignal));
+    .map(({ adSet, ad }) => buildCopyRewriteDecision(campaign, adSet, ad, bookingSignal))
+    .filter((decision): decision is OptimisationDecision => decision !== null)
+    .slice(0, 3);
 }
 
 function buildPauseDecision(args: {
@@ -766,8 +769,10 @@ function buildCopyRewriteDecision(
   adSet: OptimisationAdSetRow,
   ad: OptimisationAdRow,
   bookingSignal: BlendedBookingSignal,
-): OptimisationDecision {
+): OptimisationDecision | null {
   const proposed = buildBookingFocusedCopy(campaign, ad);
+  // No safe public copy means no recommendation, never a fallback to internal text.
+  if (!proposed) return null;
   const issues = describeCopyIssues(ad, campaign);
   return {
     campaignId: campaign.id,
@@ -796,34 +801,124 @@ function buildCopyRewriteDecision(
   };
 }
 
+interface BookingRewriteCopy {
+  headline: string;
+  primaryText: string;
+  description: string;
+}
+
+/**
+ * Proposed replacement copy, or null when no safe public version exists.
+ *
+ * Public copy only ever comes from public sources: the imported event name and facts for event
+ * campaigns, and the ad's own published headline and primary text for everything else. The
+ * campaign name and `problem_brief` are internal (operator labels and notes) and are never used.
+ */
 function buildBookingFocusedCopy(campaign: OptimisationCampaignRow, ad: OptimisationAdRow) {
   const snapshot = campaign.source_snapshot ?? {};
-  const campaignName = compactCampaignName(stringValue(snapshot.eventName) ?? campaign.name);
+  const eventName = stringValue(snapshot.eventName);
+  const copy = campaign.campaign_kind === 'event'
+    ? buildEventBookingCopy(campaign, snapshot, eventName)
+    : buildEvergreenBookingCopy(ad);
+  if (!copy) return null;
+
+  const problems = findRewriteCopyProblems(copy, { campaignName: campaign.name, publicNames: [eventName] });
+  if (problems.length > 0) return null;
+
+  return {
+    name: `${ad.name} - booking rewrite`,
+    ...copy,
+    cta: 'BOOK_NOW',
+    angle: 'Booking intent',
+  };
+}
+
+function buildEventBookingCopy(
+  campaign: OptimisationCampaignRow,
+  snapshot: Record<string, unknown>,
+  eventName: string | null,
+): BookingRewriteCopy | null {
+  const subject = eventName ? compactEventName(eventName) : '';
+  if (!subject) return null;
+
   const dateLabel = formatEventDateForCopy(snapshot);
   const unitPrice = numericSnapshotValue(snapshot.price_per_seat)
     ?? numericSnapshotValue(snapshot.pricePerSeat)
     ?? numericSnapshotValue(snapshot.price)
     ?? numericSnapshotValue(snapshot.eventPrice);
   const payOnArrival = hasCashOnArrivalContext(campaign);
-  const headline = truncateText(`Book ${campaignName}`, 40);
-  const hook = truncateText(`Reserve a table for ${campaignName}${dateLabel ? ` on ${dateLabel}` : ''}.`, 115);
-  const detail = truncateText(buildBookingCopyDetail(campaign, snapshot, dateLabel, unitPrice), 145);
+  const headline = truncateText(`Book ${subject}`, REWRITE_HEADLINE_MAX);
+  const hook = truncateText(`Reserve a table for ${subject}${dateLabel ? ` on ${dateLabel}` : ''}.`, 115);
+  const detail = truncateText(buildEventCopyDetail(snapshot, unitPrice), 145);
   const reassurance = payOnArrival
     ? `No payment now${unitPrice ? `, pay £${formatPrice(unitPrice)} on arrival` : ', pay on arrival'}.`
     : 'Reserve now so your seats are held.';
-  const urgency = campaign.campaign_kind === 'event'
-    ? reassurance
-    : 'Book today and make the plan easy to say yes to.';
-  const primaryText = truncateText(`${hook}\n\n${detail}\n\n${urgency}`, 300);
 
   return {
-    name: `${ad.name} - booking rewrite`,
     headline,
-    primaryText,
-    description: campaign.campaign_kind === 'event' ? 'Book your spot' : 'Book now',
-    cta: 'BOOK_NOW',
-    angle: 'Booking intent',
+    primaryText: truncateText(`${hook}\n\n${detail}\n\n${reassurance}`, REWRITE_PRIMARY_TEXT_MAX),
+    description: 'Book your spot',
   };
+}
+
+/**
+ * Evergreen campaigns have no public subject of their own, so the rewrite keeps the ad's
+ * published headline (it must state a concrete fact, per the ads playbook), drops sentences
+ * that break the copy rules, and adds a booking ask when none is left. When none of that
+ * changes anything there is nothing to test, so no rewrite.
+ */
+function buildEvergreenBookingCopy(ad: OptimisationAdRow): BookingRewriteCopy | null {
+  const headline = ad.headline.trim();
+  if (!headline || headline.length > REWRITE_HEADLINE_MAX) return null;
+  if (!headlineStatesAConcreteFact(headline, new Set())) return null;
+
+  const original = splitIntoParagraphSentences(ad.primary_text);
+  const kept = original
+    .map((sentences) => sentences.filter((sentence) => !sentenceBreaksCopyRules(sentence)))
+    .filter((sentences) => sentences.length > 0);
+  if (kept.length === 0) return null;
+
+  const removedSentences = kept.flat().length !== original.flat().length;
+  const needsBookingLine = !BOOKING_INTENT_PATTERN.test(kept.flat().join(' '));
+  if (!removedSentences && !needsBookingLine) return null;
+
+  const primaryText = fitPrimaryText(kept, needsBookingLine ? EVERGREEN_BOOKING_LINE : null);
+  if (!primaryText || !BOOKING_INTENT_PATTERN.test(primaryText)) return null;
+
+  return { headline, primaryText, description: 'Book now' };
+}
+
+function sentenceBreaksCopyRules(sentence: string): boolean {
+  return WALK_IN_PATTERN.test(sentence)
+    || findBannedPhrase(sentence) !== null
+    || /(https?:\/\/|\bwww\.)/i.test(sentence);
+}
+
+function splitIntoParagraphSentences(value: string): string[][] {
+  return value
+    .split(/\n\s*\n/)
+    .map((paragraph) => paragraph.replace(/\s+/g, ' ').trim())
+    .filter(Boolean)
+    .map((paragraph) => paragraph.split(/(?<=[.!?])\s+/).map((sentence) => sentence.trim()).filter(Boolean));
+}
+
+/** Joins the kept sentences, dropping whole sentences from the end (never cutting one) to fit. */
+function fitPrimaryText(paragraphs: string[][], closingLine: string | null): string | null {
+  const working = paragraphs.map((sentences) => [...sentences]);
+  for (;;) {
+    const body = working
+      .filter((sentences) => sentences.length > 0)
+      .map((sentences) => sentences.join(' '))
+      .join('\n\n');
+    if (!body) return null;
+
+    const text = closingLine ? `${body}\n\n${closingLine}` : body;
+    if (text.length <= REWRITE_PRIMARY_TEXT_MAX) return text;
+
+    let lastIndex = working.length - 1;
+    while (working[lastIndex].length === 0) lastIndex--;
+    working[lastIndex].pop();
+  }
 }
 
 function buildCampaignMetricsSnapshot(campaign: OptimisationCampaignRow, bookingSignal?: BlendedBookingSignal) {
@@ -1235,13 +1330,12 @@ function hasCriticalCopyMismatch(campaign: OptimisationCampaignRow, ad: Optimisa
 }
 
 function hasWeakBookingIntent(ad: OptimisationAdRow) {
-  const text = `${ad.headline} ${ad.primary_text} ${ad.description} ${ad.cta}`.toLowerCase();
-  return !/\b(book|booking|reserve|reserved|ticket|tickets|seat|seats|table|tables|secure|spot|spots|purchase|buy)\b/.test(text);
+  return !BOOKING_INTENT_PATTERN.test(`${ad.headline} ${ad.primary_text} ${ad.description} ${ad.cta}`);
 }
 
 function containsBannedGenericPhrase(value: string) {
   const lower = value.toLowerCase();
-  return BANNED_GENERIC_PHRASES.some((phrase) => lower.includes(phrase));
+  return GENERIC_URGENCY_PHRASES.some((phrase) => lower.includes(phrase));
 }
 
 function hasMateriallyStrongerSibling(ad: OptimisationAdRow, siblings: OptimisationAdRow[]): boolean {
@@ -1447,15 +1541,8 @@ function formatPrice(value: number) {
   return value % 1 === 0 ? String(value) : value.toFixed(2);
 }
 
-function buildBookingCopyDetail(
-  campaign: OptimisationCampaignRow,
-  snapshot: Record<string, unknown>,
-  dateLabel: string | null,
-  unitPrice: number | null,
-) {
-  const briefDetail = sanitiseCopyDetail(firstUsefulSentence(campaign.problem_brief ?? ''), dateLabel);
-  if (briefDetail && !isWeakFallbackDetail(briefDetail)) return briefDetail;
-
+/** Detail line from the imported event facts only; the free-text brief is internal notes. */
+function buildEventCopyDetail(snapshot: Record<string, unknown>, unitPrice: number | null) {
   const eventTime = stringValue(snapshot.eventTime)
     ?? stringValue(snapshot.event_time)
     ?? stringValue(snapshot.startTime)
@@ -1472,26 +1559,6 @@ function buildBookingCopyDetail(
     return `Starts at ${formattedTime}. Booking holds your table.`;
   }
   return 'Booking holds your table for the event.';
-}
-
-function sanitiseCopyDetail(value: string, dateLabel: string | null) {
-  if (!value.trim()) return '';
-  return value
-    .replace(/https?:\/\/\S+/gi, '')
-    .replace(ISO_DATE_PATTERN, dateLabel ?? '')
-    .replace(/\s{2,}/g, ' ')
-    .replace(/\s+([,.!?])/g, '$1')
-    .trim();
-}
-
-function isWeakFallbackDetail(value: string) {
-  const lower = value.toLowerCase();
-  return (
-    lower.includes('table, tickets, or seats') ||
-    lower.includes('sorted before the day') ||
-    lower.includes('reserve your spot now so') ||
-    lower.includes('before spaces go')
-  );
 }
 
 function formatGuestDate(value: string, options: { includeYear: boolean }) {
@@ -1529,19 +1596,13 @@ function formatDisplayTime(value: string) {
   return minute === 0 ? `${displayHour}${suffix}` : `${displayHour}:${String(minute).padStart(2, '0')}${suffix}`;
 }
 
-function firstUsefulSentence(value: string) {
-  return value
-    .split(/[.\n]/)
-    .map((part) => part.trim())
-    .find((part) => part.length >= 20 && !/^imported from/i.test(part)) ?? '';
-}
-
-function compactCampaignName(value: string) {
+function compactEventName(value: string) {
   return value
     .replace(/\s*\|\s*.+$/g, '')
     .replace(/\s{2,}/g, ' ')
     .trim()
-    .slice(0, 36) || 'your booking';
+    .slice(0, 36)
+    .trim();
 }
 
 function truncateText(value: string, max: number) {

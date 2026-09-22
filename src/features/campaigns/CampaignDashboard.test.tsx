@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { buildCampaignDashboard } from '@/lib/campaigns/dashboard';
 import { EMPTY_FOOD_BOOKING_INSIGHTS, type FoodBookingInsights } from '@/lib/campaigns/food-booking-insights';
-import type { Campaign, CampaignPerformanceMetrics } from '@/types/campaigns';
+import type { Campaign, CampaignPerformanceMetrics, OptimisationActionSummary } from '@/types/campaigns';
 import { CampaignDashboard } from './CampaignDashboard';
 
 const { foodBookingFlag } = vi.hoisted(() => ({ foodBookingFlag: { value: true } }));
@@ -21,6 +21,7 @@ vi.mock('@/env', () => ({
 }));
 
 vi.mock('@/app/(app)/campaigns/actions', () => ({
+  activateOptimisationReplacementAd: vi.fn(),
   applyOptimisationRecommendation: vi.fn(),
   runCampaignDashboardOptimisation: vi.fn(),
   syncCampaignDashboardPerformance: vi.fn(),
@@ -242,6 +243,90 @@ describe('CampaignDashboard', () => {
     expect(
       screen.getByText(/Sunday roast “last tables” converts 2% of its bookings/),
     ).toBeTruthy();
+  });
+
+  it('shows why a blocked rewrite cannot be applied and offers the paused flow for safe ones', () => {
+    const baseAction: OptimisationActionSummary = {
+      id: 'blocked',
+      runId: 'run-1',
+      campaignId: 'active',
+      campaignName: 'Weekday Lunch A (cod and chips)',
+      adSetId: 'adset-1',
+      adSetName: 'Ad set',
+      adId: 'ad-1',
+      adName: 'Var 1',
+      actionType: 'copy_rewrite',
+      reason: 'Rewrite recommended.',
+      status: 'planned',
+      severity: 'info',
+      error: null,
+      metricsSnapshot: {},
+      recommendationPayload: {
+        proposed: { headline: 'Book Weekday Lunch A (cod and chips)', primaryText: 'Reserve a table.', description: 'Book now', cta: 'BOOK_NOW' },
+      },
+      copyProblems: ['it uses the internal campaign name'],
+      replacementAdId: null,
+      appliedAt: null,
+      createdAt: new Date('2026-05-22T09:00:00Z'),
+    };
+    const dashboard = buildCampaignDashboard(
+      [campaign({ id: 'active', name: 'Weekday Lunch A (cod and chips)' })],
+      [
+        baseAction,
+        {
+          ...baseAction,
+          id: 'safe',
+          recommendationPayload: {
+            proposed: { headline: 'Lunch from £9, Tuesday to Friday', primaryText: 'Snack pots are £9.', description: 'Book now', cta: 'BOOK_NOW' },
+          },
+          copyProblems: [],
+        },
+      ],
+      undefined,
+      { now: new Date('2026-05-23T12:00:00Z') },
+    );
+
+    render(<CampaignDashboard dashboard={dashboard} />);
+
+    expect(screen.getByText('Cannot be applied: it uses the internal campaign name.')).toBeTruthy();
+    expect(screen.getAllByRole('button', { name: 'Create paused replacement' })).toHaveLength(1);
+    expect(screen.getByText('1 recommendation waiting for approval')).toBeTruthy();
+  });
+
+  it('offers to switch on a replacement ad that was created paused', () => {
+    const dashboard = buildCampaignDashboard(
+      [campaign({ id: 'active', name: 'Active campaign' })],
+      [{
+        id: 'applied',
+        runId: 'run-1',
+        campaignId: 'active',
+        campaignName: 'Active campaign',
+        adSetId: 'adset-1',
+        adSetName: 'Ad set',
+        adId: 'ad-1',
+        adName: 'Var 2',
+        actionType: 'copy_rewrite',
+        reason: 'Rewrite recommended.',
+        status: 'applied',
+        severity: 'info',
+        error: null,
+        metricsSnapshot: {},
+        recommendationPayload: {
+          proposed: { headline: 'Lunch from £9, Tuesday to Friday', primaryText: 'Snack pots are £9.', description: 'Book now', cta: 'BOOK_NOW' },
+        },
+        replacementAdId: 'replacement-1',
+        replacementAdStatus: 'PAUSED',
+        appliedAt: new Date('2026-05-22T10:00:00Z'),
+        createdAt: new Date('2026-05-22T09:00:00Z'),
+      }],
+      undefined,
+      { now: new Date('2026-05-23T12:00:00Z') },
+    );
+
+    render(<CampaignDashboard dashboard={dashboard} />);
+
+    expect(screen.getByText('Replacement ad created paused. Check it, then switch it on.')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Switch on replacement ad' })).toBeTruthy();
   });
 
   it('renders no cutoff advice when there are no recommendations', () => {

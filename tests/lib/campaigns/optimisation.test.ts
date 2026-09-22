@@ -447,6 +447,8 @@ describe('copy recommendations', () => {
   it('creates copy rewrite recommendations for clicks with no blended bookings', () => {
     const { decisions } = evaluateCampaignOptimisation([
       campaign({
+        name: 'Evergreen quiz push B',
+        campaign_kind: 'evergreen',
         metrics_clicks: 12,
         metrics_spend: 7,
         metrics_conversions: 0,
@@ -456,7 +458,7 @@ describe('copy recommendations', () => {
               ad({
                 id: 'weak-copy',
                 meta_ad_id: 'meta-weak-copy',
-                headline: 'Quiz night',
+                headline: 'Quiz night, Wednesdays at 8pm',
                 primary_text: 'A brilliant evening is coming soon.',
                 description: 'Learn more',
                 cta: 'LEARN_MORE',
@@ -639,6 +641,195 @@ describe('copy recommendations', () => {
     ]);
 
     expect(decisions.some((decision) => decision.actionType === 'copy_rewrite')).toBe(false);
+  });
+
+  describe('public copy never uses internal text', () => {
+    // Mirrors the four live "Weekday ..." custom promotions on 22 September 2026.
+    const weekdayLunchBrief =
+      'Weekday lunch at The Anchor, Stanwell Moor: lunch is served Tuesday to Friday, 12pm to 3pm (new since 1 September 2026). '
+      + 'This is a message test with three ads: 1) news, we now do lunch; 2) value, lunch from £9.';
+
+    function weekdayLunchCampaign(ads: OptimisationAdRow[]) {
+      return campaign({
+        name: 'Weekday Lunch A (cod and chips)',
+        campaign_kind: 'evergreen',
+        source_type: 'custom_promotion',
+        problem_brief: weekdayLunchBrief,
+        source_snapshot: { bookingConversionOptimised: true, shortCode: 'weekday-lunch' },
+        metrics_clicks: 40,
+        metrics_spend: 18,
+        metrics_conversions: 0,
+        ad_sets: [adSet({ ads })],
+      });
+    }
+
+    function proposedCopy(decisions: ReturnType<typeof evaluateCampaignOptimisation>['decisions']) {
+      return decisions
+        .filter((decision) => decision.actionType === 'copy_rewrite')
+        .map((decision) => decision.recommendationPayload.proposed as { headline: string; primaryText: string; description: string });
+    }
+
+    function expectNoCampaignName(copy: { headline: string; primaryText: string }, campaignName: string) {
+      expect(copy.headline.toLowerCase()).not.toContain(campaignName.toLowerCase());
+      expect(copy.primaryText.toLowerCase()).not.toContain(campaignName.toLowerCase());
+    }
+
+    it('builds an evergreen rewrite from the ad’s own copy, never the campaign name or brief', () => {
+      const valueAd = ad({
+        id: 'value-ad',
+        name: 'Evergreen Test | Value for money | Var 2',
+        headline: 'Lunch from £9, Tuesday to Friday',
+        primary_text:
+          'Lunch break sorted. Snack pots are £9, a wrap with chips is £10 and burgers start at £11, served Tuesday to Friday from 12pm to 3pm. '
+          + 'Free on-site parking makes it easy to pop over. Your local in Stanwell Moor.',
+        description: 'Snack pots £9, wraps £10',
+        cta: 'BOOK_NOW',
+        metrics_clicks: 14,
+        metrics_spend: 6,
+        metrics_impressions: 2400,
+      });
+
+      const { decisions } = evaluateCampaignOptimisation([weekdayLunchCampaign([valueAd])]);
+      const [copy] = proposedCopy(decisions);
+
+      expect(copy).toBeDefined();
+      expectNoCampaignName(copy, 'Weekday Lunch A (cod and chips)');
+      expect(copy.headline).toBe('Lunch from £9, Tuesday to Friday');
+      expect(copy.primaryText).toContain('Snack pots are £9');
+      expect(copy.primaryText).toContain("Book your table online and we'll have it ready for you.");
+      expect(copy.primaryText).not.toMatch(/new since|message test|make the plan easy/i);
+    });
+
+    it('does not rewrite an evergreen ad that already asks for a booking and breaks no rule', () => {
+      const bookingAd = ad({
+        id: 'booking-ad',
+        headline: 'Now serving lunch, Tue to Fri, 12 to 3',
+        primary_text: "We're now open for lunch Tuesday to Friday, 12pm to 3pm. Book a table or come as you are.",
+        description: 'Lunch served 12pm to 3pm',
+        metrics_clicks: 20,
+        metrics_spend: 8,
+      });
+
+      const { decisions } = evaluateCampaignOptimisation([weekdayLunchCampaign([bookingAd])]);
+
+      expect(proposedCopy(decisions)).toEqual([]);
+    });
+
+    it('does not rewrite an evergreen ad whose headline states no concrete fact', () => {
+      const moodAd = ad({
+        id: 'mood-ad',
+        headline: 'Proper pub lunch',
+        primary_text: 'Proper pub food in Stanwell Moor.',
+        description: 'Proper pub food',
+        metrics_clicks: 20,
+        metrics_spend: 8,
+      });
+
+      const { decisions } = evaluateCampaignOptimisation([weekdayLunchCampaign([moodAd])]);
+
+      expect(proposedCopy(decisions)).toEqual([]);
+    });
+
+    it('drops a walk-ins sentence from an evergreen ad instead of inventing new copy', () => {
+      const walkInAd = ad({
+        id: 'walk-in-ad',
+        headline: 'Lunch from £9, Tuesday to Friday',
+        primary_text: 'Snack pots are £9 and wraps are £10. Walk-ins welcome at lunch. Book a table for your lunch break.',
+        metrics_clicks: 20,
+        metrics_spend: 8,
+      });
+
+      const { decisions } = evaluateCampaignOptimisation([weekdayLunchCampaign([walkInAd])]);
+      const [copy] = proposedCopy(decisions);
+
+      expect(copy.primaryText).toBe('Snack pots are £9 and wraps are £10. Book a table for your lunch break.');
+      expectNoCampaignName(copy, 'Weekday Lunch A (cod and chips)');
+    });
+
+    it('does not rewrite an evergreen ad whose own copy already carries the campaign name', () => {
+      const leakedAd = ad({
+        id: 'leaked-ad',
+        headline: 'Lunch from £9, Tuesday to Friday',
+        primary_text: 'Reserve a table for Weekday Lunch A (cod and chips). Walk-ins welcome.',
+        metrics_clicks: 20,
+        metrics_spend: 8,
+      });
+
+      const { decisions } = evaluateCampaignOptimisation([weekdayLunchCampaign([leakedAd])]);
+
+      expect(proposedCopy(decisions)).toEqual([]);
+    });
+
+    it('uses the imported event name and facts for event rewrites, never the campaign name or brief', () => {
+      const campaignName = 'Cowboys & Queens Country Music Bingo 2026 (Traffic)';
+      const { decisions } = evaluateCampaignOptimisation([
+        campaign({
+          name: campaignName,
+          campaign_kind: 'event',
+          problem_brief: 'Cowboys & Queens Country Music Bingo on 2026-08-14. Here’s the updated brief: The Ultimate Country Party.',
+          source_snapshot: {
+            bookingConversionOptimised: true,
+            eventName: 'Cowboys & Queens Country Music Bingo',
+            eventDate: '2026-08-14',
+            eventTime: '19:00',
+            pricePerSeat: 5,
+          },
+          metrics_clicks: 30,
+          metrics_spend: 12,
+          ad_sets: [
+            adSet({
+              ads: [
+                ad({
+                  id: 'event-ad',
+                  headline: 'Country music bingo',
+                  primary_text: 'A brilliant evening is coming.',
+                  description: 'Learn more',
+                  cta: 'LEARN_MORE',
+                  metrics_clicks: 12,
+                  metrics_spend: 6,
+                }),
+              ],
+            }),
+          ],
+        }),
+      ]);
+      const [copy] = proposedCopy(decisions);
+
+      expect(copy).toBeDefined();
+      expectNoCampaignName(copy, campaignName);
+      expect(copy.headline).toContain('Cowboys & Queens');
+      expect(copy.primaryText).toContain('Friday 14 August');
+      expect(copy.primaryText).toContain('£5 per person, starts at 7pm.');
+      expect(copy.primaryText).not.toMatch(/updated brief|ultimate|2026-08-14/i);
+    });
+
+    it('does not rewrite an event campaign that has no imported event name', () => {
+      const { decisions } = evaluateCampaignOptimisation([
+        campaign({
+          name: 'Music Bingo | Warm push',
+          campaign_kind: 'event',
+          source_snapshot: { bookingConversionOptimised: true, eventDate: '2026-05-08T20:00:00+01:00' },
+          metrics_clicks: 12,
+          metrics_spend: 7,
+          ad_sets: [
+            adSet({
+              ads: [
+                ad({
+                  id: 'wrong-date',
+                  headline: 'Music Bingo 22nd May',
+                  primary_text: 'Walk-ins welcome for music bingo.',
+                  cta: 'LEARN_MORE',
+                  metrics_clicks: 8,
+                  metrics_spend: 4,
+                }),
+              ],
+            }),
+          ],
+        }),
+      ]);
+
+      expect(proposedCopy(decisions)).toEqual([]);
+    });
   });
 
   it('treats known paid short links and expanded destinations as trackable', () => {

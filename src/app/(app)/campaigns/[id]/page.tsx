@@ -11,7 +11,12 @@ import {
 } from '@/lib/campaigns/performance-matrix';
 import type { AdSet, Campaign, CampaignObjective, CampaignPerformanceMetrics, CampaignStatus, OptimisationActionSummary } from '@/types/campaigns';
 import { CampaignActions } from '@/features/campaigns/CampaignActions';
-import { applyOptimisationRecommendation, getCampaignOptimisationActions, getCampaignWithTree } from '../actions';
+import {
+  activateOptimisationReplacementAd,
+  applyOptimisationRecommendation,
+  getCampaignOptimisationActions,
+  getCampaignWithTree,
+} from '../actions';
 
 interface CampaignDetailPageProps {
   params: Promise<{ id: string }>;
@@ -292,6 +297,14 @@ async function applyOptimisationRecommendationFormAction(formData: FormData) {
   }
 }
 
+async function activateOptimisationReplacementAdFormAction(formData: FormData) {
+  'use server';
+  const actionId = String(formData.get('actionId') ?? '');
+  if (actionId) {
+    await activateOptimisationReplacementAd(actionId);
+  }
+}
+
 function DetailRecommendationPreview({ action }: { action: OptimisationActionSummary }) {
   const proposed = readProposedCopy(action.recommendationPayload);
   if (action.actionType !== 'copy_rewrite' || !proposed) return null;
@@ -320,7 +333,11 @@ function DetailRecommendationPreview({ action }: { action: OptimisationActionSum
       {confidence !== null && (
         <p className="mt-1 text-xs" style={{ color: 'var(--c-ink-3)' }}>Confidence: {Math.round(confidence * 100)}%</p>
       )}
-      {action.status === 'planned' && (
+      {action.status === 'planned' && action.copyProblems?.length ? (
+        <p className="mt-2 text-xs" style={{ color: 'var(--c-claret)' }}>
+          Cannot be applied: {action.copyProblems.join('; ')}.
+        </p>
+      ) : action.status === 'planned' && (
         <form action={applyOptimisationRecommendationFormAction} className="mt-2">
           <input type="hidden" name="actionId" value={action.id} />
           <button
@@ -333,9 +350,32 @@ function DetailRecommendationPreview({ action }: { action: OptimisationActionSum
               color: 'var(--c-ink)',
             }}
           >
-            Approve replacement
+            Create paused replacement
           </button>
         </form>
+      )}
+      {action.replacementAdId && action.replacementAdStatus === 'PAUSED' && (
+        <form action={activateOptimisationReplacementAdFormAction} className="mt-2">
+          <p className="mb-2 text-xs" style={{ color: 'var(--c-ink-3)' }}>
+            Replacement ad created paused. Check it, then switch it on.
+          </p>
+          <input type="hidden" name="actionId" value={action.id} />
+          <button
+            type="submit"
+            className="px-3 py-1.5 text-xs font-semibold transition-colors"
+            style={{
+              borderRadius: 'var(--r-md)',
+              border: '1px solid var(--c-line)',
+              backgroundColor: 'var(--c-card)',
+              color: 'var(--c-ink)',
+            }}
+          >
+            Switch on replacement ad
+          </button>
+        </form>
+      )}
+      {action.replacementAdId && action.replacementAdStatus === 'ACTIVE' && (
+        <p className="mt-2 text-xs" style={{ color: 'var(--c-status-posted-fg)' }}>Replacement ad is live.</p>
       )}
     </div>
   );
