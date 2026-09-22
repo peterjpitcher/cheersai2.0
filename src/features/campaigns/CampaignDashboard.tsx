@@ -724,6 +724,7 @@ function CampaignScoreboard({ dashboard }: { dashboard: CampaignDashboardModel }
 function RecommendationsPanel({ actions }: { actions: OptimisationActionSummary[] }) {
   const planned = actions.filter((action) => action.status === 'planned');
   const recent = planned.length ? planned : actions.slice(0, 4);
+  const approvable = planned.filter(awaitsApproval);
 
   return (
     <section
@@ -737,8 +738,8 @@ function RecommendationsPanel({ actions }: { actions: OptimisationActionSummary[
       <SectionHeader
         title="Optimisation recommendations"
         detail={
-          planned.length
-            ? `${planned.length} recommendation${planned.length === 1 ? '' : 's'} waiting for approval`
+          approvable.length
+            ? `${approvable.length} recommendation${approvable.length === 1 ? '' : 's'} waiting for approval`
             : 'Latest optimiser output'
         }
         icon={<WandSparkles className="h-4 w-4" />}
@@ -1356,7 +1357,7 @@ function getPrimaryAction(dashboard: CampaignDashboardModel): PrimaryAction {
     };
   }
 
-  const plannedRecommendation = dashboard.optimisationActions.find((action) => action.status === 'planned');
+  const plannedRecommendation = dashboard.optimisationActions.find(awaitsApproval);
   if (plannedRecommendation) {
     return {
       tone: plannedRecommendation.severity === 'critical' ? 'critical' : plannedRecommendation.severity === 'warning' ? 'warning' : 'info',
@@ -1431,7 +1432,7 @@ function getWorkQueueItems(dashboard: CampaignDashboardModel): WorkQueueItem[] {
   }));
 
   const recommendations: WorkQueueItem[] = dashboard.optimisationActions
-    .filter((action) => action.status === 'planned')
+    .filter(awaitsApproval)
     .map((action) => {
       const tone: DashboardAttentionSeverity =
         action.severity === 'critical' || action.severity === 'warning'
@@ -1497,6 +1498,15 @@ function metricPill(tone: PerformanceTone) {
   if (tone === 'good') return `${base} metric-good`;
   if (tone === 'weak') return `${base} metric-weak`;
   return `${base} metric-neutral`;
+}
+
+/**
+ * A planned recommendation the owner can act on. A rewrite that fails the copy checks cannot be
+ * approved, so it stays out of the queue, the count and the next action; the optimisation
+ * history still shows it with the reason.
+ */
+function awaitsApproval(action: OptimisationActionSummary) {
+  return action.status === 'planned' && !action.copyProblems?.length;
 }
 
 function actionLabel(actionType: OptimisationActionSummary['actionType']) {
