@@ -14,9 +14,13 @@ vi.mock('./client', () => ({
 }));
 
 // Import after mock setup.
-const { generateMediaNameAndTags, buildMediaFileName, deriveExtension, MAX_MEDIA_TAGS } = await import(
-  './media-tagging'
-);
+const {
+  generateMediaNameAndTags,
+  buildMediaFileName,
+  buildMediaTaggingSystemPrompt,
+  deriveExtension,
+  MAX_MEDIA_TAGS,
+} = await import('./media-tagging');
 
 describe('generateMediaNameAndTags', () => {
   beforeEach(() => {
@@ -119,5 +123,34 @@ describe('buildMediaFileName', () => {
 describe('MAX_MEDIA_TAGS', () => {
   it('is a sensible small cap', () => {
     expect(MAX_MEDIA_TAGS).toBe(6);
+  });
+});
+
+describe('buildMediaTaggingSystemPrompt', () => {
+  it('keeps the original pub wording when no business type is set', () => {
+    const expected =
+      'You label photos for a UK hospitality venue (pub, bar, or restaurant) media library. ' +
+      'Give each image a concise, descriptive title and a few practical keyword tags the owner ' +
+      'could search by. Be literal about what is shown; do not invent brand names or text that is ' +
+      'not visible. Use British English.';
+
+    expect(buildMediaTaggingSystemPrompt()).toBe(expected);
+    expect(buildMediaTaggingSystemPrompt('  ')).toBe(expected);
+  });
+
+  it("describes the brand's own business when one is set", () => {
+    const prompt = buildMediaTaggingSystemPrompt(' websites and applications company ');
+
+    expect(prompt).toContain('the media library of a UK business (websites and applications company).');
+    expect(prompt).not.toMatch(/pub|hospitality|restaurant/);
+  });
+
+  it('sends the business type to OpenAI as the system prompt', async () => {
+    mockParse.mockResolvedValue({ choices: [{ message: { parsed: { name: 'Laptop', tags: ['laptop'] } } }] });
+
+    await generateMediaNameAndTags({ imageUrl: 'https://example.com/a.jpg', businessType: 'café' });
+
+    const systemMessage = mockParse.mock.lastCall![0].messages.find((m: { role: string }) => m.role === 'system');
+    expect(systemMessage.content).toBe(buildMediaTaggingSystemPrompt('café'));
   });
 });

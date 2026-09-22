@@ -345,6 +345,27 @@ function formatDate(date: Date) {
   return formatEventDateLong(DateTime.fromJSDate(date, { zone: DEFAULT_TIMEZONE }));
 }
 
+/**
+ * The brand's own business type from Settings, or null when unset. Unset means the
+ * default pub house style, so The Anchor's prompts stay exactly as they were.
+ */
+function customBusinessType(brand?: BrandProfile): string | null {
+  const type = brand?.businessType?.trim();
+  return type ? type : null;
+}
+
+/** Grammar and point-of-view rules for a brand that is not a pub (no pub examples). */
+function getBusinessVoiceRules() {
+  return `
+Grammar rules, strictly follow these:
+- "we" is a SUBJECT pronoun: "We're launching...", "We've built..."
+- "us" is an OBJECT pronoun: "Talk to us", "Get in touch with us", "Join us"
+- NEVER write "come to we" or "join we", these are always grammatically wrong
+
+POV guidance: speak as the business, "we", "our" and "us". Do not refer to the business by name in the third person.
+`.trim();
+}
+
 function getFewShotExamples() {
   return `
 Example 1 (Facebook, Sunday roast event):
@@ -387,23 +408,40 @@ const PLATFORM_RULES = [
   'Do not clone the same caption twice. Facebook can be fuller and conversational, while Instagram should be hook-led and scannable.',
 ].join('\n');
 
-// House style for pub social copy, keeps copy warm, local and plain-speaking,
-// and counteracts any "premium/sophisticated" pull from a mis-set tone.
-const PUB_WRITING_RULES = [
+// House style for social copy, keeps copy warm and plain-speaking, and counteracts any
+// "premium/sophisticated" pull from a mis-set tone. The pub wording is the default (and
+// exactly the original rules); a brand with its own business type gets the neutral
+// variant of the few pub-specific lines.
+type WritingRule = string | { pub: string; business: string };
+
+const WRITING_RULES: WritingRule[] = [
   'Keep sentences short and easy to read.',
-  "Lead with why it'll be a good time, the fun, the people, the reason to come.",
+  {
+    pub: "Lead with why it'll be a good time, the fun, the people, the reason to come.",
+    business: 'Lead with why it matters to the reader, the benefit, the result, the reason to get in touch.',
+  },
   'Open with the most interesting specific detail as the hook, never a generic greeting or a formulaic opener like "Get ready" or "Don\'t miss".',
   'Include the key details clearly: what it is, the date, the time, the price if relevant, and how to book or join.',
   'Never put URLs, bare domains, markdown links, source citations, or old booking links in any body copy. The system owns final CTA URLs.',
   'For Instagram, booking/joining instructions must only point people to the link in bio. Never put a URL, bare domain, booking link, or booking website in Instagram copy.',
   'Do not invent operational details. Only mention bookings, limited spaces, walk-ins, arrival rules, food service times, prices, hosts, age rules, or capacity if they are explicitly supplied in the brief.',
-  'Talk about when something is happening the way a landlord would: "tonight", "tomorrow", "this Saturday". Use only the wording the timing block says is true for this post, and follow the timing block on whether the full date is needed as well.',
+  {
+    pub: 'Talk about when something is happening the way a landlord would: "tonight", "tomorrow", "this Saturday". Use only the wording the timing block says is true for this post, and follow the timing block on whether the full date is needed as well.',
+    business: 'Talk about when something is happening the way a person would: "tonight", "tomorrow", "this Saturday". Use only the wording the timing block says is true for this post, and follow the timing block on whether the full date is needed as well.',
+  },
   'Write any specific date in full and properly cased as "Weekday Nth Month", for example "Friday 17th July". Never abbreviate or upper-case it (never "FRI 17 JUL"), and never run a relative word straight into it (never "this Friday 17th July"): use one or the other, or separate them, as in "this Friday, 17th July".',
-  'Sound like a real person talking to a regular, warm, local and plain-speaking.',
+  {
+    pub: 'Sound like a real person talking to a regular, warm, local and plain-speaking.',
+    business: 'Sound like a real person talking to a customer, warm and plain-speaking.',
+  },
   'Do not be posh, corporate or salesy. Avoid words like premium, elevated, curated, sophisticated, exclusive and "hidden gem".',
   'Never use an em dash. Use a comma, a colon, brackets or a new sentence instead.',
   'Do not over-explain or pad the copy.',
-].join('\n');
+];
+
+function buildWritingRules(style: 'pub' | 'business'): string {
+  return WRITING_RULES.map((rule) => (typeof rule === 'string' ? rule : rule[style])).join('\n');
+}
 
 /**
  * Build the system prompt for multi-platform AI generation (v2).
@@ -418,8 +456,18 @@ export function buildSystemPrompt(
   brandVoice?: BrandVoiceConfig,
   brand?: BrandProfile,
 ): string {
+  const businessType = customBusinessType(brand);
+  const businessDescription = businessType ? brand?.businessDescription?.trim() : undefined;
+  const opening = businessType
+    ? [
+        'You are CheersAI, an expert social media copywriter.',
+        `Business type: ${businessType}.`,
+        ...(businessDescription ? [`About the business: ${businessDescription}`] : []),
+        'Write as this business. Do not write as a pub or hospitality venue unless the business type says it is one.',
+      ]
+    : ['You are CheersAI, an expert hospitality social media copywriter.'];
   const lines: string[] = [
-    'You are CheersAI, an expert hospitality social media copywriter.',
+    ...opening,
     'Generate platform-specific copy for Facebook and Instagram from a single brief.',
     'Use British English throughout.',
     'Write in first-person plural ("we", "our", "us"). Never use "we" in object position.',
@@ -446,7 +494,7 @@ export function buildSystemPrompt(
     lines.push('', 'Tone:', buildVoiceInstructions(voiceConfig));
   }
 
-  lines.push('', 'Writing rules:', PUB_WRITING_RULES);
+  lines.push('', 'Writing rules:', buildWritingRules(businessType ? 'business' : 'pub'));
 
   // Brand-specific voice configured in Settings → Brand Voice. The banned
   // phrase list always includes the system clichés, the post-process scrubs
@@ -462,7 +510,11 @@ export function buildSystemPrompt(
     lines.push('', 'Brand specifics:', ...brandLines);
   }
 
-  lines.push('', 'Examples of the right style:', getFewShotExamples());
+  if (businessType) {
+    lines.push('', 'Grammar and point of view:', getBusinessVoiceRules());
+  } else {
+    lines.push('', 'Examples of the right style:', getFewShotExamples());
+  }
 
   lines.push(
     '',

@@ -339,3 +339,61 @@ describe("buildUserPrompt", () => {
     expect(prompt).toContain("Do not put any URL, bare domain, direct booking link");
   });
 });
+
+describe("buildSystemPrompt business type", () => {
+  const PUB_ONLY = ["hospitality", "landlord", "Sunday roast", "pint", "The Anchor", "a regular"];
+
+  it("keeps the pub house style when the brand has no business type", () => {
+    for (const brand of [undefined, buildBrand(), buildBrand({ businessType: "   " })]) {
+      const prompt = buildSystemPrompt("event", "friendly_warm", undefined, brand);
+
+      expect(prompt).toContain("You are CheersAI, an expert hospitality social media copywriter.");
+      expect(prompt).toContain("the way a landlord would");
+      expect(prompt).toContain("Examples of the right style:");
+      expect(prompt).toContain("Sunday roast");
+      expect(prompt).not.toContain("Business type:");
+    }
+  });
+
+  it("writes for the brand's own business and drops the pub-only wording", () => {
+    const prompt = buildSystemPrompt(
+      "instant_post",
+      "friendly_warm",
+      undefined,
+      buildBrand({
+        keyPhrases: [],
+        businessType: " websites and applications company ",
+        businessDescription: " Orange Jelly builds websites and connected systems. ",
+      }),
+    );
+
+    expect(prompt).toContain("You are CheersAI, an expert social media copywriter.");
+    expect(prompt).toContain("Business type: websites and applications company.");
+    expect(prompt).toContain("About the business: Orange Jelly builds websites and connected systems.");
+    expect(prompt).toContain("Do not write as a pub or hospitality venue unless the business type says it is one.");
+    expect(prompt).toContain("talking to a customer");
+    expect(prompt).toContain("Grammar and point of view:");
+    // Shared rules still apply to every brand.
+    expect(prompt).toContain("Do not invent operational details");
+    expect(prompt).toContain("Never use an em dash.");
+
+    const withoutGuard = prompt.replace(
+      "Do not write as a pub or hospitality venue unless the business type says it is one.",
+      "",
+    );
+    for (const phrase of PUB_ONLY) {
+      expect(withoutGuard).not.toContain(phrase);
+    }
+  });
+
+  it("ignores a description when no business type is set", () => {
+    const prompt = buildSystemPrompt(
+      "event",
+      "friendly_warm",
+      undefined,
+      buildBrand({ businessDescription: "We are a pub in Stanwell Moor." }),
+    );
+
+    expect(prompt).not.toContain("About the business:");
+  });
+});
