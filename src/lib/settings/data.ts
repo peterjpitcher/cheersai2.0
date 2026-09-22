@@ -25,6 +25,8 @@ export interface PostingDefaults {
   instagramLocationId?: string;
   defaultPostingTime?: string;
   venueLocation?: string;
+  /** Venue pre-filled on new event posts; unset means the venue starts blank. */
+  defaultEventVenue?: string;
   venueLatitude?: number;
   venueLongitude?: number;
   notifications: {
@@ -65,6 +67,7 @@ type PostingDefaultsRow = {
   instagram_location_id: string | null;
   default_posting_time: string | null;
   venue_location: string | null;
+  default_event_venue: string | null;
   venue_latitude: number | string | null;
   venue_longitude: number | string | null;
   notifications: Record<string, boolean> | null;
@@ -139,7 +142,7 @@ export async function getOwnerSettings(): Promise<OwnerSettings> {
     const { data: postingRow, error: postingError } = await supabase
       .from("posting_defaults")
       .select(
-        "facebook_location_id, instagram_location_id, default_posting_time, venue_location, venue_latitude, venue_longitude, notifications, banners_enabled, banner_position, banner_bg, banner_text_colour",
+        "facebook_location_id, instagram_location_id, default_posting_time, venue_location, default_event_venue, venue_latitude, venue_longitude, notifications, banners_enabled, banner_position, banner_bg, banner_text_colour",
       )
       .eq("account_id", accountId)
       .maybeSingle<PostingDefaultsRow>();
@@ -173,6 +176,7 @@ export async function getOwnerSettings(): Promise<OwnerSettings> {
       instagramLocationId: postingRow?.instagram_location_id ?? undefined,
       defaultPostingTime: postingRow?.default_posting_time ?? undefined,
       venueLocation: postingRow?.venue_location ?? undefined,
+      defaultEventVenue: postingRow?.default_event_venue ?? undefined,
       venueLatitude: normaliseOptionalNumber(postingRow?.venue_latitude),
       venueLongitude: normaliseOptionalNumber(postingRow?.venue_longitude),
       notifications: {

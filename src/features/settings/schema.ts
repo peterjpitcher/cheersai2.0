@@ -38,6 +38,13 @@ export const postingDefaultsFormSchema = z.object({
     )
     .optional()
     .nullable(),
+  // Pre-filled as the venue on new event posts; blank means no default. The limit matches
+  // the event brief's venue field and the posting_defaults length check.
+  defaultEventVenue: z.string()
+    .trim()
+    .max(200, "Use 200 characters or fewer.")
+    .optional()
+    .nullable(),
   venueLatitude: z.string()
     .trim()
     .optional()

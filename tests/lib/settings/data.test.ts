@@ -83,6 +83,7 @@ describe("getOwnerSettings", () => {
         gbp_location_id: null,
         default_posting_time: "18:30",
         venue_location: "123 High Street, London",
+        default_event_venue: "The Anchor, Stanwell Moor Village",
         venue_latitude: "51.4625",
         venue_longitude: "-0.5021",
         notifications: { emailFailures: true, emailTokenExpiring: true },
@@ -98,6 +99,7 @@ describe("getOwnerSettings", () => {
 
     expect(result.posting.defaultPostingTime).toBe("18:30");
     expect(result.posting.venueLocation).toBe("123 High Street, London");
+    expect(result.posting.defaultEventVenue).toBe("The Anchor, Stanwell Moor Village");
     expect(result.posting.venueLatitude).toBe(51.4625);
     expect(result.posting.venueLongitude).toBe(-0.5021);
     expect(result.venueLocation).toBe("123 High Street, London");
@@ -138,6 +140,7 @@ describe("getOwnerSettings", () => {
 
     expect(result.posting.defaultPostingTime).toBeUndefined();
     expect(result.posting.venueLocation).toBeUndefined();
+    expect(result.posting.defaultEventVenue).toBeUndefined();
     expect(result.posting.venueLatitude).toBeUndefined();
     expect(result.posting.venueLongitude).toBeUndefined();
     expect(result.venueLocation).toBeUndefined();

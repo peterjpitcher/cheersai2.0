@@ -54,6 +54,7 @@ function getPostingDefaultsFormDefaultValues(data: PostingDefaults): PostingDefa
     instagramLocationId: data.instagramLocationId,
     defaultPostingTime: data.defaultPostingTime,
     venueLocation: data.venueLocation ?? "",
+    defaultEventVenue: data.defaultEventVenue ?? "",
     venueLatitude: data.venueLatitude?.toString() ?? "",
     venueLongitude: data.venueLongitude?.toString() ?? "",
     notifications: { ...data.notifications },
@@ -142,6 +143,30 @@ export function PostingDefaultsForm({ data }: PostingDefaultsFormProps) {
             {form.formState.errors.venueLocation?.message ? (
               <p className="mt-1 text-xs" style={{ color: "var(--c-claret)" }}>
                 {form.formState.errors.venueLocation.message}
+              </p>
+            ) : null}
+          </div>
+        </div>
+        <div className="grid gap-4 md:grid-cols-2">
+          <div>
+            <label htmlFor="default-event-venue" className="text-sm font-medium" style={{ color: "var(--c-ink-2)" }}>
+              Default event venue
+            </label>
+            <input
+              id="default-event-venue"
+              type="text"
+              maxLength={200}
+              placeholder="Venue name, town"
+              className="mt-2 w-full p-3 text-sm focus:outline-none"
+              style={inputStyle}
+              {...form.register("defaultEventVenue")}
+            />
+            <p className="mt-1 text-xs" style={{ color: "var(--c-ink-3)" }}>
+              Filled in as the venue on new event posts. Leave blank to type it each time.
+            </p>
+            {form.formState.errors.defaultEventVenue?.message ? (
+              <p className="mt-1 text-xs" style={{ color: "var(--c-claret)" }}>
+                {form.formState.errors.defaultEventVenue.message}
               </p>
             ) : null}
           </div>

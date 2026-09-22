@@ -26,6 +26,21 @@ describe("postingDefaultsFormSchema", () => {
     expect(parsed.venueLocation).toBe("123 High Street, Leatherhead");
   });
 
+  it("trims the default event venue and caps it at 200 characters", () => {
+    const parsed = postingDefaultsFormSchema.parse({
+      ...basePostingDefaults,
+      defaultEventVenue: "  The Anchor, Stanwell Moor Village  ",
+    });
+
+    expect(parsed.defaultEventVenue).toBe("The Anchor, Stanwell Moor Village");
+    expect(
+      postingDefaultsFormSchema.safeParse({ ...basePostingDefaults, defaultEventVenue: "v".repeat(200) }).success,
+    ).toBe(true);
+    expect(
+      postingDefaultsFormSchema.safeParse({ ...basePostingDefaults, defaultEventVenue: "v".repeat(201) }).success,
+    ).toBe(false);
+  });
+
   it("allows the venue location field to be left blank", () => {
     const parsed = postingDefaultsFormSchema.parse({
       ...basePostingDefaults,
