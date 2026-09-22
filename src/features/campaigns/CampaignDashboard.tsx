@@ -23,6 +23,7 @@ import {
 
 import { featureFlags } from '@/env';
 import {
+  activateOptimisationReplacementAd,
   applyOptimisationRecommendation,
   runCampaignDashboardOptimisation,
   syncCampaignDashboardPerformance,
@@ -1225,14 +1226,27 @@ function RecommendationPreview({ action }: { action: OptimisationActionSummary }
         ) : action.status === 'planned' && (
           <DashboardActionButton
             run={() => applyOptimisationRecommendation(action.id)}
-            label="Approve replacement"
-            successMessage="Replacement ad created"
+            label="Create paused replacement"
+            successMessage="Paused replacement ad created"
             errorTitle="Could not apply recommendation"
           />
         )}
-        {action.replacementAdId && (
+        {action.replacementAdId && action.replacementAdStatus === 'PAUSED' && (
+          <>
+            <p className="text-xs" style={{ color: 'var(--c-ink-3)' }}>
+              Replacement ad created paused. Check it, then switch it on.
+            </p>
+            <DashboardActionButton
+              run={() => activateOptimisationReplacementAd(action.id)}
+              label="Switch on replacement ad"
+              successMessage="Replacement ad switched on"
+              errorTitle="Could not switch on the replacement ad"
+            />
+          </>
+        )}
+        {action.replacementAdId && action.replacementAdStatus !== 'PAUSED' && (
           <p className="text-xs" style={{ color: 'var(--c-status-posted-fg)' }}>
-            Replacement ad created.
+            {action.replacementAdStatus === 'ACTIVE' ? 'Replacement ad is live.' : 'Replacement ad created.'}
           </p>
         )}
       </div>

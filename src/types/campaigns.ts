@@ -178,6 +178,8 @@ export interface OptimisationActionSummary {
   /** Why a planned copy rewrite fails the public-copy checks; empty or absent when it can be applied. */
   copyProblems?: string[];
   replacementAdId: string | null;
+  /** Status of the ad Apply created; PAUSED until the owner switches it on. */
+  replacementAdStatus?: AdStatus | null;
   appliedAt: Date | null;
   createdAt: Date;
 }

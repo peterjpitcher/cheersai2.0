@@ -60,6 +60,7 @@ import {
   createMetaAd,
   createMetaAdCreative,
   searchMetaInterests,
+  setMetaObjectStatus,
   uploadMetaImage,
 } from '@/lib/meta/marketing';
 import {
@@ -76,6 +77,7 @@ import {
   type OptimisationCampaignRow,
 } from '@/lib/campaigns/optimisation';
 import { syncMetaCampaignPerformance } from '@/lib/campaigns/performance-sync';
+import { logOptimisationAuditEvent, logOptimisationAuditEventBestEffort } from '@/lib/campaigns/optimisation-audit';
 import { findRewriteCopyProblems } from '@/lib/campaigns/rewrite-copy';
 import { logPublishAuditEvent } from '@/lib/publishing/audit';
 import { createServiceSupabaseClient } from '@/lib/supabase/service';
@@ -187,7 +189,7 @@ interface ConversionRuleResult {
 }
 
 const OPTIMISATION_ACTION_SELECT =
-  'id, run_id, campaign_id, adset_id, ad_id, action_type, reason, status, severity, error, metrics_snapshot, recommendation_payload, replacement_ad_id, applied_at, created_at, meta_campaigns(name,status,meta_status,end_date,source_snapshot), ad_sets(name), ads:ads!meta_optimisation_actions_ad_id_fkey(name)';
+  'id, run_id, campaign_id, adset_id, ad_id, action_type, reason, status, severity, error, metrics_snapshot, recommendation_payload, replacement_ad_id, applied_at, created_at, meta_campaigns(name,status,meta_status,end_date,source_snapshot), ad_sets(name), ads:ads!meta_optimisation_actions_ad_id_fkey(name), replacement:ads!meta_optimisation_actions_replacement_ad_id_fkey(status)';
 const LEGACY_OPTIMISATION_ACTION_SELECT =
   'id, run_id, campaign_id, adset_id, ad_id, action_type, reason, status, error, metrics_snapshot, applied_at, created_at, meta_campaigns(name,status,meta_status,end_date), ad_sets(name), ads:ads!meta_optimisation_actions_ad_id_fkey(name)';
 
@@ -1739,7 +1741,7 @@ interface ApplyRecommendationAdAccountRow {
 export async function applyOptimisationRecommendation(
   actionId: string,
 ): Promise<{ success: true; replacementAdId?: string } | { error: string }> {
-  const { accountId } = await requireAuthContext();
+  const { accountId, user } = await requireAuthContext();
   const supabase = createServiceSupabaseClient();
 
   const { data: action, error: actionError } = await supabase
@@ -1797,6 +1799,27 @@ export async function applyOptimisationRecommendation(
     );
   }
 
+  // Record who is applying before anything changes; without that record, nothing changes.
+  const audit = { accountId, userId: user.id, actionId: action.id };
+  try {
+    await logOptimisationAuditEvent(supabase, {
+      ...audit,
+      operationType: 'optimisation_rewrite_apply_attempt',
+      details: { campaignId: campaign.id, adId: ad.id, headline: proposal.headline },
+    });
+  } catch (auditError) {
+    return { error: auditError instanceof Error ? auditError.message : String(auditError) };
+  }
+  const recordFailure = (message: string) => logOptimisationAuditEventBestEffort(supabase, {
+    ...audit,
+    operationType: 'optimisation_rewrite_apply_failed',
+    details: { error: message },
+  });
+  const fail = async (message: string) => {
+    await recordFailure(message);
+    return failRecommendation(supabase, action.id, message);
+  };
+
   if (!ad.meta_ad_id || ad.status !== 'ACTIVE' || !adSet.meta_adset_id) {
     const { error: updateError } = await supabase
       .from('ads')
@@ -1810,16 +1833,24 @@ export async function applyOptimisationRecommendation(
       })
       .eq('id', ad.id);
 
-    if (updateError) return { error: updateError.message };
+    if (updateError) {
+      await recordFailure(updateError.message);
+      return { error: updateError.message };
+    }
 
     await markRecommendationApplied(supabase, action.id, { replacementAdId: null });
+    await logOptimisationAuditEventBestEffort(supabase, {
+      ...audit,
+      operationType: 'optimisation_rewrite_applied',
+      details: { campaignId: campaign.id, updatedDraftAdId: ad.id, replacementAdId: null },
+    });
     revalidatePath('/campaigns');
     revalidatePath(`/campaigns/${campaign.id}`);
     return { success: true };
   }
 
   if (!campaign.destination_url) {
-    return failRecommendation(supabase, action.id, 'Campaign is missing its paid CTA URL.');
+    return fail('Campaign is missing its paid CTA URL.');
   }
 
   const { data: adAccount, error: adAccountError } = await supabase
@@ -1828,9 +1859,12 @@ export async function applyOptimisationRecommendation(
     .eq('account_id', accountId)
     .maybeSingle<ApplyRecommendationAdAccountRow>();
 
-  if (adAccountError) return { error: adAccountError.message };
+  if (adAccountError) {
+    await recordFailure(adAccountError.message);
+    return { error: adAccountError.message };
+  }
   if (!adAccount?.access_token || !adAccount.meta_account_id) {
-    return failRecommendation(supabase, action.id, 'Meta Ads account is not connected.');
+    return fail('Meta Ads account is not connected.');
   }
 
   const { data: fbConnection, error: fbError } = await supabase
@@ -1840,15 +1874,18 @@ export async function applyOptimisationRecommendation(
     .eq('provider', 'facebook')
     .maybeSingle<{ metadata: { pageId?: string } | null }>();
 
-  if (fbError) return { error: fbError.message };
+  if (fbError) {
+    await recordFailure(fbError.message);
+    return { error: fbError.message };
+  }
   const pageId = fbConnection?.metadata?.pageId;
   if (!pageId) {
-    return failRecommendation(supabase, action.id, 'Facebook Page not connected.');
+    return fail('Facebook Page not connected.');
   }
 
   const effectiveAssetId = ad.media_asset_id ?? adSet.adset_media_asset_id;
   if (!effectiveAssetId) {
-    return failRecommendation(supabase, action.id, 'The original ad has no media asset to reuse.');
+    return fail('The original ad has no media asset to reuse.');
   }
 
   let replacementAdId: string | null = null;
@@ -1910,13 +1947,16 @@ export async function applyOptimisationRecommendation(
       description: proposal.description,
       callToActionType: campaign.campaign_kind === 'event' ? 'BOOK_NOW' : proposal.cta,
     });
+    // Created PAUSED: a new ad in a live ad set takes over its delivery within hours (on
+    // 22 September 2026 it broke a running message test), so it only starts when the owner
+    // switches it on with activateOptimisationReplacementAd.
     const metaAd = await createMetaAd({
       accessToken: adAccount.access_token,
       adAccountId: adAccount.meta_account_id,
       name: proposal.name,
       adsetId: adSet.meta_adset_id,
       creativeId: creative.id,
-      status: 'ACTIVE',
+      status: 'PAUSED',
     });
     metaAdCreated = true;
 
@@ -1925,14 +1965,19 @@ export async function applyOptimisationRecommendation(
       .update({
         meta_creative_id: creative.id,
         meta_ad_id: metaAd.id,
-        status: 'ACTIVE',
-        meta_status: 'ACTIVE',
+        status: 'PAUSED',
+        meta_status: 'PAUSED',
       })
       .eq('id', replacementAdId);
 
     if (replacementUpdateError) throw new Error(replacementUpdateError.message);
 
     await markRecommendationApplied(supabase, action.id, { replacementAdId });
+    await logOptimisationAuditEventBestEffort(supabase, {
+      ...audit,
+      operationType: 'optimisation_rewrite_applied',
+      details: { campaignId: campaign.id, replacementAdId, metaAdId: metaAd.id, createdPaused: true },
+    });
     revalidatePath('/campaigns');
     revalidatePath(`/campaigns/${campaign.id}`);
     return { success: true, replacementAdId };
@@ -1940,8 +1985,126 @@ export async function applyOptimisationRecommendation(
     if (replacementAdId && !metaAdCreated) {
       await supabase.from('ads').delete().eq('id', replacementAdId);
     }
-    return failRecommendation(supabase, action.id, error instanceof Error ? error.message : String(error));
+    return fail(error instanceof Error ? error.message : String(error));
   }
+}
+
+interface ActivateReplacementActionRow {
+  id: string;
+  campaign_id: string;
+  action_type: string;
+  status: string;
+  replacement_ad_id: string | null;
+}
+
+interface ActivateReplacementAdRow {
+  id: string;
+  adset_id: string;
+  meta_ad_id: string | null;
+  status: string;
+}
+
+/**
+ * Switches on a replacement ad that Apply created paused. A separate, explicit step so nothing
+ * the optimiser proposes starts spending until the owner has checked it.
+ */
+export async function activateOptimisationReplacementAd(
+  actionId: string,
+): Promise<{ success: true } | { error: string }> {
+  const { accountId, user } = await requireAuthContext();
+  const supabase = createServiceSupabaseClient();
+
+  const { data: action, error: actionError } = await supabase
+    .from('meta_optimisation_actions')
+    .select('id, campaign_id, action_type, status, replacement_ad_id')
+    .eq('id', actionId)
+    .eq('account_id', accountId)
+    .maybeSingle<ActivateReplacementActionRow>();
+
+  if (actionError) return { error: actionError.message };
+  if (!action || action.action_type !== 'copy_rewrite' || action.status !== 'applied' || !action.replacement_ad_id) {
+    return { error: 'There is no paused replacement ad to switch on for this recommendation.' };
+  }
+
+  const [{ data: campaign, error: campaignError }, { data: replacement, error: replacementError }] = await Promise.all([
+    supabase
+      .from('meta_campaigns')
+      .select('id')
+      .eq('id', action.campaign_id)
+      .eq('account_id', accountId)
+      .maybeSingle<{ id: string }>(),
+    supabase
+      .from('ads')
+      .select('id, adset_id, meta_ad_id, status')
+      .eq('id', action.replacement_ad_id)
+      .maybeSingle<ActivateReplacementAdRow>(),
+  ]);
+
+  if (campaignError) return { error: campaignError.message };
+  if (replacementError) return { error: replacementError.message };
+  if (!campaign || !replacement) return { error: 'Could not load the campaign or the replacement ad.' };
+  if (!replacement.meta_ad_id) return { error: 'The replacement ad was never created on Meta.' };
+  if (replacement.status !== 'PAUSED') return { error: 'The replacement ad is not paused, so there is nothing to switch on.' };
+
+  // The replacement id comes from our own action row, but confirm it sits in this campaign.
+  const { data: adSet, error: adSetError } = await supabase
+    .from('ad_sets')
+    .select('id, campaign_id')
+    .eq('id', replacement.adset_id)
+    .maybeSingle<{ id: string; campaign_id: string }>();
+
+  if (adSetError) return { error: adSetError.message };
+  if (!adSet || adSet.campaign_id !== campaign.id) return { error: 'The replacement ad does not belong to this campaign.' };
+
+  const { data: adAccount, error: adAccountError } = await supabase
+    .from('meta_ad_accounts')
+    .select('access_token')
+    .eq('account_id', accountId)
+    .maybeSingle<{ access_token: string | null }>();
+
+  if (adAccountError) return { error: adAccountError.message };
+  if (!adAccount?.access_token) return { error: 'Meta Ads account is not connected.' };
+
+  const audit = { accountId, userId: user.id, actionId: action.id };
+  const details = { campaignId: campaign.id, replacementAdId: replacement.id, metaAdId: replacement.meta_ad_id };
+  try {
+    await logOptimisationAuditEvent(supabase, { ...audit, operationType: 'optimisation_replacement_activate_attempt', details });
+  } catch (auditError) {
+    return { error: auditError instanceof Error ? auditError.message : String(auditError) };
+  }
+
+  try {
+    await setMetaObjectStatus(replacement.meta_ad_id, adAccount.access_token, 'ACTIVE');
+  } catch (metaError) {
+    const message = metaError instanceof Error ? metaError.message : String(metaError);
+    await logOptimisationAuditEventBestEffort(supabase, {
+      ...audit,
+      operationType: 'optimisation_replacement_activate_failed',
+      details: { ...details, error: message },
+    });
+    return { error: message };
+  }
+
+  const { error: updateError } = await supabase
+    .from('ads')
+    .update({ status: 'ACTIVE', meta_status: 'ACTIVE' })
+    .eq('id', replacement.id);
+
+  if (updateError) {
+    // Meta is already delivering it; say so rather than implying nothing happened.
+    const message = `The ad is now live on Meta, but the app could not record that: ${updateError.message}`;
+    await logOptimisationAuditEventBestEffort(supabase, {
+      ...audit,
+      operationType: 'optimisation_replacement_activate_failed',
+      details: { ...details, error: message },
+    });
+    return { error: message };
+  }
+
+  await logOptimisationAuditEventBestEffort(supabase, { ...audit, operationType: 'optimisation_replacement_activated', details });
+  revalidatePath('/campaigns');
+  revalidatePath(`/campaigns/${campaign.id}`);
+  return { success: true };
 }
 
 function parseCopyProposal(payload: Record<string, unknown> | null): CopyProposal | null {
@@ -2225,6 +2388,7 @@ interface OptimisationActionDbRow {
   meta_campaigns?: OptimisationActionCampaignRef | OptimisationActionCampaignRef[] | null;
   ad_sets?: { name?: string | null } | Array<{ name?: string | null }> | null;
   ads?: { name?: string | null } | Array<{ name?: string | null }> | null;
+  replacement?: { status?: string | null } | Array<{ status?: string | null }> | null;
 }
 
 function dbRowToAd(row: AdDbRow): Ad {
@@ -2386,9 +2550,15 @@ function dbRowToOptimisationActionSummary(row: OptimisationActionDbRow): Optimis
     recommendationPayload: row.recommendation_payload ?? {},
     copyProblems: plannedRewriteCopyProblems(row),
     replacementAdId: row.replacement_ad_id ?? null,
+    replacementAdStatus: replacementAdStatus(row),
     appliedAt: row.applied_at ? new Date(row.applied_at) : null,
     createdAt: new Date(row.created_at),
   };
+}
+
+function replacementAdStatus(row: OptimisationActionDbRow): AdStatus | null {
+  const status = firstNested(row.replacement)?.status;
+  return status === 'DRAFT' || status === 'ACTIVE' || status === 'PAUSED' ? status : null;
 }
 
 /** Why a planned rewrite cannot be applied, so the UI can say so instead of offering Approve. */

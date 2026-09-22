@@ -21,6 +21,7 @@ vi.mock('@/env', () => ({
 }));
 
 vi.mock('@/app/(app)/campaigns/actions', () => ({
+  activateOptimisationReplacementAd: vi.fn(),
   applyOptimisationRecommendation: vi.fn(),
   runCampaignDashboardOptimisation: vi.fn(),
   syncCampaignDashboardPerformance: vi.fn(),

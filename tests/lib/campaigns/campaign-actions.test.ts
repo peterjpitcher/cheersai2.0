@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // --- Mocks must be declared before imports ---
 
 vi.mock('@/lib/auth/server', () => ({
-  requireAuthContext: vi.fn().mockResolvedValue({ accountId: 'account-123' }),
+  requireAuthContext: vi.fn().mockResolvedValue({ accountId: 'account-123', user: { id: 'user-123' } }),
 }));
 
 vi.mock('@/lib/supabase/service', () => ({
@@ -18,6 +18,7 @@ vi.mock('@/lib/meta/marketing', () => ({
   createMetaAd: vi.fn(),
   createMetaAdCreative: vi.fn(),
   searchMetaInterests: vi.fn(),
+  setMetaObjectStatus: vi.fn(),
   uploadMetaImage: vi.fn(),
 }));
 
@@ -48,6 +49,7 @@ vi.mock('next/cache', () => ({
 }));
 
 import {
+  activateOptimisationReplacementAd,
   applyOptimisationRecommendation,
   generateCampaignAction,
   getCampaignOptimisationActions,
@@ -57,7 +59,13 @@ import {
 } from '@/app/(app)/campaigns/actions';
 import { createServiceSupabaseClient } from '@/lib/supabase/service';
 import { generateCampaign } from '@/lib/campaigns/generate';
-import { createMetaAd, createMetaAdCreative, searchMetaInterests, uploadMetaImage } from '@/lib/meta/marketing';
+import {
+  createMetaAd,
+  createMetaAdCreative,
+  searchMetaInterests,
+  setMetaObjectStatus,
+  uploadMetaImage,
+} from '@/lib/meta/marketing';
 import { createManagementMetaAdsLink } from '@/lib/management-app/client';
 import { getManagementConnectionConfig } from '@/lib/management-app/data';
 import { runMetaCampaignOptimisation } from '@/lib/campaigns/optimisation';
@@ -83,6 +91,11 @@ const mockSupabase = {
   order: vi.fn().mockReturnThis(),
   single: mockSingle,
   maybeSingle: mockMaybeSingle,
+  storage: {
+    from: vi.fn(() => ({
+      createSignedUrl: vi.fn(async () => ({ data: { signedUrl: 'https://storage.test/signed.jpg' }, error: null })),
+    })),
+  },
 };
 
 type TestPhase = {
@@ -851,6 +864,84 @@ describe('applyOptimisationRecommendation', () => {
       status: 'applied',
       replacement_ad_id: null,
     }));
+    expect(mockSupabase.insert).toHaveBeenCalledWith(expect.objectContaining({
+      user_id: 'user-123',
+      operation_type: 'optimisation_rewrite_apply_attempt',
+      resource_type: 'meta_optimisation_action',
+      resource_id: 'action-1',
+    }));
+  });
+
+  const safeLiveProposalAction = {
+    id: 'action-safe',
+    campaign_id: 'campaign-weekday',
+    adset_id: 'adset-weekday',
+    ad_id: 'ad-weekday',
+    action_type: 'copy_rewrite',
+    status: 'planned',
+    recommendation_payload: {
+      proposed: {
+        name: 'Evergreen Test | Value for money | Var 2 - booking rewrite',
+        headline: 'Lunch from £9, Tuesday to Friday',
+        primaryText: "Snack pots are £9 and wraps are £10.\n\nBook your table online and we'll have it ready for you.",
+        description: 'Book now',
+        cta: 'BOOK_NOW',
+        angle: 'Booking intent',
+      },
+    },
+  };
+
+  it('creates the replacement ad PAUSED on Meta and records who applied it', async () => {
+    mockMaybeSingle
+      .mockResolvedValueOnce({ data: safeLiveProposalAction, error: null })
+      .mockResolvedValueOnce({ data: liveWeekdayLunchAd, error: null })
+      .mockResolvedValueOnce({ data: liveWeekdayLunchAdSet, error: null })
+      .mockResolvedValueOnce({ data: weekdayLunchCampaignRow, error: null })
+      .mockResolvedValueOnce({ data: { access_token: 'token', meta_account_id: 'act_123' }, error: null })
+      .mockResolvedValueOnce({ data: { metadata: { pageId: 'page-1' } }, error: null });
+    mockSingle
+      .mockResolvedValueOnce({ data: { storage_path: 'media/weekday.jpg' }, error: null })
+      .mockResolvedValueOnce({ data: { id: 'replacement-1' }, error: null });
+    vi.mocked(uploadMetaImage).mockResolvedValueOnce({ hash: 'hash-1' } as never);
+    vi.mocked(createMetaAdCreative).mockResolvedValueOnce({ id: 'creative-1' } as never);
+    vi.mocked(createMetaAd).mockResolvedValueOnce({ id: 'meta-replacement-1' });
+
+    const result = await applyOptimisationRecommendation('action-safe');
+
+    expect(result).toEqual({ success: true, replacementAdId: 'replacement-1' });
+    expect(createMetaAd).toHaveBeenCalledWith(expect.objectContaining({ status: 'PAUSED' }));
+    expect(mockSupabase.update).toHaveBeenCalledWith(expect.objectContaining({
+      meta_ad_id: 'meta-replacement-1',
+      status: 'PAUSED',
+      meta_status: 'PAUSED',
+    }));
+    expect(mockSupabase.update).not.toHaveBeenCalledWith(expect.objectContaining({ status: 'ACTIVE' }));
+    expect(mockSupabase.insert).toHaveBeenCalledWith(expect.objectContaining({
+      user_id: 'user-123',
+      operation_type: 'optimisation_rewrite_apply_attempt',
+      resource_id: 'action-safe',
+    }));
+    expect(mockSupabase.insert).toHaveBeenCalledWith(expect.objectContaining({
+      user_id: 'user-123',
+      operation_type: 'optimisation_rewrite_applied',
+      details: expect.objectContaining({ replacementAdId: 'replacement-1', createdPaused: true }),
+    }));
+  });
+
+  it('changes nothing and tells the user when it cannot record who is applying', async () => {
+    mockMaybeSingle
+      .mockResolvedValueOnce({ data: safeLiveProposalAction, error: null })
+      .mockResolvedValueOnce({ data: liveWeekdayLunchAd, error: null })
+      .mockResolvedValueOnce({ data: liveWeekdayLunchAdSet, error: null })
+      .mockResolvedValueOnce({ data: weekdayLunchCampaignRow, error: null });
+    mockSupabase.insert.mockReturnValueOnce({ error: { message: 'audit_log unavailable' } });
+
+    const result = await applyOptimisationRecommendation('action-safe');
+
+    expect(result).toEqual({ error: expect.stringContaining('Could not record who made this change') });
+    expect(mockSupabase.update).not.toHaveBeenCalled();
+    expect(uploadMetaImage).not.toHaveBeenCalled();
+    expect(createMetaAd).not.toHaveBeenCalled();
   });
 
   it('skips a stored proposal that publishes the internal campaign name and never calls Meta', async () => {
@@ -973,6 +1064,102 @@ describe('optimisation action summaries', () => {
     const [summary] = await getCampaignOptimisationActions('campaign-weekday');
 
     expect(summary.copyProblems).toEqual([]);
+  });
+
+  it('reports the replacement ad status so a paused replacement can be switched on', async () => {
+    mockActionRows([{
+      ...baseRow,
+      id: 'applied',
+      status: 'applied',
+      recommendation_payload: {},
+      replacement_ad_id: 'replacement-1',
+      replacement: { status: 'PAUSED' },
+    }]);
+
+    const [summary] = await getCampaignOptimisationActions('campaign-weekday');
+
+    expect(summary.replacementAdStatus).toBe('PAUSED');
+  });
+});
+
+describe('activateOptimisationReplacementAd', () => {
+  const appliedAction = {
+    id: 'action-applied',
+    campaign_id: 'campaign-weekday',
+    action_type: 'copy_rewrite',
+    status: 'applied',
+    replacement_ad_id: 'replacement-1',
+  };
+  const pausedReplacement = { id: 'replacement-1', adset_id: 'adset-weekday', meta_ad_id: 'meta-replacement-1', status: 'PAUSED' };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(createServiceSupabaseClient).mockReturnValue(mockSupabase as never);
+  });
+
+  function queueActivationReads(replacement: Record<string, unknown>) {
+    mockMaybeSingle
+      .mockResolvedValueOnce({ data: appliedAction, error: null })
+      .mockResolvedValueOnce({ data: { id: 'campaign-weekday' }, error: null })
+      .mockResolvedValueOnce({ data: replacement, error: null });
+  }
+
+  it('switches on a paused replacement and records who did it', async () => {
+    queueActivationReads(pausedReplacement);
+    mockMaybeSingle
+      .mockResolvedValueOnce({ data: { id: 'adset-weekday', campaign_id: 'campaign-weekday' }, error: null })
+      .mockResolvedValueOnce({ data: { access_token: 'token' }, error: null });
+
+    const result = await activateOptimisationReplacementAd('action-applied');
+
+    expect(result).toEqual({ success: true });
+    expect(setMetaObjectStatus).toHaveBeenCalledWith('meta-replacement-1', 'token', 'ACTIVE');
+    expect(mockSupabase.update).toHaveBeenCalledWith({ status: 'ACTIVE', meta_status: 'ACTIVE' });
+    expect(mockSupabase.insert).toHaveBeenCalledWith(expect.objectContaining({
+      user_id: 'user-123',
+      operation_type: 'optimisation_replacement_activate_attempt',
+      resource_id: 'action-applied',
+    }));
+    expect(mockSupabase.insert).toHaveBeenCalledWith(expect.objectContaining({
+      user_id: 'user-123',
+      operation_type: 'optimisation_replacement_activated',
+    }));
+  });
+
+  it('refuses when the replacement is not paused', async () => {
+    queueActivationReads({ ...pausedReplacement, status: 'ACTIVE' });
+
+    const result = await activateOptimisationReplacementAd('action-applied');
+
+    expect(result).toEqual({ error: expect.stringContaining('not paused') });
+    expect(setMetaObjectStatus).not.toHaveBeenCalled();
+  });
+
+  it('refuses a replacement that sits in another campaign', async () => {
+    queueActivationReads(pausedReplacement);
+    mockMaybeSingle.mockResolvedValueOnce({ data: { id: 'adset-other', campaign_id: 'campaign-other' }, error: null });
+
+    const result = await activateOptimisationReplacementAd('action-applied');
+
+    expect(result).toEqual({ error: 'The replacement ad does not belong to this campaign.' });
+    expect(setMetaObjectStatus).not.toHaveBeenCalled();
+  });
+
+  it('tells the user and records the failure when Meta refuses', async () => {
+    queueActivationReads(pausedReplacement);
+    mockMaybeSingle
+      .mockResolvedValueOnce({ data: { id: 'adset-weekday', campaign_id: 'campaign-weekday' }, error: null })
+      .mockResolvedValueOnce({ data: { access_token: 'token' }, error: null });
+    vi.mocked(setMetaObjectStatus).mockRejectedValueOnce(new Error('Meta API error: token expired'));
+
+    const result = await activateOptimisationReplacementAd('action-applied');
+
+    expect(result).toEqual({ error: 'Meta API error: token expired' });
+    expect(mockSupabase.update).not.toHaveBeenCalled();
+    expect(mockSupabase.insert).toHaveBeenCalledWith(expect.objectContaining({
+      operation_type: 'optimisation_replacement_activate_failed',
+      operation_status: 'failure',
+    }));
   });
 });
 
