@@ -616,6 +616,9 @@ describe('fetchMetaObjectInsights', () => {
             actions: [
               { action_type: 'offsite_conversion.fb_pixel_purchase', value: '2' },
               { action_type: 'link_click', value: '32' },
+              { action_type: 'post_reaction', value: '11' },
+              { action_type: 'comment', value: '4' },
+              { action_type: 'post', value: '2' },
             ],
             cost_per_action_type: [
               { action_type: 'offsite_conversion.fb_pixel_purchase', value: '6.17' },
@@ -641,6 +644,9 @@ describe('fetchMetaObjectInsights', () => {
       ctr: 2.67,
       cpc: 0.39,
       conversions: 2,
+      reactions: 11,
+      comments: 4,
+      shares: 2,
       costPerConversion: 6.17,
       conversionRate: 6.25,
       status: 'ACTIVE',
@@ -654,5 +660,78 @@ describe('fetchMetaObjectInsights', () => {
       until: '2026-04-10',
     });
     expect(params.get('date_preset')).toBeNull();
+  });
+
+  it('sums exact engagement actions and ignores invalid or broad engagement values', async () => {
+    vi.mocked(global.fetch)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          data: [{
+            spend: '12',
+            impressions: '500',
+            reach: '400',
+            clicks: '99',
+            inline_link_clicks: '10',
+            ctr: '2',
+            cpc: '1.2',
+            actions: [
+              { action_type: 'offsite_conversion.fb_pixel_purchase', value: '3' },
+              { action_type: 'post_reaction', value: '5' },
+              { action_type: 'post_reaction', value: '7' },
+              { action_type: 'comment', value: '-2' },
+              { action_type: 'post', value: 'not-a-number' },
+              { action_type: 'post', value: 'Infinity' },
+              { action_type: 'post_engagement', value: '1000' },
+              { action_type: 'page_engagement', value: '2000' },
+            ],
+            cost_per_action_type: [
+              { action_type: 'offsite_conversion.fb_pixel_purchase', value: '4' },
+            ],
+          }],
+        }),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ effective_status: 'PAUSED' }),
+      } as Response);
+
+    await expect(fetchMetaObjectInsights('object_123', 'token')).resolves.toEqual({
+      spend: 12,
+      impressions: 500,
+      reach: 400,
+      clicks: 10,
+      ctr: 2,
+      cpc: 1.2,
+      conversions: 3,
+      reactions: 12,
+      comments: 0,
+      shares: 0,
+      costPerConversion: 4,
+      conversionRate: 30,
+      status: 'PAUSED',
+    });
+  });
+
+  it('returns zero engagement when Meta does not return actions', async () => {
+    vi.mocked(global.fetch)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ data: [{}] }),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ configured_status: 'PAUSED' }),
+      } as Response);
+
+    const result = await fetchMetaObjectInsights('object_123', 'token');
+
+    expect(result).toEqual(expect.objectContaining({
+      conversions: 0,
+      reactions: 0,
+      comments: 0,
+      shares: 0,
+      status: 'PAUSED',
+    }));
   });
 });

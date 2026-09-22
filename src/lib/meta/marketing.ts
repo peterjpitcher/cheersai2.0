@@ -114,6 +114,9 @@ export interface CampaignInsights {
   ctr: number;
   cpc: number;
   conversions: number;
+  reactions: number;
+  comments: number;
+  shares: number;
   costPerConversion: number;
   conversionRate: number;
   status: string;
@@ -670,6 +673,9 @@ export async function fetchMetaObjectInsights(
         : 0;
   const spend = row?.spend !== undefined ? parseFloat(row.spend) : 0;
   const conversions = sumPurchaseActions(row?.actions);
+  const reactions = sumActionValues(row?.actions, 'post_reaction');
+  const comments = sumActionValues(row?.actions, 'comment');
+  const shares = sumActionValues(row?.actions, 'post');
   const reportedCostPerConversion = findPurchaseActionValue(row?.cost_per_action_type);
   const costPerConversion =
     reportedCostPerConversion > 0
@@ -687,6 +693,9 @@ export async function fetchMetaObjectInsights(
     ctr: row?.ctr !== undefined ? parseFloat(row.ctr) : 0,
     cpc: row?.cpc !== undefined ? parseFloat(row.cpc) : 0,
     conversions,
+    reactions,
+    comments,
+    shares,
     costPerConversion,
     conversionRate,
     status: campaignResult.status ?? campaignResult.effective_status ?? campaignResult.configured_status ?? 'UNKNOWN',
@@ -699,6 +708,18 @@ const PURCHASE_ACTION_TYPES = new Set([
   'omni_purchase',
   'onsite_conversion.purchase',
 ]);
+
+function sumActionValues(
+  actions: Array<{ action_type?: string; value?: string }> | undefined,
+  actionType: string,
+): number {
+  if (!Array.isArray(actions)) return 0;
+  return actions.reduce((total, action) => {
+    if (action.action_type !== actionType) return total;
+    const parsed = Number(action.value ?? 0);
+    return Number.isFinite(parsed) && parsed >= 0 ? total + parsed : total;
+  }, 0);
+}
 
 function sumPurchaseActions(actions: Array<{ action_type?: string; value?: string }> | undefined): number {
   if (!Array.isArray(actions)) return 0;
