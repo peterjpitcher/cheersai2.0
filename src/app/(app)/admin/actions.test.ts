@@ -5,6 +5,11 @@ vi.mock('@/lib/auth/server', () => ({
   requireAuthContext: mockRequireAuthContext,
 }));
 
+const mockLoggerError = vi.fn();
+vi.mock('@/lib/logging', () => ({
+  createLogger: () => ({ debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: mockLoggerError }),
+}));
+
 const mockLogAdminEvent = vi.fn();
 vi.mock('@/lib/admin/audit', () => ({
   logAdminEvent: (...args: unknown[]) => mockLogAdminEvent(...args),
@@ -19,9 +24,15 @@ const state = {
   mutationError: null as unknown,
 };
 
+const insertCalls: Array<{ table: string; row: unknown }> = [];
+
 function buildSupabase() {
   const b: Record<string, unknown> = {};
-  b.insert = () => b;
+  let table = '';
+  b.insert = (row: unknown) => {
+    insertCalls.push({ table, row });
+    return b;
+  };
   b.update = () => b;
   b.upsert = () => Promise.resolve({ error: state.mutationError });
   b.select = (_cols?: string, opts?: { head?: boolean }) => {
@@ -32,7 +43,12 @@ function buildSupabase() {
   b.delete = () => b;
   b.eq = () => b;
   b.then = (resolve: (v: unknown) => unknown) => resolve({ error: state.mutationError });
-  return { from: () => b };
+  return {
+    from: (name: string) => {
+      table = name;
+      return b;
+    },
+  };
 }
 
 const SUPER_ADMIN_CTX = {
@@ -49,6 +65,7 @@ const A_BRAND = '33333333-3333-4333-8333-333333333333';
 
 beforeEach(() => {
   vi.clearAllMocks();
+  insertCalls.length = 0;
   state.accountsInsert = { data: { id: 'brand-1' }, error: null };
   state.appAdminsCount = { count: 2, error: null };
   state.mutationError = null;
@@ -73,6 +90,38 @@ describe('createBrand', () => {
     expect(mockLogAdminEvent).toHaveBeenCalledWith(
       expect.objectContaining({ action: 'create_brand', targetAccountId: 'brand-1' }),
     );
+  });
+
+  it('sets every column the live accounts table requires, with the creator as legacy owner', async () => {
+    const { createBrand } = await import('./actions');
+    await createBrand({ name: 'Orange Jelly', email: 'peter@orangejelly.co.uk' });
+
+    expect(insertCalls).toEqual([
+      {
+        table: 'accounts',
+        row: {
+          business_name: 'Orange Jelly',
+          email: 'peter@orangejelly.co.uk',
+          timezone: 'Europe/London',
+          created_by_user_id: SUPER_ADMIN_CTX.user.id,
+          auth_user_id: SUPER_ADMIN_CTX.user.id,
+        },
+      },
+    ]);
+  });
+
+  it('logs the database error and shows a generic failure when the insert fails', async () => {
+    state.accountsInsert = { data: null, error: { code: '23502', message: 'null value in column "id"' } };
+    const { createBrand } = await import('./actions');
+    const result = await createBrand({ name: 'Orange Jelly', email: 'peter@orangejelly.co.uk' });
+
+    expect(result).toEqual({ error: 'Could not create the brand.' });
+    expect(mockLoggerError).toHaveBeenCalledWith(
+      'create brand failed',
+      undefined,
+      expect.objectContaining({ code: '23502', reason: 'null value in column "id"' }),
+    );
+    expect(mockLogAdminEvent).not.toHaveBeenCalled();
   });
 
   it('rejects a blank name', async () => {
