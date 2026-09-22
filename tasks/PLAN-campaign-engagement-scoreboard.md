@@ -354,5 +354,6 @@ Production migration application and application deployment remain separate user
 - Focused integration: 94 tests passed across eight files.
 - Full `npm run ci:verify`: lint and typecheck passed; 2,377 tests passed and 3 skipped in each timezone run; production build completed with 33 pages.
 - Independent review: no functional or data-integrity defects found. Three trailing spaces in the spec were removed before the final diff check.
-- Production read-only recheck: all nine columns remain absent; the latest applied migration remains `20260910113202`; the three tables are small and have no dependent views, materialised views, functions or triggers.
-- Production migration and application deployment have not been run.
+- Production pre-apply check: all nine columns were absent; the three tables were small and had no dependent views, materialised views, functions or triggers.
+- Production migration: applied to `cheersai2.0` as `20260922040934 campaign_engagement_metrics`. All nine columns were verified as integer, non-null and defaulting to zero. Existing rows contain no nulls.
+- Application deployment has not been run.
