@@ -79,9 +79,9 @@ describe('syncMetaCampaignPerformance', () => {
     };
 
     vi.mocked(fetchMetaObjectInsights)
-      .mockResolvedValueOnce({ spend: 10, impressions: 1000, reach: 800, clicks: 50, ctr: 5, cpc: 0.2, conversions: 2, costPerConversion: 5, conversionRate: 4, status: 'ACTIVE' })
-      .mockResolvedValueOnce({ spend: 6, impressions: 600, reach: 500, clicks: 30, ctr: 5, cpc: 0.2, conversions: 1, costPerConversion: 6, conversionRate: 3.33, status: 'ACTIVE' })
-      .mockResolvedValueOnce({ spend: 4, impressions: 400, reach: 300, clicks: 20, ctr: 5, cpc: 0.2, conversions: 1, costPerConversion: 4, conversionRate: 5, status: 'ACTIVE' });
+      .mockResolvedValueOnce({ spend: 10, impressions: 1000, reach: 800, clicks: 50, reactions: 12, comments: 3, shares: 2, ctr: 5, cpc: 0.2, conversions: 2, costPerConversion: 5, conversionRate: 4, status: 'ACTIVE' })
+      .mockResolvedValueOnce({ spend: 6, impressions: 600, reach: 500, clicks: 30, reactions: 7, comments: 2, shares: 1, ctr: 5, cpc: 0.2, conversions: 1, costPerConversion: 6, conversionRate: 3.33, status: 'ACTIVE' })
+      .mockResolvedValueOnce({ spend: 4, impressions: 400, reach: 300, clicks: 20, reactions: 4, comments: 1, shares: 1, ctr: 5, cpc: 0.2, conversions: 1, costPerConversion: 4, conversionRate: 5, status: 'ACTIVE' });
 
     const result = await syncMetaCampaignPerformance('campaign-1', {
       accountId: 'account-1',
@@ -105,10 +105,23 @@ describe('syncMetaCampaignPerformance', () => {
     expect(updates[0].payload).toMatchObject({
       metrics_reach: 800,
       metrics_clicks: 50,
+      metrics_reactions: 12,
+      metrics_comments: 3,
+      metrics_shares: 2,
       metrics_conversions: 2,
       metrics_cost_per_conversion: 5,
       metrics_conversion_rate: 4,
       meta_status: 'ACTIVE',
+    });
+    expect(updates[1].payload).toMatchObject({
+      metrics_reactions: 7,
+      metrics_comments: 2,
+      metrics_shares: 1,
+    });
+    expect(updates[2].payload).toMatchObject({
+      metrics_reactions: 4,
+      metrics_comments: 1,
+      metrics_shares: 1,
     });
 
     expect(upserts).toHaveLength(1);
@@ -123,6 +136,9 @@ describe('syncMetaCampaignPerformance', () => {
     });
     // frequency = impressions / reach = 400 / 300
     expect(upserts[0].payload.frequency).toBeCloseTo(400 / 300, 6);
+    expect(upserts[0].payload).not.toHaveProperty('reactions');
+    expect(upserts[0].payload).not.toHaveProperty('comments');
+    expect(upserts[0].payload).not.toHaveProperty('shares');
     expect(typeof upserts[0].payload.captured_on).toBe('string');
     expect(upserts[0].payload.captured_on).toMatch(/^\d{4}-\d{2}-\d{2}$/);
   });
@@ -156,9 +172,9 @@ describe('syncMetaCampaignPerformance', () => {
     const supabase = { from: vi.fn((table: string) => queues[table]?.shift()) };
 
     vi.mocked(fetchMetaObjectInsights)
-      .mockResolvedValueOnce({ spend: 10, impressions: 1000, reach: 800, clicks: 50, ctr: 5, cpc: 0.2, conversions: 2, costPerConversion: 5, conversionRate: 4, status: 'ACTIVE' })
-      .mockResolvedValueOnce({ spend: 6, impressions: 600, reach: 500, clicks: 30, ctr: 5, cpc: 0.2, conversions: 1, costPerConversion: 6, conversionRate: 3.33, status: 'ACTIVE' })
-      .mockResolvedValueOnce({ spend: 0, impressions: 0, reach: 0, clicks: 0, ctr: 0, cpc: 0, conversions: 0, costPerConversion: 0, conversionRate: 0, status: 'ACTIVE' });
+      .mockResolvedValueOnce({ spend: 10, impressions: 1000, reach: 800, clicks: 50, reactions: 12, comments: 3, shares: 2, ctr: 5, cpc: 0.2, conversions: 2, costPerConversion: 5, conversionRate: 4, status: 'ACTIVE' })
+      .mockResolvedValueOnce({ spend: 6, impressions: 600, reach: 500, clicks: 30, reactions: 7, comments: 2, shares: 1, ctr: 5, cpc: 0.2, conversions: 1, costPerConversion: 6, conversionRate: 3.33, status: 'ACTIVE' })
+      .mockResolvedValueOnce({ spend: 0, impressions: 0, reach: 0, clicks: 0, reactions: 0, comments: 0, shares: 0, ctr: 0, cpc: 0, conversions: 0, costPerConversion: 0, conversionRate: 0, status: 'ACTIVE' });
 
     await syncMetaCampaignPerformance('campaign-1', { accountId: 'account-1', supabase: supabase as never });
 
@@ -203,7 +219,7 @@ describe('syncMetaCampaignPerformance', () => {
     };
     const supabase = { from: vi.fn((table: string) => queues[table]?.shift()) };
 
-    const insights = { spend: 4, impressions: 400, reach: 300, clicks: 20, ctr: 5, cpc: 0.2, conversions: 1, costPerConversion: 4, conversionRate: 5, status: 'ACTIVE' };
+    const insights = { spend: 4, impressions: 400, reach: 300, clicks: 20, reactions: 4, comments: 1, shares: 1, ctr: 5, cpc: 0.2, conversions: 1, costPerConversion: 4, conversionRate: 5, status: 'ACTIVE' };
     vi.mocked(fetchMetaObjectInsights).mockResolvedValue(insights);
 
     try {

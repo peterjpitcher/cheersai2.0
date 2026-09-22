@@ -50,6 +50,7 @@ vi.mock('next/cache', () => ({
 import {
   applyOptimisationRecommendation,
   generateCampaignAction,
+  getCampaignWithTree,
   runCampaignDashboardOptimisation,
   saveCampaignDraft,
 } from '@/app/(app)/campaigns/actions';
@@ -144,6 +145,151 @@ function mockGenerateFromPhases() {
   vi.mocked(generateCampaign).mockImplementationOnce(async (input) => (
     generatedPayloadForPhases(input.phases) as Awaited<ReturnType<typeof generateCampaign>>
   ));
+}
+
+function campaignTreeRow(engagement?: { reactions: number; comments: number; shares: number }) {
+  const engagementMetrics = engagement
+    ? {
+        metrics_reactions: engagement.reactions,
+        metrics_comments: engagement.comments,
+        metrics_shares: engagement.shares,
+      }
+    : {};
+
+  return {
+    id: 'campaign-1',
+    account_id: 'account-123',
+    meta_campaign_id: 'meta-campaign-1',
+    name: 'Campaign',
+    objective: 'OUTCOME_SALES',
+    problem_brief: 'Fill more tables.',
+    ai_rationale: null,
+    budget_type: 'DAILY',
+    budget_amount: 20,
+    start_date: '2026-09-01',
+    end_date: '2026-09-30',
+    status: 'ACTIVE',
+    meta_status: 'ACTIVE',
+    publish_error: null,
+    special_ad_category: 'NONE',
+    campaign_kind: 'event',
+    source_type: null,
+    source_id: null,
+    destination_url: 'https://example.com/book',
+    geo_radius_miles: 3,
+    audience_mode: 'local_only',
+    audience_interest_keywords: [],
+    resolved_interests: [],
+    source_snapshot: null,
+    quality_score: null,
+    quality_status: null,
+    quality_issues: [],
+    audience_strategy: null,
+    metrics_spend: 10,
+    metrics_impressions: 1000,
+    metrics_reach: 800,
+    metrics_clicks: 50,
+    ...engagementMetrics,
+    metrics_ctr: 5,
+    metrics_cpc: 0.2,
+    metrics_conversions: 2,
+    metrics_cost_per_conversion: 5,
+    metrics_conversion_rate: 4,
+    last_synced_at: '2026-09-22T08:00:00.000Z',
+    created_at: '2026-09-01T08:00:00.000Z',
+    ad_sets: [{
+      id: 'adset-1',
+      campaign_id: 'campaign-1',
+      meta_adset_id: 'meta-adset-1',
+      name: 'Ad set',
+      phase_start: '2026-09-01',
+      phase_end: '2026-09-30',
+      targeting: {},
+      placements: 'AUTO',
+      budget_amount: 20,
+      optimisation_goal: 'OFFSITE_CONVERSIONS',
+      bid_strategy: 'LOWEST_COST_WITHOUT_CAP',
+      adset_media_asset_id: null,
+      adset_image_url: null,
+      ads_stop_time: null,
+      ads_start_time: null,
+      service_key: null,
+      decision_stage: null,
+      budget_weight: null,
+      meta_status: 'ACTIVE',
+      metrics_spend: 6,
+      metrics_impressions: 600,
+      metrics_reach: 500,
+      metrics_clicks: 30,
+      ...engagementMetrics,
+      metrics_ctr: 5,
+      metrics_cpc: 0.2,
+      metrics_conversions: 1,
+      metrics_cost_per_conversion: 6,
+      metrics_conversion_rate: 3.33,
+      last_synced_at: '2026-09-22T08:00:00.000Z',
+      status: 'ACTIVE',
+      created_at: '2026-09-01T08:00:00.000Z',
+      ads: [{
+        id: 'ad-1',
+        adset_id: 'adset-1',
+        meta_ad_id: 'meta-ad-1',
+        meta_creative_id: 'meta-creative-1',
+        name: 'Ad',
+        headline: 'Book now',
+        primary_text: 'Book your table.',
+        description: 'Tables available',
+        cta: 'BOOK_NOW',
+        angle: null,
+        creative_format: null,
+        creative_variant_key: null,
+        utm_content_key: null,
+        media_asset_id: null,
+        creative_brief: null,
+        preview_url: null,
+        meta_status: 'ACTIVE',
+        metrics_spend: 4,
+        metrics_impressions: 400,
+        metrics_reach: 300,
+        metrics_clicks: 20,
+        ...engagementMetrics,
+        metrics_ctr: 5,
+        metrics_cpc: 0.2,
+        metrics_conversions: 1,
+        metrics_cost_per_conversion: 4,
+        metrics_conversion_rate: 5,
+        last_synced_at: '2026-09-22T08:00:00.000Z',
+        status: 'ACTIVE',
+        created_at: '2026-09-01T08:00:00.000Z',
+      }],
+    }],
+  };
+}
+
+function mockCampaignTreeLoad(row: ReturnType<typeof campaignTreeRow>) {
+  const treeEqCalls: Array<{ column: string; value: string }> = [];
+  const treeBuilder = {
+    select: vi.fn(() => treeBuilder),
+    eq: vi.fn((column: string, value: string) => {
+      treeEqCalls.push({ column, value });
+      return treeBuilder;
+    }),
+    single: vi.fn(async () => ({ data: row, error: null })),
+  };
+  const listBuilder = {
+    select: vi.fn(() => listBuilder),
+    eq: vi.fn(() => listBuilder),
+    order: vi.fn(async () => ({ data: [], error: null })),
+  };
+  const campaignQueries = [treeBuilder, listBuilder];
+  const supabase = {
+    from: vi.fn((table: string) => {
+      if (table !== 'meta_campaigns') throw new Error(`Unexpected table: ${table}`);
+      return campaignQueries.shift();
+    }),
+  };
+  vi.mocked(createServiceSupabaseClient).mockReturnValue(supabase as never);
+  return { treeEqCalls };
 }
 
 // ---------------------------------------------------------------------------
@@ -585,6 +731,48 @@ describe('runCampaignDashboardOptimisation', () => {
       mode: 'recommend',
       supabase: mockSupabase,
     });
+  });
+});
+
+describe('campaign performance row mapping', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('maps engagement metrics on campaigns, ad sets, and ads', async () => {
+    const row = campaignTreeRow({
+      reactions: 12,
+      comments: 3,
+      shares: 2,
+    });
+    Object.assign(row.ad_sets[0], {
+      metrics_reactions: 7,
+      metrics_comments: 2,
+      metrics_shares: 1,
+    });
+    Object.assign(row.ad_sets[0].ads[0], {
+      metrics_reactions: 4,
+      metrics_comments: 1,
+      metrics_shares: 1,
+    });
+    const { treeEqCalls } = mockCampaignTreeLoad(row);
+
+    const campaign = await getCampaignWithTree('campaign-1');
+
+    expect(campaign?.performance).toMatchObject({ reactions: 12, comments: 3, shares: 2 });
+    expect(campaign?.adSets?.[0].performance).toMatchObject({ reactions: 7, comments: 2, shares: 1 });
+    expect(campaign?.adSets?.[0].ads?.[0].performance).toMatchObject({ reactions: 4, comments: 1, shares: 1 });
+    expect(treeEqCalls).toContainEqual({ column: 'account_id', value: 'account-123' });
+  });
+
+  it('maps missing legacy engagement fields to zero at every level', async () => {
+    mockCampaignTreeLoad(campaignTreeRow());
+
+    const campaign = await getCampaignWithTree('campaign-1');
+
+    expect(campaign?.performance).toMatchObject({ reactions: 0, comments: 0, shares: 0 });
+    expect(campaign?.adSets?.[0].performance).toMatchObject({ reactions: 0, comments: 0, shares: 0 });
+    expect(campaign?.adSets?.[0].ads?.[0].performance).toMatchObject({ reactions: 0, comments: 0, shares: 0 });
   });
 });
 

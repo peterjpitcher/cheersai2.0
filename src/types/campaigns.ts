@@ -124,6 +124,9 @@ export interface CampaignPerformanceMetrics {
   impressions: number;
   reach: number;
   clicks: number;
+  reactions: number;
+  comments: number;
+  shares: number;
   ctr: number;
   cpc: number;
   conversions: number;

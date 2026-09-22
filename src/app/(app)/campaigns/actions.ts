@@ -2071,6 +2071,9 @@ interface CampaignDbRow {
   metrics_impressions: number | null;
   metrics_reach: number | null;
   metrics_clicks: number | null;
+  metrics_reactions: number | null;
+  metrics_comments: number | null;
+  metrics_shares: number | null;
   metrics_ctr: number | string | null;
   metrics_cpc: number | string | null;
   metrics_conversions: number | string | null;
@@ -2102,6 +2105,9 @@ interface AdDbRow {
   metrics_impressions: number | null;
   metrics_reach: number | null;
   metrics_clicks: number | null;
+  metrics_reactions: number | null;
+  metrics_comments: number | null;
+  metrics_shares: number | null;
   metrics_ctr: number | string | null;
   metrics_cpc: number | string | null;
   metrics_conversions: number | string | null;
@@ -2136,6 +2142,9 @@ interface AdSetDbRow {
   metrics_impressions: number | null;
   metrics_reach: number | null;
   metrics_clicks: number | null;
+  metrics_reactions: number | null;
+  metrics_comments: number | null;
+  metrics_shares: number | null;
   metrics_ctr: number | string | null;
   metrics_cpc: number | string | null;
   metrics_conversions: number | string | null;
@@ -2282,6 +2291,9 @@ function dbRowToPerformance(row: {
   metrics_impressions: number | null;
   metrics_reach: number | null;
   metrics_clicks: number | null;
+  metrics_reactions?: number | null;
+  metrics_comments?: number | null;
+  metrics_shares?: number | null;
   metrics_ctr: number | string | null;
   metrics_cpc: number | string | null;
   metrics_conversions?: number | string | null;
@@ -2294,6 +2306,9 @@ function dbRowToPerformance(row: {
     impressions: Number(row.metrics_impressions ?? 0),
     reach: Number(row.metrics_reach ?? 0),
     clicks: Number(row.metrics_clicks ?? 0),
+    reactions: Number(row.metrics_reactions ?? 0),
+    comments: Number(row.metrics_comments ?? 0),
+    shares: Number(row.metrics_shares ?? 0),
     ctr: Number(row.metrics_ctr ?? 0),
     cpc: Number(row.metrics_cpc ?? 0),
     conversions,
