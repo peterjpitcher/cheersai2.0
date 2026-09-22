@@ -320,7 +320,11 @@ function DetailRecommendationPreview({ action }: { action: OptimisationActionSum
       {confidence !== null && (
         <p className="mt-1 text-xs" style={{ color: 'var(--c-ink-3)' }}>Confidence: {Math.round(confidence * 100)}%</p>
       )}
-      {action.status === 'planned' && (
+      {action.status === 'planned' && action.copyProblems?.length ? (
+        <p className="mt-2 text-xs" style={{ color: 'var(--c-claret)' }}>
+          Cannot be applied: {action.copyProblems.join('; ')}.
+        </p>
+      ) : action.status === 'planned' && (
         <form action={applyOptimisationRecommendationFormAction} className="mt-2">
           <input type="hidden" name="actionId" value={action.id} />
           <button

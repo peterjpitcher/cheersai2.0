@@ -50,13 +50,14 @@ vi.mock('next/cache', () => ({
 import {
   applyOptimisationRecommendation,
   generateCampaignAction,
+  getCampaignOptimisationActions,
   getCampaignWithTree,
   runCampaignDashboardOptimisation,
   saveCampaignDraft,
 } from '@/app/(app)/campaigns/actions';
 import { createServiceSupabaseClient } from '@/lib/supabase/service';
 import { generateCampaign } from '@/lib/campaigns/generate';
-import { searchMetaInterests } from '@/lib/meta/marketing';
+import { createMetaAd, createMetaAdCreative, searchMetaInterests, uploadMetaImage } from '@/lib/meta/marketing';
 import { createManagementMetaAdsLink } from '@/lib/management-app/client';
 import { getManagementConnectionConfig } from '@/lib/management-app/data';
 import { runMetaCampaignOptimisation } from '@/lib/campaigns/optimisation';
@@ -850,6 +851,128 @@ describe('applyOptimisationRecommendation', () => {
       status: 'applied',
       replacement_ad_id: null,
     }));
+  });
+
+  it('skips a stored proposal that publishes the internal campaign name and never calls Meta', async () => {
+    mockMaybeSingle
+      .mockResolvedValueOnce({ data: leakedWeekdayLunchAction, error: null })
+      .mockResolvedValueOnce({ data: liveWeekdayLunchAd, error: null })
+      .mockResolvedValueOnce({ data: liveWeekdayLunchAdSet, error: null })
+      .mockResolvedValueOnce({ data: weekdayLunchCampaignRow, error: null });
+
+    const result = await applyOptimisationRecommendation('action-leaked');
+
+    expect(result).toEqual({ error: expect.stringContaining('it uses the internal campaign name') });
+    expect(mockSupabase.update).toHaveBeenCalledWith(expect.objectContaining({ status: 'skipped' }));
+    expect(mockSupabase.update).not.toHaveBeenCalledWith(expect.objectContaining({ status: 'applied' }));
+    expect(mockSupabase.insert).not.toHaveBeenCalled();
+    expect(uploadMetaImage).not.toHaveBeenCalled();
+    expect(createMetaAdCreative).not.toHaveBeenCalled();
+    expect(createMetaAd).not.toHaveBeenCalled();
+  });
+});
+
+// The rewrite applied on 22 September 2026, as stored in meta_optimisation_actions.
+const leakedWeekdayLunchAction = {
+  id: 'action-leaked',
+  campaign_id: 'campaign-weekday',
+  adset_id: 'adset-weekday',
+  ad_id: 'ad-weekday',
+  action_type: 'copy_rewrite',
+  status: 'planned',
+  recommendation_payload: {
+    proposed: {
+      name: 'Evergreen Test | Booking urgency | Var 1 - booking rewrite',
+      headline: 'Book Weekday Lunch A (cod and chips)',
+      primaryText:
+        'Reserve a table for Weekday Lunch A (cod and chips).\n\n'
+        + 'Weekday lunch at The Anchor, Stanwell Moor: lunch is served Tuesday to Friday, 12pm to 3pm (new since 1 September 2026)\n\n'
+        + 'Book today and make the plan easy to say yes to.',
+      description: 'Book now',
+      cta: 'BOOK_NOW',
+      angle: 'Booking intent',
+    },
+  },
+};
+
+const liveWeekdayLunchAd = {
+  id: 'ad-weekday',
+  adset_id: 'adset-weekday',
+  meta_ad_id: 'meta-ad-weekday',
+  name: 'Evergreen Test | Booking urgency | Var 1',
+  status: 'ACTIVE',
+  media_asset_id: 'asset-weekday',
+};
+
+const liveWeekdayLunchAdSet = {
+  id: 'adset-weekday',
+  campaign_id: 'campaign-weekday',
+  meta_adset_id: 'meta-adset-weekday',
+  adset_media_asset_id: null,
+};
+
+const weekdayLunchCampaignRow = {
+  id: 'campaign-weekday',
+  account_id: 'account-123',
+  name: 'Weekday Lunch A (cod and chips)',
+  destination_url: 'https://l.the-anchor.pub/weekday-lunch',
+  campaign_kind: 'evergreen',
+  source_snapshot: { sourceType: 'custom_promotion' },
+};
+
+describe('optimisation action summaries', () => {
+  function mockActionRows(rows: unknown[]) {
+    const builder = {
+      select: vi.fn(() => builder),
+      eq: vi.fn(() => builder),
+      order: vi.fn(() => builder),
+      limit: vi.fn(async () => ({ data: rows, error: null })),
+    };
+    vi.mocked(createServiceSupabaseClient).mockReturnValue({ from: vi.fn(() => builder) } as never);
+  }
+
+  const baseRow = {
+    run_id: 'run-1',
+    campaign_id: 'campaign-weekday',
+    adset_id: 'adset-weekday',
+    ad_id: 'ad-weekday',
+    action_type: 'copy_rewrite',
+    reason: 'Rewrite recommended.',
+    status: 'planned',
+    severity: 'info',
+    error: null,
+    metrics_snapshot: {},
+    replacement_ad_id: null,
+    applied_at: null,
+    created_at: '2026-09-19T03:00:00Z',
+    meta_campaigns: { name: 'Weekday Lunch A (cod and chips)', status: 'ACTIVE', meta_status: 'ACTIVE', end_date: null, source_snapshot: {} },
+  };
+
+  it('marks a planned rewrite that uses the campaign name as blocked, with the reason', async () => {
+    mockActionRows([{ ...baseRow, id: 'leaked', recommendation_payload: leakedWeekdayLunchAction.recommendation_payload }]);
+
+    const [summary] = await getCampaignOptimisationActions('campaign-weekday');
+
+    expect(summary.copyProblems).toContain('it uses the internal campaign name');
+  });
+
+  it('leaves a safe planned rewrite approvable', async () => {
+    mockActionRows([{
+      ...baseRow,
+      id: 'safe',
+      recommendation_payload: {
+        proposed: {
+          headline: 'Lunch from £9, Tuesday to Friday',
+          primaryText: "Snack pots are £9.\n\nBook your table online and we'll have it ready for you.",
+          description: 'Book now',
+          cta: 'BOOK_NOW',
+        },
+      },
+    }]);
+
+    const [summary] = await getCampaignOptimisationActions('campaign-weekday');
+
+    expect(summary.copyProblems).toEqual([]);
   });
 });
 

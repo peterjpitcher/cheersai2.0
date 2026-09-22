@@ -76,6 +76,7 @@ import {
   type OptimisationCampaignRow,
 } from '@/lib/campaigns/optimisation';
 import { syncMetaCampaignPerformance } from '@/lib/campaigns/performance-sync';
+import { findRewriteCopyProblems } from '@/lib/campaigns/rewrite-copy';
 import { logPublishAuditEvent } from '@/lib/publishing/audit';
 import { createServiceSupabaseClient } from '@/lib/supabase/service';
 import type {
@@ -186,7 +187,7 @@ interface ConversionRuleResult {
 }
 
 const OPTIMISATION_ACTION_SELECT =
-  'id, run_id, campaign_id, adset_id, ad_id, action_type, reason, status, severity, error, metrics_snapshot, recommendation_payload, replacement_ad_id, applied_at, created_at, meta_campaigns(name,status,meta_status,end_date), ad_sets(name), ads:ads!meta_optimisation_actions_ad_id_fkey(name)';
+  'id, run_id, campaign_id, adset_id, ad_id, action_type, reason, status, severity, error, metrics_snapshot, recommendation_payload, replacement_ad_id, applied_at, created_at, meta_campaigns(name,status,meta_status,end_date,source_snapshot), ad_sets(name), ads:ads!meta_optimisation_actions_ad_id_fkey(name)';
 const LEGACY_OPTIMISATION_ACTION_SELECT =
   'id, run_id, campaign_id, adset_id, ad_id, action_type, reason, status, error, metrics_snapshot, applied_at, created_at, meta_campaigns(name,status,meta_status,end_date), ad_sets(name), ads:ads!meta_optimisation_actions_ad_id_fkey(name)';
 
@@ -1724,8 +1725,10 @@ interface ApplyRecommendationAdSetRow {
 interface ApplyRecommendationCampaignRow {
   id: string;
   account_id: string;
+  name: string;
   destination_url: string | null;
   campaign_kind: string | null;
+  source_snapshot: Record<string, unknown> | null;
 }
 
 interface ApplyRecommendationAdAccountRow {
@@ -1772,7 +1775,7 @@ export async function applyOptimisationRecommendation(
         .maybeSingle<ApplyRecommendationAdSetRow>(),
       supabase
         .from('meta_campaigns')
-        .select('id, account_id, destination_url, campaign_kind')
+        .select('id, account_id, name, destination_url, campaign_kind, source_snapshot')
         .eq('id', action.campaign_id)
         .eq('account_id', accountId)
         .maybeSingle<ApplyRecommendationCampaignRow>(),
@@ -1782,6 +1785,17 @@ export async function applyOptimisationRecommendation(
   if (adSetError) return { error: adSetError.message };
   if (campaignError) return { error: campaignError.message };
   if (!ad || !adSet || !campaign) return { error: 'Could not load the ad, ad set, or campaign for this recommendation.' };
+
+  // A stored proposal can predate the public-copy rules (on 22 September 2026 one published the
+  // internal campaign name), so check it again before it can reach an ad.
+  const copyProblems = rewriteProposalProblems(proposal, campaign);
+  if (copyProblems.length > 0) {
+    return skipRecommendation(
+      supabase,
+      action.id,
+      `Not applied: the proposed copy failed the copy checks (${copyProblems.join('; ')}). Nothing was changed.`,
+    );
+  }
 
   if (!ad.meta_ad_id || ad.status !== 'ACTIVE' || !adSet.meta_adset_id) {
     const { error: updateError } = await supabase
@@ -1948,6 +1962,17 @@ function parseCopyProposal(payload: Record<string, unknown> | null): CopyProposa
   };
 }
 
+function rewriteProposalProblems(
+  proposal: Pick<CopyProposal, 'headline' | 'primaryText' | 'description'>,
+  campaign: { name?: string | null; source_snapshot?: Record<string, unknown> | null },
+): string[] {
+  const eventName = campaign.source_snapshot?.eventName;
+  return findRewriteCopyProblems(proposal, {
+    campaignName: campaign.name,
+    publicNames: [typeof eventName === 'string' ? eventName : null],
+  });
+}
+
 function normaliseText(value: unknown, max: number) {
   if (typeof value !== 'string') return '';
   return value.trim().slice(0, max);
@@ -1985,6 +2010,19 @@ async function failRecommendation(
     .from('meta_optimisation_actions')
     .update({ status: 'failed', error })
     .eq('id', actionId);
+  return { error };
+}
+
+async function skipRecommendation(
+  supabase: ReturnType<typeof createServiceSupabaseClient>,
+  actionId: string,
+  error: string,
+): Promise<{ error: string }> {
+  await supabase
+    .from('meta_optimisation_actions')
+    .update({ status: 'skipped', error })
+    .eq('id', actionId);
+  revalidatePath('/campaigns');
   return { error };
 }
 
@@ -2165,6 +2203,7 @@ interface OptimisationActionCampaignRef {
   status?: string | null;
   meta_status?: string | null;
   end_date?: string | null;
+  source_snapshot?: Record<string, unknown> | null;
 }
 
 interface OptimisationActionDbRow {
@@ -2345,10 +2384,20 @@ function dbRowToOptimisationActionSummary(row: OptimisationActionDbRow): Optimis
     error: row.error,
     metricsSnapshot: row.metrics_snapshot ?? {},
     recommendationPayload: row.recommendation_payload ?? {},
+    copyProblems: plannedRewriteCopyProblems(row),
     replacementAdId: row.replacement_ad_id ?? null,
     appliedAt: row.applied_at ? new Date(row.applied_at) : null,
     createdAt: new Date(row.created_at),
   };
+}
+
+/** Why a planned rewrite cannot be applied, so the UI can say so instead of offering Approve. */
+function plannedRewriteCopyProblems(row: OptimisationActionDbRow): string[] {
+  if (row.action_type !== 'copy_rewrite' || row.status !== 'planned') return [];
+  const proposal = parseCopyProposal(row.recommendation_payload);
+  const campaign = firstNested(row.meta_campaigns);
+  if (!proposal || !campaign) return [];
+  return rewriteProposalProblems(proposal, campaign);
 }
 
 function isOptimisationActionForFinishedCampaign(row: OptimisationActionDbRow): boolean {

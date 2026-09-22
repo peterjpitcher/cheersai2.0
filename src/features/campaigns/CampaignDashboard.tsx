@@ -1218,7 +1218,11 @@ function RecommendationPreview({ action }: { action: OptimisationActionSummary }
             Confidence: {Math.round(confidence * 100)}%
           </p>
         )}
-        {action.status === 'planned' && (
+        {action.status === 'planned' && action.copyProblems?.length ? (
+          <p className="text-xs" style={{ color: 'var(--c-claret)' }}>
+            Cannot be applied: {action.copyProblems.join('; ')}.
+          </p>
+        ) : action.status === 'planned' && (
           <DashboardActionButton
             run={() => applyOptimisationRecommendation(action.id)}
             label="Approve replacement"
