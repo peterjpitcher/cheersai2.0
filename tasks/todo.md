@@ -1,3 +1,16 @@
+# Campaign engagement scoreboard (2026-09-22)
+
+Spec: `tasks/SPEC-campaign-engagement-scoreboard.md`
+Plan: `tasks/PLAN-campaign-engagement-scoreboard.md`
+
+- [ ] Add and locally verify the additive engagement metric migration.
+- [ ] Parse Meta reactions, comments and shares without changing booking metrics.
+- [ ] Persist and map engagement at campaign, ad set and ad levels.
+- [ ] Add Reach and compact Engagement columns to the scoreboard.
+- [ ] Run full release verification and prepare the production approval packet.
+
+---
+
 # Feature: evergreen delivery schedule, no Mondays (2026-09-10)
 
 Spec: `tasks/SPEC-evergreen-delivery-schedule.md`. Four stacked PRs; merging deploys.
