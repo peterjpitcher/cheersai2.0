@@ -1,6 +1,6 @@
 # SPEC: optimiser copy rewrites must never publish internal text
 
-Date: 22 September 2026. Status: Pieces 1 and 2 on `fix/optimiser-rewrite-copy`, Piece 3 on `feat/optimiser-controlled-test-guard` (stacked); owner approved shipping both, applying the migration and flagging the four Weekday campaigns.
+Date: 22 September 2026. Status: shipped. Both pieces merged and live, migration applied, the four Weekday campaigns flagged (see Production record).
 
 ## Problem
 
@@ -127,3 +127,22 @@ The conversion-first optimiser's copy rewrite put internal text into a live, pub
 - Switch on: activates a paused replacement and records the user.
 - Controlled test: no rewrites recorded; Apply and Switch on refuse.
 - `npm run ci:verify`.
+
+## Production record (22 September 2026)
+
+- PR #76 (Pieces 1 and 2) squash-merged as `ba9858eb`; production deployment
+  `dpl_87TEDcb49BXnMCHcZZsDtN2bxifQ` serving `cheers.orangejelly.co.uk`.
+- PR #77 (Piece 3) squash-merged as `c920b561`; production deployment
+  `dpl_6Bjatw7eKMQHHMt4F4DxtpAd22h1` serving `cheers.orangejelly.co.uk`.
+- Migration file `20260922160000_meta_campaigns_controlled_test.sql` (SHA-256
+  `de940458730a803ad88cc5f62141bdf4e5f7ed30af97a810ab917b7e07e64619`) applied to `cheersai2.0`
+  (`nbkjciurhvkfpcpatbnt`) as history version `20260922150937`. Verified: boolean, not null,
+  default false, comment present, 14 rows false before flagging, row policy unchanged.
+- Owner-approved flag set on the four Weekday campaigns: Lunch A (cod and chips), Lunch B (spicy
+  chicken stack), Dinner A (pizza), Dinner B (beef and ale pie).
+- Read-only dry run of the new logic on live data: before flagging, 4 rewrites would be proposed,
+  none containing a campaign name; after flagging, none. All 22 stored planned rewrites fail the
+  new check ("it uses the internal campaign name").
+- The migration file's "Deploy order" comment predates the switch to `select('*')` reads; the
+  code in fact runs with or without the column, as this spec says.
+- To end the test: "End controlled test" on each campaign page (or set the flag false).
