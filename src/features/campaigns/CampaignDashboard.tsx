@@ -656,6 +656,7 @@ function CampaignScoreboard({ dashboard }: { dashboard: CampaignDashboardModel }
                 <th className="px-3 py-3 text-right">Bookings</th>
                 <th className="px-3 py-3 text-right">Cost/booking</th>
                 <th className="px-3 py-3 text-right">Spend</th>
+                <th className="px-3 py-3 text-right">Clicks</th>
                 <th className="px-3 py-3 text-right">CTR</th>
                 <th className="px-3 py-3 text-left">Last sync</th>
                 <th className="px-4 py-3 text-right">Actions</th>
@@ -691,6 +692,7 @@ function CampaignScoreboard({ dashboard }: { dashboard: CampaignDashboardModel }
                       tone={getPerformanceTone('costPerConversion', campaign.performance.costPerConversion, performanceContext)}
                     />
                     <MetricCell value={formatCurrency(campaign.performance.spend)} />
+                    <MetricCell value={formatNumber(campaign.performance.clicks)} />
                     <MetricCell value={formatPercentage(campaign.performance.ctr)} />
                     <td className="px-3 py-3 text-xs" style={{ color: 'var(--c-ink-3)' }}>
                       {formatDateTime(campaign.lastSyncedAt)}

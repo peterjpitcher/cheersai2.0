@@ -126,6 +126,26 @@ describe('CampaignDashboard', () => {
     expect(screen.getByRole('button', { name: 'Hide finished' })).toBeTruthy();
   });
 
+  it('shows campaign clicks in the scoreboard', () => {
+    const dashboard = buildCampaignDashboard(
+      [
+        campaign({
+          id: 'clicked',
+          name: 'Clicked campaign',
+          performance: { ...EMPTY_PERFORMANCE, clicks: 1234 },
+        }),
+      ],
+      [],
+      undefined,
+      { now: new Date('2026-05-23T12:00:00Z') },
+    );
+
+    render(<CampaignDashboard dashboard={dashboard} />);
+
+    expect(screen.getByRole('columnheader', { name: 'Clicks' })).toBeTruthy();
+    expect(screen.getByRole('cell', { name: '1,234' })).toBeTruthy();
+  });
+
   it('renders advisory cutoff recommendations in the food booking panel', () => {
     const foodBookingInsights: FoodBookingInsights = {
       ...EMPTY_FOOD_BOOKING_INSIGHTS,
