@@ -139,7 +139,7 @@ move locals, for any future spend.
 | 10 Sep | Consent-gated attribution | the-anchor.pub #169 |
 | 10 Sep | Daily check and readouts scheduled | Claude scheduled tasks on the owner's Mac |
 | 22 Sep 04:36 | Optimiser "booking rewrite" applied to Lunch A: new live ad `120246219010320609` ("Var 1 - booking rewrite", link `0ai0j0`, `utm_content=meta_ads_main`) with the internal campaign name as its headline. It took all of Lunch A's delivery that morning (1,160 impressions, 32 link clicks, £4.31) | CheersAI campaign dashboard Apply button |
-| 22 Sep 12:25 | That ad paused with the owner's yes; the three original Lunch A ads untouched | Meta API on the one ad; CheersAI `ads.status` and `meta_status` set to `PAUSED` |
+| 22 Sep 12:23 | That ad paused with the owner's yes; the three original Lunch A ads untouched | Meta API on the one ad; CheersAI `ads.status` and `meta_status` set to `PAUSED` |
 
 Rollback: pause any campaign from the CheersAI app; revert the website PRs; restore the previous
 audience (`home`, `recent`, `frequently_in`) or automatic placements through the Meta API.
