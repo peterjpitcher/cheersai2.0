@@ -40,6 +40,9 @@
 | metrics_impressions | integer | NO | 0 |
 | metrics_reach | integer | NO | 0 |
 | metrics_clicks | integer | NO | 0 |
+| metrics_reactions | integer | NO | 0 |
+| metrics_comments | integer | NO | 0 |
+| metrics_shares | integer | NO | 0 |
 | metrics_ctr | numeric | NO | 0 |
 | metrics_cpc | numeric | NO | 0 |
 | last_synced_at | timestamp with time zone | YES |  |
@@ -75,6 +78,9 @@
 | metrics_impressions | integer | NO | 0 |
 | metrics_reach | integer | NO | 0 |
 | metrics_clicks | integer | NO | 0 |
+| metrics_reactions | integer | NO | 0 |
+| metrics_comments | integer | NO | 0 |
+| metrics_shares | integer | NO | 0 |
 | metrics_ctr | numeric | NO | 0 |
 | metrics_cpc | numeric | NO | 0 |
 | last_synced_at | timestamp with time zone | YES |  |
@@ -518,6 +524,9 @@
 | metrics_impressions | integer | NO | 0 |
 | metrics_reach | integer | NO | 0 |
 | metrics_clicks | integer | NO | 0 |
+| metrics_reactions | integer | NO | 0 |
+| metrics_comments | integer | NO | 0 |
+| metrics_shares | integer | NO | 0 |
 | metrics_ctr | numeric | NO | 0 |
 | metrics_cpc | numeric | NO | 0 |
 | geo_radius_miles | integer | NO | 3 |
