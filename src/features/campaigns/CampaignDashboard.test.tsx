@@ -1,7 +1,7 @@
 /**
  * @vitest-environment jsdom
  */
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { buildCampaignDashboard } from '@/lib/campaigns/dashboard';
@@ -42,6 +42,9 @@ const EMPTY_PERFORMANCE: CampaignPerformanceMetrics = {
   spend: 0,
   impressions: 0,
   reach: 0,
+  reactions: 0,
+  comments: 0,
+  shares: 0,
   clicks: 0,
   ctr: 0,
   cpc: 0,
@@ -144,6 +147,73 @@ describe('CampaignDashboard', () => {
 
     expect(screen.getByRole('columnheader', { name: 'Clicks' })).toBeTruthy();
     expect(screen.getByRole('cell', { name: '1,234' })).toBeTruthy();
+  });
+
+  it('shows reach and the engagement breakdown beside clicks', () => {
+    const dashboard = buildCampaignDashboard(
+      [
+        campaign({
+          id: 'impact',
+          name: 'Impact campaign',
+          performance: {
+            ...EMPTY_PERFORMANCE,
+            reach: 950,
+            reactions: 48,
+            comments: 6,
+            shares: 3,
+            clicks: 32,
+          },
+        }),
+      ],
+      [],
+      undefined,
+      { now: new Date('2026-05-23T12:00:00Z') },
+    );
+
+    render(<CampaignDashboard dashboard={dashboard} />);
+
+    expect(
+      within(screen.getByRole('table'))
+        .getAllByRole('columnheader')
+        .map((header) => header.textContent),
+    ).toEqual([
+      'Campaign',
+      'Status',
+      'Reach',
+      'Engagement',
+      'Clicks',
+      'CTR',
+      'Bookings',
+      'Cost/booking',
+      'Spend',
+      'Last sync',
+      'Actions',
+    ]);
+
+    const row = screen.getByRole('row', { name: /Impact campaign/ });
+    expect(within(row).getByRole('cell', { name: '950' })).toBeTruthy();
+    expect(within(row).getByText('57')).toBeTruthy();
+    expect(within(row).getByText('48 reactions · 6 comments · 3 shares')).toBeTruthy();
+    expect(within(row).getByRole('cell', { name: '32' })).toBeTruthy();
+  });
+
+  it('shows explicit zero engagement instead of missing data', () => {
+    const dashboard = buildCampaignDashboard(
+      [campaign({ id: 'no-engagement', name: 'No engagement campaign' })],
+      [],
+      undefined,
+      { now: new Date('2026-05-23T12:00:00Z') },
+    );
+
+    render(<CampaignDashboard dashboard={dashboard} />);
+
+    const row = screen.getByRole('row', { name: /No engagement campaign/ });
+    const engagementCell = within(row).getByRole('cell', {
+      name: '0 0 reactions · 0 comments · 0 shares',
+    });
+
+    expect(within(engagementCell).getByText('0')).toBeTruthy();
+    expect(within(engagementCell).getByText('0 reactions · 0 comments · 0 shares')).toBeTruthy();
   });
 
   it('renders advisory cutoff recommendations in the food booking panel', () => {

@@ -641,7 +641,7 @@ function CampaignScoreboard({ dashboard }: { dashboard: CampaignDashboardModel }
         </div>
       ) : (
         <div className="overflow-x-auto">
-          <table className="min-w-[920px] w-full text-sm">
+          <table className="min-w-[1220px] w-full text-sm">
             <thead>
               <tr
                 className="text-xs font-semibold uppercase"
@@ -653,11 +653,13 @@ function CampaignScoreboard({ dashboard }: { dashboard: CampaignDashboardModel }
               >
                 <th className="px-4 py-3 text-left">Campaign</th>
                 <th className="px-3 py-3 text-left">Status</th>
+                <th className="px-3 py-3 text-right">Reach</th>
+                <th className="px-3 py-3 text-right">Engagement</th>
+                <th className="px-3 py-3 text-right">Clicks</th>
+                <th className="px-3 py-3 text-right">CTR</th>
                 <th className="px-3 py-3 text-right">Bookings</th>
                 <th className="px-3 py-3 text-right">Cost/booking</th>
                 <th className="px-3 py-3 text-right">Spend</th>
-                <th className="px-3 py-3 text-right">Clicks</th>
-                <th className="px-3 py-3 text-right">CTR</th>
                 <th className="px-3 py-3 text-left">Last sync</th>
                 <th className="px-4 py-3 text-right">Actions</th>
               </tr>
@@ -683,6 +685,10 @@ function CampaignScoreboard({ dashboard }: { dashboard: CampaignDashboardModel }
                         {campaign.deliveryStatus.detail}
                       </p>
                     </td>
+                    <MetricCell value={formatNumber(campaign.performance.reach)} />
+                    <EngagementCell performance={campaign.performance} />
+                    <MetricCell value={formatNumber(campaign.performance.clicks)} />
+                    <MetricCell value={formatPercentage(campaign.performance.ctr)} />
                     <MetricCell
                       value={formatBookingMetric(campaign.performance)}
                       tone={getPerformanceTone('conversions', campaign.performance.conversions, performanceContext)}
@@ -692,8 +698,6 @@ function CampaignScoreboard({ dashboard }: { dashboard: CampaignDashboardModel }
                       tone={getPerformanceTone('costPerConversion', campaign.performance.costPerConversion, performanceContext)}
                     />
                     <MetricCell value={formatCurrency(campaign.performance.spend)} />
-                    <MetricCell value={formatNumber(campaign.performance.clicks)} />
-                    <MetricCell value={formatPercentage(campaign.performance.ctr)} />
                     <td className="px-3 py-3 text-xs" style={{ color: 'var(--c-ink-3)' }}>
                       {formatDateTime(campaign.lastSyncedAt)}
                     </td>
@@ -1301,6 +1305,22 @@ function MetricCell({ value, tone = 'neutral' }: { value: string; tone?: Perform
   return (
     <td className="px-3 py-3 text-right tabular-nums">
       <span className={metricPill(tone)}>{value}</span>
+    </td>
+  );
+}
+
+function EngagementCell({ performance }: { performance: CampaignPerformanceMetrics }) {
+  const total = performance.reactions + performance.comments + performance.shares;
+  const detail = `${formatNumber(performance.reactions)} reactions · ${formatNumber(performance.comments)} comments · ${formatNumber(performance.shares)} shares`;
+
+  return (
+    <td className="min-w-64 px-3 py-3 text-right tabular-nums">
+      <p className="font-semibold" style={{ color: 'var(--c-ink)' }}>
+        {formatNumber(total)}
+      </p>
+      <p className="mt-1 whitespace-nowrap text-xs" style={{ color: 'var(--c-ink-3)' }}>
+        {detail}
+      </p>
     </td>
   );
 }
