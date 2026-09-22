@@ -40,6 +40,11 @@ messages share a `utm_content` between Lunch A and Lunch B, so never join on `ut
 `utm_campaign` values: `weekday_lunch_a_cod_and_chips`, `weekday_lunch_b_spicy_chicken_stack`,
 `weekday_dinner_a_pizza`, `weekday_dinner_b_beef_and_ale_pie`.
 
+Lunch A also has a fourth ad from 22 September, `120246219010320609` ("Var 1 - booking rewrite",
+paused the same day; section 8). It is not one of the three messages: report it on its own line and
+leave it out of the message comparison. Its link is the campaign-level code `0ai0j0`
+(`utm_content=meta_ads_main`).
+
 ## 3. Owner decisions after the independent review (10 September 2026)
 
 Review: `tasks/REVIEW-weekday-food-campaign-2026-09-10.md`.
@@ -133,6 +138,8 @@ move locals, for any future spend.
 | 10 Sep | Start moved to 11 September 00:00 | Meta API on the four ad sets; CheersAI `meta_campaigns.start_date` and `ad_sets.phase_start` updated so the sync includes Friday |
 | 10 Sep | Consent-gated attribution | the-anchor.pub #169 |
 | 10 Sep | Daily check and readouts scheduled | Claude scheduled tasks on the owner's Mac |
+| 22 Sep 04:36 | Optimiser "booking rewrite" applied to Lunch A: new live ad `120246219010320609` ("Var 1 - booking rewrite", link `0ai0j0`, `utm_content=meta_ads_main`) with the internal campaign name as its headline. It took all of Lunch A's delivery that morning (1,160 impressions, 32 link clicks, £4.31) | CheersAI campaign dashboard Apply button |
+| 22 Sep 12:25 | That ad paused with the owner's yes; the three original Lunch A ads untouched | Meta API on the one ad; CheersAI `ads.status` and `meta_status` set to `PAUSED` |
 
 Rollback: pause any campaign from the CheersAI app; revert the website PRs; restore the previous
 audience (`home`, `recent`, `frequently_in`) or automatic placements through the Meta API.

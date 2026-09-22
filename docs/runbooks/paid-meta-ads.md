@@ -77,6 +77,10 @@ three copy ads in each, the same messages in each campaign of a pair. It is not 
 the campaigns share one audience and Meta shifts delivery to early leaders. Report results as
 directional, with click counts. Do not pause ads "for learning" at small budgets (the old 70% rule
 was dropped). A causal answer needs Meta's A/B test tool, which the app does not support.
+Three messages in one ad set do not give a fair copy test: in September 2026 Meta put almost all of
+each ad set's money behind one ad within a day, so the other two were judged on a few dozen clicks.
+The photo comparison (one image per campaign, fixed budgets) held up; the copy comparison did not.
+For a message test, give each message its own ad set and budget, or treat Meta's pick as the answer.
 
 **Delivery hours.** Use the app's delivery schedule (Meta day parting): lifetime budget only,
 whole hours, advertiser time (Europe/London), never with campaign budget optimisation. Deliver in
@@ -97,7 +101,9 @@ Explore will not run a square image, which is harmless.
 **Budget and forecast.** Give low, central and high cases, not one number. For £500 in September
 2026: 25p, 14p and 10p a link click; 0.5%, 1% and 2% of visitors booking; 2.5 people a table; so
 about £20, £5.60 and £2 per extra cover. Peter's bar is **£1 per extra cover**, because he can buy
-covers from other suppliers at that price; say plainly when a campaign cannot reach it.
+covers from other suppliers at that price; say plainly when a campaign cannot reach it. Do the sum
+in the brief: weekly spend divided by £1 is the extra covers a week needed to meet the bar (about
+£95 a week needed about 95 extra covers a week against a goal of 20).
 
 **Copy.** Limits: headline 40, primary text 300 (Meta shows about the first 125 before "more"),
 description 25. Every headline states a concrete fact. First person plural. Only name the days the
@@ -107,11 +113,20 @@ organic copy, not ad generation, so check ad copy by hand.
 **Measurement.** Fix a baseline period before launch. Primary: extra covers against the baseline
 and cost per extra cover. Secondary: link click-through rate and cost per link click. Guardrails:
 food takings, cancellations, no-shows, frequency, complaints, kitchen capacity. Write down the
-attribution rule (section 11) and the stop rule before the first penny is spent.
+attribution rule (section 11) and the stop rule before the first penny is spent. Cheap clicks are
+not the result: in the first week of the weekday food test, 851 link clicks at 14p brought no tagged
+booking and no rise in covers. Before judging copy or adding spend, check in Google Analytics how
+many ad visitors reach the booking page. Brief staff before launch to log every walk-in: on
+15 September 2026 the cash-up showed £302 of food with no covers logged, so the uplift could not be
+measured for that day.
 
 ## 5. Creative
 
 - Peter supplies the images. AI images are fine if they show what we actually serve.
+- **The photo moves results more than the words.** Week 1 of the weekday food test: pie 2.7% link
+  click-through against pizza 1.5% (11p against 19p a click), cod and chips 2.7% against the spicy
+  chicken stack 1.9%; the three messages were within noise. Test photos first, and lead with the
+  winners (pie, cod) next time.
 - **Check every image against the dish's menu description**: toppings, sides, garnish. ASA guidance
   says food pictures must show what customers will get, and naming no dish in the label does not
   fix a wrong picture. **Menu descriptions can lag the kitchen:** ask Peter before calling an image
@@ -213,9 +228,16 @@ number, which is the same message in each campaign of a pair.
   `ad_sets.phase_start`, `ad_sets.targeting`, `ad_sets.placements`.
 - Any edit sends the ads back to Meta's review. In September 2026 approval took 10 to 35 minutes;
   plan edits well before the first delivery.
-- Never use the app's "approve replacement" copy suggestions during a flight: approving one adds a
-  new live ad without a tracking tag while the old one keeps running.
-- Pause and resume through the app. Changing the objective or optimisation goal means a rebuild.
+- Never press Apply on the optimiser's copy rewrite suggestions ("booking rewrite") during a flight.
+  Apply puts a new ad live at once, with no preview, alongside the old ones. Its link is the
+  campaign-level short link (tagged, `utm_content=meta_ads_main`, but not per ad), and on evergreen
+  campaigns its copy is built from the internal campaign name. On 22 September 2026 it put "Book
+  Weekday Lunch A (cod and chips)" live as a headline, and Meta moved the whole ad set's delivery
+  onto it within hours, which also broke the copy test. A fix to the generator is in progress.
+- Pause and resume whole campaigns through the app. The app cannot pause a single ad: with Peter's
+  yes, set the ad's `status` to `PAUSED` through the Graph API, read it back, then set `ads.status`
+  and `ads.meta_status` to `PAUSED` in CheersAI. Changing the objective or optimisation goal means a
+  rebuild.
 
 ## 10. Read back and pre-launch checks
 
@@ -317,3 +339,9 @@ brief.
 | 10 Sep | A dinner baseline counted drinks tables as covers | Section 3 |
 | 10 Sep | Menu descriptions lag what the kitchen serves | Section 5 |
 | 10 Sep | Changing a campaign's start date on Meta without changing it in CheersAI would have dropped a day from the sync | Section 9 |
+| 21 Sep | Meta put each ad set's money behind one ad within a day, so three messages in one ad set gave no usable copy result | Section 4 (structure) |
+| 21 Sep | The photo moved click-through more than the message (pie over pizza, cod over chicken stack) | Section 5 |
+| 21 Sep | 851 link clicks at 14p brought no tagged booking and no rise in covers in week 1 | Section 4 (measurement): check the path to the booking page before adding spend |
+| 21 Sep | Unlogged walk-ins hid covers (£302 of food, no covers, 15 Sep) | Section 4 (measurement): brief staff before launch |
+| 21 Sep | At about £95 a week, the £1 bar needs about 95 extra covers a week | Section 4 (budget): do the sum in the brief |
+| 22 Sep | The optimiser's rewrite Apply button put a live ad with the internal campaign name as its headline; Meta moved the ad set onto it | Ad paused through the Graph API on 22 Sep; generator fix in progress; section 9 |
