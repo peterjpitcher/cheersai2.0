@@ -1,3 +1,18 @@
+# Brand-aware AI copy: business type and description (2026-09-22)
+
+Spec: `tasks/SPEC-brand-business-type.md`. Two stacked PRs; migration before either merges.
+
+- [x] Archive the unused "CheersAI Owner" placeholder brand (owner-approved, audited in admin_audit)
+- [x] PR 1: migration `20260922120000_brand_profile_business_type.sql`, verify script, Settings
+      fields, save action, loader, tests; migration tested on a scratch Postgres 17 (apply, re-apply,
+      verify, rollback, re-apply); `ci:verify` green (2384 tests, both time zones; build clean)
+- [ ] PR 2: copy and photo-tagging prompts use the business type; Anchor prompts byte-identical
+- [ ] Apply the migration to production (needs owner approval of the packet), run the verify script
+- [ ] Merge PR 1 then PR 2; verify the deploy and the Settings page live
+- [ ] Fill in Orange Jelly's business type and description once the brand exists
+
+---
+
 # Campaign engagement scoreboard (2026-09-22)
 
 Spec: `tasks/SPEC-campaign-engagement-scoreboard.md`

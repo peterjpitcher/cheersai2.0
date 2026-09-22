@@ -55,6 +55,9 @@ export async function updateBrandProfile(formData: unknown) {
         default_emojis: parsed.defaultEmojis,
         instagram_signature: parsed.instagramSignature,
         facebook_signature: parsed.facebookSignature,
+        // Empty means "not set", stored as null so the AI keeps its default pub style.
+        business_type: parsed.businessType || null,
+        business_description: parsed.businessDescription || null,
       },
       { onConflict: "account_id" },
     )

@@ -192,9 +192,10 @@
 | default_emojis | ARRAY | YES | ARRAY[]::text[] |
 | instagram_signature | text | YES |  |
 | facebook_signature | text | YES |  |
-| gbp_cta | text | YES |  |
 | updated_at | timestamp with time zone | NO | now() |
 | banned_phrases | ARRAY | NO | '{}'::text[] |
+| business_type | text | YES |  |
+| business_description | text | YES |  |
 
 > **RLS:** enabled (1 policies) | **FKs:** account_id -> accounts(id) CASCADE | **Audit:** updated_at
 
