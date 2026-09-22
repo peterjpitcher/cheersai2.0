@@ -9,7 +9,10 @@ Spec: `tasks/SPEC-brand-business-type.md`. Two stacked PRs; migration before eit
 - [x] PR 2: copy and photo-tagging prompts use the business type; Anchor prompts byte-identical
       (20 system-prompt variants diffed against main: identical); live OpenAI sample for Orange
       Jelly wrote as a websites business with no pub wording; `ci:verify` green (2392 tests)
-- [ ] Apply the migration to production (needs owner approval of the packet), run the verify script
+- [x] Apply the migration to production (owner approved 2026-09-22): repo `20260922120000` = prod
+      version `20260922124618 brand_profile_business_type`, SHA-256 7e527ecd...8149; verify script
+      passed on prod; The Anchor row unchanged; anon sees 0 rows
+- [x] PR 1 (#71) squash-merged to main as 7315301e
 - [ ] Merge PR 1 then PR 2; verify the deploy and the Settings page live
 - [ ] Fill in Orange Jelly's business type and description once the brand exists
 
