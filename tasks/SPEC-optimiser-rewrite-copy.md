@@ -1,6 +1,6 @@
 # SPEC: optimiser copy rewrites must never publish internal text
 
-Date: 22 September 2026. Status: implemented on branch `claude/kind-morse-73a8ce`, local only, not pushed.
+Date: 22 September 2026. Status: Pieces 1 and 2 on `fix/optimiser-rewrite-copy`, Piece 3 on `feat/optimiser-controlled-test-guard` (stacked); owner approved shipping both, applying the migration and flagging the four Weekday campaigns.
 
 ## Problem
 
@@ -70,7 +70,7 @@ The conversion-first optimiser's copy rewrite put internal text into a live, pub
 
 ### Piece 3: per-campaign controlled-test guard (schema change)
 
-- Migration `20260922120000_meta_campaigns_controlled_test.sql` adds
+- Migration `20260922160000_meta_campaigns_controlled_test.sql` adds
   `meta_campaigns.controlled_test boolean not null default false`.
 - The optimiser records no copy rewrites for a controlled-test campaign.
 - Apply and Switch on refuse for a controlled-test campaign.

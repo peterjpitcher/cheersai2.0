@@ -189,7 +189,7 @@ interface ConversionRuleResult {
 }
 
 // meta_campaigns(*) rather than a column list so the dashboard keeps working whether or not the
-// controlled_test migration (20260922120000) has been applied yet.
+// controlled_test migration (20260922160000) has been applied yet.
 const OPTIMISATION_ACTION_SELECT =
   'id, run_id, campaign_id, adset_id, ad_id, action_type, reason, status, severity, error, metrics_snapshot, recommendation_payload, replacement_ad_id, applied_at, created_at, meta_campaigns(*), ad_sets(name), ads:ads!meta_optimisation_actions_ad_id_fkey(name), replacement:ads!meta_optimisation_actions_replacement_ad_id_fkey(status)';
 const LEGACY_OPTIMISATION_ACTION_SELECT =
@@ -1733,7 +1733,7 @@ interface ApplyRecommendationCampaignRow {
   destination_url: string | null;
   campaign_kind: string | null;
   source_snapshot: Record<string, unknown> | null;
-  /** Absent until migration 20260922120000 is applied; nobody can set it before then. */
+  /** Absent until migration 20260922160000 is applied; nobody can set it before then. */
   controlled_test?: boolean | null;
 }
 
@@ -2306,7 +2306,7 @@ interface CampaignDbRow {
   quality_status: string | null;
   quality_issues: Record<string, unknown>[] | null;
   audience_strategy: Record<string, unknown> | null;
-  /** Absent until migration 20260922120000 is applied. */
+  /** Absent until migration 20260922160000 is applied. */
   controlled_test?: boolean | null;
   metrics_spend: number | string | null;
   metrics_impressions: number | null;

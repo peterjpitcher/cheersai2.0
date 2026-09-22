@@ -82,7 +82,7 @@ export interface OptimisationCampaignRow {
   source_id?: string | null;
   source_snapshot?: Record<string, unknown> | null;
   campaign_kind?: string | null;
-  /** A running A/B or message test: no copy rewrites. Absent until migration 20260922120000. */
+  /** A running A/B or message test: no copy rewrites. Absent until migration 20260922160000. */
   controlled_test?: boolean | null;
   end_date?: string | null;
   status: string;
@@ -225,7 +225,7 @@ export async function runMetaCampaignOptimisation({
       .select(
         [
           // '*' rather than a column list so runs keep working whether or not the
-          // controlled_test migration (20260922120000) has been applied yet.
+          // controlled_test migration (20260922160000) has been applied yet.
           '*',
           'ad_sets(id, meta_adset_id, name, status, meta_status, last_synced_at, ads(id, meta_ad_id, name, headline, primary_text, description, cta, angle, utm_content_key, media_asset_id, status, meta_status, metrics_spend, metrics_impressions, metrics_clicks, metrics_ctr, metrics_cpc, metrics_conversions, metrics_cost_per_conversion, metrics_conversion_rate, last_synced_at))',
         ].join(', '),
