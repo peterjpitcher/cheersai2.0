@@ -49,6 +49,26 @@ export function buildAdUtmContentKey(args: {
   ], MAX_UTM_CONTENT_LENGTH);
 }
 
+/**
+ * Returns `key`, or `key` with a `__2`, `__3`... suffix (trimmed to the length limit) when another
+ * ad in the campaign already uses it. Two ads sharing a key would have every booking credited to
+ * whichever the optimiser finds first.
+ */
+export function uniqueAdUtmContentKey(
+  key: string,
+  takenKeys: Iterable<string | null | undefined>,
+): string {
+  const taken = new Set(Array.from(takenKeys, normaliseUtmContentKey).filter(Boolean));
+  if (!taken.has(normaliseUtmContentKey(key))) return key;
+
+  // Terminates: `taken` is finite, so some suffix is always free.
+  for (let suffix = 2; ; suffix += 1) {
+    const tail = `__${suffix}`;
+    const candidate = `${key.slice(0, MAX_UTM_CONTENT_LENGTH - tail.length).replace(/_+$/g, '')}${tail}`;
+    if (!taken.has(normaliseUtmContentKey(candidate))) return candidate;
+  }
+}
+
 export function applyAdUtmContent(destinationUrl: string, utmContentKey: string): string {
   const parsed = new URL(destinationUrl);
   parsed.searchParams.set('utm_content', utmContentKey);
