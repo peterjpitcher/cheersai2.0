@@ -13,6 +13,7 @@ import { useAutoSaveDraft } from '@/lib/content/draft-autosave';
 import { createDraft, getDraft, saveDraft, createScheduledBatch } from '@/app/actions/content';
 import { attachMediaToContent } from '@/app/actions/media';
 import { getCreateModalData } from '@/features/create/create-modal-actions';
+import { getContentTypeDefaults } from '@/features/create/content-type-defaults';
 import type { MediaAssetSummary } from '@/lib/library/data';
 import type { AccountBannerDefaults } from '@/lib/banner/config';
 import { contentBriefSchema } from '@/features/create/schemas/content-schemas';
@@ -44,7 +45,6 @@ import { ScheduleStep } from '@/features/create/steps/schedule-step';
 // ---------------------------------------------------------------------------
 
 const STEP_LABELS = ['Brief', 'Media', 'Schedule', 'Generate'] as const;
-const DEFAULT_EVENT_VENUE = 'The Anchor, Stanwell Moor Village';
 
 const CONTENT_TYPE_LABELS: Record<string, string> = {
   instant_post: 'Instant Post',
@@ -99,6 +99,8 @@ export function CreateWizard({ initialDraftId, accountId, onClose }: CreateWizar
   // A ref rather than state: it is read inside a setSelectedMediaIds updater,
   // where a state variable would be a stale closure, and nothing renders from it.
   const artworkAttributionRef = useRef<ArtworkAttribution | null>(null);
+  // The active brand's default event venue, loaded with the media library below.
+  const defaultEventVenueRef = useRef('');
   const [bannerDefaults, setBannerDefaults] = useState<AccountBannerDefaults | null>(null);
   const toast = useToast();
 
@@ -204,6 +206,7 @@ export function CreateWizard({ initialDraftId, accountId, onClose }: CreateWizar
         if (data.bannerDefaults) {
           setBannerDefaults(data.bannerDefaults);
         }
+        defaultEventVenueRef.current = data.defaultEventVenue ?? '';
       })
       .catch((error) => {
         // Non-blocking — uploads still work — but surface it: a silent failure here
@@ -372,25 +375,10 @@ export function CreateWizard({ initialDraftId, accountId, onClose }: CreateWizar
         proofPoints: currentValues.proofPoints,
       };
 
-      const typeDefaults: Record<ContentType, Partial<ContentBriefInput>> = {
-        instant_post: { publishMode: 'now' },
-        story: {},
-        // Events go out on the feed and as a story on every posting day, so both
-        // are on by default rather than something to remember to tick.
-        event: { eventName: '', eventDate: '', eventTime: '', venue: DEFAULT_EVENT_VENUE, placements: ['feed', 'story'] },
-        promotion: { offerSummary: '', endDate: '', placements: ['feed'] },
-        weekly_recurring: {
-          daysOfWeek: [1],
-          time: '12:00',
-          endDate: DateTime.now().setZone(DEFAULT_TIMEZONE).plus({ weeks: 4 }).toFormat('yyyy-MM-dd'),
-          placement: 'feed',
-        },
-      };
-
       form.reset({
         contentType: type,
         ...sharedFields,
-        ...typeDefaults[type],
+        ...getContentTypeDefaults(type, { defaultEventVenue: defaultEventVenueRef.current }),
       } as ContentBriefInput);
     },
     [form],

@@ -287,7 +287,7 @@ export function EventFields({
           <Label htmlFor="venue">Venue (optional)</Label>
           <Input
             id="venue"
-            placeholder="The Anchor, Stanwell Moor Village"
+            placeholder="Venue name, town"
             {...register('venue')}
             aria-invalid={!!errors.venue}
           />
