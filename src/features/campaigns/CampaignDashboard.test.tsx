@@ -293,6 +293,44 @@ describe('CampaignDashboard', () => {
     expect(screen.getByText('1 recommendation waiting for approval')).toBeTruthy();
   });
 
+  it('does not offer rewrites on a controlled-test campaign', () => {
+    const dashboard = buildCampaignDashboard(
+      [campaign({ id: 'active', name: 'Active campaign' })],
+      [{
+        id: 'controlled',
+        runId: 'run-1',
+        campaignId: 'active',
+        campaignName: 'Active campaign',
+        adSetId: 'adset-1',
+        adSetName: 'Ad set',
+        adId: 'ad-1',
+        adName: 'Var 2',
+        actionType: 'copy_rewrite',
+        reason: 'Rewrite recommended.',
+        status: 'planned',
+        severity: 'info',
+        error: null,
+        metricsSnapshot: {},
+        recommendationPayload: {
+          proposed: { headline: 'Lunch from £9, Tuesday to Friday', primaryText: 'Snack pots are £9.', description: 'Book now', cta: 'BOOK_NOW' },
+        },
+        copyProblems: [],
+        campaignControlledTest: true,
+        replacementAdId: null,
+        appliedAt: null,
+        createdAt: new Date('2026-05-22T09:00:00Z'),
+      }],
+      undefined,
+      { now: new Date('2026-05-23T12:00:00Z') },
+    );
+
+    render(<CampaignDashboard dashboard={dashboard} />);
+
+    expect(screen.getByText('Rewrites are off while this campaign is a controlled test.')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Create paused replacement' })).toBeNull();
+    expect(screen.queryByText(/waiting for approval/)).toBeNull();
+  });
+
   it('offers to switch on a replacement ad that was created paused', () => {
     const dashboard = buildCampaignDashboard(
       [campaign({ id: 'active', name: 'Active campaign' })],

@@ -177,6 +177,8 @@ export interface OptimisationActionSummary {
   recommendationPayload: Record<string, unknown>;
   /** Why a planned copy rewrite fails the public-copy checks; empty or absent when it can be applied. */
   copyProblems?: string[];
+  /** The campaign is a controlled test, so rewrites cannot be applied or switched on. */
+  campaignControlledTest?: boolean;
   replacementAdId: string | null;
   /** Status of the ad Apply created; PAUSED until the owner switches it on. */
   replacementAdStatus?: AdStatus | null;
@@ -313,6 +315,8 @@ export interface Campaign {
   qualityStatus: CampaignQualityStatus | null;
   qualityIssues: Record<string, unknown>[];
   audienceStrategy: Record<string, unknown> | null;
+  /** A running A/B or message test: the optimiser proposes no copy rewrites and none can be applied. */
+  controlledTest?: boolean;
   performance: CampaignPerformanceMetrics;
   lastSyncedAt: Date | null;
   campaignType: string | null;

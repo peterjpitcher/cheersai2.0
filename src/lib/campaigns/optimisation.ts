@@ -82,6 +82,8 @@ export interface OptimisationCampaignRow {
   source_id?: string | null;
   source_snapshot?: Record<string, unknown> | null;
   campaign_kind?: string | null;
+  /** A running A/B or message test: no copy rewrites. Absent until migration 20260922160000. */
+  controlled_test?: boolean | null;
   end_date?: string | null;
   status: string;
   meta_status: string | null;
@@ -222,8 +224,9 @@ export async function runMetaCampaignOptimisation({
       .from('meta_campaigns')
       .select(
         [
-          'id, account_id, meta_campaign_id, name, problem_brief, destination_url, source_type, source_id, source_snapshot, campaign_kind',
-          'status, meta_status, end_date, last_synced_at, metrics_spend, metrics_impressions, metrics_clicks, metrics_ctr, metrics_cpc, metrics_conversions',
+          // '*' rather than a column list so runs keep working whether or not the
+          // controlled_test migration (20260922160000) has been applied yet.
+          '*',
           'ad_sets(id, meta_adset_id, name, status, meta_status, last_synced_at, ads(id, meta_ad_id, name, headline, primary_text, description, cta, angle, utm_content_key, media_asset_id, status, meta_status, metrics_spend, metrics_impressions, metrics_clicks, metrics_ctr, metrics_cpc, metrics_conversions, metrics_cost_per_conversion, metrics_conversion_rate, last_synced_at))',
         ].join(', '),
       )
@@ -668,6 +671,9 @@ function evaluateCopyRewriteRecommendations(
   adSets: OptimisationAdSetRow[],
   bookingSignal: BlendedBookingSignal,
 ): OptimisationDecision[] {
+  // A new ad added mid-test takes over the ad set's delivery and breaks the comparison.
+  if (campaign.controlled_test === true) return [];
+
   const activeAds = adSets.flatMap((adSet) =>
     (adSet.ads ?? [])
       .filter((ad) => isActiveObject(ad))

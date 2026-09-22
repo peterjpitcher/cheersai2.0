@@ -1,6 +1,6 @@
 # SPEC: optimiser copy rewrites must never publish internal text
 
-Date: 22 September 2026. Status: implemented on branch `claude/kind-morse-73a8ce`, local only, not pushed.
+Date: 22 September 2026. Status: Pieces 1 and 2 on `fix/optimiser-rewrite-copy`, Piece 3 on `feat/optimiser-controlled-test-guard` (stacked); owner approved shipping both, applying the migration and flagging the four Weekday campaigns.
 
 ## Problem
 
@@ -70,10 +70,13 @@ The conversion-first optimiser's copy rewrite put internal text into a live, pub
 
 ### Piece 3: per-campaign controlled-test guard (schema change)
 
-- Migration adds `meta_campaigns.controlled_test boolean not null default false`.
+- Migration `20260922160000_meta_campaigns_controlled_test.sql` adds
+  `meta_campaigns.controlled_test boolean not null default false`.
 - The optimiser records no copy rewrites for a controlled-test campaign.
 - Apply and Switch on refuse for a controlled-test campaign.
 - A toggle on the campaign page, server action `setCampaignControlledTest(campaignId, enabled)`.
+- Every read of the flag selects `*`, so the code runs the same before the migration (flag reads
+  as off, which is today's behaviour) and the toggle is hidden until the column exists.
 
 ## Decisions and assumptions
 
@@ -100,8 +103,9 @@ The conversion-first optimiser's copy rewrite put internal text into a live, pub
 ## Deployment
 
 - Pieces 1 and 2 have no schema change and can deploy on their own.
-- Piece 3: apply the migration to `cheersai2.0` before deploying its code. If the code goes first,
-  optimiser runs fail on the missing column and Apply refuses, so it fails closed, not open.
+- Piece 3 is on its own branch, `feat/optimiser-controlled-test-guard`, stacked on Pieces 1 and 2.
+  Its code works with or without the migration, so there is no hard order, but the guard does
+  nothing until the migration is applied to `cheersai2.0`. Update `supabase/SCHEMA.md` once it is.
 - After Piece 3 is live, the owner decides whether to flag the four Weekday campaigns.
 
 ## Rollback

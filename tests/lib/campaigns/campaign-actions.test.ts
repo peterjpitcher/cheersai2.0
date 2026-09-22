@@ -56,6 +56,7 @@ import {
   getCampaignWithTree,
   runCampaignDashboardOptimisation,
   saveCampaignDraft,
+  setCampaignControlledTest,
 } from '@/app/(app)/campaigns/actions';
 import { createServiceSupabaseClient } from '@/lib/supabase/service';
 import { generateCampaign } from '@/lib/campaigns/generate';
@@ -944,6 +945,21 @@ describe('applyOptimisationRecommendation', () => {
     expect(createMetaAd).not.toHaveBeenCalled();
   });
 
+  it('refuses to apply a rewrite on a campaign marked as a controlled test', async () => {
+    mockMaybeSingle
+      .mockResolvedValueOnce({ data: safeLiveProposalAction, error: null })
+      .mockResolvedValueOnce({ data: liveWeekdayLunchAd, error: null })
+      .mockResolvedValueOnce({ data: liveWeekdayLunchAdSet, error: null })
+      .mockResolvedValueOnce({ data: { ...weekdayLunchCampaignRow, controlled_test: true }, error: null });
+
+    const result = await applyOptimisationRecommendation('action-safe');
+
+    expect(result).toEqual({ error: expect.stringContaining('controlled test') });
+    expect(mockSupabase.update).not.toHaveBeenCalled();
+    expect(mockSupabase.insert).not.toHaveBeenCalled();
+    expect(createMetaAd).not.toHaveBeenCalled();
+  });
+
   it('skips a stored proposal that publishes the internal campaign name and never calls Meta', async () => {
     mockMaybeSingle
       .mockResolvedValueOnce({ data: leakedWeekdayLunchAction, error: null })
@@ -1080,6 +1096,43 @@ describe('optimisation action summaries', () => {
 
     expect(summary.replacementAdStatus).toBe('PAUSED');
   });
+
+  it('flags actions on a controlled-test campaign, and not before the column exists', async () => {
+    mockActionRows([
+      { ...baseRow, id: 'flagged', recommendation_payload: {}, meta_campaigns: { ...baseRow.meta_campaigns, controlled_test: true } },
+      { ...baseRow, id: 'pre-migration', recommendation_payload: {} },
+    ]);
+
+    const [flagged, preMigration] = await getCampaignOptimisationActions('campaign-weekday');
+
+    expect(flagged.campaignControlledTest).toBe(true);
+    expect(preMigration.campaignControlledTest).toBe(false);
+  });
+});
+
+describe('setCampaignControlledTest', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(createServiceSupabaseClient).mockReturnValue(mockSupabase as never);
+  });
+
+  it('sets the flag on a campaign in the active brand only', async () => {
+    mockMaybeSingle.mockResolvedValueOnce({ data: { id: 'campaign-weekday' }, error: null });
+
+    const result = await setCampaignControlledTest('campaign-weekday', true);
+
+    expect(result).toEqual({ success: true });
+    expect(mockSupabase.update).toHaveBeenCalledWith({ controlled_test: true });
+    expect(mockSupabase.eq).toHaveBeenCalledWith('account_id', 'account-123');
+  });
+
+  it('reports a campaign outside the brand as not found', async () => {
+    mockMaybeSingle.mockResolvedValueOnce({ data: null, error: null });
+
+    const result = await setCampaignControlledTest('campaign-other-brand', false);
+
+    expect(result).toEqual({ error: 'Campaign not found.' });
+  });
 });
 
 describe('activateOptimisationReplacementAd', () => {
@@ -1124,6 +1177,19 @@ describe('activateOptimisationReplacementAd', () => {
       user_id: 'user-123',
       operation_type: 'optimisation_replacement_activated',
     }));
+  });
+
+  it('refuses while the campaign is marked as a controlled test', async () => {
+    mockMaybeSingle
+      .mockResolvedValueOnce({ data: appliedAction, error: null })
+      .mockResolvedValueOnce({ data: { id: 'campaign-weekday', controlled_test: true }, error: null })
+      .mockResolvedValueOnce({ data: pausedReplacement, error: null });
+
+    const result = await activateOptimisationReplacementAd('action-applied');
+
+    expect(result).toEqual({ error: expect.stringContaining('controlled test') });
+    expect(setMetaObjectStatus).not.toHaveBeenCalled();
+    expect(mockSupabase.insert).not.toHaveBeenCalled();
   });
 
   it('refuses when the replacement is not paused', async () => {

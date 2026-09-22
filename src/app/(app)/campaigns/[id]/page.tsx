@@ -16,6 +16,7 @@ import {
   applyOptimisationRecommendation,
   getCampaignOptimisationActions,
   getCampaignWithTree,
+  setCampaignControlledTest,
 } from '../actions';
 
 interface CampaignDetailPageProps {
@@ -107,6 +108,7 @@ export default async function CampaignDetailPage({ params }: CampaignDetailPageP
       </div>
 
       <PerformanceMatrix campaign={campaign} adSets={adSets} />
+      {campaign.metaCampaignId && campaign.controlledTest !== undefined && <ControlledTestPanel campaign={campaign} />}
       <OptimisationHistory actions={optimisationActions} />
 
       {campaign.destinationUrl && (
@@ -305,6 +307,54 @@ async function activateOptimisationReplacementAdFormAction(formData: FormData) {
   }
 }
 
+async function setCampaignControlledTestFormAction(formData: FormData) {
+  'use server';
+  const campaignId = String(formData.get('campaignId') ?? '');
+  if (campaignId) {
+    await setCampaignControlledTest(campaignId, formData.get('enabled') === 'true');
+  }
+}
+
+function ControlledTestPanel({ campaign }: { campaign: Campaign }) {
+  const enabled = campaign.controlledTest === true;
+  return (
+    <form
+      action={setCampaignControlledTestFormAction}
+      className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+      style={{
+        borderRadius: 'var(--r-xl)',
+        border: '1px solid var(--c-line)',
+        backgroundColor: 'var(--c-card)',
+      }}
+    >
+      <div>
+        <p className="text-sm font-semibold" style={{ color: 'var(--c-ink)' }}>
+          Controlled test: {enabled ? 'on' : 'off'}
+        </p>
+        <p className="text-xs" style={{ color: 'var(--c-ink-3)' }}>
+          {enabled
+            ? 'The optimiser will not propose or apply copy rewrites here, so the ads being compared stay as they are.'
+            : 'Turn this on while ads in this campaign are being compared. A rewrite added mid-test takes over the ad set’s delivery.'}
+        </p>
+      </div>
+      <input type="hidden" name="campaignId" value={campaign.id} />
+      <input type="hidden" name="enabled" value={enabled ? 'false' : 'true'} />
+      <button
+        type="submit"
+        className="shrink-0 px-3 py-1.5 text-xs font-semibold transition-colors"
+        style={{
+          borderRadius: 'var(--r-md)',
+          border: '1px solid var(--c-line)',
+          backgroundColor: 'var(--c-paper)',
+          color: 'var(--c-ink)',
+        }}
+      >
+        {enabled ? 'End controlled test' : 'Mark as controlled test'}
+      </button>
+    </form>
+  );
+}
+
 function DetailRecommendationPreview({ action }: { action: OptimisationActionSummary }) {
   const proposed = readProposedCopy(action.recommendationPayload);
   if (action.actionType !== 'copy_rewrite' || !proposed) return null;
@@ -333,7 +383,11 @@ function DetailRecommendationPreview({ action }: { action: OptimisationActionSum
       {confidence !== null && (
         <p className="mt-1 text-xs" style={{ color: 'var(--c-ink-3)' }}>Confidence: {Math.round(confidence * 100)}%</p>
       )}
-      {action.status === 'planned' && action.copyProblems?.length ? (
+      {action.status === 'planned' && action.campaignControlledTest ? (
+        <p className="mt-2 text-xs" style={{ color: 'var(--c-ink-3)' }}>
+          Rewrites are off while this campaign is a controlled test.
+        </p>
+      ) : action.status === 'planned' && action.copyProblems?.length ? (
         <p className="mt-2 text-xs" style={{ color: 'var(--c-claret)' }}>
           Cannot be applied: {action.copyProblems.join('; ')}.
         </p>
@@ -354,7 +408,12 @@ function DetailRecommendationPreview({ action }: { action: OptimisationActionSum
           </button>
         </form>
       )}
-      {action.replacementAdId && action.replacementAdStatus === 'PAUSED' && (
+      {action.replacementAdId && action.replacementAdStatus === 'PAUSED' && action.campaignControlledTest && (
+        <p className="mt-2 text-xs" style={{ color: 'var(--c-ink-3)' }}>
+          Replacement ad created paused. It stays off while this campaign is a controlled test.
+        </p>
+      )}
+      {action.replacementAdId && action.replacementAdStatus === 'PAUSED' && !action.campaignControlledTest && (
         <form action={activateOptimisationReplacementAdFormAction} className="mt-2">
           <p className="mb-2 text-xs" style={{ color: 'var(--c-ink-3)' }}>
             Replacement ad created paused. Check it, then switch it on.

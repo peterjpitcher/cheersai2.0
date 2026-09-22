@@ -188,8 +188,10 @@ interface ConversionRuleResult {
   bookingOptimised: boolean;
 }
 
+// meta_campaigns(*) rather than a column list so the dashboard keeps working whether or not the
+// controlled_test migration (20260922160000) has been applied yet.
 const OPTIMISATION_ACTION_SELECT =
-  'id, run_id, campaign_id, adset_id, ad_id, action_type, reason, status, severity, error, metrics_snapshot, recommendation_payload, replacement_ad_id, applied_at, created_at, meta_campaigns(name,status,meta_status,end_date,source_snapshot), ad_sets(name), ads:ads!meta_optimisation_actions_ad_id_fkey(name), replacement:ads!meta_optimisation_actions_replacement_ad_id_fkey(status)';
+  'id, run_id, campaign_id, adset_id, ad_id, action_type, reason, status, severity, error, metrics_snapshot, recommendation_payload, replacement_ad_id, applied_at, created_at, meta_campaigns(*), ad_sets(name), ads:ads!meta_optimisation_actions_ad_id_fkey(name), replacement:ads!meta_optimisation_actions_replacement_ad_id_fkey(status)';
 const LEGACY_OPTIMISATION_ACTION_SELECT =
   'id, run_id, campaign_id, adset_id, ad_id, action_type, reason, status, error, metrics_snapshot, applied_at, created_at, meta_campaigns(name,status,meta_status,end_date), ad_sets(name), ads:ads!meta_optimisation_actions_ad_id_fkey(name)';
 
@@ -1731,7 +1733,12 @@ interface ApplyRecommendationCampaignRow {
   destination_url: string | null;
   campaign_kind: string | null;
   source_snapshot: Record<string, unknown> | null;
+  /** Absent until migration 20260922160000 is applied; nobody can set it before then. */
+  controlled_test?: boolean | null;
 }
+
+const CONTROLLED_TEST_REWRITE_ERROR =
+  'This campaign is marked as a controlled test, so copy rewrites are switched off: a new ad added mid-test takes over the ad set’s delivery. End the controlled test on the campaign page first.';
 
 interface ApplyRecommendationAdAccountRow {
   access_token: string | null;
@@ -1777,7 +1784,8 @@ export async function applyOptimisationRecommendation(
         .maybeSingle<ApplyRecommendationAdSetRow>(),
       supabase
         .from('meta_campaigns')
-        .select('id, account_id, name, destination_url, campaign_kind, source_snapshot')
+        // '*' so this still loads before the controlled_test migration is applied.
+        .select('*')
         .eq('id', action.campaign_id)
         .eq('account_id', accountId)
         .maybeSingle<ApplyRecommendationCampaignRow>(),
@@ -1787,6 +1795,7 @@ export async function applyOptimisationRecommendation(
   if (adSetError) return { error: adSetError.message };
   if (campaignError) return { error: campaignError.message };
   if (!ad || !adSet || !campaign) return { error: 'Could not load the ad, ad set, or campaign for this recommendation.' };
+  if (campaign.controlled_test === true) return { error: CONTROLLED_TEST_REWRITE_ERROR };
 
   // A stored proposal can predate the public-copy rules (on 22 September 2026 one published the
   // internal campaign name), so check it again before it can reach an ad.
@@ -2029,10 +2038,11 @@ export async function activateOptimisationReplacementAd(
   const [{ data: campaign, error: campaignError }, { data: replacement, error: replacementError }] = await Promise.all([
     supabase
       .from('meta_campaigns')
-      .select('id')
+      // '*' so this still loads before the controlled_test migration is applied.
+      .select('*')
       .eq('id', action.campaign_id)
       .eq('account_id', accountId)
-      .maybeSingle<{ id: string }>(),
+      .maybeSingle<{ id: string; controlled_test?: boolean | null }>(),
     supabase
       .from('ads')
       .select('id, adset_id, meta_ad_id, status')
@@ -2043,6 +2053,7 @@ export async function activateOptimisationReplacementAd(
   if (campaignError) return { error: campaignError.message };
   if (replacementError) return { error: replacementError.message };
   if (!campaign || !replacement) return { error: 'Could not load the campaign or the replacement ad.' };
+  if (campaign.controlled_test === true) return { error: CONTROLLED_TEST_REWRITE_ERROR };
   if (!replacement.meta_ad_id) return { error: 'The replacement ad was never created on Meta.' };
   if (replacement.status !== 'PAUSED') return { error: 'The replacement ad is not paused, so there is nothing to switch on.' };
 
@@ -2104,6 +2115,33 @@ export async function activateOptimisationReplacementAd(
   await logOptimisationAuditEventBestEffort(supabase, { ...audit, operationType: 'optimisation_replacement_activated', details });
   revalidatePath('/campaigns');
   revalidatePath(`/campaigns/${campaign.id}`);
+  return { success: true };
+}
+
+/**
+ * Marks a campaign as a controlled test (or ends one). While marked, the optimiser proposes no
+ * copy rewrites for it and none can be applied or switched on.
+ */
+export async function setCampaignControlledTest(
+  campaignId: string,
+  enabled: boolean,
+): Promise<{ success?: boolean; error?: string }> {
+  const { accountId } = await requireAuthContext();
+  const supabase = createServiceSupabaseClient();
+
+  const { data, error } = await supabase
+    .from('meta_campaigns')
+    .update({ controlled_test: enabled })
+    .eq('id', campaignId)
+    .eq('account_id', accountId)
+    .select('id')
+    .maybeSingle<{ id: string }>();
+
+  if (error) return { error: error.message };
+  if (!data) return { error: 'Campaign not found.' };
+
+  revalidatePath('/campaigns');
+  revalidatePath(`/campaigns/${campaignId}`);
   return { success: true };
 }
 
@@ -2268,6 +2306,8 @@ interface CampaignDbRow {
   quality_status: string | null;
   quality_issues: Record<string, unknown>[] | null;
   audience_strategy: Record<string, unknown> | null;
+  /** Absent until migration 20260922160000 is applied. */
+  controlled_test?: boolean | null;
   metrics_spend: number | string | null;
   metrics_impressions: number | null;
   metrics_reach: number | null;
@@ -2367,6 +2407,7 @@ interface OptimisationActionCampaignRef {
   meta_status?: string | null;
   end_date?: string | null;
   source_snapshot?: Record<string, unknown> | null;
+  controlled_test?: boolean | null;
 }
 
 interface OptimisationActionDbRow {
@@ -2479,6 +2520,8 @@ function dbRowToCampaign(row: CampaignDbRow): Campaign {
     qualityStatus: (row.quality_status ?? null) as Campaign['qualityStatus'],
     qualityIssues: Array.isArray(row.quality_issues) ? row.quality_issues : [],
     audienceStrategy: row.audience_strategy ?? null,
+    // Undefined until the controlled_test migration is applied, so the page can hide the toggle.
+    controlledTest: typeof row.controlled_test === 'boolean' ? row.controlled_test : undefined,
     // meta_campaigns has no campaign_type/auto_confirm columns; campaignType mirrors the kind
     // and autoConfirm is always false (recurring paid campaigns are not modelled on this table).
     campaignType: row.campaign_kind ?? null,
@@ -2549,6 +2592,7 @@ function dbRowToOptimisationActionSummary(row: OptimisationActionDbRow): Optimis
     metricsSnapshot: row.metrics_snapshot ?? {},
     recommendationPayload: row.recommendation_payload ?? {},
     copyProblems: plannedRewriteCopyProblems(row),
+    campaignControlledTest: firstNested(row.meta_campaigns)?.controlled_test === true,
     replacementAdId: row.replacement_ad_id ?? null,
     replacementAdStatus: replacementAdStatus(row),
     appliedAt: row.applied_at ? new Date(row.applied_at) : null,

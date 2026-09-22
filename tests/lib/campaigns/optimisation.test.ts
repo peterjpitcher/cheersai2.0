@@ -803,6 +803,22 @@ describe('copy recommendations', () => {
       expect(copy.primaryText).not.toMatch(/updated brief|ultimate|2026-08-14/i);
     });
 
+    it('records no rewrites for a campaign marked as a controlled test', () => {
+      const walkInAd = ad({
+        id: 'walk-in-ad',
+        headline: 'Lunch from £9, Tuesday to Friday',
+        primary_text: 'Snack pots are £9 and wraps are £10. Walk-ins welcome at lunch.',
+        metrics_clicks: 20,
+        metrics_spend: 8,
+      });
+
+      const unflagged = evaluateCampaignOptimisation([weekdayLunchCampaign([walkInAd])]);
+      const flagged = evaluateCampaignOptimisation([{ ...weekdayLunchCampaign([walkInAd]), controlled_test: true }]);
+
+      expect(proposedCopy(unflagged.decisions)).toHaveLength(1);
+      expect(proposedCopy(flagged.decisions)).toEqual([]);
+    });
+
     it('does not rewrite an event campaign that has no imported event name', () => {
       const { decisions } = evaluateCampaignOptimisation([
         campaign({
