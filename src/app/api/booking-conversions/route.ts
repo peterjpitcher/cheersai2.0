@@ -81,6 +81,31 @@ function normaliseDateTime(value: string | null | undefined) {
   return parsed.toISOString();
 }
 
+// A sender that cannot work a booking's worth out reports zero rather than nothing:
+// estimateTableBookingValue() on the-anchor.pub returns 0 for a missing party size. So
+// a zero here means "not known", not "worth nothing", and must not be written over a
+// figure another post already supplied. Reporting maps a null value to 0 anyway.
+function normaliseValue(value: number | null | undefined) {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) return null;
+  return value;
+}
+
+// Every confirmed booking is posted more than once under the same reference: the site
+// forwards it server-side on confirmation, and the browser forwards it again from the
+// confirmation screen with whatever that page happens to know. The upsert below is
+// idempotent on (account_id, booking_id), and PostgREST only puts the columns present
+// in the payload into its ON CONFLICT DO UPDATE SET, so any placeholder a later post
+// sends replaces what an earlier one recorded. That is how the table bookings between
+// July and September 2026 lost their party size, covers value and booking date.
+//
+// Dropping the keys a post has no information for makes the write additive: the column
+// is left out of the statement entirely, so the stored value survives. It stays a
+// single atomic upsert, so two posts racing each other still cannot lose either one's
+// fields.
+function withKnownValuesOnly(columns: Record<string, string | number | null>) {
+  return Object.fromEntries(Object.entries(columns).filter(([, value]) => value !== null));
+}
+
 export async function POST(request: Request) {
   const suppliedSecret = normaliseAuthHeader(request.headers.get('authorization'));
   if (!suppliedSecret) {
@@ -139,47 +164,61 @@ export async function POST(request: Request) {
   const phoneSha256 = hasMetaConsent ? nullIfEmpty(parsedPayload.phoneSha256)?.toLowerCase() ?? null : null;
   const clientIpAddress = hasMetaConsent ? nullIfEmpty(parsedPayload.clientIpAddress) : null;
 
+  const bookingValue = normaliseValue(parsedPayload.value);
+
   const { error } = await supabase
     .from('booking_conversion_events')
     .upsert({
+      // Identity and classification. Both senders always know these, so they are
+      // written on every post.
       account_id: accountId,
       source_site: parsedPayload.sourceSite?.trim() || 'the-anchor.pub',
       booking_id: parsedPayload.bookingId,
       meta_event_id: metaEventId,
       booking_type: parsedPayload.bookingType,
-      event_id: nullIfEmpty(parsedPayload.eventId),
-      event_slug: nullIfEmpty(parsedPayload.eventSlug),
-      event_name: nullIfEmpty(parsedPayload.eventName),
-      event_category_name: nullIfEmpty(parsedPayload.eventCategoryName),
-      event_category_slug: nullIfEmpty(parsedPayload.eventCategorySlug),
-      event_date: normaliseDate(parsedPayload.eventDate),
-      tickets: parsedPayload.tickets ?? null,
-      value: parsedPayload.value ?? null,
-      currency: parsedPayload.currency?.toUpperCase() || 'GBP',
-      food_intent: nullIfEmpty(parsedPayload.foodIntent),
-      source_url: nullIfEmpty(parsedPayload.sourceUrl),
-      landing_path: nullIfEmpty(parsedPayload.landingPath),
-      utm_source: nullIfEmpty(parsedPayload.utmSource),
-      utm_medium: nullIfEmpty(parsedPayload.utmMedium),
-      utm_campaign: nullIfEmpty(parsedPayload.utmCampaign),
-      utm_content: nullIfEmpty(parsedPayload.utmContent),
-      utm_term: nullIfEmpty(parsedPayload.utmTerm),
-      fbclid: nullIfEmpty(parsedPayload.fbclid),
-      gclid: nullIfEmpty(parsedPayload.gclid),
-      short_code: nullIfEmpty(parsedPayload.shortCode),
-      attribution_captured_at: normaliseDateTime(parsedPayload.attributionCapturedAt),
-      attribution_updated_at: normaliseDateTime(parsedPayload.attributionUpdatedAt),
+      occurred_at: occurredAt,
+      // Consent describes the post, not the booking, so it and the identifiers it
+      // gates are still written every time: a post without consent clears the browser
+      // identifiers exactly as it did before. Do not fold these into the merge below.
       meta_consent_granted: hasMetaConsent,
       fbp: hasMetaConsent ? nullIfEmpty(parsedPayload.fbp) : null,
       fbc: hasMetaConsent ? nullIfEmpty(parsedPayload.fbc) : null,
       client_user_agent: hasMetaConsent ? nullIfEmpty(parsedPayload.clientUserAgent) : null,
+      // Facts about the booking. Written only when this post actually carries them, so
+      // a later, less informed post cannot blank what an earlier one recorded.
+      // `currency` is left out rather than defaulted here: the column is
+      // `not null default 'GBP'`, so a first post without one still inserts GBP, and a
+      // later post cannot overwrite a real currency with the fallback.
+      ...withKnownValuesOnly({
+        event_id: nullIfEmpty(parsedPayload.eventId),
+        event_slug: nullIfEmpty(parsedPayload.eventSlug),
+        event_name: nullIfEmpty(parsedPayload.eventName),
+        event_category_name: nullIfEmpty(parsedPayload.eventCategoryName),
+        event_category_slug: nullIfEmpty(parsedPayload.eventCategorySlug),
+        event_date: normaliseDate(parsedPayload.eventDate),
+        tickets: parsedPayload.tickets ?? null,
+        value: bookingValue,
+        currency: parsedPayload.currency?.trim().toUpperCase() || null,
+        food_intent: nullIfEmpty(parsedPayload.foodIntent),
+        source_url: nullIfEmpty(parsedPayload.sourceUrl),
+        landing_path: nullIfEmpty(parsedPayload.landingPath),
+        utm_source: nullIfEmpty(parsedPayload.utmSource),
+        utm_medium: nullIfEmpty(parsedPayload.utmMedium),
+        utm_campaign: nullIfEmpty(parsedPayload.utmCampaign),
+        utm_content: nullIfEmpty(parsedPayload.utmContent),
+        utm_term: nullIfEmpty(parsedPayload.utmTerm),
+        fbclid: nullIfEmpty(parsedPayload.fbclid),
+        gclid: nullIfEmpty(parsedPayload.gclid),
+        short_code: nullIfEmpty(parsedPayload.shortCode),
+        attribution_captured_at: normaliseDateTime(parsedPayload.attributionCapturedAt),
+        attribution_updated_at: normaliseDateTime(parsedPayload.attributionUpdatedAt),
+      }),
       // Advanced-matching columns only exist once the match-key migration has been
       // applied; omit them entirely until the sender actually supplies values so the
       // insert stays compatible with the pre-migration schema.
       ...(emailSha256 ? { email_sha256: emailSha256 } : {}),
       ...(phoneSha256 ? { phone_sha256: phoneSha256 } : {}),
       ...(clientIpAddress ? { client_ip_address: clientIpAddress } : {}),
-      occurred_at: occurredAt,
     }, {
       onConflict: 'account_id,booking_id',
     });
@@ -214,7 +253,7 @@ export async function POST(request: Request) {
         eventName: parsedPayload.eventName,
         eventCategoryName: parsedPayload.eventCategoryName,
         tickets: parsedPayload.tickets,
-        value: parsedPayload.value,
+        value: bookingValue,
         currency: parsedPayload.currency,
         sourceUrl: parsedPayload.sourceUrl,
         occurredAt,
