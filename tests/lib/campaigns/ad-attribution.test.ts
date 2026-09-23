@@ -4,6 +4,7 @@ import {
   applyAdUtmContent,
   buildAdUtmContentKey,
   normaliseCreativeFormat,
+  uniqueAdUtmContentKey,
   utmContentMatchesAd,
 } from '@/lib/campaigns/ad-attribution';
 
@@ -21,6 +22,17 @@ describe('ad attribution helpers', () => {
     expect(applyAdUtmContent('https://www.the-anchor.pub/events/quiz?utm_source=facebook', key))
       .toBe(`https://www.the-anchor.pub/events/quiz?utm_source=facebook&utm_content=${key}`);
     expect(utmContentMatchesAd(key.toUpperCase(), { utm_content_key: key })).toBe(true);
+  });
+
+  it('keeps a free key and suffixes a taken one without passing the length limit', () => {
+    expect(uniqueAdUtmContentKey('ad__quiz__v1', ['ad__quiz__v2', null])).toBe('ad__quiz__v1');
+    expect(uniqueAdUtmContentKey('ad__quiz__v1', ['AD__QUIZ__V1', 'ad__quiz__v1__2'])).toBe('ad__quiz__v1__3');
+
+    const longKey = `ad__${'a'.repeat(156)}`;
+    const unique = uniqueAdUtmContentKey(longKey, [longKey]);
+    expect(unique).toHaveLength(160);
+    expect(unique.endsWith('__2')).toBe(true);
+    expect(unique).not.toBe(longKey);
   });
 
   it('normalises missing or invalid creative formats to the deterministic sequence', () => {

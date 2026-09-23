@@ -40,15 +40,14 @@ import { logPublishAuditEvent } from '@/lib/publishing/audit';
 import { syncMetaCampaignPerformance } from '@/lib/campaigns/performance-sync';
 import { buildConversionReadiness } from '@/lib/campaigns/conversion-readiness';
 import {
-  applyAdUtmContent,
   buildAdUtmContentKey,
   buildCreativeVariantKey,
   normaliseCreativeFormat,
 } from '@/lib/campaigns/ad-attribution';
+import { resolveAdLinkUrl } from '@/lib/campaigns/ad-link';
 import {
   collectManagementMetaAdVariants,
   ensureManagementMetaAdVariantLinks,
-  resolveManagementMetaAdVariantShortUrl,
 } from '@/lib/campaigns/management-tracking';
 import type { AudienceMode, GeoRadiusMiles, ResolvedMetaInterest } from '@/types/campaigns';
 
@@ -168,37 +167,6 @@ function forcesBookNowCta(campaign: CampaignRow): boolean {
 
 function stringValue(value: unknown): string | null {
   return typeof value === 'string' && value.trim() ? value.trim() : null;
-}
-
-function serviceBookingUrlsFromSnapshot(
-  sourceSnapshot: Record<string, unknown> | null,
-): Record<string, string> {
-  const value = sourceSnapshot?.serviceBookingUrls;
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
-
-  return Object.entries(value as Record<string, unknown>).reduce<Record<string, string>>(
-    (acc, [key, rawValue]) => {
-      const url = stringValue(rawValue);
-      if (url) acc[key] = url;
-      return acc;
-    },
-    {},
-  );
-}
-
-function resolveFoodBookingLinkUrl(
-  campaign: CampaignRow,
-  adSet: AdSetRow,
-  utmContentKey: string,
-) {
-  if (!isFoodBookingCampaign(campaign) || !adSet.service_key) {
-    return null;
-  }
-
-  const serviceUrl = serviceBookingUrlsFromSnapshot(campaign.source_snapshot)[adSet.service_key];
-  if (!serviceUrl) return null;
-
-  return applyAdUtmContent(serviceUrl, utmContentKey);
 }
 
 function isTrustedShortLink(parsed: URL): boolean {
@@ -1167,10 +1135,13 @@ export async function publishCampaign(
               adAccountId,
               name: ad.name,
               pageId,
-              linkUrl:
-                resolveFoodBookingLinkUrl(campaign, adSet, fallbackUtmContentKey) ??
-                resolveManagementMetaAdVariantShortUrl(campaign.source_snapshot, fallbackUtmContentKey) ??
-                applyAdUtmContent(baseLinkUrl, fallbackUtmContentKey),
+              linkUrl: resolveAdLinkUrl({
+                campaignKind: campaign.campaign_kind,
+                destinationUrl: baseLinkUrl,
+                sourceSnapshot: campaign.source_snapshot,
+                serviceKey: adSet.service_key,
+                utmContentKey: fallbackUtmContentKey,
+              }),
               imageHash,
               message: ad.primary_text,
               headline: ad.headline,

@@ -32,12 +32,15 @@ import {
   buildAdUtmContentKey,
   buildCreativeVariantKey,
   normaliseCreativeFormat,
+  uniqueAdUtmContentKey,
 } from '@/lib/campaigns/ad-attribution';
+import { resolveAdLinkUrl } from '@/lib/campaigns/ad-link';
 import {
   buildAudienceStrategy,
   buildCampaignQualitySnapshot,
 } from '@/lib/campaigns/quality-score';
 import {
+  collectManagementMetaAdVariants,
   collectManagementMetaAdVariantsFromPayload,
   ensureManagementMetaAdVariantLinks,
 } from '@/lib/campaigns/management-tracking';
@@ -1717,6 +1720,7 @@ interface ApplyRecommendationAdRow {
   name: string;
   status: string;
   media_asset_id: string | null;
+  creative_format: string | null;
 }
 
 interface ApplyRecommendationAdSetRow {
@@ -1724,6 +1728,8 @@ interface ApplyRecommendationAdSetRow {
   campaign_id: string;
   meta_adset_id: string | null;
   adset_media_asset_id: string | null;
+  name: string;
+  service_key: string | null;
 }
 
 interface ApplyRecommendationCampaignRow {
@@ -1774,12 +1780,12 @@ export async function applyOptimisationRecommendation(
     await Promise.all([
       supabase
         .from('ads')
-        .select('id, adset_id, meta_ad_id, name, status, media_asset_id')
+        .select('id, adset_id, meta_ad_id, name, status, media_asset_id, creative_format')
         .eq('id', action.ad_id)
         .maybeSingle<ApplyRecommendationAdRow>(),
       supabase
         .from('ad_sets')
-        .select('id, campaign_id, meta_adset_id, adset_media_asset_id')
+        .select('id, campaign_id, meta_adset_id, adset_media_asset_id, name, service_key')
         .eq('id', action.adset_id)
         .maybeSingle<ApplyRecommendationAdSetRow>(),
       supabase
@@ -1829,6 +1835,38 @@ export async function applyOptimisationRecommendation(
     return failRecommendation(supabase, action.id, message);
   };
 
+  // Claim the recommendation before anything is created. Two overlapping applies (a double
+  // submission of the approve form) would otherwise both read the campaign's keys, build the same
+  // "unique" utm_content key and create two replacement ads sharing it, so a booking could be
+  // credited to the wrong one. Only the apply that flips 'planned' here carries on.
+  const { data: claimedAction, error: claimError } = await supabase
+    .from('meta_optimisation_actions')
+    .update({ status: 'applied', applied_at: new Date().toISOString(), error: null })
+    .eq('id', action.id)
+    .eq('account_id', accountId)
+    .eq('status', 'planned')
+    .select('id')
+    .maybeSingle<{ id: string }>();
+
+  if (claimError) {
+    await recordFailure(claimError.message);
+    return { error: claimError.message };
+  }
+  if (!claimedAction) {
+    return { error: 'This recommendation is already being applied.' };
+  }
+
+  // Hands the claim back, with the reason, after a failure that changed nothing, so the owner can
+  // try again. A failure that did reach Meta goes through fail() instead and stays failed.
+  const releaseClaim = async (message: string): Promise<{ error: string }> => {
+    await supabase
+      .from('meta_optimisation_actions')
+      .update({ status: 'planned', applied_at: null, error: message })
+      .eq('id', action.id)
+      .eq('account_id', accountId);
+    return { error: message };
+  };
+
   if (!ad.meta_ad_id || ad.status !== 'ACTIVE' || !adSet.meta_adset_id) {
     const { error: updateError } = await supabase
       .from('ads')
@@ -1844,7 +1882,7 @@ export async function applyOptimisationRecommendation(
 
     if (updateError) {
       await recordFailure(updateError.message);
-      return { error: updateError.message };
+      return releaseClaim(updateError.message);
     }
 
     await markRecommendationApplied(supabase, action.id, { replacementAdId: null });
@@ -1870,7 +1908,7 @@ export async function applyOptimisationRecommendation(
 
   if (adAccountError) {
     await recordFailure(adAccountError.message);
-    return { error: adAccountError.message };
+    return releaseClaim(adAccountError.message);
   }
   if (!adAccount?.access_token || !adAccount.meta_account_id) {
     return fail('Meta Ads account is not connected.');
@@ -1885,7 +1923,7 @@ export async function applyOptimisationRecommendation(
 
   if (fbError) {
     await recordFailure(fbError.message);
-    return { error: fbError.message };
+    return releaseClaim(fbError.message);
   }
   const pageId = fbConnection?.metadata?.pageId;
   if (!pageId) {
@@ -1921,6 +1959,57 @@ export async function applyOptimisationRecommendation(
       throw new Error('Could not prepare the original ad media.');
     }
 
+    // The replacement gets its own utm_content key and per-ad short link, built as publishing
+    // builds them, so bookings made through it are credited to it. The campaign's main short link
+    // cannot carry the key: its target already sets utm_content=meta_ads_main, and the management
+    // app's redirect keeps a stored utm_* value over one added to the link.
+    const { data: campaignAdSets, error: campaignAdsError } = await supabase
+      .from('ad_sets')
+      .select('ads(utm_content_key)')
+      .eq('campaign_id', campaign.id);
+    if (campaignAdsError) throw new Error(campaignAdsError.message);
+
+    const takenUtmContentKeys = ((campaignAdSets ?? []) as unknown as Array<{
+      ads: Array<{ utm_content_key: string | null }> | null;
+    }>).flatMap((row) => (row.ads ?? []).map((campaignAd) => campaignAd.utm_content_key));
+    // Same image as the original ad, so the same creative format.
+    const creativeFormat = normaliseCreativeFormat(ad.creative_format);
+    const attributionParts = {
+      campaignName: campaign.name,
+      adSetName: adSet.name,
+      adName: proposal.name,
+      angle: proposal.angle,
+      creativeFormat,
+    };
+    const creativeVariantKey = buildCreativeVariantKey(attributionParts);
+    const utmContentKey = uniqueAdUtmContentKey(buildAdUtmContentKey(attributionParts), takenUtmContentKeys);
+
+    const trackedSourceSnapshot = await ensureManagementMetaAdVariantLinks({
+      campaignKind: campaign.campaign_kind,
+      campaignName: campaign.name,
+      destinationUrl: campaign.destination_url,
+      sourceSnapshot: campaign.source_snapshot,
+      variants: collectManagementMetaAdVariants({
+        campaignName: campaign.name,
+        adSets: [{
+          name: adSet.name,
+          ads: [{
+            name: proposal.name,
+            angle: proposal.angle,
+            creative_format: creativeFormat,
+            creative_variant_key: creativeVariantKey,
+            utm_content_key: utmContentKey,
+          }],
+        }],
+      }),
+    });
+    const { error: snapshotError } = await supabase
+      .from('meta_campaigns')
+      .update({ source_snapshot: trackedSourceSnapshot })
+      .eq('id', campaign.id)
+      .eq('account_id', accountId);
+    if (snapshotError) throw new Error(snapshotError.message);
+
     const { data: replacementRow, error: replacementError } = await supabase
       .from('ads')
       .insert({
@@ -1933,6 +2022,9 @@ export async function applyOptimisationRecommendation(
         angle: proposal.angle,
         media_asset_id: effectiveAssetId,
         creative_brief: 'Approved copy rewrite from conversion-first optimiser.',
+        creative_format: creativeFormat,
+        creative_variant_key: creativeVariantKey,
+        utm_content_key: utmContentKey,
         status: 'DRAFT',
       })
       .select('id')
@@ -1949,7 +2041,13 @@ export async function applyOptimisationRecommendation(
       adAccountId: adAccount.meta_account_id,
       name: proposal.name,
       pageId,
-      linkUrl: campaign.destination_url,
+      linkUrl: resolveAdLinkUrl({
+        campaignKind: campaign.campaign_kind,
+        destinationUrl: campaign.destination_url,
+        sourceSnapshot: trackedSourceSnapshot,
+        serviceKey: adSet.service_key,
+        utmContentKey,
+      }),
       imageHash: hash,
       message: proposal.primaryText,
       headline: proposal.headline,

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // --- Mocks must be declared before imports ---
 
@@ -67,7 +67,7 @@ import {
   setMetaObjectStatus,
   uploadMetaImage,
 } from '@/lib/meta/marketing';
-import { createManagementMetaAdsLink } from '@/lib/management-app/client';
+import { createManagementMetaAdsLink, ManagementApiError } from '@/lib/management-app/client';
 import { getManagementConnectionConfig } from '@/lib/management-app/data';
 import { runMetaCampaignOptimisation } from '@/lib/campaigns/optimisation';
 import { syncMetaCampaignPerformance } from '@/lib/campaigns/performance-sync';
@@ -795,7 +795,89 @@ describe('applyOptimisationRecommendation', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(createServiceSupabaseClient).mockReturnValue(mockSupabase as never);
+    vi.mocked(getManagementConnectionConfig).mockResolvedValue({
+      baseUrl: 'https://management.example.com',
+      apiKey: 'key',
+      enabled: true,
+    });
+    // Behaves like the management app: each per-ad short link lands on the parent's target with
+    // utm_content replaced by that ad's key.
+    vi.mocked(createManagementMetaAdsLink).mockImplementation(async (_config, input) => ({
+      shortUrl: `https://l.the-anchor.pub/${input.parentShortCode ?? 'new-parent'}`,
+      shortCode: input.parentShortCode ?? 'new-parent',
+      destinationUrl: input.destinationUrl,
+      utmDestinationUrl: input.destinationUrl,
+      alreadyExists: Boolean(input.parentShortCode),
+      variants: (input.variants ?? []).map((variant, index) => {
+        const target = new URL(input.destinationUrl);
+        target.searchParams.set('utm_content', variant.utmContent);
+        return {
+          shortUrl: `https://l.the-anchor.pub/rv${index + 1}`,
+          shortCode: `rv${index + 1}`,
+          destinationUrl: input.destinationUrl,
+          utmDestinationUrl: target.toString(),
+          utmContent: variant.utmContent,
+          parentShortCode: input.parentShortCode ?? 'new-parent',
+          alreadyExists: false,
+        };
+      }),
+    }));
   });
+
+  afterEach(() => {
+    mockSupabase.select.mockReturnThis();
+  });
+
+  /** The keys already used by the campaign's ads, as the replacement key lookup reads them. */
+  function mockCampaignAdKeys(keys: string[]) {
+    mockSupabase.select.mockImplementation(((columns?: string) => {
+      if (columns === 'ads(utm_content_key)') {
+        return {
+          eq: vi.fn(async () => ({ data: [{ ads: keys.map((key) => ({ utm_content_key: key })) }], error: null })),
+        };
+      }
+      return mockSupabase;
+    }) as never);
+  }
+
+  function queueLiveApplyReads(
+    campaign: Record<string, unknown> = weekdayLunchCampaignRow,
+    adSet: Record<string, unknown> = liveWeekdayLunchAdSet,
+  ) {
+    mockMaybeSingle
+      .mockResolvedValueOnce({ data: safeLiveProposalAction, error: null })
+      .mockResolvedValueOnce({ data: liveWeekdayLunchAd, error: null })
+      .mockResolvedValueOnce({ data: adSet, error: null })
+      .mockResolvedValueOnce({ data: campaign, error: null })
+      // The claim on the recommendation, won.
+      .mockResolvedValueOnce({ data: { id: 'action-safe' }, error: null })
+      .mockResolvedValueOnce({ data: { access_token: 'token', meta_account_id: 'act_123' }, error: null })
+      .mockResolvedValueOnce({ data: { metadata: { pageId: 'page-1' } }, error: null });
+  }
+
+  function queueSuccessfulReplacement() {
+    mockSingle
+      .mockResolvedValueOnce({ data: { storage_path: 'media/weekday.jpg' }, error: null })
+      .mockResolvedValueOnce({ data: { id: 'replacement-1' }, error: null });
+    vi.mocked(uploadMetaImage).mockResolvedValueOnce({ hash: 'hash-1' } as never);
+    vi.mocked(createMetaAdCreative).mockResolvedValueOnce({ id: 'creative-1' } as never);
+    vi.mocked(createMetaAd).mockResolvedValueOnce({ id: 'meta-replacement-1' });
+  }
+
+  function insertedReplacementRow(): Record<string, unknown> | undefined {
+    return mockSupabase.insert.mock.calls
+      .map(([row]) => row as Record<string, unknown>)
+      .find((row) => row.adset_id === 'adset-weekday');
+  }
+
+  function creativeLinkUrl(): string {
+    return vi.mocked(createMetaAdCreative).mock.calls[0]![0].linkUrl;
+  }
+
+  // Campaign "Weekday Lunch A (cod and chips)", ad set "Evergreen Test | Local only 5mi | Local
+  // only", the original ad's venue_photo format, then the proposal's angle and name (cut at 48).
+  const expectedReplacementKey =
+    'ad__weekday_lunch_a_cod_and_chips__evergreen_test_local_only_5mi_local_only__venue_photo__booking_intent__evergreen_test_value_for_money_var_2_booking_rew';
 
   it('updates a draft ad with approved replacement copy', async () => {
     mockMaybeSingle
@@ -848,7 +930,9 @@ describe('applyOptimisationRecommendation', () => {
           campaign_kind: 'event',
         },
         error: null,
-      });
+      })
+      // The claim on the recommendation, won.
+      .mockResolvedValueOnce({ data: { id: 'action-1' }, error: null });
 
     const result = await applyOptimisationRecommendation('action-1');
 
@@ -898,6 +982,8 @@ describe('applyOptimisationRecommendation', () => {
       .mockResolvedValueOnce({ data: liveWeekdayLunchAd, error: null })
       .mockResolvedValueOnce({ data: liveWeekdayLunchAdSet, error: null })
       .mockResolvedValueOnce({ data: weekdayLunchCampaignRow, error: null })
+      // The claim on the recommendation, won.
+      .mockResolvedValueOnce({ data: { id: 'action-safe' }, error: null })
       .mockResolvedValueOnce({ data: { access_token: 'token', meta_account_id: 'act_123' }, error: null })
       .mockResolvedValueOnce({ data: { metadata: { pageId: 'page-1' } }, error: null });
     mockSingle
@@ -927,6 +1013,146 @@ describe('applyOptimisationRecommendation', () => {
       operation_type: 'optimisation_rewrite_applied',
       details: expect.objectContaining({ replacementAdId: 'replacement-1', createdPaused: true }),
     }));
+  });
+
+  it('gives the replacement its own utm_content key and a per-ad short link that carries it', async () => {
+    queueLiveApplyReads();
+    queueSuccessfulReplacement();
+
+    const result = await applyOptimisationRecommendation('action-safe');
+
+    expect(result).toEqual({ success: true, replacementAdId: 'replacement-1' });
+    expect(insertedReplacementRow()).toEqual(expect.objectContaining({
+      utm_content_key: expectedReplacementKey,
+      creative_format: 'venue_photo',
+      creative_variant_key: expect.any(String),
+    }));
+    // A per-ad short link is requested under the campaign's main link, for exactly this key.
+    expect(createManagementMetaAdsLink).toHaveBeenCalledTimes(1);
+    expect(createManagementMetaAdsLink).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+      parentShortCode: 'weekday-lunch',
+      variants: [expect.objectContaining({ utmContent: expectedReplacementKey })],
+    }));
+    // The creative uses that short link, not the campaign's main link (whose target keeps
+    // utm_content=meta_ads_main whatever is added to it).
+    const linkUrl = creativeLinkUrl();
+    expect(linkUrl).toBe('https://l.the-anchor.pub/rv1');
+    expect(linkUrl).not.toBe(weekdayLunchCampaignRow.destination_url);
+    // The short link is saved on the campaign, account-scoped, and lands with the replacement's key.
+    const snapshotUpdate = mockSupabase.update.mock.calls
+      .map(([row]) => row as Record<string, unknown>)
+      .find((row) => 'source_snapshot' in row);
+    const savedVariants = (snapshotUpdate?.source_snapshot as { managementMetaAdVariants: Array<Record<string, string>> })
+      .managementMetaAdVariants;
+    const usedVariant = savedVariants.find((variant) => variant.shortUrl === linkUrl);
+    expect(new URL(usedVariant!.utmDestinationUrl!).searchParams.get('utm_content')).toBe(expectedReplacementKey);
+    expect(savedVariants).toEqual(expect.arrayContaining([
+      expect.objectContaining({ utmContent: 'ad__original_weekday_lunch_key' }),
+    ]));
+    expect(mockSupabase.eq).toHaveBeenCalledWith('account_id', 'account-123');
+  });
+
+  it('links a food booking replacement to its service booking page with its own key', async () => {
+    queueLiveApplyReads(
+      {
+        ...weekdayLunchCampaignRow,
+        campaign_kind: 'food_booking',
+        source_snapshot: {
+          ...weekdayLunchCampaignRow.source_snapshot,
+          serviceBookingUrls: { weekday_dinner: 'https://www.the-anchor.pub/book-table?service=dinner' },
+        },
+      },
+      { ...liveWeekdayLunchAdSet, service_key: 'weekday_dinner' },
+    );
+    queueSuccessfulReplacement();
+
+    const result = await applyOptimisationRecommendation('action-safe');
+
+    expect(result).toEqual({ success: true, replacementAdId: 'replacement-1' });
+    const key = insertedReplacementRow()?.utm_content_key;
+    expect(key).toBe(expectedReplacementKey);
+    const linkUrl = new URL(creativeLinkUrl());
+    expect(`${linkUrl.origin}${linkUrl.pathname}`).toBe('https://www.the-anchor.pub/book-table');
+    expect(linkUrl.searchParams.get('service')).toBe('dinner');
+    expect(linkUrl.searchParams.get('utm_content')).toBe(key);
+  });
+
+  it('never reuses a key another ad in the campaign already has', async () => {
+    // A second rewrite of the same ad gets the same name and angle, so the same base key.
+    mockCampaignAdKeys(['ad__original_weekday_lunch_key', expectedReplacementKey]);
+    queueLiveApplyReads();
+    queueSuccessfulReplacement();
+
+    const result = await applyOptimisationRecommendation('action-safe');
+
+    expect(result).toEqual({ success: true, replacementAdId: 'replacement-1' });
+    expect(insertedReplacementRow()?.utm_content_key).toBe(`${expectedReplacementKey}__2`);
+    expect(createManagementMetaAdsLink).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+      variants: [expect.objectContaining({ utmContent: `${expectedReplacementKey}__2` })],
+    }));
+  });
+
+  it('creates nothing on Meta and fails the recommendation when the per-ad short link cannot be made', async () => {
+    queueLiveApplyReads();
+    mockSingle.mockResolvedValueOnce({ data: { storage_path: 'media/weekday.jpg' }, error: null });
+    vi.mocked(createManagementMetaAdsLink).mockRejectedValueOnce(
+      new ManagementApiError('NETWORK', 'fetch failed'),
+    );
+
+    const result = await applyOptimisationRecommendation('action-safe');
+
+    expect(result).toEqual({ error: expect.stringContaining('Management API is unreachable') });
+    expect(insertedReplacementRow()).toBeUndefined();
+    expect(uploadMetaImage).not.toHaveBeenCalled();
+    expect(createMetaAdCreative).not.toHaveBeenCalled();
+    expect(createMetaAd).not.toHaveBeenCalled();
+    expect(mockSupabase.update).toHaveBeenCalledWith(expect.objectContaining({
+      status: 'failed',
+      error: expect.stringContaining('Management API is unreachable'),
+    }));
+    expect(mockSupabase.insert).toHaveBeenCalledWith(expect.objectContaining({
+      operation_type: 'optimisation_rewrite_apply_failed',
+    }));
+  });
+
+  it('stops a second overlapping apply, so two replacements cannot share a key', async () => {
+    mockMaybeSingle
+      .mockResolvedValueOnce({ data: safeLiveProposalAction, error: null })
+      .mockResolvedValueOnce({ data: liveWeekdayLunchAd, error: null })
+      .mockResolvedValueOnce({ data: liveWeekdayLunchAdSet, error: null })
+      .mockResolvedValueOnce({ data: weekdayLunchCampaignRow, error: null })
+      // The claim, lost: another apply already moved this recommendation off 'planned'.
+      .mockResolvedValueOnce({ data: null, error: null });
+
+    const result = await applyOptimisationRecommendation('action-safe');
+
+    expect(result).toEqual({ error: expect.stringContaining('already being applied') });
+    expect(insertedReplacementRow()).toBeUndefined();
+    expect(createManagementMetaAdsLink).not.toHaveBeenCalled();
+    expect(uploadMetaImage).not.toHaveBeenCalled();
+    expect(createMetaAdCreative).not.toHaveBeenCalled();
+    expect(createMetaAd).not.toHaveBeenCalled();
+  });
+
+  it('hands the recommendation back when a read fails after the claim and nothing was created', async () => {
+    mockMaybeSingle
+      .mockResolvedValueOnce({ data: safeLiveProposalAction, error: null })
+      .mockResolvedValueOnce({ data: liveWeekdayLunchAd, error: null })
+      .mockResolvedValueOnce({ data: liveWeekdayLunchAdSet, error: null })
+      .mockResolvedValueOnce({ data: weekdayLunchCampaignRow, error: null })
+      .mockResolvedValueOnce({ data: { id: 'action-safe' }, error: null })
+      .mockResolvedValueOnce({ data: null, error: { message: 'meta_ad_accounts unavailable' } });
+
+    const result = await applyOptimisationRecommendation('action-safe');
+
+    expect(result).toEqual({ error: 'meta_ad_accounts unavailable' });
+    expect(mockSupabase.update).toHaveBeenCalledWith(expect.objectContaining({
+      status: 'planned',
+      applied_at: null,
+      error: 'meta_ad_accounts unavailable',
+    }));
+    expect(mockSupabase.update).not.toHaveBeenCalledWith(expect.objectContaining({ status: 'failed' }));
+    expect(createMetaAd).not.toHaveBeenCalled();
   });
 
   it('changes nothing and tells the user when it cannot record who is applying', async () => {
@@ -1009,6 +1235,7 @@ const liveWeekdayLunchAd = {
   name: 'Evergreen Test | Booking urgency | Var 1',
   status: 'ACTIVE',
   media_asset_id: 'asset-weekday',
+  creative_format: 'venue_photo',
 };
 
 const liveWeekdayLunchAdSet = {
@@ -1016,15 +1243,35 @@ const liveWeekdayLunchAdSet = {
   campaign_id: 'campaign-weekday',
   meta_adset_id: 'meta-adset-weekday',
   adset_media_asset_id: null,
+  name: 'Evergreen Test | Local only 5mi | Local only',
+  service_key: null,
 };
 
+// Shaped like the live weekday campaigns: the main short link's target carries
+// utm_content=meta_ads_main, and each published ad has its own short link.
+const weekdayLunchUtmDestinationUrl =
+  'https://www.the-anchor.pub/lunch-and-dinner?utm_source=facebook&utm_medium=paid_social&utm_campaign=weekday_lunch_a_cod_and_chips&utm_content=meta_ads_main';
 const weekdayLunchCampaignRow = {
   id: 'campaign-weekday',
   account_id: 'account-123',
   name: 'Weekday Lunch A (cod and chips)',
   destination_url: 'https://l.the-anchor.pub/weekday-lunch',
   campaign_kind: 'evergreen',
-  source_snapshot: { sourceType: 'custom_promotion' },
+  source_snapshot: {
+    sourceType: 'custom_promotion',
+    shortCode: 'weekday-lunch',
+    paidCtaUrl: 'https://l.the-anchor.pub/weekday-lunch',
+    utmDestinationUrl: weekdayLunchUtmDestinationUrl,
+    managementMetaAdVariants: [{
+      shortUrl: 'https://l.the-anchor.pub/orig01',
+      shortCode: 'orig01',
+      destinationUrl: weekdayLunchUtmDestinationUrl,
+      utmDestinationUrl: weekdayLunchUtmDestinationUrl.replace('meta_ads_main', 'ad__original_weekday_lunch_key'),
+      utmContent: 'ad__original_weekday_lunch_key',
+      parentShortCode: 'weekday-lunch',
+      alreadyExists: false,
+    }],
+  },
 };
 
 describe('optimisation action summaries', () => {
