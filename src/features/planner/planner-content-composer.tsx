@@ -298,7 +298,7 @@ export function PlannerContentComposer({ detail, ownerTimezone, mediaLibrary }: 
             ) : (
               <label className="flex flex-col gap-2">
                 <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                  Caption · {body.length.toLocaleString()} chars
+                  Caption · {body.length.toLocaleString("en-GB")} chars
                 </span>
                 <textarea
                   value={body}

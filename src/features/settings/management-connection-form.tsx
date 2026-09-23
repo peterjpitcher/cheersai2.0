@@ -15,6 +15,7 @@ import {
   updateManagementConnectionSettings,
 } from "@/app/(app)/settings/actions";
 import { Button } from "@/components/ui/button";
+import { formatUkDateTime } from "@/lib/utils/date";
 
 interface ManagementConnectionFormProps {
   data: ManagementConnectionSummary;
@@ -145,7 +146,7 @@ export function ManagementConnectionForm({ data }: ManagementConnectionFormProps
           </p>
           {data.lastTestedAt ? (
             <p>
-              Last test: {new Date(data.lastTestedAt).toLocaleString()} ·
+              Last test: {formatUkDateTime(data.lastTestedAt)} ·
               {" "}
               {data.lastTestStatus === "ok" ? "Passed" : "Failed"}
             </p>

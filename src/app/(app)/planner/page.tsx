@@ -12,6 +12,7 @@ import { AttentionNeededBanner } from '@/features/planner/attention-needed-banne
 import { PlannerShell } from '@/features/planner/planner-shell';
 import { STATUS_QUERY_ALIASES } from '@/features/planner/status-filter-options';
 import type { PlannerActivityItem } from '@/features/planner/activity-feed';
+import { formatUkDateTime } from '@/lib/utils/date';
 
 /** Force dynamic rendering — planner shows personalised data (PERF-01) */
 export const dynamic = 'force-dynamic';
@@ -111,7 +112,7 @@ function FailedPostsList({ posts }: { posts: ActiveFailedPost[] }) {
           >
             <span className="font-medium capitalize">{post.platform} {post.placement}</span>
             {post.scheduledFor ? (
-              <span style={{ color: 'var(--c-ink-3)' }}> · {new Date(post.scheduledFor).toLocaleString()}</span>
+              <span style={{ color: 'var(--c-ink-3)' }}> · {formatUkDateTime(post.scheduledFor)}</span>
             ) : null}
             {post.lastError ? (
               <span className="mt-1 block truncate" style={{ color: 'var(--c-claret)' }}>

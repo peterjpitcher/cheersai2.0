@@ -577,7 +577,7 @@ function InlineCopyEditor({
           />
           <div className="flex items-center justify-between">
             <span className="text-xs text-muted-foreground">
-              {body.length.toLocaleString()} characters
+              {body.length.toLocaleString('en-GB')} characters
             </span>
             <div className="flex gap-1.5">
               <button

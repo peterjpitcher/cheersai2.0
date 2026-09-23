@@ -7,6 +7,7 @@ import type { ComponentType, SVGProps } from "react";
 
 import { DismissNotificationButton } from "@/features/planner/dismiss-notification-button";
 import { useRealtimeFeed } from "@/hooks/use-realtime-feed";
+import { formatUkDateTime } from "@/lib/utils/date";
 import type { FeedEvent, FeedEventType } from "@/types/notifications";
 
 /* Tone styles use inline CSS vars set on the article element */
@@ -188,7 +189,7 @@ export function resolvePresenter(item: PlannerActivityItem): Presenter {
       const metadata = (item.metadata ?? {}) as Record<string, unknown>;
       const detailParts: string[] = [];
       if (typeof metadata.nextAttemptAt === "string") {
-        detailParts.push(`Next attempt ${new Date(metadata.nextAttemptAt).toLocaleString()}`);
+        detailParts.push(`Next attempt ${formatUkDateTime(metadata.nextAttemptAt)}`);
       }
       if (Number.isFinite(Number(metadata.attempt))) {
         detailParts.push(`Attempt ${Number(metadata.attempt)}`);
@@ -211,7 +212,7 @@ export function resolvePresenter(item: PlannerActivityItem): Presenter {
       const metadata = (item.metadata ?? {}) as Record<string, unknown>;
       const detailParts: string[] = [];
       if (typeof metadata.nextAttemptAt === "string") {
-        detailParts.push(`Next attempt ${new Date(metadata.nextAttemptAt).toLocaleString()}`);
+        detailParts.push(`Next attempt ${formatUkDateTime(metadata.nextAttemptAt)}`);
       }
       if (Number.isFinite(Number(metadata.attempt))) {
         detailParts.push(`Attempt ${Number(metadata.attempt)}`);
@@ -424,7 +425,7 @@ export function ActivityCard({
             <p className="text-[14px] font-medium" style={{ color: "var(--c-ink)" }}>{presenter.badge}</p>
             <p className="text-[13px]" style={{ color: "var(--c-ink-2)" }}>{presenter.message}</p>
             {presenter.details ? <p className="text-xs" style={{ color: "var(--c-ink-3)" }}>{presenter.details}</p> : null}
-            <p className="mono text-xs" style={{ color: "var(--c-ink-3)" }}>{new Date(item.timestamp).toLocaleString()}</p>
+            <p className="mono text-xs" style={{ color: "var(--c-ink-3)" }}>{formatUkDateTime(item.timestamp)}</p>
           </div>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2 sm:flex-col sm:items-end">
