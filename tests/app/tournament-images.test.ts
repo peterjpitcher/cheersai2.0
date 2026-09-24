@@ -31,7 +31,7 @@ function form(file?: File, aspect = 'square'): FormData {
 beforeEach(() => {
   vi.clearAllMocks();
   vi.spyOn(console, 'error').mockImplementation(() => undefined);
-  mocks.auth.mockResolvedValue({ supabase, accountId });
+  mocks.auth.mockResolvedValue({ supabase, accountId, features: { paidAds: true, tournaments: true, managementImport: true } });
   mocks.tournament.mockResolvedValue({ baseImageSquareId: oldSquare, baseImageStoryId: oldStory });
   supabase.from.mockImplementation((table: string) => {
     if (table === 'media_assets') return media;

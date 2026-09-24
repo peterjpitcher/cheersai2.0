@@ -1,7 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { AuthDependencyError } from '@/lib/auth/errors';
-import type { BrandSummary } from '@/lib/auth/types';
+import type { BrandFeatures, BrandSummary } from '@/lib/auth/types';
 import { DEFAULT_TIMEZONE } from '@/lib/constants';
 
 /**
@@ -16,7 +16,20 @@ interface AccountRow {
   id: string;
   business_name: string | null;
   timezone: string | null;
+  paid_ads_enabled: boolean | null;
+  tournaments_enabled: boolean | null;
+  management_import_enabled: boolean | null;
 }
+
+const ACCOUNT_COLUMNS =
+  'id, business_name, timezone, paid_ads_enabled, tournaments_enabled, management_import_enabled';
+
+/** Every feature switch off: the default for a brand, and for a user with no brand. */
+export const NO_FEATURES: BrandFeatures = Object.freeze({
+  paidAds: false,
+  tournaments: false,
+  managementImport: false,
+});
 
 /** Whether the user is a global super-admin (app_admins registry). */
 export async function isSuperAdmin(service: SupabaseClient, userId: string): Promise<boolean> {
@@ -44,7 +57,7 @@ export async function loadBrands(
   if (superAdmin) {
     const { data, error } = await service
       .from('accounts')
-      .select('id, business_name, timezone')
+      .select(ACCOUNT_COLUMNS)
       .is('archived_at', null)
       .order('business_name', { ascending: true });
     if (error) throw new AuthDependencyError('accounts lookup failed', error);
@@ -61,7 +74,7 @@ export async function loadBrands(
 
     const { data, error } = await service
       .from('accounts')
-      .select('id, business_name, timezone')
+      .select(ACCOUNT_COLUMNS)
       .in('id', ids)
       .is('archived_at', null)
       .order('business_name', { ascending: true });
@@ -73,6 +86,11 @@ export async function loadBrands(
     accountId: row.id,
     name: row.business_name,
     timezone: row.timezone ?? DEFAULT_TIMEZONE,
+    features: {
+      paidAds: row.paid_ads_enabled === true,
+      tournaments: row.tournaments_enabled === true,
+      managementImport: row.management_import_enabled === true,
+    },
   }));
 }
 

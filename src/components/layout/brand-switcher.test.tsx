@@ -28,6 +28,7 @@ function makeUser(brands: AppUser['brands'], activeAccountId: string | null): Ap
     timezone: 'Europe/London',
     brands,
     isSuperAdmin: false,
+    features: { paidAds: false, tournaments: false, managementImport: false },
   };
 }
 
@@ -54,7 +55,7 @@ describe('BrandSwitcher', () => {
 
   it('renders a plain label with no menu for a single brand', () => {
     renderSwitcher(
-      makeUser([{ accountId: 'a-1', name: 'The Anchor', timezone: 'Europe/London' }], 'a-1'),
+      makeUser([{ accountId: 'a-1', name: 'The Anchor', timezone: 'Europe/London', features: { paidAds: false, tournaments: false, managementImport: false } }], 'a-1'),
     );
     expect(screen.getByText('The Anchor')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /switch brand/i })).not.toBeInTheDocument();
@@ -64,8 +65,8 @@ describe('BrandSwitcher', () => {
     renderSwitcher(
       makeUser(
         [
-          { accountId: 'a-1', name: 'Alpha', timezone: 'Europe/London' },
-          { accountId: 'a-2', name: 'Bravo', timezone: 'Europe/London' },
+          { accountId: 'a-1', name: 'Alpha', timezone: 'Europe/London', features: { paidAds: false, tournaments: false, managementImport: false } },
+          { accountId: 'a-2', name: 'Bravo', timezone: 'Europe/London', features: { paidAds: false, tournaments: false, managementImport: false } },
         ],
         'a-1',
       ),
@@ -85,8 +86,8 @@ describe('BrandSwitcher', () => {
     renderSwitcher(
       makeUser(
         [
-          { accountId: 'a-1', name: 'Alpha', timezone: 'Europe/London' },
-          { accountId: 'a-2', name: 'Bravo', timezone: 'Europe/London' },
+          { accountId: 'a-1', name: 'Alpha', timezone: 'Europe/London', features: { paidAds: false, tournaments: false, managementImport: false } },
+          { accountId: 'a-2', name: 'Bravo', timezone: 'Europe/London', features: { paidAds: false, tournaments: false, managementImport: false } },
         ],
         'a-1',
       ),

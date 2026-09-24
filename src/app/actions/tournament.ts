@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 
-import { requireAuthContext } from '@/lib/auth/server';
+import { requireFeatureContext } from '@/lib/auth/features';
 import { createServiceSupabaseClient } from '@/lib/supabase/service';
 import { MEDIA_BUCKET } from '@/lib/constants';
 import {
@@ -95,7 +95,7 @@ export async function createTournament(
 ): Promise<{ success: boolean; error?: string; tournamentId?: string }> {
   try {
     const parsed = tournamentCreateSchema.parse(input);
-    const { supabase, accountId } = await requireAuthContext();
+    const { supabase, accountId } = await requireFeatureContext('tournaments');
 
     const nowIso = new Date().toISOString();
 
@@ -142,7 +142,7 @@ export async function updateTournament(
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const parsed = tournamentUpdateSchema.parse(input);
-    const { supabase, accountId } = await requireAuthContext();
+    const { supabase, accountId } = await requireFeatureContext('tournaments');
 
     const tournament = await getTournamentById(supabase, tournamentId, accountId);
     if (!tournament) return { success: false, error: 'Tournament not found' };
@@ -188,7 +188,7 @@ export async function updateTournamentStatus(
   status: Tournament['status'],
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const { supabase, accountId } = await requireAuthContext();
+    const { supabase, accountId } = await requireFeatureContext('tournaments');
 
     const tournament = await getTournamentById(supabase, tournamentId, accountId);
     if (!tournament) return { success: false, error: 'Tournament not found' };
@@ -220,7 +220,7 @@ export async function createFixture(
 ): Promise<{ success: boolean; error?: string; fixtureId?: string }> {
   try {
     const parsed = fixtureCreateSchema.parse(input);
-    const { supabase, accountId } = await requireAuthContext();
+    const { supabase, accountId } = await requireFeatureContext('tournaments');
 
     const tournament = await getTournamentById(supabase, tournamentId, accountId);
     if (!tournament) return { success: false, error: 'Tournament not found' };
@@ -273,7 +273,7 @@ export async function deleteFixture(
   fixtureId: string,
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const { supabase, accountId } = await requireAuthContext();
+    const { supabase, accountId } = await requireFeatureContext('tournaments');
 
     const tournament = await getTournamentById(supabase, tournamentId, accountId);
     if (!tournament) return { success: false, error: 'Tournament not found' };
@@ -312,7 +312,7 @@ export async function updateFixture(
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const parsed = fixtureUpdateSchema.parse(input);
-    const { supabase, accountId } = await requireAuthContext();
+    const { supabase, accountId } = await requireFeatureContext('tournaments');
 
     const tournament = await getTournamentById(supabase, tournamentId, accountId);
     if (!tournament) return { success: false, error: 'Tournament not found' };
@@ -379,7 +379,7 @@ export async function saveAndGenerateFixture(
 ): Promise<{ success: boolean; error?: string; preconditionErrors?: string[] }> {
   try {
     const parsed = fixtureUpdateSchema.parse(input);
-    const { supabase, accountId } = await requireAuthContext();
+    const { supabase, accountId } = await requireFeatureContext('tournaments');
 
     const tournament = await getTournamentById(supabase, tournamentId, accountId);
     if (!tournament) return { success: false, error: 'Tournament not found' };
@@ -488,7 +488,7 @@ export async function bulkGenerateAction(
   });
 
   try {
-    const { supabase, accountId } = await requireAuthContext();
+    const { supabase, accountId } = await requireFeatureContext('tournaments');
     tournamentDebug('action.bulk-generate.auth-ok', {
       tournamentId: redactId(tournamentId),
       accountId: redactId(accountId),
@@ -567,7 +567,7 @@ export async function publishNowFixture(
   fixtureId: string,
 ): Promise<{ success: boolean; error?: string; enqueuedCount?: number }> {
   try {
-    const { supabase, accountId } = await requireAuthContext();
+    const { supabase, accountId } = await requireFeatureContext('tournaments');
 
     const tournament = await getTournamentById(supabase, tournamentId, accountId);
     if (!tournament) return { success: false, error: 'Tournament not found' };
@@ -749,7 +749,7 @@ export async function toggleFixtureShowing(
   showing: boolean,
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const { supabase, accountId } = await requireAuthContext();
+    const { supabase, accountId } = await requireFeatureContext('tournaments');
 
     const tournament = await getTournamentById(supabase, tournamentId, accountId);
     if (!tournament) return { success: false, error: 'Tournament not found' };
@@ -810,7 +810,7 @@ export async function deleteTournament(
   tournamentId: string,
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const { supabase, accountId } = await requireAuthContext();
+    const { supabase, accountId } = await requireFeatureContext('tournaments');
 
     const tournament = await getTournamentById(supabase, tournamentId, accountId);
     if (!tournament) return { success: false, error: 'Tournament not found' };
@@ -856,7 +856,7 @@ export async function getFixturePreview(
   fixtureId: string,
 ): Promise<{ success: boolean; items?: PreviewItem[]; error?: string }> {
   try {
-    const { supabase, accountId } = await requireAuthContext();
+    const { supabase, accountId } = await requireFeatureContext('tournaments');
 
     const tournament = await getTournamentById(supabase, tournamentId, accountId);
     if (!tournament) return { success: false, error: 'Tournament not found' };
@@ -970,7 +970,7 @@ export async function importFixtures(
   }>,
 ): Promise<{ success: boolean; imported: number; skipped: number; errors: ImportError[] }> {
   try {
-    const { supabase, accountId } = await requireAuthContext();
+    const { supabase, accountId } = await requireFeatureContext('tournaments');
 
     const tournament = await getTournamentById(supabase, tournamentId, accountId);
     if (!tournament) return { success: false, imported: 0, skipped: 0, errors: [{ row: 0, error: 'Tournament not found' }] };
@@ -1043,7 +1043,7 @@ export async function regenerateFeedApiKey(
   tournamentId: string,
 ): Promise<{ success: true; apiKey: string } | { success: false; error: string }> {
   try {
-    const { supabase, accountId } = await requireAuthContext();
+    const { supabase, accountId } = await requireFeatureContext('tournaments');
 
     const tournament = await getTournamentById(supabase, tournamentId, accountId);
     if (!tournament) return { success: false, error: 'Tournament not found' };
@@ -1075,7 +1075,7 @@ export async function disableFeedApiKey(
   tournamentId: string,
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const { supabase, accountId } = await requireAuthContext();
+    const { supabase, accountId } = await requireFeatureContext('tournaments');
 
     const tournament = await getTournamentById(supabase, tournamentId, accountId);
     if (!tournament) return { success: false, error: 'Tournament not found' };
@@ -1098,7 +1098,7 @@ export async function disableFeedApiKey(
 
 export async function getFixtureScreeningPreview(tournamentId: string, input: unknown): Promise<{ success: boolean; error?: string; screening?: import('@/lib/tournament/screening').ScreeningProjection }> {
   try {
-    const { supabase, accountId } = await requireAuthContext();
+    const { supabase, accountId } = await requireFeatureContext('tournaments');
     const tournament = await getTournamentById(supabase, tournamentId, accountId);
     if (!tournament) throw new Error('Tournament not found');
     const parsed = fixtureCreateSchema.parse(input);

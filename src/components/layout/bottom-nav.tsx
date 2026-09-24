@@ -5,6 +5,7 @@ import { Plus } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
+import { useAuth } from '@/components/providers/auth-provider';
 import { MOBILE_NAV_ITEMS, getOverflowItems, isNavActive } from '@/config/app-nav';
 import { cn } from '@/lib/utils';
 
@@ -16,6 +17,7 @@ import { cn } from '@/lib/utils';
  */
 export function BottomNav() {
   const pathname = usePathname();
+  const auth = useAuth();
   const [overflowOpen, setOverflowOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -47,7 +49,7 @@ export function BottomNav() {
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [overflowOpen]);
 
-  const overflowItems = getOverflowItems();
+  const overflowItems = getOverflowItems(auth?.features);
 
   // Check if any overflow item is currently active
   const overflowActive = overflowItems.some((item) =>

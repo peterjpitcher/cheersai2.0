@@ -7,7 +7,7 @@ vi.mock('@/lib/supabase/service', () => ({
 
 // Mock auth — saveCampaignDraft calls requireAuthContext.
 vi.mock('@/lib/auth/server', () => ({
-  requireAuthContext: vi.fn().mockResolvedValue({ accountId: 'account-123' }),
+  requireAuthContext: vi.fn().mockResolvedValue({ features: { paidAds: true, tournaments: true, managementImport: true }, accountId: 'account-123' }),
 }));
 
 // Mock publishCampaign from its own module.

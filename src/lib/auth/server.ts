@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation';
 
 import { readActiveBrandCookie } from '@/lib/auth/active-brand';
 import { AuthDependencyError } from '@/lib/auth/errors';
-import { isSuperAdmin, loadBrands, resolveActiveBrand } from '@/lib/auth/membership';
+import { isSuperAdmin, loadBrands, NO_FEATURES, resolveActiveBrand } from '@/lib/auth/membership';
 import type { AppUser, AuthContext } from '@/lib/auth/types';
 import { DEFAULT_TIMEZONE } from '@/lib/constants';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
@@ -59,6 +59,7 @@ export async function getCurrentUser(): Promise<AppUser | null> {
       timezone: active?.timezone ?? DEFAULT_TIMEZONE,
       brands,
       isSuperAdmin: superAdmin,
+      features: active?.features ?? NO_FEATURES,
     };
   } catch (error) {
     // Next.js throws "Dynamic server usage" during static generation for pages
@@ -106,6 +107,7 @@ export async function requireAuthContext(): Promise<AuthContext> {
     activeAccountId: user.activeAccountId,
     brands: user.brands,
     isSuperAdmin: user.isSuperAdmin,
+    features: user.features,
   };
 }
 

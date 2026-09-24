@@ -1,5 +1,15 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
+/**
+ * Per-brand feature switches (accounts.*_enabled). Off by default; The Anchor
+ * has all three. See src/lib/auth/features.ts.
+ */
+export interface BrandFeatures {
+  paidAds: boolean;
+  tournaments: boolean;
+  managementImport: boolean;
+}
+
 /** A brand (accounts row) the user can access, used to render the switcher. */
 export interface BrandSummary {
   /** accounts table primary key */
@@ -8,6 +18,7 @@ export interface BrandSummary {
   name: string | null;
   /** Defaults to Europe/London */
   timezone: string;
+  features: BrandFeatures;
 }
 
 /**
@@ -35,6 +46,8 @@ export interface AppUser {
   brands: BrandSummary[];
   /** Global super-admin (god-mode) flag. */
   isSuperAdmin: boolean;
+  /** Active brand's feature switches; all off when there is no active brand. */
+  features: BrandFeatures;
 }
 
 /**
@@ -58,4 +71,6 @@ export interface AuthContext {
   brands: BrandSummary[];
   /** Global super-admin (god-mode) flag. */
   isSuperAdmin: boolean;
+  /** Active brand's feature switches. */
+  features: BrandFeatures;
 }

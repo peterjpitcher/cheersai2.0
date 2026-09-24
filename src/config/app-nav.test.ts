@@ -5,6 +5,7 @@ import {
   MOBILE_NAV_ITEMS,
   getOverflowItems,
   isNavActive,
+  visibleNavItems,
 } from './app-nav';
 
 describe('APP_NAV_ITEMS', () => {
@@ -30,9 +31,12 @@ describe('MOBILE_NAV_ITEMS', () => {
   });
 });
 
+const ALL_ON = { paidAds: true, tournaments: true, managementImport: true };
+const ALL_OFF = { paidAds: false, tournaments: false, managementImport: false };
+
 describe('getOverflowItems', () => {
   it('should return items from APP_NAV_ITEMS not in the mobile bottom bar', () => {
-    const overflow = getOverflowItems();
+    const overflow = getOverflowItems(ALL_ON);
     const overflowIds = overflow.map((item) => item.id);
 
     // These are in MOBILE_NAV_ITEMS and should NOT be in overflow
@@ -52,6 +56,19 @@ describe('getOverflowItems', () => {
     const settings = overflow.find((item) => item.id === 'settings');
     expect(settings).toBeDefined();
     expect(settings!.href).toBe('/settings');
+  });
+
+  it('hides campaigns and tournaments when the brand has those switches off', () => {
+    const ids = getOverflowItems(ALL_OFF).map((item) => item.id);
+    expect(ids).not.toContain('campaigns');
+    expect(ids).not.toContain('tournaments');
+    expect(ids).toContain('settings');
+  });
+
+  it('hides gated items when no brand features are known', () => {
+    const ids = getOverflowItems(null).map((item) => item.id);
+    expect(ids).not.toContain('campaigns');
+    expect(ids).not.toContain('tournaments');
   });
 });
 
@@ -76,5 +93,16 @@ describe('isNavActive', () => {
 
   it('should not mark /planner as active for unrelated paths', () => {
     expect(isNavActive('/planner', '/campaigns')).toBe(false);
+  });
+});
+
+describe('visibleNavItems', () => {
+  it('shows each gated item only when its own switch is on', () => {
+    const ids = visibleNavItems(APP_NAV_ITEMS, { paidAds: true, tournaments: false, managementImport: false }).map(
+      (item) => item.id,
+    );
+    expect(ids).toContain('campaigns');
+    expect(ids).not.toContain('tournaments');
+    expect(ids).toEqual(expect.arrayContaining(['planner', 'create', 'library', 'connections', 'settings']));
   });
 });

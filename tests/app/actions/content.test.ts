@@ -108,9 +108,10 @@ describe('createScheduledBatch', () => {
       supabase: supabaseMock.mock as never,
       accountId: 'acc-1',
       activeAccountId: 'acc-1',
-      brands: [{ accountId: 'acc-1', name: 'Test', timezone: 'Europe/London' }],
+      brands: [{ accountId: 'acc-1', name: 'Test', timezone: 'Europe/London', features: { paidAds: false, tournaments: false, managementImport: false } }],
       isSuperAdmin: false,
-      user: { id: 'user-1', email: 'test@test.com', accountId: 'acc-1', activeAccountId: 'acc-1', businessName: 'Test', timezone: 'Europe/London', brands: [{ accountId: 'acc-1', name: 'Test', timezone: 'Europe/London' }], isSuperAdmin: false } as never,
+    features: { paidAds: false, tournaments: false, managementImport: false },
+      user: { id: 'user-1', email: 'test@test.com', accountId: 'acc-1', activeAccountId: 'acc-1', businessName: 'Test', timezone: 'Europe/London', brands: [{ accountId: 'acc-1', name: 'Test', timezone: 'Europe/London', features: { paidAds: false, tournaments: false, managementImport: false } }], isSuperAdmin: false } as never,
     });
   });
 
@@ -1407,9 +1408,10 @@ describe('getCalendarItemsAction', () => {
       supabase: supabaseMock.mock as never,
       accountId: 'acc-1',
       activeAccountId: 'acc-1',
-      brands: [{ accountId: 'acc-1', name: 'Test', timezone: 'Europe/London' }],
+      brands: [{ accountId: 'acc-1', name: 'Test', timezone: 'Europe/London', features: { paidAds: false, tournaments: false, managementImport: false } }],
       isSuperAdmin: false,
-      user: { id: 'user-1', email: 'test@test.com', accountId: 'acc-1', activeAccountId: 'acc-1', businessName: 'Test', timezone: 'Europe/London', brands: [{ accountId: 'acc-1', name: 'Test', timezone: 'Europe/London' }], isSuperAdmin: false } as never,
+    features: { paidAds: false, tournaments: false, managementImport: false },
+      user: { id: 'user-1', email: 'test@test.com', accountId: 'acc-1', activeAccountId: 'acc-1', businessName: 'Test', timezone: 'Europe/London', brands: [{ accountId: 'acc-1', name: 'Test', timezone: 'Europe/London', features: { paidAds: false, tournaments: false, managementImport: false } }], isSuperAdmin: false } as never,
     });
   });
 
@@ -1625,9 +1627,10 @@ describe('getDraft', () => {
       supabase: supabaseMock.mock as never,
       accountId: 'acc-1',
       activeAccountId: 'acc-1',
-      brands: [{ accountId: 'acc-1', name: 'Test', timezone: 'Europe/London' }],
+      brands: [{ accountId: 'acc-1', name: 'Test', timezone: 'Europe/London', features: { paidAds: false, tournaments: false, managementImport: false } }],
       isSuperAdmin: false,
-      user: { id: 'user-1', email: 'test@test.com', accountId: 'acc-1', activeAccountId: 'acc-1', businessName: 'Test', timezone: 'Europe/London', brands: [{ accountId: 'acc-1', name: 'Test', timezone: 'Europe/London' }], isSuperAdmin: false } as never,
+    features: { paidAds: false, tournaments: false, managementImport: false },
+      user: { id: 'user-1', email: 'test@test.com', accountId: 'acc-1', activeAccountId: 'acc-1', businessName: 'Test', timezone: 'Europe/London', brands: [{ accountId: 'acc-1', name: 'Test', timezone: 'Europe/London', features: { paidAds: false, tournaments: false, managementImport: false } }], isSuperAdmin: false } as never,
     });
   });
 
@@ -1666,9 +1669,10 @@ describe('listDrafts', () => {
       supabase: supabaseMock.mock as never,
       accountId: 'acc-1',
       activeAccountId: 'acc-1',
-      brands: [{ accountId: 'acc-1', name: 'Test', timezone: 'Europe/London' }],
+      brands: [{ accountId: 'acc-1', name: 'Test', timezone: 'Europe/London', features: { paidAds: false, tournaments: false, managementImport: false } }],
       isSuperAdmin: false,
-      user: { id: 'user-1', email: 'test@test.com', accountId: 'acc-1', activeAccountId: 'acc-1', businessName: 'Test', timezone: 'Europe/London', brands: [{ accountId: 'acc-1', name: 'Test', timezone: 'Europe/London' }], isSuperAdmin: false } as never,
+    features: { paidAds: false, tournaments: false, managementImport: false },
+      user: { id: 'user-1', email: 'test@test.com', accountId: 'acc-1', activeAccountId: 'acc-1', businessName: 'Test', timezone: 'Europe/London', brands: [{ accountId: 'acc-1', name: 'Test', timezone: 'Europe/London', features: { paidAds: false, tournaments: false, managementImport: false } }], isSuperAdmin: false } as never,
     });
   });
 

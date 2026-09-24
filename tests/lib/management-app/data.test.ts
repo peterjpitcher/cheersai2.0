@@ -47,6 +47,7 @@ describe("management app connection data", () => {
     fromMock.mockReset();
 
     requireAuthContextMock.mockResolvedValue({
+      features: { paidAds: true, tournaments: true, managementImport: true },
       accountId: "account-1",
     });
     createServiceSupabaseClientMock.mockReturnValue({
@@ -131,5 +132,26 @@ describe("management app connection data", () => {
         message: "failed",
       }),
     ).rejects.toThrow("latest Supabase migrations");
+  });
+
+  it("refuses to read or save the connection when the brand's import switch is off", async () => {
+    requireAuthContextMock.mockResolvedValue({
+      features: { paidAds: true, tournaments: true, managementImport: false },
+      accountId: "account-1",
+    });
+    // Even with a stored, enabled connection row, nothing may be read.
+    const builder = createQueryBuilder();
+    builder.maybeSingle.mockResolvedValue({
+      data: { base_url: "https://management.orangejelly.co.uk", api_key: "secret", enabled: true },
+      error: null,
+    });
+    fromMock.mockReturnValue(builder);
+
+    const { getManagementConnectionConfig, saveManagementConnection } = await import("@/lib/management-app/data");
+    await expect(getManagementConnectionConfig()).rejects.toThrow("This brand doesn't have management app import switched on.");
+    await expect(
+      saveManagementConnection({ baseUrl: "https://management.orangejelly.co.uk", apiKey: "k", enabled: true }),
+    ).rejects.toThrow("switched on");
+    expect(fromMock).not.toHaveBeenCalled();
   });
 });

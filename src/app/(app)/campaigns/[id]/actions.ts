@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 
+import { requireFeatureContext } from '@/lib/auth/features';
 import { requireAuthContext } from '@/lib/auth/server';
 import { featureFlags } from '@/env';
 import { MEDIA_BUCKET } from '@/lib/constants';
@@ -726,7 +727,7 @@ async function ensureAdAttributionKeys(
 export async function publishCampaign(
   campaignId: string,
 ): Promise<{ success?: boolean; error?: string }> {
-  const { accountId } = await requireAuthContext();
+  const { accountId } = await requireFeatureContext('paidAds');
   const supabase = createServiceSupabaseClient();
 
   // Track every Meta object id we successfully create so we can roll back.
@@ -1345,6 +1346,9 @@ function validatePublishDestination(value: string | null, sourceSnapshot: Record
 export async function pauseCampaign(
   campaignId: string,
 ): Promise<{ success?: boolean; error?: string }> {
+  // Deliberately NOT gated on the paidAds switch: Meta keeps serving a live
+  // campaign whatever this app shows, so a brand must always be able to stop
+  // spend, even after its paid-ads switch is turned off.
   const { accountId } = await requireAuthContext();
   const supabase = createServiceSupabaseClient();
 
@@ -1399,7 +1403,7 @@ export async function syncCampaignPerformance(
   campaignId: string,
 ): Promise<{ success: true } | { error: string }> {
   try {
-    const { accountId } = await requireAuthContext();
+    const { accountId } = await requireFeatureContext('paidAds');
     await syncMetaCampaignPerformance(campaignId, { accountId });
     revalidatePath(`/campaigns/${campaignId}`);
     return { success: true };

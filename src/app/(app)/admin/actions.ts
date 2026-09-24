@@ -10,6 +10,7 @@ import { buildAuthConfirmUrl, renderInviteEmail, renderPasswordResetEmail } from
 import { sendEmail } from '@/lib/email/resend';
 import { requireAuthContext } from '@/lib/auth/server';
 import { createLogger } from '@/lib/logging';
+import type { BrandFeature } from '@/lib/auth/features';
 import type { AuthContext } from '@/lib/auth/types';
 import { DEFAULT_TIMEZONE } from '@/lib/constants';
 import { generateIngestSecret } from '@/lib/security/signing';
@@ -364,4 +365,46 @@ function siteUrlOrThrow(): string {
   const siteUrl = env.client.NEXT_PUBLIC_SITE_URL;
   if (!siteUrl) throw new Error('NEXT_PUBLIC_SITE_URL is not set; cannot build auth links.');
   return siteUrl;
+}
+
+// ---------------------------------------------------------------------------
+// setBrandFeature -- per-brand feature switches (paid ads, tournaments,
+// management-app import). See src/lib/auth/features.ts.
+// ---------------------------------------------------------------------------
+
+const FEATURE_COLUMNS = {
+  paidAds: 'paid_ads_enabled',
+  tournaments: 'tournaments_enabled',
+  managementImport: 'management_import_enabled',
+} as const satisfies Record<BrandFeature, string>;
+
+const brandFeatureSchema = z.enum(['paidAds', 'tournaments', 'managementImport']);
+
+export async function setBrandFeature(
+  accountId: string,
+  feature: BrandFeature,
+  enabled: boolean,
+): Promise<ActionResult> {
+  const ctx = await requireSuperAdmin();
+  if (!ctx) return { error: 'Forbidden.' };
+  if (!uuid.safeParse(accountId).success) return { error: 'Invalid brand.' };
+  const parsedFeature = brandFeatureSchema.safeParse(feature);
+  if (!parsedFeature.success || typeof enabled !== 'boolean') return { error: 'Invalid feature.' };
+
+  const { data, error } = await ctx.supabase
+    .from('accounts')
+    .update({ [FEATURE_COLUMNS[parsedFeature.data]]: enabled })
+    .eq('id', accountId)
+    .select('id')
+    .single<{ id: string }>();
+  if (error || !data) return { error: 'Could not update the feature.' };
+
+  await logAdminEvent({
+    actorUserId: ctx.user.id,
+    action: 'set_brand_feature',
+    targetAccountId: accountId,
+    detail: { feature: parsedFeature.data, enabled },
+  });
+  revalidatePath('/', 'layout');
+  return { success: true };
 }

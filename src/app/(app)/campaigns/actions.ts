@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 
-import { requireAuthContext } from '@/lib/auth/server';
+import { requireFeatureContext } from '@/lib/auth/features';
 import { publishCampaign } from '@/app/(app)/campaigns/[id]/actions';
 import { featureFlags } from '@/env';
 import { MEDIA_BUCKET } from '@/lib/constants';
@@ -625,7 +625,7 @@ function mapPaidLinkError(error: unknown): Error {
 export async function generateCampaignAction(
   input: GenerateCampaignInput,
 ): Promise<GenerateCampaignSuccess | { error: string }> {
-  const { accountId } = await requireAuthContext();
+  const { accountId } = await requireFeatureContext('paidAds');
   const supabase = createServiceSupabaseClient();
 
   // 1. Verify Meta Ads account is connected and setup_complete
@@ -807,7 +807,7 @@ export async function saveCampaignDraft(
   payload: AiCampaignPayload,
   meta: SaveCampaignMeta,
 ): Promise<{ campaignId: string } | { error: string }> {
-  const { accountId } = await requireAuthContext();
+  const { accountId } = await requireFeatureContext('paidAds');
   const supabase = createServiceSupabaseClient();
 
   try {
@@ -1148,7 +1148,7 @@ export async function createFoodBookingCampaign(
     return { error: 'Food booking campaigns are not enabled.' };
   }
 
-  const { accountId } = await requireAuthContext();
+  const { accountId } = await requireFeatureContext('paidAds');
   const supabase = createServiceSupabaseClient();
 
   try {
@@ -1424,7 +1424,7 @@ export async function createFoodBookingCampaign(
  * Returns all campaigns for the authenticated account, ordered newest-first.
  */
 export async function getCampaigns(): Promise<Campaign[]> {
-  const { accountId } = await requireAuthContext();
+  const { accountId } = await requireFeatureContext('paidAds');
   const supabase = createServiceSupabaseClient();
 
   const { data, error } = await supabase
@@ -1447,7 +1447,7 @@ export async function getCampaigns(): Promise<Campaign[]> {
  * Returns a single campaign with nested ad_sets and ads.
  */
 export async function getCampaignWithTree(campaignId: string): Promise<Campaign | null> {
-  const { accountId } = await requireAuthContext();
+  const { accountId } = await requireFeatureContext('paidAds');
   const supabase = createServiceSupabaseClient();
 
   const { data, error } = await supabase
@@ -1481,7 +1481,7 @@ export async function getCampaignWithTree(campaignId: string): Promise<Campaign 
 }
 
 export async function getCampaignOptimisationActions(campaignId: string): Promise<OptimisationActionSummary[]> {
-  const { accountId } = await requireAuthContext();
+  const { accountId } = await requireFeatureContext('paidAds');
   const supabase = createServiceSupabaseClient();
 
   return fetchOptimisationActionSummaries(supabase, accountId, { campaignId });
@@ -1492,7 +1492,7 @@ export async function getCampaignOptimisationActions(campaignId: string): Promis
 // ---------------------------------------------------------------------------
 
 export async function getCampaignDashboard(): Promise<CampaignDashboardModel> {
-  const { accountId } = await requireAuthContext();
+  const { accountId } = await requireFeatureContext('paidAds');
   const supabase = createServiceSupabaseClient();
 
   const [{ data: campaignsData, error: campaignsError }, actions, eventBookingInsights] =
@@ -1627,7 +1627,7 @@ async function fetchOptimisationActionSummaries(
 }
 
 export async function syncCampaignDashboardPerformance(): Promise<{ success: true; synced: number; failed: number } | { error: string; synced: number; failed: number }> {
-  const { accountId } = await requireAuthContext();
+  const { accountId } = await requireFeatureContext('paidAds');
   const supabase = createServiceSupabaseClient();
 
   const { data: campaigns, error } = await supabase
@@ -1670,7 +1670,7 @@ export async function runCampaignDashboardOptimisation(
   | { error: string }
 > {
   try {
-    const { accountId } = await requireAuthContext();
+    const { accountId } = await requireFeatureContext('paidAds');
     const supabase = createServiceSupabaseClient();
     const syncResult = await syncCampaignDashboardPerformance();
     const mode = modeOrFormData === 'apply' || modeOrFormData === 'dry_run' ? modeOrFormData : 'recommend';
@@ -1754,7 +1754,7 @@ interface ApplyRecommendationAdAccountRow {
 export async function applyOptimisationRecommendation(
   actionId: string,
 ): Promise<{ success: true; replacementAdId?: string } | { error: string }> {
-  const { accountId, user } = await requireAuthContext();
+  const { accountId, user } = await requireFeatureContext('paidAds');
   const supabase = createServiceSupabaseClient();
 
   const { data: action, error: actionError } = await supabase
@@ -2118,7 +2118,7 @@ interface ActivateReplacementAdRow {
 export async function activateOptimisationReplacementAd(
   actionId: string,
 ): Promise<{ success: true } | { error: string }> {
-  const { accountId, user } = await requireAuthContext();
+  const { accountId, user } = await requireFeatureContext('paidAds');
   const supabase = createServiceSupabaseClient();
 
   const { data: action, error: actionError } = await supabase
@@ -2224,7 +2224,7 @@ export async function setCampaignControlledTest(
   campaignId: string,
   enabled: boolean,
 ): Promise<{ success?: boolean; error?: string }> {
-  const { accountId } = await requireAuthContext();
+  const { accountId } = await requireFeatureContext('paidAds');
   const supabase = createServiceSupabaseClient();
 
   const { data, error } = await supabase
@@ -2336,7 +2336,7 @@ async function skipRecommendation(
 export async function deleteCampaign(
   campaignId: string,
 ): Promise<{ success: true } | { error: string }> {
-  const { accountId } = await requireAuthContext();
+  const { accountId } = await requireFeatureContext('paidAds');
   const supabase = createServiceSupabaseClient();
 
   const { error } = await supabase

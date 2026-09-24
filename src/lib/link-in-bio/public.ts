@@ -559,6 +559,17 @@ async function loadPublicWebsiteEvents(
 
   const now = DateTime.now().setZone(timezone);
 
+  // The management-app import is a per-brand switch; fail closed if it is off
+  // or the lookup fails.
+  const { data: brand, error: brandError } = await supabase
+    .from("accounts")
+    .select("management_import_enabled")
+    .eq("id", accountId)
+    .maybeSingle<{ management_import_enabled: boolean | null }>();
+  if (brandError || brand?.management_import_enabled !== true) {
+    return [];
+  }
+
   const { data: connection, error } = await supabase
     .from("management_app_connections")
     .select("base_url, api_key, enabled")

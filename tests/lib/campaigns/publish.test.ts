@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 vi.mock('@/lib/auth/server', () => ({
-  requireAuthContext: vi.fn().mockResolvedValue({ accountId: 'account-123' }),
+  requireAuthContext: vi.fn().mockResolvedValue({ features: { paidAds: true, tournaments: true, managementImport: true }, accountId: 'account-123' }),
 }));
 
 vi.mock('@/lib/supabase/service', () => ({

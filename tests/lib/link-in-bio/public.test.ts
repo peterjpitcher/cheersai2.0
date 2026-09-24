@@ -526,7 +526,10 @@ describe("getPublicLinkInBioPageData", () => {
     expect(data?.campaigns).toHaveLength(0);
   });
 
-  it("loads upcoming website events from the management connection", async () => {
+  it.each([
+    { importEnabled: true, label: "loads upcoming website events from the management connection" },
+    { importEnabled: false, label: "skips management events when the brand's import switch is off" },
+  ])("$label", async ({ importEnabled }) => {
     vi.setSystemTime(new Date("2026-05-22T12:00:00.000Z"));
     managementClientMock.listManagementEvents.mockResolvedValue([
       {
@@ -592,7 +595,7 @@ describe("getPublicLinkInBioPageData", () => {
           }
 
           if (table === "accounts") {
-            return { data: { timezone: "Europe/London" }, error: null };
+            return { data: { timezone: "Europe/London", management_import_enabled: importEnabled }, error: null };
           }
 
           if (table === "management_app_connections") {
@@ -633,6 +636,12 @@ describe("getPublicLinkInBioPageData", () => {
 
     const { getPublicLinkInBioPageData } = await import("@/lib/link-in-bio/public");
     const data = await getPublicLinkInBioPageData("the-anchor");
+
+    if (!importEnabled) {
+      expect(managementClientMock.listManagementEvents).not.toHaveBeenCalled();
+      expect(data?.websiteEvents).toEqual([]);
+      return;
+    }
 
     expect(managementClientMock.listManagementEvents).toHaveBeenCalledWith(
       expect.objectContaining({ baseUrl: "https://management.orangejelly.co.uk", apiKey: "secret" }),

@@ -1,3 +1,4 @@
+import type { BrandFeatures } from '@/lib/auth/types';
 import { createServiceSupabaseClient } from '@/lib/supabase/service';
 
 /**
@@ -13,6 +14,7 @@ export interface AdminBrand {
   archivedAt: string | null;
   /** Whether a per-brand booking-conversion ingest key is set (secret never exposed here). */
   bookingIngestConfigured: boolean;
+  features: BrandFeatures;
 }
 
 export interface AdminUser {
@@ -26,7 +28,7 @@ export async function getAdminOverview(): Promise<{ brands: AdminBrand[]; users:
   const db = createServiceSupabaseClient();
 
   const [accounts, snapshots, members, admins] = await Promise.all([
-    db.from('accounts').select('id, business_name, timezone, archived_at, booking_ingest_secret').order('business_name', { ascending: true }),
+    db.from('accounts').select('id, business_name, timezone, archived_at, booking_ingest_secret, paid_ads_enabled, tournaments_enabled, management_import_enabled').order('business_name', { ascending: true }),
     db.from('user_auth_snapshot').select('user_id, email').order('email', { ascending: true }),
     db.from('account_members').select('account_id, user_id'),
     db.from('app_admins').select('user_id'),
@@ -48,6 +50,9 @@ export async function getAdminOverview(): Promise<{ brands: AdminBrand[]; users:
       timezone: string;
       archived_at: string | null;
       booking_ingest_secret: string | null;
+      paid_ads_enabled: boolean | null;
+      tournaments_enabled: boolean | null;
+      management_import_enabled: boolean | null;
     }[]
   ).map((a) => ({
     accountId: a.id,
@@ -55,6 +60,11 @@ export async function getAdminOverview(): Promise<{ brands: AdminBrand[]; users:
     timezone: a.timezone,
     archivedAt: a.archived_at,
     bookingIngestConfigured: Boolean(a.booking_ingest_secret),
+    features: {
+      paidAds: a.paid_ads_enabled === true,
+      tournaments: a.tournaments_enabled === true,
+      managementImport: a.management_import_enabled === true,
+    },
   }));
 
   const users: AdminUser[] = (
