@@ -12,6 +12,7 @@ import {
   ChevronDown,
 } from "lucide-react";
 
+import { BelongsToCard } from "@/features/planner/belongs-to-card";
 import { PlannerContentScheduleForm } from "@/features/planner/content-schedule-form";
 import { PlannerContentComposer } from "@/features/planner/planner-content-composer";
 import { PlannerMediaSwapButton } from "@/features/planner/planner-media-swap-button";
@@ -432,31 +433,7 @@ export default async function PlannerContentPage({
         </div>
 
         {/* Belongs-to card */}
-        <div
-          style={{
-            backgroundColor: "var(--c-card)",
-            border: "1px solid var(--c-line)",
-            borderRadius: "var(--r-xl)",
-            padding: 18,
-          }}
-        >
-          <span className="eyebrow" style={{ color: "var(--c-ink-3)" }}>Belongs to</span>
-          <p className="text-[14px] font-medium mt-2" style={{ color: "var(--c-ink)" }}>
-            {detail.campaign?.name ?? "Instant post"}
-          </p>
-          {!detail.campaign?.name && (
-            <p className="text-[12px] mt-0.5" style={{ color: "var(--c-ink-3)" }}>
-              Not part of a campaign
-            </p>
-          )}
-          {detail.campaign?.id && (
-            <div className="mt-3">
-              <Button variant="ghost" size="sm" asChild>
-                <Link href={`/campaigns/${detail.campaign.id}`}>View campaign</Link>
-              </Button>
-            </div>
-          )}
-        </div>
+        <BelongsToCard campaignName={detail.campaign?.name} />
       </div>
 
       {/* ---- Footer actions ---- */}
