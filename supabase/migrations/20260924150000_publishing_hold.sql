@@ -23,8 +23,10 @@
 --   drop table if exists public.app_flags;
 
 alter table public.publish_jobs drop constraint if exists publish_jobs_status_check;
+-- status::text: live production stores status as text, while a database rebuilt
+-- from the migration chain (CI) has an enum; the cast works for both.
 alter table public.publish_jobs add constraint publish_jobs_status_check
-  check (status = any (array['queued', 'in_progress', 'succeeded', 'failed', 'held']));
+  check (status::text = any (array['queued', 'in_progress', 'succeeded', 'failed', 'held']));
 
 alter table public.publish_jobs
   add column if not exists hold_reason text
