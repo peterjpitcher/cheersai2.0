@@ -1,0 +1,90 @@
+import { describe, expect, it } from 'vitest';
+
+import { can, PAST_DUE_GRACE_DAYS, resolveEntitlement, type EntitlementInput } from '@/lib/billing/entitlement';
+import { PLANS } from '@/lib/billing/plans';
+
+const NOW = new Date('2026-10-15T12:00:00Z');
+const base: EntitlementInput = { archivedAt: null, billingOverride: null, subscription: null, now: NOW };
+const sub = (status: NonNullable<EntitlementInput['subscription']>['status'], currentPeriodEnd: string | null = '2026-10-10T00:00:00Z') => ({
+  ...base,
+  subscription: { status, currentPeriodEnd },
+});
+
+describe('resolveEntitlement precedence', () => {
+  it('archived beats everything', () => {
+    expect(resolveEntitlement({ ...sub('active'), archivedAt: '2026-10-01T00:00:00Z', billingOverride: 'comped' })).toBe('archived');
+  });
+
+  it('suspension overrides a comped or paying brand', () => {
+    expect(resolveEntitlement({ ...sub('active'), billingOverride: 'suspended' })).toBe('suspended');
+  });
+
+  it('comped needs no subscription', () => {
+    expect(resolveEntitlement({ ...base, billingOverride: 'comped' })).toBe('comped');
+  });
+
+  it('a brand with no subscription has not finished checkout', () => {
+    expect(resolveEntitlement(base)).toBe('incomplete');
+  });
+});
+
+describe('resolveEntitlement from Stripe status', () => {
+  it.each([
+    ['trialing', 'trialing'],
+    ['active', 'active'],
+    ['incomplete', 'incomplete'],
+    ['canceled', 'lapsed'],
+    ['unpaid', 'lapsed'],
+    ['incomplete_expired', 'lapsed'],
+    ['paused', 'lapsed'],
+  ] as const)('%s -> %s', (status, expected) => {
+    expect(resolveEntitlement(sub(status))).toBe(expected);
+  });
+
+  it(`keeps a past-due brand working for ${PAST_DUE_GRACE_DAYS} days after the period ends`, () => {
+    // Period ended 2026-10-10; now is 2026-10-15, inside the 7-day grace.
+    expect(resolveEntitlement(sub('past_due'))).toBe('past_due_grace');
+    // Across a clock change (BST ends 25 Oct): grace is measured in absolute time.
+    expect(resolveEntitlement({ ...sub('past_due', '2026-10-20T00:00:00Z'), now: new Date('2026-10-27T00:00:00Z') })).toBe('past_due_grace');
+    expect(resolveEntitlement({ ...sub('past_due', '2026-10-20T00:00:00Z'), now: new Date('2026-10-27T00:00:01Z') })).toBe('lapsed');
+  });
+
+  it('treats a past-due brand with no period end as lapsed (fail closed)', () => {
+    expect(resolveEntitlement(sub('past_due', null))).toBe('lapsed');
+  });
+});
+
+describe('capability matrix (decision D3)', () => {
+  it('paying, trialing, grace and comped brands can do everything', () => {
+    for (const state of ['active', 'trialing', 'past_due_grace', 'comped'] as const) {
+      for (const capability of ['read', 'create', 'publish', 'billing', 'export', 'switch_brand'] as const) {
+        expect(can(state, capability)).toBe(true);
+      }
+    }
+  });
+
+  it('held brands keep read, billing and export but cannot create or publish', () => {
+    for (const state of ['lapsed', 'incomplete', 'suspended'] as const) {
+      expect(can(state, 'read')).toBe(true);
+      expect(can(state, 'billing')).toBe(true);
+      expect(can(state, 'export')).toBe(true);
+      expect(can(state, 'switch_brand')).toBe(true);
+      expect(can(state, 'create')).toBe(false);
+      expect(can(state, 'publish')).toBe(false);
+    }
+  });
+
+  it('archived brands get nothing', () => {
+    expect(can('archived', 'read')).toBe(false);
+  });
+});
+
+describe('plans', () => {
+  it('match the approved plan table', () => {
+    expect(PLANS.starter.limits).toEqual({ postsPerMonth: 120, aiGenerationsPerMonth: 150, storageBytes: 2 * 1024 ** 3, seats: 2 });
+    expect(PLANS.professional.limits).toEqual({ postsPerMonth: 400, aiGenerationsPerMonth: 500, storageBytes: 10 * 1024 ** 3, seats: 5 });
+    expect([PLANS.starter.monthlyPricePence, PLANS.starter.annualPricePence]).toEqual([2999, 32389]);
+    expect([PLANS.professional.monthlyPricePence, PLANS.professional.annualPricePence]).toEqual([5999, 64789]);
+    expect(PLANS.group.selfServe).toBe(false);
+  });
+});
