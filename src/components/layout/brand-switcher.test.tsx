@@ -29,6 +29,7 @@ function makeUser(brands: AppUser['brands'], activeAccountId: string | null): Ap
     brands,
     isSuperAdmin: false,
     features: { paidAds: false, tournaments: false, managementImport: false },
+    role: 'owner',
   };
 }
 
@@ -55,7 +56,7 @@ describe('BrandSwitcher', () => {
 
   it('renders a plain label with no menu for a single brand', () => {
     renderSwitcher(
-      makeUser([{ accountId: 'a-1', name: 'The Anchor', timezone: 'Europe/London', features: { paidAds: false, tournaments: false, managementImport: false } }], 'a-1'),
+      makeUser([{ accountId: 'a-1', name: 'The Anchor', timezone: 'Europe/London', features: { paidAds: false, tournaments: false, managementImport: false }, role: 'owner' }], 'a-1'),
     );
     expect(screen.getByText('The Anchor')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /switch brand/i })).not.toBeInTheDocument();
@@ -65,8 +66,8 @@ describe('BrandSwitcher', () => {
     renderSwitcher(
       makeUser(
         [
-          { accountId: 'a-1', name: 'Alpha', timezone: 'Europe/London', features: { paidAds: false, tournaments: false, managementImport: false } },
-          { accountId: 'a-2', name: 'Bravo', timezone: 'Europe/London', features: { paidAds: false, tournaments: false, managementImport: false } },
+          { accountId: 'a-1', name: 'Alpha', timezone: 'Europe/London', features: { paidAds: false, tournaments: false, managementImport: false }, role: 'owner' },
+          { accountId: 'a-2', name: 'Bravo', timezone: 'Europe/London', features: { paidAds: false, tournaments: false, managementImport: false }, role: 'owner' },
         ],
         'a-1',
       ),
@@ -86,8 +87,8 @@ describe('BrandSwitcher', () => {
     renderSwitcher(
       makeUser(
         [
-          { accountId: 'a-1', name: 'Alpha', timezone: 'Europe/London', features: { paidAds: false, tournaments: false, managementImport: false } },
-          { accountId: 'a-2', name: 'Bravo', timezone: 'Europe/London', features: { paidAds: false, tournaments: false, managementImport: false } },
+          { accountId: 'a-1', name: 'Alpha', timezone: 'Europe/London', features: { paidAds: false, tournaments: false, managementImport: false }, role: 'owner' },
+          { accountId: 'a-2', name: 'Bravo', timezone: 'Europe/London', features: { paidAds: false, tournaments: false, managementImport: false }, role: 'owner' },
         ],
         'a-1',
       ),

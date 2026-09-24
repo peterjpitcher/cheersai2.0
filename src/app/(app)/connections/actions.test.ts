@@ -47,7 +47,7 @@ vi.mock('next/cache', () => ({
 // Helpers
 // ---------------------------------------------------------------------------
 
-function authContext(overrides: Partial<{ accountId: string; user: { id: string } }> = {}) {
+function authContext(overrides: Partial<{ accountId: string; user: { id: string }; role: 'owner' | 'member' }> = {}) {
   const accountId = overrides.accountId ?? 'acc-1';
   return {
     accountId,
@@ -56,6 +56,7 @@ function authContext(overrides: Partial<{ accountId: string; user: { id: string 
     supabase: { from: mockFrom },
     brands: [{ accountId, name: 'Test', timezone: 'Europe/London' }],
     isSuperAdmin: false,
+    role: overrides.role ?? 'owner',
   };
 }
 
@@ -372,5 +373,16 @@ describe('disconnectProvider', () => {
     expect(mockFrom).toHaveBeenCalledWith('social_connections');
     const updateCall = updateChain.update.mock.calls[0][0];
     expect(updateCall).toHaveProperty('status', 'disconnected');
+  });
+});
+
+describe('owner-only connections (decision D4)', () => {
+  it('refuses members before touching the database', async () => {
+    mockRequireAuthContext.mockResolvedValue(authContext({ role: 'member' }));
+    mockFrom.mockClear();
+
+    await expect(disconnectProvider('facebook')).rejects.toThrow('Only an owner of this brand can do that.');
+    await expect(initiateOAuthConnect('facebook')).rejects.toThrow('Only an owner of this brand can do that.');
+    expect(mockFrom).not.toHaveBeenCalled();
   });
 });

@@ -68,6 +68,21 @@ ${brandLine}
   };
 }
 
+/** For someone who already has a CheersAI login and has been given access to another brand. */
+export function renderAddedToBrandEmail(options: { loginUrl: string; brandName: string }): RenderedEmail {
+  if (!options.loginUrl) throw new Error('Added-to-brand email needs a login link.');
+  const brand = options.brandName.trim() || 'a brand';
+  return {
+    subject: `You now have access to ${brand} on CheersAI`,
+    html: `
+<p>Hi,</p>
+<p>You've been given access to <strong>${escapeHtml(brand)}</strong> on CheersAI.</p>
+<p><a href="${escapeHtml(options.loginUrl)}">Sign in to CheersAI</a>, then pick ${escapeHtml(brand)} from the brand switcher.</p>
+<p>CheersAI</p>
+`.trim(),
+  };
+}
+
 export function renderPasswordResetEmail(options: { link: string }): RenderedEmail {
   if (!options.link) throw new Error('Password reset email needs a link.');
   return {
