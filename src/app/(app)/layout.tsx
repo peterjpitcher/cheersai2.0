@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation';
 
 import { AppShell } from '@/components/layout/app-shell';
 import { AuthProvider } from '@/components/providers/auth-provider';
-import { featureFlags } from "@/env";
+import { isBillingEnforcementEnabled } from "@/lib/billing/enforcement";
 import { can } from "@/lib/billing/entitlement";
 import { ENTITLEMENT_MESSAGES, getBrandEntitlement } from "@/lib/billing/entitlement-server";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
@@ -48,13 +48,14 @@ export default async function AppLayout({ children }: AppLayoutProps) {
   // Billing hold banner (only when enforcement is on). A lookup failure shows no
   // banner; every guarded action still re-checks and fails closed on its own.
   let heldMessage: string | null = null;
-  if (featureFlags.billingEnforcement) {
-    try {
-      const state = await getBrandEntitlement(createServiceSupabaseClient(), user.activeAccountId);
+  try {
+    const service = createServiceSupabaseClient();
+    if (await isBillingEnforcementEnabled(service)) {
+      const state = await getBrandEntitlement(service, user.activeAccountId);
       if (!can(state, "create")) heldMessage = ENTITLEMENT_MESSAGES[state] ?? null;
-    } catch (error) {
-      console.error("[layout] entitlement lookup failed", error);
     }
+  } catch (error) {
+    console.error("[layout] entitlement lookup failed", error);
   }
 
   // Fetch unread notification count for sidebar badge — silent fallback to 0

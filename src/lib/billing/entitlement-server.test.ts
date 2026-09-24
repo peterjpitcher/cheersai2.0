@@ -1,7 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const flags = { billingEnforcement: false };
-vi.mock('@/env', () => ({ featureFlags: flags, env: { server: {}, client: {} } }));
+vi.mock('@/lib/billing/enforcement', () => ({
+  BILLING_ENFORCEMENT_FLAG: 'billing_enforcement',
+  isBillingEnforcementEnabled: vi.fn(async () => flags.billingEnforcement),
+}));
 
 const mockRequireAuthContext = vi.fn();
 vi.mock('@/lib/auth/server', () => ({ requireAuthContext: () => mockRequireAuthContext() }));

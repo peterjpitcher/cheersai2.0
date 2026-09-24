@@ -1205,6 +1205,7 @@ export async function updatePlannerContentSchedule(payload: unknown) {
       next_attempt_at: scheduledIso,
       last_error: null,
       attempt: 0,
+      hold_reason: null,
       resolved_at: null,
       resolution_kind: null,
       resolution_note: null,

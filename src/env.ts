@@ -74,9 +74,6 @@ const serverEnv = {
   // materialisation cron's *writes*: when off the cron is a pure no-op (no QStash dispatch,
   // no Meta calls). Flip on per-environment once a few dry-run summaries have been reviewed.
   FOOD_AUTO_MATERIALISE_ENABLED: readOptionalEnv("FOOD_AUTO_MATERIALISE_ENABLED"),
-  // Billing enforcement (SPEC-new-customer-readiness §4.1). Default off: stays off
-  // until Stripe, entitlement and the publishing hold are all live.
-  BILLING_ENFORCEMENT_ENABLED: readOptionalEnv("BILLING_ENFORCEMENT_ENABLED"),
   // Booking-conversion ingest (the-anchor.pub → /api/booking-conversions). Optional:
   // the endpoint 500s with a clear message when unset rather than failing the build.
   BOOKING_CONVERSION_INGEST_SECRET: readOptionalEnv("BOOKING_CONVERSION_INGEST_SECRET"),
@@ -212,15 +209,6 @@ export const featureFlags = {
    */
   foodAutoMaterialise: (() => {
     const flag = serverEnv.FOOD_AUTO_MATERIALISE_ENABLED;
-    if (!flag) return false;
-    return flag === "true" || flag === "1";
-  })(),
-  /**
-   * Billing enforcement: held brands (lapsed, incomplete, suspended) cannot create or
-   * publish. Server-only and default off; when off, entitlement is never consulted.
-   */
-  billingEnforcement: (() => {
-    const flag = serverEnv.BILLING_ENFORCEMENT_ENABLED;
     if (!flag) return false;
     return flag === "true" || flag === "1";
   })(),

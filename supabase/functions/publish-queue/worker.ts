@@ -8,6 +8,13 @@ import { publishToFacebook } from "./providers/facebook.ts";
 import { publishToInstagram } from "./providers/instagram.ts";
 import { resolveConnectionMetadata } from "./metadata.ts";
 import {
+    mayPublish,
+    resolveEntitlement,
+    type EntitlementInput,
+    type EntitlementState,
+    type StripeSubscriptionStatus,
+} from "./entitlement.ts";
+import {
     compactMetaGraphError,
     getMetaGraphErrorDetails,
     isAmbiguousMetaAuthorizationFailure,
@@ -121,6 +128,14 @@ type NewPublishJobRow = {
     status: "queued";
     next_attempt_at: string;
     placement: "feed" | "story";
+};
+
+/** Shown on the held post in the planner and in the activity feed. */
+const HOLD_MESSAGES: Partial<Record<EntitlementState, string>> = {
+    lapsed: "On hold: this brand's subscription has lapsed. Future posts go out once an owner restarts it from Billing; past-due posts will need rescheduling.",
+    incomplete: "On hold: this brand has not finished setting up billing. An owner can finish it from Billing.",
+    suspended: "On hold: this brand is paused. Contact CheersAI support.",
+    archived: "On hold: this brand has been closed.",
 };
 
 const SUPPORTED_PUBLISH_PLATFORMS = new Set<ProviderPlatform>(["facebook", "instagram"]);
@@ -693,6 +708,15 @@ export class PublishQueueWorker {
 
         if (!isSupportedPublishPlatform(content.platform)) {
             await this.resolveUnsupportedPlatformJob(job.id, content, nowIso);
+            return;
+        }
+
+        // Billing hold (spec §4.2): before any provider call, a brand that may not
+        // publish has the job held (schedule kept, visible, never picked up again
+        // until released or rescheduled).
+        const holdState = await this.checkPublishHold(content.account_id, now);
+        if (holdState) {
+            await this.holdJob(job, content.account_id, holdState, nowIso);
             return;
         }
 
@@ -1810,6 +1834,81 @@ export class PublishQueueWorker {
                 reason,
             },
         );
+    }
+
+    /**
+     * Returns the brand's entitlement state when it may NOT publish, or null when
+     * it may. Reads the shared billing_enforcement switch first: while it is off
+     * nothing is held. A lookup failure logs and returns null (publish): this is
+     * a billing control, and stopping every brand's posts on a transient read
+     * error would hurt paying customers more than one unpaid post going out.
+     */
+    protected async checkPublishHold(accountId: string, now: Date): Promise<EntitlementState | null> {
+        try {
+            const { data: flag, error: flagError } = await this.supabase
+                .from("app_flags")
+                .select("enabled")
+                .eq("name", "billing_enforcement")
+                .maybeSingle<{ enabled: boolean }>();
+            if (flagError) throw flagError;
+            if (flag?.enabled !== true) return null;
+
+            const { data: account, error: accountError } = await this.supabase
+                .from("accounts")
+                .select("archived_at, billing_override")
+                .eq("id", accountId)
+                .maybeSingle<{ archived_at: string | null; billing_override: "comped" | "suspended" | null }>();
+            if (accountError) throw accountError;
+            if (!account) return null;
+
+            let subscription: EntitlementInput["subscription"] = null;
+            if (!account.archived_at && !account.billing_override) {
+                const { data: sub, error: subError } = await this.supabase
+                    .from("subscriptions")
+                    .select("status, current_period_end")
+                    .eq("account_id", accountId)
+                    .order("stripe_state_at", { ascending: false })
+                    .limit(1)
+                    .maybeSingle<{ status: StripeSubscriptionStatus; current_period_end: string | null }>();
+                if (subError) throw subError;
+                subscription = sub ? { status: sub.status, currentPeriodEnd: sub.current_period_end } : null;
+            }
+
+            const state = resolveEntitlement({
+                archivedAt: account.archived_at,
+                billingOverride: account.billing_override,
+                subscription,
+                now,
+            });
+            return mayPublish(state) ? null : state;
+        } catch (error) {
+            console.error(`[publish-queue] entitlement check failed for account ${accountId}; publishing`, error);
+            return null;
+        }
+    }
+
+    private async holdJob(job: PublishJobRow, accountId: string, state: EntitlementState, nowIso: string) {
+        const message = HOLD_MESSAGES[state] ?? "On hold: this brand cannot publish right now.";
+        const { error } = await this.supabase
+            .from("publish_jobs")
+            .update({
+                status: "held",
+                hold_reason: "entitlement",
+                // The lock bumped the attempt; a hold is not an attempt.
+                attempt: job.attempt ?? 0,
+                last_error: message,
+                updated_at: nowIso,
+            })
+            .eq("id", job.id);
+        if (error) {
+            console.error(`[publish-queue] failed to hold job ${job.id}`, error);
+            return;
+        }
+        await this.insertNotification(accountId, "publish_held", message, {
+            job_id: job.id,
+            content_item_id: job.content_item_id,
+            entitlement: state,
+        });
     }
 
     private async insertNotification(
