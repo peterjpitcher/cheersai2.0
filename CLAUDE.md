@@ -8,7 +8,7 @@ CheersAI is an AI-assisted social media tool for hospitality venues. An owner cr
 
 ## Stack: where this repo differs from the workspace default
 
-- Next.js **16.2** App Router (workspace default is 15), React 19.2, Tailwind v4, TypeScript strict. Node **20.x** (`engines`), npm with `package-lock.json`.
+- Next.js **16.2** App Router (workspace default is 15), React 19.2, Tailwind v4, TypeScript strict. Node **24.x** (`engines`, CI and Vercel), npm with `package-lock.json`.
 - `npm run build` runs `next build --webpack`: webpack, not Turbopack. The build type-checks against `tsconfig.build.json` (src only); `npm run typecheck` uses `tsconfig.json`, which also covers `tests/` and `scripts/`, so the two can disagree.
 - Tests are **Vitest 4** (node environment, `TZ` forced to Europe/London) plus **Playwright** for e2e. Not Jest.
 - No `middleware.ts` or `proxy.ts`. The auth gate is `src/app/(app)/layout.tsx` calling `getCurrentUser()` (redirects to `/auth/login` or `/no-access`); server actions and routes call `requireAuthContext()` from `src/lib/auth/server.ts`.

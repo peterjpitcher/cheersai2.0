@@ -32,7 +32,7 @@ Historical planning residue: `.planning/` (GSD phases, archived 2026-07-03), `do
 | Images | `sharp` 0.34 (declared in `serverExternalPackages`), `satori` 0.26, `text-to-svg` 3 |
 | Testing | `vitest` 4 with `@vitest/coverage-v8`, `@testing-library/react` 16, `@testing-library/jest-dom` 6, `jsdom` 29, `msw` 2, `@playwright/test` 1.60, `autocannon` 8 (`perf:load-test`) |
 
-Runtime: Node 20.x (`engines`), npm with `package-lock.json`, deployed on Vercel in `lhr1`, Supabase PostgreSQL with RLS on every table. Path alias `@/*` maps to `./src/*` in both `tsconfig.json` and `vitest.config.ts`. `next.config.ts` also wires `securityHeaders` (`src/lib/security/headers.ts`) and `legacyHostRedirects` (`src/lib/routing/legacy-host-redirects.ts`) and allows `**.supabase.co` as an image host.
+Runtime: Node 24.x (`engines`), npm with `package-lock.json`, deployed on Vercel in `lhr1`, Supabase PostgreSQL with RLS on every table. Path alias `@/*` maps to `./src/*` in both `tsconfig.json` and `vitest.config.ts`. `next.config.ts` also wires `securityHeaders` (`src/lib/security/headers.ts`) and `legacyHostRedirects` (`src/lib/routing/legacy-host-redirects.ts`) and allows `**.supabase.co` as an image host.
 
 Not in this project (despite older notes): `libphonenumber-js`, Lightning CSS, Prettier config, Jest, any Google Business Profile SDK.
 
