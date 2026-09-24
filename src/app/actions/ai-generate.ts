@@ -18,6 +18,7 @@ import { requireAuthContext } from '@/lib/auth/server';
 import { buildGenerationTemporalContext } from '@/lib/create/temporal-context';
 import type { GenerationTemporalContext } from '@/lib/create/temporal-context';
 import type { BrandProfile } from '@/lib/settings/data';
+import { requireEntitledContext } from '@/lib/billing/entitlement-server';
 
 /**
  * Optional media + schedule context passed from the create wizard.
@@ -73,7 +74,7 @@ export async function generateContent(
   context?: GenerationContextInput,
 ): Promise<{ data?: PostprocessResult; error?: string }> {
   try {
-    const { supabase, accountId } = await requireAuthContext();
+    const { supabase, accountId } = await requireEntitledContext('create');
 
     // Load the configured brand voice (key phrases, banned phrases, signatures,
     // tone sliders) from the brand_profile table — the same store the
@@ -163,7 +164,7 @@ export async function regenerateWithModifier(
   context?: GenerationContextInput,
 ): Promise<{ data?: PostprocessResult; error?: string }> {
   try {
-    const { supabase, accountId } = await requireAuthContext();
+    const { supabase, accountId } = await requireEntitledContext('create');
 
     // Load the configured brand voice — see generateContent for details.
     const brand = await loadBrandProfile(supabase, accountId);

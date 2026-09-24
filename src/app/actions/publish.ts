@@ -5,7 +5,6 @@
  * Re-queues a failed job with a fresh deduplication ID so QStash treats it as new.
  */
 
-import { requireAuthContext } from '@/lib/auth/server';
 import { createServiceSupabaseClient } from '@/lib/supabase/service';
 import { transitionStatus } from '@/lib/publishing/state-machine';
 import { dispatchToQStash } from '@/lib/publishing/dispatch';
@@ -13,6 +12,7 @@ import { logPublishAuditEvent } from '@/lib/publishing/audit';
 import { evaluateTemporalDrift } from '@/lib/publishing/temporal-drift';
 import { DateTime } from 'luxon';
 import { DEFAULT_TIMEZONE } from '@/lib/constants';
+import { requireEntitledContext } from '@/lib/billing/entitlement-server';
 
 type PublishJobRow = {
   id: string;
@@ -27,7 +27,7 @@ type PublishJobRow = {
 export async function retryPublishJob(
   jobId: string,
 ): Promise<{ success?: boolean; error?: string; warning?: string }> {
-  const { accountId } = await requireAuthContext();
+  const { accountId } = await requireEntitledContext('publish');
   const db = createServiceSupabaseClient();
 
   // Load job, verify ownership

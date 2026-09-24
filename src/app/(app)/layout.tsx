@@ -3,6 +3,10 @@ import { redirect } from 'next/navigation';
 
 import { AppShell } from '@/components/layout/app-shell';
 import { AuthProvider } from '@/components/providers/auth-provider';
+import { featureFlags } from "@/env";
+import { can } from "@/lib/billing/entitlement";
+import { ENTITLEMENT_MESSAGES, getBrandEntitlement } from "@/lib/billing/entitlement-server";
+import { createServiceSupabaseClient } from "@/lib/supabase/service";
 import { ConnectionHealthToast } from '@/features/connections/connection-toast';
 import { signOut } from '@/lib/auth/actions';
 import { getCurrentUser } from '@/lib/auth/server';
@@ -41,6 +45,18 @@ export default async function AppLayout({ children }: AppLayoutProps) {
     // Silent fallback — no health dots or toast if query fails
   }
 
+  // Billing hold banner (only when enforcement is on). A lookup failure shows no
+  // banner; every guarded action still re-checks and fails closed on its own.
+  let heldMessage: string | null = null;
+  if (featureFlags.billingEnforcement) {
+    try {
+      const state = await getBrandEntitlement(createServiceSupabaseClient(), user.activeAccountId);
+      if (!can(state, "create")) heldMessage = ENTITLEMENT_MESSAGES[state] ?? null;
+    } catch (error) {
+      console.error("[layout] entitlement lookup failed", error);
+    }
+  }
+
   // Fetch unread notification count for sidebar badge — silent fallback to 0
   let notificationCount = 0;
   try {
@@ -56,6 +72,15 @@ export default async function AppLayout({ children }: AppLayoutProps) {
         notificationCount={notificationCount}
         signOutAction={signOut}
       >
+        {heldMessage ? (
+          <div
+            role="status"
+            className="mb-4 rounded-[var(--r-md)] p-3 text-sm font-medium"
+            style={{ backgroundColor: "var(--c-claret-soft)", color: "var(--c-claret)" }}
+          >
+            {heldMessage}
+          </div>
+        ) : null}
         {children}
       </AppShell>
       <ConnectionHealthToast summaries={healthSummaries} />

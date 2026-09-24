@@ -16,6 +16,7 @@ import { readPlatformCtaLinks } from '@/lib/publishing/copy-rules';
 import { logPublishAuditEvent } from '@/lib/publishing/audit';
 import { MEDIA_BUCKET, DEFAULT_TIMEZONE, WEEKLY_MAX_OCCURRENCES } from '@/lib/constants';
 import type { ContentItem, ContentType, Platform, PlatformCopy } from '@/types/content';
+import { requireEntitledContext } from '@/lib/billing/entitlement-server';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -105,7 +106,7 @@ export async function createDraft(
   formData: unknown,
 ): Promise<{ success?: boolean; error?: string; id?: string }> {
   try {
-    const { supabase, accountId } = await requireAuthContext();
+    const { supabase, accountId } = await requireEntitledContext('create');
 
     const parsed = contentBriefSchema.safeParse(formData);
     if (!parsed.success) {
@@ -172,7 +173,7 @@ export async function saveDraft(
   draftState: unknown,
 ): Promise<{ success?: boolean; error?: string }> {
   try {
-    const { supabase, accountId } = await requireAuthContext();
+    const { supabase, accountId } = await requireEntitledContext('create');
 
     const { error } = await supabase
       .from('content_items')
@@ -326,7 +327,7 @@ export async function scheduleContent(
   scheduledAt: string,
 ): Promise<{ success?: boolean; error?: string }> {
   try {
-    const { supabase, accountId } = await requireAuthContext();
+    const { supabase, accountId } = await requireEntitledContext('publish');
 
     // Validate date is in the future. Parse via Luxon in the app timezone so a
     // naive datetime string is interpreted as Europe/London (not the server's
@@ -374,7 +375,7 @@ export async function approveForQueue(
   contentId: string,
 ): Promise<{ success?: boolean; error?: string }> {
   try {
-    const { supabase, accountId } = await requireAuthContext();
+    const { supabase, accountId } = await requireEntitledContext('publish');
 
     const { error } = await supabase
       .from('content_items')
@@ -682,7 +683,7 @@ export async function createScheduledBatch(
   campaignId?: string;
 }> {
   try {
-    const { supabase, accountId } = await requireAuthContext();
+    const { supabase, accountId } = await requireEntitledContext('publish');
 
     const {
       draftContentId,

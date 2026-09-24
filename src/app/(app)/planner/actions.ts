@@ -16,6 +16,7 @@ import { validateBannerText } from "@/lib/banner/text";
 import { listMediaAssets } from "@/lib/library/data";
 import { isSchemaMissingError } from "@/lib/supabase/errors";
 import { formatUkDateTime } from "@/lib/utils/date";
+import { requireEntitledContext } from "@/lib/billing/entitlement-server";
 
 const approveSchema = z.object({
   contentId: z.string().uuid(),
@@ -184,7 +185,7 @@ function reservePlannerSlotOnSameDay({
 export async function approveDraftContent(payload: unknown) {
   const parsed = approveSchema.parse(payload);
   const { contentId } = parsed;
-  const { supabase, accountId } = await requireAuthContext();
+  const { supabase, accountId } = await requireEntitledContext('publish');
 
   const { data: content, error } = await supabase
     .from("content_items")
@@ -521,7 +522,7 @@ export async function updatePlannerContentMedia(payload: unknown) {
     throw new Error("Attach at least one media asset");
   }
 
-  const { supabase, accountId } = await requireAuthContext();
+  const { supabase, accountId } = await requireEntitledContext('create');
 
   const { data: content, error: fetchError } = await supabase
     .from("content_items")
@@ -704,7 +705,7 @@ export async function loadPlannerMediaLibrary(input?: unknown) {
 
 export async function restorePlannerContent(payload: unknown) {
   const { contentId } = restoreSchema.parse(payload);
-  const { supabase, accountId } = await requireAuthContext();
+  const { supabase, accountId } = await requireEntitledContext('create');
 
   const { data: content, error: contentFetchError } = await supabase
     .from("content_items")
@@ -982,7 +983,7 @@ export async function updatePlannerContentBody(payload: unknown) {
   const { contentId, body } = updateBodySchema.parse(payload);
   const trimmedBody = body.trim();
 
-  const { supabase, accountId } = await requireAuthContext();
+  const { supabase, accountId } = await requireEntitledContext('create');
 
   const { data: content, error: fetchError } = await supabase
     .from("content_items")
@@ -1061,7 +1062,7 @@ export async function updatePlannerContentBody(payload: unknown) {
 
 export async function updatePlannerContentSchedule(payload: unknown) {
   const { contentId, date, time } = updateScheduleSchema.parse(payload);
-  const { supabase, accountId } = await requireAuthContext();
+  const { supabase, accountId } = await requireEntitledContext('publish');
 
   const { data: content, error: contentError } = await supabase
     .from("content_items")
@@ -1292,7 +1293,7 @@ async function evaluateScheduleDrift({
 
 export async function createPlannerContent(payload: unknown) {
   const { platform, placement } = createSchema.parse(payload);
-  const { supabase, accountId } = await requireAuthContext();
+  const { supabase, accountId } = await requireEntitledContext('create');
 
   const nowIso = new Date().toISOString();
 
@@ -1341,7 +1342,7 @@ export async function updatePlannerBannerConfig(
   input: unknown,
 ): Promise<{ success?: boolean; error?: string }> {
   const data = updateBannerSchema.parse(input);
-  const { supabase, accountId } = await requireAuthContext();
+  const { supabase, accountId } = await requireEntitledContext('create');
 
   // Ownership check: confirm content item belongs to this account and is editable.
   const { data: content, error: fetchError } = await supabase

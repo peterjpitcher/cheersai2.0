@@ -22,6 +22,7 @@ import {
   normaliseStoragePath,
   type PreviewPlacement,
 } from "@/lib/library/data";
+import { requireEntitledContext } from "@/lib/billing/entitlement-server";
 
 const REVALIDATE_PATHS = ["/library", "/create", "/planner", "/campaigns", "/link-in-bio", "/tournaments"] as const;
 
@@ -77,7 +78,7 @@ interface RequestUploadResult {
 }
 
 export async function requestMediaUpload(input: RequestUploadInput) {
-  const { accountId } = await requireAuthContext();
+  const { accountId } = await requireEntitledContext('create');
   const supabase = createServiceSupabaseClient();
 
   await ensureBucketExists(supabase);
@@ -155,7 +156,7 @@ interface FinaliseUploadInput {
 }
 
 export async function finaliseMediaUpload(input: FinaliseUploadInput) {
-  const { accountId } = await requireAuthContext();
+  const { accountId } = await requireEntitledContext('create');
   const supabase = createServiceSupabaseClient();
 
   if (!input.storagePath.startsWith(`${accountId}/`)) {
@@ -277,7 +278,7 @@ interface UpdateMediaAssetInput {
 }
 
 export async function updateMediaAsset(input: UpdateMediaAssetInput) {
-  const { accountId } = await requireAuthContext();
+  const { accountId } = await requireEntitledContext('create');
   const supabase = createServiceSupabaseClient();
 
   const trimmedName = input.fileName?.trim();
@@ -343,7 +344,7 @@ export async function updateMediaAsset(input: UpdateMediaAssetInput) {
  */
 export async function autoNameAndTagMediaAsset(assetId: string): Promise<MediaAssetSummary | null> {
   try {
-    const { accountId } = await requireAuthContext();
+    const { accountId } = await requireEntitledContext('create');
     const supabase = createServiceSupabaseClient();
 
     const { data: assetRow } = await supabase
@@ -529,7 +530,7 @@ export async function hideMediaAssetsByTag(tag: string): Promise<HideByTagResult
 }
 
 export async function replaceMediaAssetEverywhere(input: { oldAssetId: string; newAssetId: string }) {
-  const { accountId } = await requireAuthContext();
+  const { accountId } = await requireEntitledContext('create');
   const supabase = createServiceSupabaseClient();
 
   const oldAssetId = input.oldAssetId?.trim();

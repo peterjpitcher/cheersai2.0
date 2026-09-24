@@ -13,6 +13,7 @@ import type {
   UpdateLinkInBioProfileInput,
   UpsertLinkInBioTileInput,
 } from "./types";
+import { requireEntitledContext } from "@/lib/billing/entitlement-server";
 
 interface LinkInBioProfileRow {
   account_id: string;
@@ -142,7 +143,7 @@ export async function getLinkInBioProfileWithTiles(): Promise<LinkInBioProfileWi
 }
 
 export async function upsertLinkInBioProfile(input: UpdateLinkInBioProfileInput) {
-  const { supabase, accountId } = await requireAuthContext();
+  const { supabase, accountId } = await requireEntitledContext('create');
 
   const payload: Partial<LinkInBioProfileRow> & { account_id: string; slug: string; updated_at: string } = {
     account_id: accountId,
@@ -184,7 +185,7 @@ export async function upsertLinkInBioProfile(input: UpdateLinkInBioProfileInput)
 }
 
 export async function createLinkInBioTile(input: UpsertLinkInBioTileInput) {
-  const { supabase, accountId } = await requireAuthContext();
+  const { supabase, accountId } = await requireEntitledContext('create');
 
   const { data: maxRow, error: maxError } = await supabase
     .from("link_in_bio_tiles")
@@ -232,7 +233,7 @@ export async function createLinkInBioTile(input: UpsertLinkInBioTileInput) {
 }
 
 export async function updateLinkInBioTile(tileId: string, input: UpsertLinkInBioTileInput) {
-  const { supabase, accountId } = await requireAuthContext();
+  const { supabase, accountId } = await requireEntitledContext('create');
 
   const payload: Partial<LinkInBioTileRow> = {
     title: input.title,
@@ -283,7 +284,7 @@ export async function deleteLinkInBioTile(tileId: string) {
 }
 
 export async function reorderLinkInBioTiles(input: ReorderLinkInBioTilesInput) {
-  const { supabase, accountId } = await requireAuthContext();
+  const { supabase, accountId } = await requireEntitledContext('create');
 
   if (!input.tileIdsInOrder.length) {
     return;

@@ -7,6 +7,7 @@ import { MEDIA_BUCKET } from '@/lib/constants';
 import { normaliseTags } from '@/lib/library/tags';
 import { isSchemaMissingError } from '@/lib/supabase/errors';
 import type { MediaItem } from '@/types/media';
+import { requireEntitledContext } from '@/lib/billing/entitlement-server';
 
 // ---------------------------------------------------------------------------
 // Mapper
@@ -40,7 +41,7 @@ export async function uploadMediaAction(
   formData: FormData,
 ): Promise<{ data?: MediaItem; error?: string }> {
   try {
-    const { supabase, accountId } = await requireAuthContext();
+    const { supabase, accountId } = await requireEntitledContext('create');
 
     const file = formData.get('file');
     if (!file || !(file instanceof File)) {
@@ -199,7 +200,7 @@ export async function updateMediaTags(
   tags: string[],
 ): Promise<{ success?: boolean; error?: string }> {
   try {
-    const { supabase, accountId } = await requireAuthContext();
+    const { supabase, accountId } = await requireEntitledContext('create');
 
     const normalised = normaliseTags(tags);
 
@@ -235,7 +236,7 @@ export async function attachMediaToContent(
   mediaIds: string[],
 ): Promise<{ success?: boolean; error?: string }> {
   try {
-    const { supabase, accountId } = await requireAuthContext();
+    const { supabase, accountId } = await requireEntitledContext('create');
 
     // Verify content item belongs to this account before modifying attachments
     const { data: item, error: itemError } = await supabase
