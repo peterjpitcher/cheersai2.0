@@ -31,4 +31,5 @@ Release order for enforcement (spec §6): 2.2 expand, 2.3 and 2.4 deployed with 
 
 ## Results
 
-- **2.1** `feat/ai-usage-logging` (2026-09-24): built; `trackAiCall()` wraps all four OpenAI call sites (post copy, media tagging, campaign generation, campaign copy correction). Recording never blocks or fails the AI call. Migration `20260924120000_ai_usage_events.sql` awaiting approval.
+- **2.1** `feat/ai-usage-logging` (2026-09-24): built; `trackAiCall()` wraps all four OpenAI call sites (post copy, media tagging, campaign generation, campaign copy correction). Recording never blocks or fails the AI call. Migration applied 2026-09-24 as version `20260924085419` (service-role only, RLS on). Merged as #91, deployed `dpl_E8XuoTwT3unKedxLLw2rXgTvf7ro`. First usage row to be confirmed after the next real generation.
+- **2.2** `feat/billing-schema` (2026-09-24): built. Migration `20260924130000_billing_schema.sql` (billing_customers, subscriptions, stripe_events, accounts.billing_override; The Anchor and Orange Jelly comped) awaiting approval. Plan config `src/lib/billing/plans.ts` and the pure D3 resolver `src/lib/billing/entitlement.ts` (7-day past-due grace), not wired to anything yet.
