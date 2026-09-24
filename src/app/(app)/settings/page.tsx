@@ -8,15 +8,18 @@ import { listMediaAssets } from "@/lib/library/data";
 import { getManagementConnectionSummary } from "@/lib/management-app/data";
 import { getOwnerSettings } from "@/lib/settings/data";
 import { requireAuthContext } from "@/lib/auth/server";
+import { listTeam } from "@/app/(app)/settings/team-actions";
+import { TeamSection } from "@/features/settings/team-section";
 
 export default async function SettingsPage() {
   // The management-app import is a per-brand switch, off by default.
-  const { features } = await requireAuthContext();
-  const [settings, managementConnection, linkInBioData, mediaAssets] = await Promise.all([
+  const { features, role } = await requireAuthContext();
+  const [settings, managementConnection, linkInBioData, mediaAssets, team] = await Promise.all([
     getOwnerSettings(),
     features.managementImport ? getManagementConnectionSummary() : Promise.resolve(null),
     getLinkInBioProfileWithTiles(),
     listMediaAssets({ excludeTags: ["Tournament"], includeSystemAssets: true }),
+    listTeam(),
   ]);
 
   return (
@@ -58,6 +61,24 @@ export default async function SettingsPage() {
           </p>
         </div>
         <PostingDefaultsForm data={settings.posting} />
+      </section>
+
+      <section
+        id="team"
+        className="rounded-xl p-6 md:p-8 space-y-6"
+        style={{
+          backgroundColor: "var(--c-card)",
+          border: "1px solid var(--c-line)",
+          boxShadow: "var(--sh-sm)",
+        }}
+      >
+        <div className="space-y-1">
+          <h3 className="text-xl font-semibold" style={{ color: "var(--c-ink)" }}>Team</h3>
+          <p className="text-sm" style={{ color: "var(--c-ink-3)" }}>
+            Owners manage billing, people and connections. Members create and schedule posts.
+          </p>
+        </div>
+        <TeamSection members={team} canManage={role === "owner"} />
       </section>
 
       {managementConnection ? (

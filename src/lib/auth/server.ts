@@ -60,6 +60,7 @@ export async function getCurrentUser(): Promise<AppUser | null> {
       brands,
       isSuperAdmin: superAdmin,
       features: active?.features ?? NO_FEATURES,
+      role: active?.role ?? null,
     };
   } catch (error) {
     // Next.js throws "Dynamic server usage" during static generation for pages
@@ -108,6 +109,8 @@ export async function requireAuthContext(): Promise<AuthContext> {
     brands: user.brands,
     isSuperAdmin: user.isSuperAdmin,
     features: user.features,
+    // A user with an active brand always has a role in it (loadBrands sets one).
+    role: user.role ?? 'member',
   };
 }
 

@@ -10,6 +10,9 @@ export interface BrandFeatures {
   managementImport: boolean;
 }
 
+/** Role within a brand (decision D4). */
+export type BrandRole = 'owner' | 'member';
+
 /** A brand (accounts row) the user can access, used to render the switcher. */
 export interface BrandSummary {
   /** accounts table primary key */
@@ -19,6 +22,8 @@ export interface BrandSummary {
   /** Defaults to Europe/London */
   timezone: string;
   features: BrandFeatures;
+  /** The user's role in this brand. Super-admins act as owner everywhere. */
+  role: BrandRole;
 }
 
 /**
@@ -48,6 +53,8 @@ export interface AppUser {
   isSuperAdmin: boolean;
   /** Active brand's feature switches; all off when there is no active brand. */
   features: BrandFeatures;
+  /** Role in the active brand; null when there is no active brand. */
+  role: BrandRole | null;
 }
 
 /**
@@ -73,4 +80,6 @@ export interface AuthContext {
   isSuperAdmin: boolean;
   /** Active brand's feature switches. */
   features: BrandFeatures;
+  /** Role in the active brand. */
+  role: BrandRole;
 }

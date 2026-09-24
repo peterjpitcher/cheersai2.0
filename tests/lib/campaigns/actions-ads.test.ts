@@ -72,7 +72,7 @@ describe("selectAdAccount", () => {
     requireAuthContextMock.mockReset();
     revalidatePathMock.mockReset();
     fromQueue = [];
-    requireAuthContextMock.mockResolvedValue({ accountId: "account-uuid-1", features: { paidAds: true, tournaments: true, managementImport: true } });
+    requireAuthContextMock.mockResolvedValue({ accountId: "account-uuid-1", features: { paidAds: true, tournaments: true, managementImport: true }, role: "owner" });
   });
 
   it("should return error when no ads token exists", async () => {
@@ -258,7 +258,7 @@ describe("getAdAccountSetupStatus", () => {
     requireAuthContextMock.mockReset();
     revalidatePathMock.mockReset();
     fromQueue = [];
-    requireAuthContextMock.mockResolvedValue({ accountId: "account-uuid-1", features: { paidAds: true, tournaments: true, managementImport: true } });
+    requireAuthContextMock.mockResolvedValue({ accountId: "account-uuid-1", features: { paidAds: true, tournaments: true, managementImport: true }, role: "owner" });
   });
 
   it("logs database errors instead of silently reporting disconnected status", async () => {
@@ -310,7 +310,7 @@ describe("updateAdAccountConversionSettings", () => {
     requireAuthContextMock.mockReset();
     revalidatePathMock.mockReset();
     fromQueue = [];
-    requireAuthContextMock.mockResolvedValue({ accountId: "account-uuid-1", features: { paidAds: true, tournaments: true, managementImport: true } });
+    requireAuthContextMock.mockResolvedValue({ accountId: "account-uuid-1", features: { paidAds: true, tournaments: true, managementImport: true }, role: "owner" });
   });
 
   it("allows the legacy seed pixel ID when it is entered explicitly", async () => {

@@ -1,7 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { AuthDependencyError } from '@/lib/auth/errors';
-import type { BrandFeatures, BrandSummary } from '@/lib/auth/types';
+import type { BrandFeatures, BrandRole, BrandSummary } from '@/lib/auth/types';
 import { DEFAULT_TIMEZONE } from '@/lib/constants';
 
 /**
@@ -53,6 +53,8 @@ export async function loadBrands(
   superAdmin: boolean,
 ): Promise<BrandSummary[]> {
   let rows: AccountRow[];
+  // Super-admins act as owner in every brand (god mode).
+  const roleByAccount = new Map<string, BrandRole>();
 
   if (superAdmin) {
     const { data, error } = await service
@@ -65,11 +67,17 @@ export async function loadBrands(
   } else {
     const { data: memberships, error: membershipError } = await service
       .from('account_members')
-      .select('account_id')
+      .select('account_id, role')
       .eq('user_id', userId);
     if (membershipError) throw new AuthDependencyError('account_members lookup failed', membershipError);
 
-    const ids = (memberships ?? []).map((m) => (m as { account_id: string }).account_id);
+    const memberRows = (memberships ?? []) as Array<{ account_id: string; role: string | null }>;
+    for (const m of memberRows) {
+      // Anything other than an explicit member role is treated as owner, matching
+      // the column default (D4: every existing membership became an owner).
+      roleByAccount.set(m.account_id, m.role === 'member' ? 'member' : 'owner');
+    }
+    const ids = memberRows.map((m) => m.account_id);
     if (ids.length === 0) return [];
 
     const { data, error } = await service
@@ -91,6 +99,7 @@ export async function loadBrands(
       tournaments: row.tournaments_enabled === true,
       managementImport: row.management_import_enabled === true,
     },
+    role: superAdmin ? 'owner' : roleByAccount.get(row.id) ?? 'member',
   }));
 }
 

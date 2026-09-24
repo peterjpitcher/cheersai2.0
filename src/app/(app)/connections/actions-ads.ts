@@ -4,6 +4,7 @@ import { randomUUID } from "crypto";
 import { revalidatePath } from "next/cache";
 
 import { requireFeatureContext } from "@/lib/auth/features";
+import { assertOwner } from "@/lib/auth/roles";
 import { buildFacebookAdsOAuthUrl } from "@/lib/connections/oauth";
 import {
   BOOKING_CONVERSION_EVENT_NAME,
@@ -51,7 +52,9 @@ function normalizeMetaAccountId(value: string): string | null {
  * Creates a state token in oauth_states and returns the Facebook Ads OAuth URL.
  */
 export async function startAdsOAuth(): Promise<{ url: string }> {
-  const { accountId } = await requireFeatureContext('paidAds');
+  const adsCtx = await requireFeatureContext('paidAds');
+  assertOwner(adsCtx);
+  const { accountId } = adsCtx;
   const supabase = createServiceSupabaseClient();
 
   const state = randomUUID();
@@ -76,7 +79,9 @@ export async function startAdsOAuth(): Promise<{ url: string }> {
 export async function fetchAdAccounts(): Promise<
   { success: true; accounts: AdAccountOption[] } | { success: false; error: string }
 > {
-  const { accountId } = await requireFeatureContext('paidAds');
+  const adsCtx = await requireFeatureContext('paidAds');
+  assertOwner(adsCtx);
+  const { accountId } = adsCtx;
   const supabase = createServiceSupabaseClient();
 
   const { data: adAccount, error: fetchError } = await supabase
@@ -142,7 +147,9 @@ export async function selectAdAccount(
     return { error: "Invalid ad account ID format." };
   }
 
-  const { accountId } = await requireFeatureContext('paidAds');
+  const adsCtx = await requireFeatureContext('paidAds');
+  assertOwner(adsCtx);
+  const { accountId } = adsCtx;
   const supabase = createServiceSupabaseClient();
 
   const { data: adAccount, error: fetchError } = await supabase
@@ -302,7 +309,9 @@ export async function updateAdAccountConversionSettings(input: {
     return { error: "Enter the full Meta Conversions API access token, or leave it blank to keep the existing token." };
   }
 
-  const { accountId } = await requireFeatureContext('paidAds');
+  const adsCtx = await requireFeatureContext('paidAds');
+  assertOwner(adsCtx);
+  const { accountId } = adsCtx;
   const supabase = createServiceSupabaseClient();
 
   const { data: current, error: fetchError } = await supabase

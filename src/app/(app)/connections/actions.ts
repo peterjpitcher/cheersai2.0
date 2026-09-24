@@ -5,7 +5,7 @@ import { randomUUID } from "crypto";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
-import { requireAuthContext } from "@/lib/auth/server";
+import { requireOwnerContext } from "@/lib/auth/roles";
 import { evaluateConnectionMetadata } from "@/lib/connections/metadata";
 import { buildOAuthRedirectUrl } from "@/lib/connections/oauth";
 import { deriveConnectionReadiness, hasTokenValue } from "@/lib/connections/readiness";
@@ -52,7 +52,7 @@ export async function initiateOAuthConnect(
   providerInput: string,
 ): Promise<{ success: boolean; redirectUrl?: string; error?: string }> {
   const provider = providerSchema.parse(providerInput);
-  const { accountId } = await requireAuthContext();
+  const { accountId } = await requireOwnerContext();
   const supabase = createServiceSupabaseClient();
 
   const state = randomUUID();
@@ -92,7 +92,7 @@ export async function completeOAuthConnect(
   stateParam: string,
 ): Promise<{ success: boolean; error?: string }> {
   const provider = providerSchema.parse(providerInput);
-  const ctx = await requireAuthContext();
+  const ctx = await requireOwnerContext();
   const supabase = createServiceSupabaseClient();
 
   // 1. Validate state: must exist, unused, and not expired. Read the brand that
@@ -231,7 +231,7 @@ export async function disconnectProvider(
   providerInput: string,
 ): Promise<{ success: boolean; error?: string }> {
   const provider = providerSchema.parse(providerInput);
-  const { accountId } = await requireAuthContext();
+  const { accountId } = await requireOwnerContext();
   const supabase = createServiceSupabaseClient();
 
   const { error } = await supabase
@@ -264,7 +264,7 @@ export async function disconnectProvider(
 export async function updateConnectionMetadata(input: unknown) {
   const { provider, metadataValue } = payloadSchema.parse(input);
   const value = metadataValue?.trim() ?? "";
-  const { accountId } = await requireAuthContext();
+  const { accountId } = await requireOwnerContext();
   const supabase = createServiceSupabaseClient();
 
   const { data: existing, error: fetchError } = await supabase
