@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { createRouteSupabaseClient } from "@/lib/supabase/route";
 import { getRateLimitKey, isRateLimited } from "@/lib/auth/rate-limit";
+import { isUnknownUserOtpError } from "@/lib/auth/otp-errors";
 
 const RATE_LIMIT_WINDOW_MS = 60_000;
 const RATE_LIMIT_MAX_ATTEMPTS = 5;
@@ -32,12 +33,18 @@ export async function POST(request: Request) {
   }
 
   const supabase = await createRouteSupabaseClient();
+  // Never create a login from a magic-link request (see src/lib/auth/actions.ts).
   const { error } = await supabase.auth.signInWithOtp({
     email,
     options: {
       emailRedirectTo: redirectTo ?? undefined,
+      shouldCreateUser: false,
     },
   });
+
+  if (error && isUnknownUserOtpError(error)) {
+    return NextResponse.json({ success: true }, { status: 200 });
+  }
 
   if (error) {
     console.error("[auth] signInWithOtp failed", { email, message: error.message, status: error.status });

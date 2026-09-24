@@ -11,6 +11,9 @@ import { Mail } from 'lucide-react';
 
 import { sendMagicLink, signInWithPassword } from '@/lib/auth/actions';
 
+/** Error codes set by /auth/confirm, /auth/callback and /auth/set-password. */
+const LINK_ERRORS = new Set(['invalid_confirmation', 'confirmation_failed', 'auth_callback_failed', 'link_expired']);
+
 /**
  * Login page with email/password as the primary method.
  * Split-screen layout: dark brand panel left, auth form right.
@@ -19,6 +22,7 @@ import { sendMagicLink, signInWithPassword } from '@/lib/auth/actions';
 export default function LoginPage() {
   const searchParams = useSearchParams();
   const nextUrl = searchParams.get('next') ?? '/dashboard';
+  const linkError = LINK_ERRORS.has(searchParams.get('error') ?? '');
 
   const [authMode, setAuthMode] = useState<'magic-link' | 'password'>('password');
 
@@ -132,6 +136,23 @@ export default function LoginPage() {
           </div>
 
           <div className="space-y-6">
+            {linkError && (
+              <div
+                role="alert"
+                className="rounded-[var(--r-md)] p-3 text-sm text-center font-medium"
+                style={{
+                  backgroundColor: "var(--c-claret-soft)",
+                  color: "var(--c-claret)",
+                }}
+              >
+                That link has expired or was already used.{' '}
+                <Link href="/forgot-password" className="underline">
+                  Send a new one
+                </Link>
+                .
+              </div>
+            )}
+
             {/* Magic link form */}
             {authMode === 'magic-link' && !magicLinkSuccess && (
               <form action={magicLinkAction} className="space-y-4">
@@ -206,7 +227,16 @@ export default function LoginPage() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="password">Password</Label>
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="password">Password</Label>
+                    <Link
+                      href="/forgot-password"
+                      className="text-sm underline-offset-4 hover:underline"
+                      style={{ color: "var(--c-ink-3)" }}
+                    >
+                      Forgot password?
+                    </Link>
+                  </div>
                   <Input
                     id="password"
                     name="password"

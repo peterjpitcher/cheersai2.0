@@ -6,6 +6,8 @@ import { z } from 'zod';
 
 import { env } from '@/env';
 import { logAdminEvent } from '@/lib/admin/audit';
+import { buildAuthConfirmUrl, renderInviteEmail, renderPasswordResetEmail } from '@/lib/auth/email-links';
+import { sendEmail } from '@/lib/email/resend';
 import { requireAuthContext } from '@/lib/auth/server';
 import { createLogger } from '@/lib/logging';
 import type { AuthContext } from '@/lib/auth/types';
@@ -256,12 +258,16 @@ export async function inviteUser(input: {
     return { error: parsed.error.issues[0]?.message ?? 'Invalid invite.' };
   }
 
-  const siteUrl = env.client.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
-  const { data, error } = await ctx.supabase.auth.admin.inviteUserByEmail(parsed.data.email, {
-    redirectTo: `${siteUrl}/auth/confirm`,
+  // Order matters: create the login without sending anything, write brand
+  // access, and only then email the link. A failure at any step stops before
+  // the invitee receives a link to an account with no brands.
+  const { data, error } = await ctx.supabase.auth.admin.generateLink({
+    type: 'invite',
+    email: parsed.data.email,
   });
 
-  if (error || !data?.user) {
+  const tokenHash = data?.properties?.hashed_token;
+  if (error || !data?.user || !tokenHash) {
     // Most commonly: the user already exists. Direct the admin to assign them
     // from the existing-users list instead (a separate, idempotent journey).
     return { error: 'Could not invite. If the user already exists, assign them a brand instead.' };
@@ -277,7 +283,39 @@ export async function inviteUser(input: {
     .from('account_members')
     .upsert(rows, { onConflict: 'account_id,user_id' });
   if (memberError) {
-    return { error: 'Invite sent, but assigning brands failed. Assign them manually.' };
+    logger.error('invite_user membership write failed', undefined, { targetUserId: newUserId, reason: memberError.message });
+    return {
+      error:
+        'The login was created but brand access could not be saved, so no email was sent. Add their brands in the users list, then use "Send password link".',
+    };
+  }
+
+  const { data: brandRows } = await ctx.supabase
+    .from('accounts')
+    .select('business_name')
+    .in('id', parsed.data.accountIds);
+  const brandNames = (brandRows ?? [])
+    .map((row: { business_name: string | null }) => row.business_name ?? '')
+    .filter(Boolean);
+
+  const link = buildAuthConfirmUrl({ siteUrl: siteUrlOrThrow(), tokenHash, type: 'invite' });
+  const email = renderInviteEmail({ link, brandNames });
+  try {
+    await sendEmail({ to: parsed.data.email, subject: email.subject, html: email.html, required: true });
+  } catch (sendError) {
+    logger.error('invite_user email failed', sendError instanceof Error ? sendError : undefined, { targetUserId: newUserId });
+    await logAdminEvent({
+      actorUserId: ctx.user.id,
+      action: 'invite_user',
+      targetUserId: newUserId,
+      detail: { email: parsed.data.email, accountIds: parsed.data.accountIds },
+      result: 'failure',
+    });
+    revalidatePath('/admin');
+    return {
+      error:
+        'The login and brand access were saved, but the invite email failed to send. Use "Send password link" in the users list to try again.',
+    };
   }
 
   await logAdminEvent({
@@ -288,4 +326,42 @@ export async function inviteUser(input: {
   });
   revalidatePath('/admin');
   return { success: true };
+}
+
+// ---------------------------------------------------------------------------
+// sendPasswordLink -- resend access to an existing user (failed or expired
+// invite, or a user who never set a password)
+// ---------------------------------------------------------------------------
+
+export async function sendPasswordLink(userId: string): Promise<ActionResult> {
+  const ctx = await requireSuperAdmin();
+  if (!ctx) return { error: 'Forbidden.' };
+  if (!uuid.safeParse(userId).success) return { error: 'Invalid user.' };
+
+  const { data: userData, error: userError } = await ctx.supabase.auth.admin.getUserById(userId);
+  const email = userData?.user?.email;
+  if (userError || !email) return { error: 'Could not find that user.' };
+
+  const { data, error } = await ctx.supabase.auth.admin.generateLink({ type: 'recovery', email });
+  const tokenHash = data?.properties?.hashed_token;
+  if (error || !tokenHash) return { error: 'Could not create a password link. Try again.' };
+
+  const link = buildAuthConfirmUrl({ siteUrl: siteUrlOrThrow(), tokenHash, type: 'recovery' });
+  const message = renderPasswordResetEmail({ link });
+  try {
+    await sendEmail({ to: email, subject: message.subject, html: message.html, required: true });
+  } catch (sendError) {
+    logger.error('send_password_link email failed', sendError instanceof Error ? sendError : undefined, { targetUserId: userId });
+    await logAdminEvent({ actorUserId: ctx.user.id, action: 'send_password_link', targetUserId: userId, result: 'failure' });
+    return { error: 'The email failed to send. Try again shortly.' };
+  }
+
+  await logAdminEvent({ actorUserId: ctx.user.id, action: 'send_password_link', targetUserId: userId });
+  return { success: true };
+}
+
+function siteUrlOrThrow(): string {
+  const siteUrl = env.client.NEXT_PUBLIC_SITE_URL;
+  if (!siteUrl) throw new Error('NEXT_PUBLIC_SITE_URL is not set; cannot build auth links.');
+  return siteUrl;
 }

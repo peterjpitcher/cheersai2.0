@@ -1,6 +1,8 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 
+import { safeNextPath } from '@/lib/auth/email-links';
+
 /**
  * Auth callback handler (AUTH-03).
  * Handles the code exchange for magic link and OAuth flows.
@@ -10,11 +12,11 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const { searchParams, origin } = request.nextUrl;
 
   const code = searchParams.get('code');
-  const next = searchParams.get('next') ?? '/dashboard';
+  const next = safeNextPath(searchParams.get('next'), '/dashboard');
 
   if (!code) {
     // No code provided -- redirect to login with error
-    const loginUrl = new URL('/auth/login', origin);
+    const loginUrl = new URL('/login', origin);
     loginUrl.searchParams.set('error', 'auth_callback_failed');
     return NextResponse.redirect(loginUrl);
   }
@@ -42,7 +44,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   if (error) {
     console.error('[auth] callback code exchange failed:', error.message);
-    const loginUrl = new URL('/auth/login', origin);
+    const loginUrl = new URL('/login', origin);
     loginUrl.searchParams.set('error', 'auth_callback_failed');
     return NextResponse.redirect(loginUrl);
   }

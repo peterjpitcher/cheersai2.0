@@ -1,6 +1,8 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 
+import { safeNextPath } from '@/lib/auth/email-links';
+
 /**
  * Email confirmation handler.
  * Handles the token_hash + type flow for signup confirmation.
@@ -16,10 +18,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     | 'email'
     | 'magiclink'
     | null;
-  const next = searchParams.get('next') ?? '/dashboard';
+  const next = safeNextPath(searchParams.get('next'), '/dashboard');
 
   if (!tokenHash || !type) {
-    const loginUrl = new URL('/auth/login', origin);
+    const loginUrl = new URL('/login', origin);
     loginUrl.searchParams.set('error', 'invalid_confirmation');
     return NextResponse.redirect(loginUrl);
   }
@@ -49,7 +51,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   if (error) {
     console.error('[auth] confirm verification failed:', error.message);
-    const loginUrl = new URL('/auth/login', origin);
+    const loginUrl = new URL('/login', origin);
     loginUrl.searchParams.set('error', 'confirmation_failed');
     return NextResponse.redirect(loginUrl);
   }
