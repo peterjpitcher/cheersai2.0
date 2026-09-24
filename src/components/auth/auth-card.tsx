@@ -1,3 +1,4 @@
+import Image from 'next/image';
 import type { ReactNode } from 'react';
 
 interface AuthCardProps {
@@ -17,16 +18,8 @@ export function AuthCard({ title, description, children }: AuthCardProps) {
       style={{ backgroundColor: 'var(--c-card)' }}
     >
       <div className="w-full max-w-[400px] space-y-8">
-        <div className="flex items-center justify-center gap-3">
-          <div
-            className="flex h-9 w-9 items-center justify-center rounded-[var(--r-lg)] text-lg font-bold text-white"
-            style={{ backgroundColor: 'var(--c-orange)' }}
-          >
-            C
-          </div>
-          <span className="text-lg font-semibold" style={{ color: 'var(--c-ink)' }}>
-            CheersAI
-          </span>
+        <div className="flex items-center justify-center">
+          <Image src="/brand/cheers-logo-horizontal-480.png" alt="Cheers by Orange Jelly" width={140} height={48} priority />
         </div>
         <div className="space-y-2 text-center">
           <h1 className="text-2xl font-semibold tracking-tight" style={{ color: 'var(--c-ink)' }}>

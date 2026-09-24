@@ -90,6 +90,6 @@ describe('requireEntitledContext', () => {
     flags.billingEnforcement = true;
     const db = service({ data: { archived_at: null, billing_override: 'suspended' }, error: null });
     mockRequireAuthContext.mockResolvedValue({ accountId: 'brand-x', supabase: db });
-    await expect(requireEntitledContext('create')).rejects.toThrow('This brand is on hold. Contact CheersAI support.');
+    await expect(requireEntitledContext('create')).rejects.toThrow('This brand is on hold. Contact Cheers support.');
   });
 });

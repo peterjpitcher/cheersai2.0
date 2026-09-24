@@ -2,6 +2,7 @@
 
 import { useActionState, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
+import Image from 'next/image';
 import Link from 'next/link';
 
 import { Button } from '@/components/ui/button';
@@ -58,14 +59,8 @@ export default function LoginPage() {
         style={{ backgroundColor: "var(--c-ink)" }}
       >
         {/* Brand mark */}
-        <div className="flex items-center gap-3">
-          <div
-            className="flex h-9 w-9 items-center justify-center rounded-[var(--r-lg)] text-lg font-bold text-white"
-            style={{ backgroundColor: "var(--c-orange)" }}
-          >
-            C
-          </div>
-          <span className="text-lg font-semibold text-white">CheersAI</span>
+        <div className="flex items-center">
+          <Image src="/brand/cheers-logo-horizontal-on-dark-480.png" alt="Cheers by Orange Jelly" width={140} height={48} priority />
         </div>
 
         {/* Headline */}
@@ -74,7 +69,7 @@ export default function LoginPage() {
             Your venue&apos;s social media, sorted.
           </h1>
           <p className="text-base leading-relaxed" style={{ color: "rgba(255,255,255,0.7)" }}>
-            Create once, publish everywhere. CheersAI adapts your content for
+            Create once, publish everywhere. Cheers adapts your content for
             Facebook and Instagram, so you can focus on running your venue.
           </p>
         </div>
@@ -90,16 +85,8 @@ export default function LoginPage() {
       >
         <div className="w-full max-w-[400px] space-y-8">
           {/* Mobile brand mark (hidden on lg) */}
-          <div className="flex items-center justify-center gap-3 lg:hidden">
-            <div
-              className="flex h-9 w-9 items-center justify-center rounded-[var(--r-lg)] text-lg font-bold text-white"
-              style={{ backgroundColor: "var(--c-orange)" }}
-            >
-              C
-            </div>
-            <span className="text-lg font-semibold" style={{ color: "var(--c-ink)" }}>
-              CheersAI
-            </span>
+          <div className="flex items-center justify-center lg:hidden">
+            <Image src="/brand/cheers-logo-horizontal-480.png" alt="Cheers by Orange Jelly" width={140} height={48} priority />
           </div>
 
           <div className="space-y-2 text-center">

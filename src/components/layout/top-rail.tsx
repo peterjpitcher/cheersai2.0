@@ -1,6 +1,7 @@
 'use client';
 
 import { Bell, LogOut } from 'lucide-react';
+import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useFormStatus } from 'react-dom';
@@ -63,19 +64,8 @@ export function TopRail({ notificationCount = 0, signOutAction }: TopRailProps) 
       {/* Left: Brand + Nav */}
       <div className="flex items-center gap-6">
         {/* Brand wordmark */}
-        <Link href="/planner" className="flex items-center gap-2">
-          <div
-            className="flex h-[26px] w-[26px] items-center justify-center rounded-[5px]"
-            style={{ background: 'var(--c-orange)' }}
-          >
-            <span className="text-sm font-bold leading-none text-white">C</span>
-          </div>
-          <span
-            className="text-lg font-semibold"
-            style={{ color: 'var(--c-ink)' }}
-          >
-            CheersAI
-          </span>
+        <Link href="/planner" className="flex items-center">
+          <Image src="/brand/cheers-logo-horizontal-480.png" alt="Cheers by Orange Jelly" width={105} height={36} priority />
         </Link>
 
         {/* Desktop nav items -- hidden on mobile */}

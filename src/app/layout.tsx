@@ -19,7 +19,7 @@ const ibmPlexMono = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "CheersAI Command Centre",
+  title: "Cheers by Orange Jelly",
   description:
     "Plan, generate, and publish social content for your venue across Facebook, Instagram, and Google.",
   robots: {

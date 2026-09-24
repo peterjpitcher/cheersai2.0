@@ -32,7 +32,7 @@ export class EntitlementError extends Error {
 export const ENTITLEMENT_MESSAGES: Partial<Record<EntitlementState, string>> = {
   lapsed: 'This brand is on hold because its subscription has lapsed. An owner can restart it from Billing.',
   incomplete: 'This brand has not finished setting up billing yet. An owner can finish it from Billing.',
-  suspended: 'This brand is on hold. Contact CheersAI support.',
+  suspended: 'This brand is on hold. Contact Cheers support.',
   archived: 'This brand has been closed.',
 };
 

@@ -56,14 +56,14 @@ export function renderInviteEmail(options: { link: string; brandNames: string[] 
     ? `<p>You have been given access to <strong>${brands.map(escapeHtml).join(', ')}</strong>.</p>`
     : '';
   return {
-    subject: "You're invited to CheersAI",
+    subject: "You're invited to Cheers by Orange Jelly",
     html: `
 <p>Hi,</p>
-<p>You've been invited to CheersAI, the social media tool for hospitality venues.</p>
+<p>You've been invited to Cheers by Orange Jelly, the social media tool for hospitality venues.</p>
 ${brandLine}
 <p><a href="${escapeHtml(options.link)}">Accept the invite and set your password</a></p>
 <p>This link works once and expires in 24 hours. If it has expired, ask the person who invited you to send a new one.</p>
-<p>CheersAI</p>
+<p>Cheers by Orange Jelly</p>
 `.trim(),
   };
 }
@@ -73,12 +73,12 @@ export function renderAddedToBrandEmail(options: { loginUrl: string; brandName: 
   if (!options.loginUrl) throw new Error('Added-to-brand email needs a login link.');
   const brand = options.brandName.trim() || 'a brand';
   return {
-    subject: `You now have access to ${brand} on CheersAI`,
+    subject: `You now have access to ${brand} on Cheers`,
     html: `
 <p>Hi,</p>
-<p>You've been given access to <strong>${escapeHtml(brand)}</strong> on CheersAI.</p>
-<p><a href="${escapeHtml(options.loginUrl)}">Sign in to CheersAI</a>, then pick ${escapeHtml(brand)} from the brand switcher.</p>
-<p>CheersAI</p>
+<p>You've been given access to <strong>${escapeHtml(brand)}</strong> on Cheers.</p>
+<p><a href="${escapeHtml(options.loginUrl)}">Sign in to Cheers</a>, then pick ${escapeHtml(brand)} from the brand switcher.</p>
+<p>Cheers by Orange Jelly</p>
 `.trim(),
   };
 }
@@ -86,13 +86,13 @@ export function renderAddedToBrandEmail(options: { loginUrl: string; brandName: 
 export function renderPasswordResetEmail(options: { link: string }): RenderedEmail {
   if (!options.link) throw new Error('Password reset email needs a link.');
   return {
-    subject: 'Reset your CheersAI password',
+    subject: 'Reset your Cheers password',
     html: `
 <p>Hi,</p>
-<p>We received a request to reset your CheersAI password.</p>
+<p>We received a request to reset your Cheers password.</p>
 <p><a href="${escapeHtml(options.link)}">Choose a new password</a></p>
 <p>This link works once and expires in 24 hours. If you did not ask for this, you can ignore this email and your password will not change.</p>
-<p>CheersAI</p>
+<p>Cheers by Orange Jelly</p>
 `.trim(),
   };
 }

@@ -190,12 +190,12 @@ async function checkTokenHealth(): Promise<{
 <p>
   <a href="${connectionsUrl}">Reconnect your ${label} account now</a>
 </p>
-<p>CheersAI</p>
+<p>Cheers by Orange Jelly</p>
 `.trim();
 
                 await sendEmail({
                   to: account.email,
-                  subject: `[CheersAI] Action required: ${label} ${statusLabel}`,
+                  subject: `[Cheers] Action required: ${label} ${statusLabel}`,
                   html,
                 });
 

@@ -4,13 +4,13 @@ import type { Metadata } from "next";
 const UPDATED_AT = "18 February 2026";
 
 export const metadata: Metadata = {
-  title: "Terms of Use | CheersAI",
+  title: "Terms of Use | Cheers",
   description:
-    "Read the CheersAI terms governing access to the command centre and related services.",
+    "Read the Cheers terms governing access to the command centre and related services.",
   openGraph: {
-    title: "Terms of Use | CheersAI",
+    title: "Terms of Use | Cheers",
     description:
-      "Read the CheersAI terms governing access to the command centre and related services.",
+      "Read the Cheers terms governing access to the command centre and related services.",
     type: "article",
   },
 };
@@ -22,7 +22,7 @@ export default function TermsPage() {
       style={{ color: "var(--c-ink)" }}
     >
       <header className="space-y-4 text-center">
-        <p className="eyebrow" style={{ color: "var(--c-ink-3)" }}>CheersAI</p>
+        <p className="eyebrow" style={{ color: "var(--c-ink-3)" }}>Cheers by Orange Jelly</p>
         <h1
           className="text-3xl font-semibold"
           style={{ color: "var(--c-ink)" }}
@@ -36,13 +36,13 @@ export default function TermsPage() {
 
       <section className="mt-12 space-y-6 text-base" style={{ lineHeight: "1.55" }}>
         <p>
-          These terms govern use of the CheersAI command centre and related services provided by Orange Jelly Limited.
+          These terms govern use of the Cheers command centre and related services provided by Orange Jelly Limited.
           By creating an account or using the platform, you agree to these terms.
         </p>
 
         <h2 className="text-xl font-semibold" style={{ color: "var(--c-ink)" }}>1. Service Access</h2>
         <p>
-          CheersAI provides software to plan, generate, and publish social content. Access is provided on a
+          Cheers provides software to plan, generate, and publish social content. Access is provided on a
           subscription basis and may be updated as the product evolves.
         </p>
 
@@ -54,13 +54,13 @@ export default function TermsPage() {
 
         <h2 className="text-xl font-semibold" style={{ color: "var(--c-ink)" }}>3. Acceptable Use</h2>
         <p>
-          You must not use CheersAI to publish unlawful, misleading, infringing, or harmful content. We may suspend
+          You must not use Cheers to publish unlawful, misleading, infringing, or harmful content. We may suspend
           access where misuse is identified.
         </p>
 
         <h2 className="text-xl font-semibold" style={{ color: "var(--c-ink)" }}>4. Intellectual Property</h2>
         <p>
-          CheersAI and associated branding remain the property of Orange Jelly Limited. You retain ownership of content
+          Cheers and associated branding remain the property of Orange Jelly Limited. You retain ownership of content
           and media you provide to the platform.
         </p>
 
@@ -72,7 +72,7 @@ export default function TermsPage() {
 
         <h2 className="text-xl font-semibold" style={{ color: "var(--c-ink)" }}>6. Liability</h2>
         <p>
-          To the maximum extent permitted by law, CheersAI is provided on an as-is basis and Orange Jelly Limited is
+          To the maximum extent permitted by law, Cheers is provided on an as-is basis and Orange Jelly Limited is
           not liable for indirect or consequential losses arising from use of the service.
         </p>
 
