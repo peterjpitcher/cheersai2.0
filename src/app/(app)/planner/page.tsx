@@ -181,7 +181,7 @@ async function PlannerCalendarLoader({
       item.placement ?? (item.contentType === 'story' ? 'story' : 'feed'),
     ]),
   );
-  const thumbnails = await resolveThumbnails(allContentIds, { placementByContentId });
+  const thumbnails = await resolveThumbnails(allContentIds, { accountId, placementByContentId });
 
   // Merge signed URLs into calendar items
   for (const item of calendarItems) {

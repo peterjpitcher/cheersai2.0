@@ -43,6 +43,7 @@ function chainable(data: unknown[] | null, error: unknown = null) {
   const obj: Record<string, ReturnType<typeof vi.fn>> = {};
   obj.select = vi.fn().mockReturnValue(obj);
   obj.in = vi.fn().mockReturnValue(obj);
+  obj.eq = vi.fn().mockReturnValue(obj);
   obj.order = vi.fn().mockReturnValue(obj);
   obj.returns = vi.fn().mockResolvedValue({ data, error });
   return obj;
@@ -61,7 +62,7 @@ describe('resolveThumbnails', () => {
   });
 
   it('returns empty map for empty input', async () => {
-    const result = await resolveThumbnails([]);
+    const result = await resolveThumbnails([], { accountId: 'acc-1' });
     expect(result).toEqual(new Map());
     expect(mockFrom).not.toHaveBeenCalled();
   });
@@ -69,7 +70,7 @@ describe('resolveThumbnails', () => {
   it('returns empty map when service client is unavailable', async () => {
     vi.mocked(tryCreateServiceSupabaseClient).mockReturnValueOnce(null);
 
-    const result = await resolveThumbnails(['content-1']);
+    const result = await resolveThumbnails(['content-1'], { accountId: 'acc-1' });
     expect(result).toEqual(new Map());
   });
 
@@ -94,7 +95,7 @@ describe('resolveThumbnails', () => {
       }),
     });
 
-    const result = await resolveThumbnails(['c-1']);
+    const result = await resolveThumbnails(['c-1'], { accountId: 'acc-1' });
     expect(result.get('c-1')).toBe('https://signed/photo.jpg');
   });
 
@@ -123,7 +124,7 @@ describe('resolveThumbnails', () => {
       }),
     });
 
-    const result = await resolveThumbnails(['c-1']);
+    const result = await resolveThumbnails(['c-1'], { accountId: 'acc-1' });
     expect(result.get('c-1')).toBe('https://signed/v2.jpg');
   });
 
@@ -150,7 +151,7 @@ describe('resolveThumbnails', () => {
       }),
     });
 
-    const result = await resolveThumbnails(['c-1']);
+    const result = await resolveThumbnails(['c-1'], { accountId: 'acc-1' });
     expect(result.get('c-1')).toBe('https://signed/v1.jpg');
   });
 
@@ -169,7 +170,7 @@ describe('resolveThumbnails', () => {
 
     vi.mocked(isSchemaMissingError).mockReturnValue(true);
 
-    const result = await resolveThumbnails(['c-1']);
+    const result = await resolveThumbnails(['c-1'], { accountId: 'acc-1' });
     expect(result).toEqual(new Map());
   });
 
@@ -202,7 +203,7 @@ describe('resolveThumbnails', () => {
       }),
     });
 
-    const result = await resolveThumbnails(['c-1']);
+    const result = await resolveThumbnails(['c-1'], { accountId: 'acc-1' });
     expect(result.get('c-1')).toBe('https://signed/first.jpg');
   });
 
@@ -232,7 +233,7 @@ describe('resolveThumbnails', () => {
       }),
     });
 
-    const result = await resolveThumbnails(['c-1', 'c-2']);
+    const result = await resolveThumbnails(['c-1', 'c-2'], { accountId: 'acc-1' });
     expect(result.size).toBe(2);
     expect(result.get('c-1')).toBe('https://signed/a.jpg');
     expect(result.get('c-2')).toBe('https://signed/b.jpg');
@@ -302,7 +303,7 @@ describe('resolveThumbnails', () => {
       }),
     });
 
-    const result = await resolveThumbnails(['c-feed', 'c-story']);
+    const result = await resolveThumbnails(['c-feed', 'c-story'], { accountId: 'acc-1' });
 
     expect(result.get('c-feed')).toBe('https://signed/original.jpg');
     expect(result.get('c-story')).toBe('https://signed/story.jpg');
@@ -312,5 +313,39 @@ describe('resolveThumbnails', () => {
     expect(resolvePreviewCandidates).toHaveBeenCalledWith(
       expect.objectContaining({ placement: 'story' }),
     );
+  });
+});
+
+describe('resolveThumbnails brand scoping', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(resolvePreviewCandidates).mockImplementation(({ storagePath }) => [
+      { path: storagePath, shape: 'square' as const },
+    ]);
+  });
+
+  it('only loads media belonging to the active brand', async () => {
+    const v2Chain = chainable([{ content_item_id: 'c-1', media_id: 'foreign-media', position: 0 }]);
+    // The brand filter excludes another brand's asset, so nothing comes back.
+    const assetChain = chainable([]);
+    mockFrom.mockImplementation((table: string) => {
+      if (table === 'content_media_attachments') return v2Chain;
+      if (table === 'media_assets') return assetChain;
+      return chainable(null);
+    });
+    const createSignedUrls = vi.fn();
+    mockStorageFrom.mockReturnValue({ createSignedUrls });
+
+    const result = await resolveThumbnails(['c-1'], { accountId: 'acc-1' });
+
+    expect(assetChain.eq).toHaveBeenCalledWith('account_id', 'acc-1');
+    expect(result.size).toBe(0);
+    expect(createSignedUrls).not.toHaveBeenCalled();
+  });
+
+  it('signs nothing without a brand', async () => {
+    const result = await resolveThumbnails(['c-1'], { accountId: '' });
+    expect(result.size).toBe(0);
+    expect(mockFrom).not.toHaveBeenCalled();
   });
 });

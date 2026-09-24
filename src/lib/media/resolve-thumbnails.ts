@@ -40,6 +40,11 @@ type ContentPlacementRow = {
 };
 
 export type ResolveThumbnailsOptions = {
+  /**
+   * The verified active brand. Media is only signed when it belongs to this
+   * brand, even if a content row references another brand's media id.
+   */
+  accountId: string;
   placementByContentId?:
     | Map<string, PreviewPlacement | null | undefined>
     | Record<string, PreviewPlacement | null | undefined>;
@@ -61,9 +66,9 @@ export type ResolveThumbnailsOptions = {
  */
 export async function resolveThumbnails(
   contentItemIds: string[],
-  options: ResolveThumbnailsOptions = {},
+  options: ResolveThumbnailsOptions,
 ): Promise<Map<string, string>> {
-  if (!contentItemIds.length) return new Map();
+  if (!contentItemIds.length || !options.accountId) return new Map();
 
   const service = tryCreateServiceSupabaseClient();
   if (!service) return new Map();
@@ -89,6 +94,7 @@ export async function resolveThumbnails(
     const { data: assetRows, error: assetError } = await service
       .from('media_assets')
       .select('id, storage_path, derived_variants')
+      .eq('account_id', options.accountId)
       .in('id', uniqueAssetIds)
       .returns<MediaAssetRow[]>();
 
