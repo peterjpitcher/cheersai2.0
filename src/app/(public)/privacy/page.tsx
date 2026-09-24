@@ -4,13 +4,13 @@ import type { Metadata } from "next";
 const UPDATED_AT = "8 February 2025";
 
 export const metadata: Metadata = {
-  title: "Privacy Policy | CheersAI",
+  title: "Privacy Policy | Cheers",
   description:
-    "Learn how CheersAI collects, uses, and safeguards your personal information across our website and product.",
+    "Learn how Cheers collects, uses, and safeguards your personal information across our website and product.",
   openGraph: {
-    title: "Privacy Policy | CheersAI",
+    title: "Privacy Policy | Cheers",
     description:
-      "Learn how CheersAI collects, uses, and safeguards your personal information across our website and product.",
+      "Learn how Cheers collects, uses, and safeguards your personal information across our website and product.",
     type: "article",
   },
 };
@@ -22,7 +22,7 @@ export default function PrivacyPolicyPage() {
       style={{ color: "var(--c-ink)" }}
     >
       <header className="space-y-4 text-center">
-        <p className="eyebrow" style={{ color: "var(--c-ink-3)" }}>CheersAI</p>
+        <p className="eyebrow" style={{ color: "var(--c-ink-3)" }}>Cheers by Orange Jelly</p>
         <h1
           className="text-3xl font-semibold"
           style={{ color: "var(--c-ink)" }}
@@ -36,8 +36,8 @@ export default function PrivacyPolicyPage() {
 
       <section className="mt-12 space-y-6 text-base" style={{ lineHeight: "1.55" }}>
         <p>
-          CheersAI (&ldquo;we&rdquo;, &ldquo;us&rdquo;, or &ldquo;our&rdquo;) builds tools that help hospitality operators plan and publish their social
-          media. CheersAI is wholly owned and operated by Orange Jelly Limited. We are committed to protecting the
+          Cheers (&ldquo;we&rdquo;, &ldquo;us&rdquo;, or &ldquo;our&rdquo;) builds tools that help hospitality operators plan and publish their social
+          media. Cheers is wholly owned and operated by Orange Jelly Limited. We are committed to protecting the
           privacy of our customers, prospects, and website visitors. This policy explains what data we collect, how we
           use it, and the rights available to you. Learn more about our parent company at{" "}
           <a
@@ -61,7 +61,7 @@ export default function PrivacyPolicyPage() {
           </li>
           <li>
             <strong>Product data</strong> including content, media assets, scheduling information, and account metadata
-            created or uploaded while using the CheersAI platform.
+            created or uploaded while using the Cheers platform.
           </li>
           <li>
             <strong>Usage data</strong> such as device information, IP address, pages visited, and actions taken within
@@ -72,7 +72,7 @@ export default function PrivacyPolicyPage() {
         <h2 className="text-xl font-semibold" style={{ color: "var(--c-ink)" }}>2. How We Use Information</h2>
         <p>We process personal information to:</p>
         <ul className="list-disc space-y-2 pl-6">
-          <li>Provide, maintain, and improve the CheersAI platform and related services.</li>
+          <li>Provide, maintain, and improve the Cheers platform and related services.</li>
           <li>Authenticate users, secure the product, and prevent abuse.</li>
           <li>Respond to enquiries, provide customer support, and send transactional communications.</li>
           <li>Comply with legal obligations and enforce our agreements.</li>
@@ -98,13 +98,13 @@ export default function PrivacyPolicyPage() {
 
         <h2 className="text-xl font-semibold" style={{ color: "var(--c-ink)" }}>5. International Transfers</h2>
         <p>
-          CheersAI operates in the United Kingdom and uses infrastructure hosted in the European Union and United
+          Cheers operates in the United Kingdom and uses infrastructure hosted in the European Union and United
           States. Where data leaves the UK/EEA we rely on appropriate safeguards such as Standard Contractual Clauses.
         </p>
 
         <h2 className="text-xl font-semibold" style={{ color: "var(--c-ink)" }}>6. Data Retention</h2>
         <p>
-          We retain personal data for as long as you have an active relationship with CheersAI and for a reasonable
+          We retain personal data for as long as you have an active relationship with Cheers and for a reasonable
           period thereafter to comply with legal obligations, resolve disputes, and enforce agreements. You may request
           deletion at any time — see &ldquo;Your Rights&rdquo; below.
         </p>
@@ -133,7 +133,7 @@ export default function PrivacyPolicyPage() {
 
         <h2 className="text-xl font-semibold" style={{ color: "var(--c-ink)" }}>8. Children&apos;s Privacy</h2>
         <p>
-          CheersAI is designed for hospitality professionals and is not directed at individuals under the age of 18. We
+          Cheers is designed for hospitality professionals and is not directed at individuals under the age of 18. We
           do not knowingly collect personal information from children.
         </p>
 
@@ -145,7 +145,7 @@ export default function PrivacyPolicyPage() {
 
         <h2 className="text-xl font-semibold" style={{ color: "var(--c-ink)" }}>10. Contact Us</h2>
         <address className="not-italic leading-relaxed">
-          CheersAI (Orange Jelly Limited)<br />
+          Cheers (Orange Jelly Limited)<br />
           71-75 Shelton Street<br />
           London WC2H 9JQ<br />
           United Kingdom

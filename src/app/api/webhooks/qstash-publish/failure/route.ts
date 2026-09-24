@@ -162,7 +162,7 @@ ${plainEnglishHtml}
   Please visit your <a href="${plannerUrl}">Planner</a> to review and retry the post.
 </p>
 <p>If you need help, please contact support.</p>
-<p>-- CheersAI</p>
+<p>-- Cheers by Orange Jelly</p>
 `.trim();
 
     await sendEmail({

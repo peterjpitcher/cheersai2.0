@@ -6,7 +6,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { AnalyticsDashboard } from '@/features/analytics/analytics-dashboard';
 
 export const metadata: Metadata = {
-  title: 'Analytics | CheersAI',
+  title: 'Analytics | Cheers',
 };
 
 /** Force dynamic rendering -- analytics shows personalised data */

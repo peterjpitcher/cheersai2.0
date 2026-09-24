@@ -59,7 +59,7 @@ describe('alertRepeatedPublishFailures', () => {
     const email = mockSendEmail.mock.calls[0][0] as { to: string; subject: string; html: string; required: boolean };
     expect(email.to).toBe('ops@test.example');
     expect(email.required).toBe(true);
-    expect(email.subject).toBe('[CheersAI operator] The New Venue: 3 failed posts in 24 hours');
+    expect(email.subject).toBe('[Cheers operator] The New Venue: 3 failed posts in 24 hours');
     for (const bad of ['undefined', 'NaN', 'null']) expect(email.html).not.toContain(bad);
     expect(mockLogAdminEvent).toHaveBeenCalledWith(
       expect.objectContaining({ actorUserId: null, action: 'operator_publish_failure_alert', targetAccountId: 'brand-a' }),

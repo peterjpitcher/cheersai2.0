@@ -25,7 +25,7 @@ export async function generateMetadata({ params }: LinkInBioPageProps): Promise<
       };
     }
     return {
-      title: `${data.profile.displayName ?? "Link in bio"} | CheersAI`,
+      title: `${data.profile.displayName ?? "Link in bio"} | Cheers`,
       description: data.profile.bio ?? undefined,
     };
   } catch {

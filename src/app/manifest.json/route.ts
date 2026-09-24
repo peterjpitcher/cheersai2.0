@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 
 const MANIFEST = {
-  name: "CheersAI Command Centre",
-  short_name: "CheersAI",
+  name: "Cheers by Orange Jelly",
+  short_name: "Cheers",
   start_url: "/login",
   display: "standalone",
   background_color: "#ffffff",

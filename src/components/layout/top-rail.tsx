@@ -64,14 +64,8 @@ export function TopRail({ notificationCount = 0, signOutAction }: TopRailProps) 
       {/* Left: Brand + Nav */}
       <div className="flex items-center gap-6">
         {/* Brand wordmark */}
-        <Link href="/planner" className="flex items-center gap-2">
-          <Image src="/brand/cheers-icon-64.png" alt="" width={28} height={28} priority />
-          <span
-            className="text-lg font-semibold"
-            style={{ color: 'var(--c-ink)' }}
-          >
-            CheersAI
-          </span>
+        <Link href="/planner" className="flex items-center">
+          <Image src="/brand/cheers-logo-horizontal-480.png" alt="Cheers by Orange Jelly" width={105} height={36} priority />
         </Link>
 
         {/* Desktop nav items -- hidden on mobile */}

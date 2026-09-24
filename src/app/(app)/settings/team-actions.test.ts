@@ -126,7 +126,7 @@ describe('inviteTeamMember', () => {
     state.existingUser = { user_id: NEW_USER_ID };
     expect(await inviteTeamMember({ email: 'known@venue.test', role: 'owner' })).toEqual({ success: true });
     expect(mockGenerateLink).not.toHaveBeenCalled();
-    expect((mockSendEmail.mock.calls[0][0] as { subject: string }).subject).toBe('You now have access to The New Venue on CheersAI');
+    expect((mockSendEmail.mock.calls[0][0] as { subject: string }).subject).toBe('You now have access to The New Venue on Cheers');
   });
 
   it('refuses someone who already has access', async () => {

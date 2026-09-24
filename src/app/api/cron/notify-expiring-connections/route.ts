@@ -181,12 +181,12 @@ async function notifyExpiringConnections(): Promise<{
   <a href="${connectionsUrl}">Reconnect your ${label} account</a>
 </p>
 <p>If you don't reconnect before the token expires, scheduled posts to ${label} will fail.</p>
-<p>— CheersAI</p>
+<p>— Cheers by Orange Jelly</p>
 `.trim();
 
       await sendEmail({
         to: account.email,
-        subject: `[CheersAI] ${label} token expires in ${days} ${dayWord}`,
+        subject: `[Cheers] ${label} token expires in ${days} ${dayWord}`,
         html,
       });
 

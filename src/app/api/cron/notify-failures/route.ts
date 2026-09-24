@@ -168,7 +168,7 @@ ${
   Please visit your <a href="${plannerUrl}">Planner</a> to review and reschedule the post.
 </p>
 <p>If you believe this is an error or need help, please contact support.</p>
-<p>CheersAI</p>
+<p>Cheers by Orange Jelly</p>
 `.trim();
 
       await sendEmail({

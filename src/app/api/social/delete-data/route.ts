@@ -118,7 +118,7 @@ export async function GET(request: Request): Promise<NextResponse> {
     status: "completed",
     completed: true,
     detail:
-      "CheersAI stores Facebook Page and Instagram business account identifiers and the access tokens issued for them. It does not store Facebook profile data against your personal user id, so there is no personal data held under this request and nothing was retained.",
+      "Cheers by Orange Jelly stores Facebook Page and Instagram business account identifiers and the access tokens issued for them. It does not store Facebook profile data against your personal user id, so there is no personal data held under this request and nothing was retained.",
     contact: "peter@orangejelly.co.uk",
   });
 }

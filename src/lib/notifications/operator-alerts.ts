@@ -82,7 +82,7 @@ export async function alertRepeatedPublishFailures(
 
     await sendEmail({
       to,
-      subject: `[CheersAI operator] ${brandName}: ${failures} failed posts in 24 hours`,
+      subject: `[Cheers operator] ${brandName}: ${failures} failed posts in 24 hours`,
       html: `
 <p>${escapeHtml(brandName)} has had <strong>${failures}</strong> posts fail to publish in the last 24 hours.</p>
 <p>Brand id: ${escapeHtml(accountId)}</p>

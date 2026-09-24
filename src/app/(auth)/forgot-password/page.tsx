@@ -20,7 +20,7 @@ export default function ForgotPasswordPage() {
     <AuthCard title="Reset your password" description="We'll email you a link to choose a new password.">
       {state?.success ? (
         <AuthMessage tone="success">
-          If that email has a CheersAI account, a reset link is on its way. Check your inbox and spam folder.
+          If that email has a Cheers account, a reset link is on its way. Check your inbox and spam folder.
         </AuthMessage>
       ) : (
         <form action={action} className="space-y-4">

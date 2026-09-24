@@ -4,7 +4,7 @@ import { Suspense } from 'react';
 import { LinkInBioEditor } from '@/features/link-in-bio/editor/link-in-bio-editor';
 
 export const metadata: Metadata = {
-  title: 'Link-in-Bio | CheersAI',
+  title: 'Link-in-Bio | Cheers',
 };
 
 function EditorSkeleton() {

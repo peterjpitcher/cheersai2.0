@@ -7,9 +7,9 @@ interface LegacyHelpPageProps {
 }
 
 export const metadata: Metadata = {
-  title: "Help | CheersAI",
+  title: "Help | Cheers",
   description:
-    "Guidance for accessing the CheersAI command centre and contacting support.",
+    "Guidance for accessing the Cheers command centre and contacting support.",
   alternates: {
     canonical: "/help",
   },
@@ -33,7 +33,7 @@ export default async function LegacyHelpPage({ params }: LegacyHelpPageProps) {
           className="eyebrow"
           style={{ color: "var(--c-ink-3)" }}
         >
-          CheersAI
+          Cheers by Orange Jelly
         </p>
         <h1
           className="text-3xl font-semibold"
@@ -138,7 +138,7 @@ export default async function LegacyHelpPage({ params }: LegacyHelpPageProps) {
             }}
           >
             <p>
-              CheersAI lets you create content once and publish to Facebook
+              Cheers lets you create content once and publish to Facebook
               and Instagram. Use the planner to
               schedule posts ahead of time, and the publishing queue handles
               delivery automatically.
@@ -203,7 +203,7 @@ export default async function LegacyHelpPage({ params }: LegacyHelpPageProps) {
             Privacy
           </Link>
         </div>
-        <p className="mt-2">CheersAI by Orange Jelly</p>
+        <p className="mt-2">Cheers by Orange Jelly</p>
       </footer>
     </main>
   );
