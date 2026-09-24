@@ -11,6 +11,7 @@ export type AdminAction =
   | 'create_brand'
   | 'archive_brand'
   | 'invite_user'
+  | 'send_password_link'
   | 'assign_member'
   | 'revoke_member'
   | 'grant_admin'

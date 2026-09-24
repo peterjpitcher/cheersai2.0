@@ -11,6 +11,7 @@ import {
   generateBookingIngestKey,
   inviteUser,
   revokeMembership,
+  sendPasswordLink,
   setSuperAdmin,
 } from '@/app/(app)/admin/actions';
 
@@ -263,6 +264,7 @@ function UserRow({ user, brands }: { user: AdminUser; brands: AdminBrand[] }) {
   const router = useRouter();
   const [isPending, start] = useTransition();
   const [assignTo, setAssignTo] = useState('');
+  const [linkMsg, setLinkMsg] = useState<{ error?: string; ok?: string }>({});
   const brandName = (id: string) => brands.find((b) => b.accountId === id)?.name ?? id;
   const unassigned = brands.filter((b) => !b.archivedAt && !user.brandIds.includes(b.accountId));
 
@@ -280,6 +282,24 @@ function UserRow({ user, brands }: { user: AdminUser; brands: AdminBrand[] }) {
         {user.isSuperAdmin && (
           <span className="ml-2 rounded px-1.5 py-0.5 text-xs" style={{ background: 'var(--c-paper-2)', color: 'var(--c-ink-2)' }}>admin</span>
         )}
+        <div className="mt-1">
+          <button
+            type="button"
+            disabled={isPending}
+            className="text-xs underline-offset-4 hover:underline disabled:opacity-60"
+            style={{ color: 'var(--c-ink-3)' }}
+            onClick={() =>
+              start(async () => {
+                setLinkMsg({});
+                const r = await sendPasswordLink(user.userId);
+                setLinkMsg(r.success ? { ok: 'Password link sent.' } : { error: r.error });
+              })
+            }
+          >
+            Send password link
+          </button>
+          <Feedback {...linkMsg} />
+        </div>
       </td>
       <td className="py-2 pr-3">
         <div className="flex flex-wrap gap-1">
