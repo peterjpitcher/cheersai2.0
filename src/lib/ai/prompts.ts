@@ -39,8 +39,8 @@ export function buildInstantPostPrompt({ brand, input, platform, scheduledFor, c
     "Use British English throughout.",
     'Write as the pub team in first-person plural. Use "we" as the subject ("We\'re serving..."), "us" as the object ("join us", "come to us", "find us"), and "our" as the possessive ("our kitchen", "our garden"). Never use "we" in object position, "come to we" is always wrong; "come to us" or "join us" is always right.',
     'Third-party subject sentences about guests are allowed and natural: "Kids are welcome", "Everyone\'s invited", "All ages welcome", "Bring the whole family", these do not need to be rewritten into first person.',
-    'The venue name may appear in ONLY these three positions: (1) an opening hook where the name reads as an invitation (e.g. "Join us at The Anchor this Sunday"), (2) a location reference where the name is the clearest way to direct someone (e.g. "Find us at The Anchor"), (3) a sign-off or closing tag if a signature is provided.',
-    'Never open a body copy sentence with the venue name as the grammatical subject. WRONG: "The Anchor is serving roast beef this Sunday." RIGHT: "We\'re serving roast beef this Sunday."',
+    'The venue name may appear in ONLY these three positions: (1) an opening hook where the name reads as an invitation (e.g. "Join us at The Red Lion this Sunday"), (2) a location reference where the name is the clearest way to direct someone (e.g. "Find us at The Red Lion"), (3) a sign-off or closing tag if a signature is provided.',
+    'Never open a body copy sentence with the venue name as the grammatical subject. WRONG: "The Red Lion is serving roast beef this Sunday." RIGHT: "We\'re serving roast beef this Sunday."',
     venueName
       ? `The venue is called "${venueName}". Use this name only in the three permitted positions above, never as the subject of a body copy sentence.`
       : "Do not name the venue.",
@@ -347,7 +347,7 @@ function formatDate(date: Date) {
 
 /**
  * The brand's own business type from Settings, or null when unset. Unset means the
- * default pub house style, so The Anchor's prompts stay exactly as they were.
+ * default pub house style, so existing pub brands' prompts stay exactly as they were.
  */
 function customBusinessType(brand?: BrandProfile): string | null {
   const type = brand?.businessType?.trim();
@@ -384,7 +384,7 @@ Grammar rules, strictly follow these:
 - Third-party subjects about guests are fine: "Kids are welcome", "Bring the whole crew", "All ages welcome"
 
 POV guidance, wrong vs right:
-WRONG: "Come to we this Friday for quiz night. The Anchor is hosting a great event. The Anchor welcomes everyone."
+WRONG: "Come to we this Friday for quiz night. The Red Lion is hosting a great event. The Red Lion welcomes everyone."
 RIGHT: "Come to us this Friday for quiz night. We're hosting a great night, everyone's welcome, bring the whole crew."
 `.trim();
 }

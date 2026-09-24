@@ -18,6 +18,23 @@ export const slugSchema = z
     'Slug must be lowercase letters, numbers, and hyphens only',
   );
 
+/**
+ * Suggest a link-in-bio slug from the brand's own name ("The Crown & Anchor"
+ * -> "the-crown-anchor"). Returns "" when nothing usable is left, so the
+ * owner must type one rather than inheriting another venue's.
+ */
+export function suggestSlug(name: string | null | undefined): string {
+  const slug = (name ?? '')
+    .normalize('NFKD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 40)
+    .replace(/-+$/, '');
+  return slug.length >= 3 ? slug : '';
+}
+
 // ---------------------------------------------------------------------------
 // Tile types & templates (mirrors type unions for runtime validation)
 // ---------------------------------------------------------------------------
