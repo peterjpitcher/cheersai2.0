@@ -1,7 +1,7 @@
 /**
  * Plain-text helpers for social copy.
  *
- * Facebook, Instagram and Google Business Profile do not render markdown, so
+ * Facebook and Instagram do not render markdown, so
  * any markdown the model emits would publish literally (e.g. a follower would
  * see "**bold**" with the asterisks). stripMarkdown removes the common markers
  * while leaving hashtags (#tag) and ordinary punctuation untouched.

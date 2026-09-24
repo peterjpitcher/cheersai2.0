@@ -138,8 +138,8 @@ export default async function LegacyHelpPage({ params }: LegacyHelpPageProps) {
             }}
           >
             <p>
-              CheersAI lets you create content once and publish to Facebook,
-              Instagram, and Google Business Profile. Use the planner to
+              CheersAI lets you create content once and publish to Facebook
+              and Instagram. Use the planner to
               schedule posts ahead of time, and the publishing queue handles
               delivery automatically.
             </p>

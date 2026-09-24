@@ -139,7 +139,7 @@ export function ProfileForm({ profile, onProfileChange }: ProfileFormProps) {
           <input
             {...register('displayName')}
             className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-            placeholder="The Anchor"
+            placeholder="Your venue name"
           />
         </div>
 
@@ -164,7 +164,7 @@ export function ProfileForm({ profile, onProfileChange }: ProfileFormProps) {
             <input
               {...register('slug')}
               className="flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm"
-              placeholder="the-anchor"
+              placeholder="your-venue"
             />
           </div>
           <p className="mt-1 text-xs text-muted-foreground">

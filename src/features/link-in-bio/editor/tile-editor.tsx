@@ -185,7 +185,7 @@ export function TileEditor({ tile, onSave, onCancel }: TileEditorProps) {
               <input
                 {...register('embedQuery')}
                 className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                placeholder="The Anchor, Leatherhead"
+                placeholder="Your venue, town"
               />
             </div>
           </>

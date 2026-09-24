@@ -75,31 +75,12 @@ export default function LoginPage() {
           </h1>
           <p className="text-base leading-relaxed" style={{ color: "rgba(255,255,255,0.7)" }}>
             Create once, publish everywhere. CheersAI adapts your content for
-            Facebook, Instagram, and Google Business Profile — so you can focus
-            on running your venue.
+            Facebook and Instagram, so you can focus on running your venue.
           </p>
         </div>
 
-        {/* Testimonial */}
-        <div
-          className="max-w-[360px] space-y-3 p-5"
-          style={{
-            backgroundColor: "rgba(255,255,255,0.06)",
-            border: "1px solid rgba(255,255,255,0.1)",
-            borderRadius: "var(--r-xl)",
-          }}
-        >
-          <p className="text-sm leading-relaxed" style={{ color: "rgba(255,255,255,0.85)" }}>
-            &ldquo;CheersAI changed how we handle our socials. What used to
-            take hours now takes minutes.&rdquo;
-          </p>
-          <div>
-            <p className="text-sm font-semibold text-white">Sarah Mitchell</p>
-            <p className="text-xs" style={{ color: "rgba(255,255,255,0.5)" }}>
-              The Rose &amp; Crown, Surrey
-            </p>
-          </div>
-        </div>
+        {/* Spacer keeps the headline centred (justify-between) */}
+        <div aria-hidden="true" />
       </div>
 
       {/* Right panel — auth form */}

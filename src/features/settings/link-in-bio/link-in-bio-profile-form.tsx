@@ -22,6 +22,7 @@ import { Button } from "@/components/ui/button";
 import { Segmented } from "@/components/ui/segmented";
 import { MediaFrameImage, resolveMediaPlacement } from "@/components/media/media-frame";
 import { MediaUploadPanel } from "@/features/library/media-upload-panel";
+import { suggestSlug } from "@/lib/link-in-bio/validation";
 
 const DEFAULT_PRIMARY = "#005131";
 const DEFAULT_SECONDARY = "#a57626";
@@ -51,12 +52,15 @@ const colorInputStyle: React.CSSProperties = {
   borderRadius: "var(--r-xl)",
 };
 
-function getProfileFormDefaultValues(profile: LinkInBioProfile | null): LinkInBioProfileFormValues {
+function getProfileFormDefaultValues(
+  profile: LinkInBioProfile | null,
+  brandName: string | null | undefined,
+): LinkInBioProfileFormValues {
   const profileTheme = profile?.theme;
   const quickActionLayout = profileTheme?.quickActionLayout === "single" ? "single" : DEFAULT_QUICK_ACTION_LAYOUT;
 
   return {
-    slug: profile?.slug ?? "the-anchor",
+    slug: profile?.slug ?? suggestSlug(brandName),
     displayName: profile?.displayName ?? undefined,
     bio: profile?.bio ?? undefined,
     logoUrl: profile?.logoUrl ?? undefined,
@@ -95,7 +99,8 @@ export function LinkInBioProfileForm({ profile, mediaAssets }: LinkInBioProfileF
   const user = useAuth();
   const [isPending, startTransition] = useTransition();
   const [uploadedAssets, setUploadedAssets] = useState<MediaAssetSummary[]>([]);
-  const defaultValues = useMemo(() => getProfileFormDefaultValues(profile), [profile]);
+  const brandName = user?.businessName;
+  const defaultValues = useMemo(() => getProfileFormDefaultValues(profile, brandName), [profile, brandName]);
 
   const form = useForm<LinkInBioProfileFormValues>({
     resolver: zodResolver(linkInBioProfileFormSchema) as Resolver<LinkInBioProfileFormValues>,
@@ -175,7 +180,7 @@ export function LinkInBioProfileForm({ profile, mediaAssets }: LinkInBioProfileF
           <input
             className="w-full px-3 py-2 text-sm focus:outline-none"
             style={inputStyle}
-            placeholder="the-anchor"
+            placeholder="your-venue"
             {...form.register("slug")}
           />
           {form.formState.errors.slug ? (
@@ -187,7 +192,7 @@ export function LinkInBioProfileForm({ profile, mediaAssets }: LinkInBioProfileF
           <input
             className="w-full px-3 py-2 text-sm focus:outline-none"
             style={inputStyle}
-            placeholder="The Anchor"
+            placeholder="Your venue name"
             {...form.register("displayName")}
           />
         </div>
@@ -425,7 +430,7 @@ export function LinkInBioProfileForm({ profile, mediaAssets }: LinkInBioProfileF
             <input
               className="w-full px-3 py-2 text-sm focus:outline-none"
               style={inputStyle}
-              placeholder="https://maps.google.com/?q=The+Anchor"
+              placeholder="https://maps.google.com/?q=Your+Venue"
               {...form.register("directionsUrl")}
             />
             {form.formState.errors.directionsUrl ? (
@@ -461,7 +466,7 @@ export function LinkInBioProfileForm({ profile, mediaAssets }: LinkInBioProfileF
             <input
               className="w-full px-3 py-2 text-sm focus:outline-none"
               style={inputStyle}
-              placeholder="https://www.the-anchor.pub"
+              placeholder="https://www.yourvenue.co.uk"
               {...form.register("websiteUrl")}
             />
             {form.formState.errors.websiteUrl ? (

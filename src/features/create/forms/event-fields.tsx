@@ -122,7 +122,7 @@ export function EventFields({
     <fieldset className="space-y-4">
       <legend className="text-sm font-medium text-foreground">Event Details</legend>
 
-      {/* Import from management app (per-brand switch; The Anchor only today) */}
+      {/* Import from management app (per-brand switch, off by default) */}
       {canImport && (
       <div className="space-y-2">
         {!importOpen ? (

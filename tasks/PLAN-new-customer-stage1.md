@@ -48,7 +48,7 @@ Goal: an invited, non-Anchor venue can log in, set a password, connect its own F
 
 - [ ] T7: neutral placeholders in `link-in-bio-profile-form.tsx`, `profile-form.tsx`, `tile-editor.tsx`; no pre-filled slug (suggest one from the brand's display name instead); remove "The Anchor" from prompt examples in `src/lib/ai/prompts.ts:42-43,387` (replace with a neutral example, then check AI copy tests still pass); delete `OWNER_ACCOUNT_ID`, `OWNER_EMAIL` and `src/lib/supabase/owner.ts` if unused.
 - [ ] Login page (`src/app/(auth)/login/page.tsx`): remove the invented testimonial ("Sarah Mitchell, The Rose & Crown") and the Google Business Profile claim; a new customer sees this page first.
-- [ ] T4: `CampaignBriefForm` default booking URL is blank (food booking is flagged off, and campaigns are gated by PR2; this stops a later leak).
+- [x] T4: moved to the paid-ads work with T1. Campaigns are now gated to The Anchor (PR2), for which the Anchor booking default is correct; blanking it would only add friction for the one brand that can reach it. Fix it together with the ad host allowlist before paid ads are offered to anyone else.
 - [ ] Test: grep-based test that fails if `the-anchor` or `The Anchor` appears in `src/` outside an allow-list (tournament and campaign modules, which are gated, plus The Anchor's id constant).
 
 ## PR4 `fix/media-tenant-scope` (I1)

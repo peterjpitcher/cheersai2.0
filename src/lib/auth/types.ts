@@ -1,8 +1,8 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 /**
- * Per-brand feature switches (accounts.*_enabled). Off by default; The Anchor
- * has all three. See src/lib/auth/features.ts.
+ * Per-brand feature switches (accounts.*_enabled). Off by default and switched
+ * on per brand by a super-admin. See src/lib/auth/features.ts.
  */
 export interface BrandFeatures {
   paidAds: boolean;
