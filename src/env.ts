@@ -61,6 +61,9 @@ const serverEnv = {
   OPENAI_API_KEY: readOptionalEnv("OPENAI_API_KEY"),
   RESEND_API_KEY: readOptionalEnv("RESEND_API_KEY"),
   RESEND_FROM: readOptionalEnv("RESEND_FROM"),
+  // Where operator alerts go (e.g. a brand with repeated publish failures).
+  // Operator-only: never shown to or suppressed by a customer.
+  OPERATOR_ALERT_EMAIL: readOptionalEnv("OPERATOR_ALERT_EMAIL"),
   SUPABASE_SERVICE_ROLE_KEY: readOptionalEnv("SUPABASE_SERVICE_ROLE_KEY"),
   META_GRAPH_VERSION: readOptionalEnv("META_GRAPH_VERSION", DEFAULT_META_GRAPH_VERSION),
   ENABLE_CONNECTION_DIAGNOSTICS: process.env.ENABLE_CONNECTION_DIAGNOSTICS ?? undefined,
@@ -132,6 +135,7 @@ function validateProductionEnv() {
     "TOKEN_VAULT_KEY",
     "RESEND_API_KEY",
     "RESEND_FROM",
+    "OPERATOR_ALERT_EMAIL",
     "OPENAI_API_KEY",
   ];
 
