@@ -3,7 +3,7 @@
 import sharp from 'sharp';
 import { z } from 'zod';
 import { revalidatePath } from 'next/cache';
-import { requireAuthContext } from '@/lib/auth/server';
+import { requireFeatureContext } from '@/lib/auth/features';
 import { MEDIA_BUCKET } from '@/lib/constants';
 import { getTournamentById } from '@/lib/tournament/queries';
 
@@ -16,7 +16,7 @@ export interface TournamentBaseImageUpload {
 
 export async function getTournamentBaseImageUploads(tournamentId: string): Promise<TournamentBaseImageUpload[]> {
   z.string().uuid().parse(tournamentId);
-  const { supabase, accountId } = await requireAuthContext();
+  const { supabase, accountId } = await requireFeatureContext('tournaments');
   const tournament = await getTournamentById(supabase, tournamentId, accountId);
   if (!tournament) throw new Error('Tournament not found');
   const slots = [
@@ -40,7 +40,7 @@ export async function getTournamentBaseImageUploads(tournamentId: string): Promi
 
 export async function uploadTournamentBaseImage(formData: FormData): Promise<{ success: boolean; error?: string }> {
   try {
-    const { supabase, accountId } = await requireAuthContext();
+    const { supabase, accountId } = await requireFeatureContext('tournaments');
     const tournamentId = z.string().uuid().parse(formData.get('tournamentId'));
     const aspect = z.enum(['square', 'story']).parse(formData.get('aspect'));
     const tournament = await getTournamentById(supabase, tournamentId, accountId);

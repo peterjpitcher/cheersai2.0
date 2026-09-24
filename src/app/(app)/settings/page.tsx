@@ -7,11 +7,14 @@ import { getLinkInBioProfileWithTiles } from "@/lib/link-in-bio/profile";
 import { listMediaAssets } from "@/lib/library/data";
 import { getManagementConnectionSummary } from "@/lib/management-app/data";
 import { getOwnerSettings } from "@/lib/settings/data";
+import { requireAuthContext } from "@/lib/auth/server";
 
 export default async function SettingsPage() {
+  // The management-app import is a per-brand switch (The Anchor only today).
+  const { features } = await requireAuthContext();
   const [settings, managementConnection, linkInBioData, mediaAssets] = await Promise.all([
     getOwnerSettings(),
-    getManagementConnectionSummary(),
+    features.managementImport ? getManagementConnectionSummary() : Promise.resolve(null),
     getLinkInBioProfileWithTiles(),
     listMediaAssets({ excludeTags: ["Tournament"], includeSystemAssets: true }),
   ]);
@@ -57,6 +60,7 @@ export default async function SettingsPage() {
         <PostingDefaultsForm data={settings.posting} />
       </section>
 
+      {managementConnection ? (
       <section
         className="rounded-xl p-6 md:p-8 space-y-6"
         style={{
@@ -73,6 +77,7 @@ export default async function SettingsPage() {
         </div>
         <ManagementConnectionForm data={managementConnection} />
       </section>
+      ) : null}
 
       <div
         className="rounded-xl p-6 md:p-8"

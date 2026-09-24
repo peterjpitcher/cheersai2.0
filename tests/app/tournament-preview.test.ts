@@ -112,6 +112,7 @@ describe('getFixturePreview', () => {
     ]);
 
     requireAuthContextMock.mockResolvedValue({
+      features: { paidAds: true, tournaments: true, managementImport: true },
       accountId: 'account-1',
       supabase,
     });

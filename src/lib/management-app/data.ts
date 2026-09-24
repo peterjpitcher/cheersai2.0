@@ -1,3 +1,4 @@
+import { requireFeatureContext } from "@/lib/auth/features";
 import { requireAuthContext } from "@/lib/auth/server";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
 import { isSchemaMissingError } from "@/lib/supabase/errors";
@@ -70,7 +71,7 @@ interface ManagementConnectionConfigRow {
 }
 
 export async function getManagementConnectionConfig(): Promise<ManagementConnectionConfig> {
-  const { accountId } = await requireAuthContext();
+  const { accountId } = await requireFeatureContext("managementImport");
   const supabase = createServiceSupabaseClient();
 
   const { data, error } = await supabase
@@ -103,7 +104,7 @@ export async function getManagementConnectionConfig(): Promise<ManagementConnect
 }
 
 export async function saveManagementConnection(input: SaveConnectionInput): Promise<ManagementConnectionSummary> {
-  const { accountId } = await requireAuthContext();
+  const { accountId } = await requireFeatureContext("managementImport");
   const supabase = createServiceSupabaseClient();
 
   const { data: existing, error: existingError } = await supabase
@@ -151,7 +152,7 @@ export async function saveManagementConnection(input: SaveConnectionInput): Prom
 export async function updateManagementConnectionTestResult(
   input: UpdateConnectionTestResultInput,
 ): Promise<ManagementConnectionSummary> {
-  const { accountId } = await requireAuthContext();
+  const { accountId } = await requireFeatureContext("managementImport");
   const supabase = createServiceSupabaseClient();
 
   const nowIso = new Date().toISOString();

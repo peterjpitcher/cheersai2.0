@@ -2,6 +2,7 @@ import { Suspense } from "react";
 
 import { getAdAccountSetupStatus } from "@/app/(app)/connections/actions-ads";
 import { featureFlags } from "@/env";
+import { requireAuthContext } from "@/lib/auth/server";
 import { ConnectionCards } from "@/features/connections/connection-cards";
 import { ConnectionDiagnostics } from "@/features/connections/connection-diagnostics";
 import { ConnectionOAuthHandler } from "@/features/connections/connection-oauth-handler";
@@ -10,7 +11,9 @@ import { MetaConversionSetup } from "@/features/campaigns/MetaConversionSetup";
 import { PageHeader } from "@/components/layout/PageHeader";
 
 export default async function ConnectionsPage() {
-  const adAccountStatus = await getAdAccountSetupStatus();
+  const { features } = await requireAuthContext();
+  // Paid ads are a per-brand switch; brands without it never see the ads setup.
+  const adAccountStatus = features.paidAds ? await getAdAccountSetupStatus() : null;
 
   return (
     <div className="flex flex-col gap-6 h-full font-sans">
@@ -39,18 +42,20 @@ export default async function ConnectionsPage() {
           <ConnectionCards />
         </section>
 
-        <section className="space-y-4">
-          <div className="space-y-1">
-            <h3 className="text-lg font-semibold" style={{ color: "var(--c-ink)" }}>Meta Ads (Campaigns)</h3>
-            <p className="text-sm" style={{ color: "var(--c-ink-3)" }}>Connect your Meta Ads account to create and manage paid campaigns.</p>
-          </div>
-          <Suspense fallback={null}>
-            <AdAccountSetup initialStatus={adAccountStatus} />
-          </Suspense>
-          {adAccountStatus.setupComplete ? (
-            <MetaConversionSetup status={adAccountStatus} />
-          ) : null}
-        </section>
+        {adAccountStatus ? (
+          <section className="space-y-4">
+            <div className="space-y-1">
+              <h3 className="text-lg font-semibold" style={{ color: "var(--c-ink)" }}>Meta Ads (Campaigns)</h3>
+              <p className="text-sm" style={{ color: "var(--c-ink-3)" }}>Connect your Meta Ads account to create and manage paid campaigns.</p>
+            </div>
+            <Suspense fallback={null}>
+              <AdAccountSetup initialStatus={adAccountStatus} />
+            </Suspense>
+            {adAccountStatus.setupComplete ? (
+              <MetaConversionSetup status={adAccountStatus} />
+            ) : null}
+          </section>
+        ) : null}
 
         <section
           className="space-y-2 rounded-lg p-4 text-sm"

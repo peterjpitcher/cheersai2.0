@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react';
 import type { UseFormReturn, FieldValues } from 'react-hook-form';
 
+import { useAuth } from '@/components/providers/auth-provider';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import {
@@ -45,6 +46,7 @@ export function EventFields({
   onUseArtwork,
 }: EventFieldsProps): React.JSX.Element {
   const { register, formState: { errors }, setValue } = form;
+  const canImport = useAuth()?.features.managementImport === true;
   const [importOpen, setImportOpen] = useState(false);
   const [events, setEvents] = useState<EventOption[]>([]);
   const [search, setSearch] = useState('');
@@ -120,7 +122,8 @@ export function EventFields({
     <fieldset className="space-y-4">
       <legend className="text-sm font-medium text-foreground">Event Details</legend>
 
-      {/* Import from management app */}
+      {/* Import from management app (per-brand switch; The Anchor only today) */}
+      {canImport && (
       <div className="space-y-2">
         {!importOpen ? (
           <button
@@ -221,6 +224,7 @@ export function EventFields({
           )}
         </div>
       </div>
+      )}
 
       <div className="space-y-1.5">
         <Label htmlFor="eventName">

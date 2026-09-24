@@ -221,3 +221,37 @@ describe('membership', () => {
     );
   });
 });
+
+describe('setBrandFeature', () => {
+  it('returns Forbidden when the caller is not a super-admin', async () => {
+    mockRequireAuthContext.mockResolvedValue({ ...SUPER_ADMIN_CTX, isSuperAdmin: false, supabase: buildSupabase() });
+    const { setBrandFeature } = await import('./actions');
+    expect(await setBrandFeature(A_BRAND, 'paidAds', true)).toEqual({ error: 'Forbidden.' });
+    expect(mockLogAdminEvent).not.toHaveBeenCalled();
+  });
+
+  it('rejects an unknown feature or a non-uuid brand', async () => {
+    const { setBrandFeature } = await import('./actions');
+    expect(await setBrandFeature('not-a-uuid', 'paidAds', true)).toEqual({ error: 'Invalid brand.' });
+    expect(await setBrandFeature(A_BRAND, 'everything' as never, true)).toEqual({ error: 'Invalid feature.' });
+  });
+
+  it('switches a feature and audits who did it', async () => {
+    const { setBrandFeature } = await import('./actions');
+    expect(await setBrandFeature(A_BRAND, 'tournaments', true)).toEqual({ success: true });
+    expect(mockLogAdminEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'set_brand_feature',
+        targetAccountId: A_BRAND,
+        detail: { feature: 'tournaments', enabled: true },
+      }),
+    );
+  });
+
+  it('reports a failed update without auditing success', async () => {
+    state.accountsInsert = { data: null, error: { message: 'db down' } };
+    const { setBrandFeature } = await import('./actions');
+    expect(await setBrandFeature(A_BRAND, 'paidAds', false)).toEqual({ error: 'Could not update the feature.' });
+    expect(mockLogAdminEvent).not.toHaveBeenCalled();
+  });
+});

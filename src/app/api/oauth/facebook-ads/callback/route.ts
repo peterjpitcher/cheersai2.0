@@ -54,6 +54,17 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   const accountId = oauthState.account_id;
 
+  // Paid ads are a per-brand switch. startAdsOAuth is already gated; this stops
+  // a stale or replayed state completing for a brand without the feature.
+  const { data: brand, error: brandError } = await supabase
+    .from("accounts")
+    .select("paid_ads_enabled")
+    .eq("id", accountId)
+    .maybeSingle<{ paid_ads_enabled: boolean | null }>();
+  if (brandError || brand?.paid_ads_enabled !== true) {
+    return NextResponse.redirect(`${SITE_URL}/connections?ads_error=not_available`);
+  }
+
   try {
     const graphBase = getMetaGraphApiBase();
 

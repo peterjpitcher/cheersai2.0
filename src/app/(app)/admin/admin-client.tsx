@@ -12,8 +12,10 @@ import {
   inviteUser,
   revokeMembership,
   sendPasswordLink,
+  setBrandFeature,
   setSuperAdmin,
 } from '@/app/(app)/admin/actions';
+import { FEATURE_LABELS, type BrandFeature } from '@/lib/auth/brand-features';
 
 const CARD = 'rounded-lg border p-4';
 const CARD_STYLE = { borderColor: 'var(--c-line)' } as const;
@@ -117,6 +119,66 @@ function InviteForm({ brands }: { brands: AdminBrand[] }) {
       >
         {isPending ? 'Inviting…' : 'Send invite'}
       </button>
+      <Feedback {...msg} />
+    </div>
+  );
+}
+
+function BrandFeaturesCard({ brands }: { brands: AdminBrand[] }) {
+  const router = useRouter();
+  const [isPending, start] = useTransition();
+  const [msg, setMsg] = useState<{ error?: string; ok?: string }>({});
+  const active = brands.filter((b) => !b.archivedAt);
+  const features = Object.keys(FEATURE_LABELS) as BrandFeature[];
+
+  function toggle(brand: AdminBrand, feature: BrandFeature) {
+    const enabled = !brand.features[feature];
+    start(async () => {
+      setMsg({});
+      const r = await setBrandFeature(brand.accountId, feature, enabled);
+      if (r.success) {
+        setMsg({ ok: `${FEATURE_LABELS[feature]} ${enabled ? 'on' : 'off'} for ${brand.name ?? 'brand'}.` });
+        router.refresh();
+      } else setMsg({ error: r.error });
+    });
+  }
+
+  return (
+    <div className={CARD} style={CARD_STYLE}>
+      <h2 className='mb-1 text-sm font-semibold' style={{ color: 'var(--c-ink)' }}>Brand features</h2>
+      <p className='mb-3 text-xs' style={{ color: 'var(--c-ink-3)' }}>
+        Paid ads, tournaments and the management app import are off for new brands. Switch them on per brand.
+      </p>
+      <div className='overflow-x-auto'>
+        <table className='w-full text-left'>
+          <thead>
+            <tr className='text-xs' style={{ color: 'var(--c-ink-3)' }}>
+              <th className='py-1 pr-3 font-medium'>Brand</th>
+              {features.map((f) => (
+                <th key={f} className='py-1 pr-3 font-medium'>{FEATURE_LABELS[f]}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {active.map((b) => (
+              <tr key={b.accountId} className='border-t' style={{ borderTopColor: 'var(--c-line)' }}>
+                <td className='py-2 pr-3 text-sm' style={{ color: 'var(--c-ink)' }}>{b.name ?? 'Brand'}</td>
+                {features.map((f) => (
+                  <td key={f} className='py-2 pr-3'>
+                    <input
+                      type='checkbox'
+                      checked={b.features[f]}
+                      disabled={isPending}
+                      onChange={() => toggle(b, f)}
+                      aria-label={`${FEATURE_LABELS[f]} for ${b.name ?? 'brand'}`}
+                    />
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
       <Feedback {...msg} />
     </div>
   );
@@ -371,6 +433,7 @@ export function AdminClient({
         <InviteForm brands={brands} />
       </div>
 
+      <BrandFeaturesCard brands={brands} />
       <BookingKeysCard brands={brands} ingestEndpoint={ingestEndpoint} />
 
       <div className={CARD} style={CARD_STYLE}>
