@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import { requireAuthContext } from "@/lib/auth/server";
+import { requireEntitledContext } from "@/lib/billing/entitlement-server";
 
 export interface ContentTemplate {
   id: string;
@@ -80,7 +81,7 @@ export async function listTemplates(): Promise<ContentTemplate[]> {
 export async function saveTemplate(
   input: SaveTemplateInput,
 ): Promise<{ success?: boolean; error?: string; id?: string }> {
-  const { supabase, accountId } = await requireAuthContext();
+  const { supabase, accountId } = await requireEntitledContext('create');
 
   const parsed = saveTemplateSchema.safeParse(input);
   if (!parsed.success) {

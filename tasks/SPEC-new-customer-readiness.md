@@ -25,7 +25,7 @@ Verified 2026-09-24:
 | D2a | Staggered plans rebuilt from the v1 tiers: Starter, Professional and Group, with the amounts, limits and seats in §2.1. Prices exclude VAT. Annual billing at 10% off from launch. | 2026-09-24 |
 | D2b | Orange Jelly Limited is VAT-registered; VAT is charged on subscriptions. | 2026-09-24 |
 | D2c | The trial requires a card at the start. | 2026-09-24 |
-| D3 | Lapse and suspension behaviour as proposed in §4.1: a lapsed or suspended brand keeps read access, the billing page (owner) and export, but cannot create, edit, generate or upload, and new publishing is held. On restore, future posts resume; overdue posts wait for the owner to review (§4.2). | 2026-09-24 |
+| D3 | Lapse and suspension behaviour as proposed in §4.1: a lapsed or suspended brand keeps read access, the billing page (owner) and export, but cannot create, edit, generate or upload, and new publishing is held. On restore, future posts resume; overdue posts wait for the owner to review (§4.2). Past-due grace: 7 days after the paid period ends. | 2026-09-24 |
 | D4 | Roles as proposed in §4.5: owners handle billing, inviting and removing people, Facebook and Instagram connections, export and deletion requests; members create, edit and schedule content. Every existing membership becomes owner. | 2026-09-24 |
 | D5 | Offboarding is handled by the operator on request (runbook plus admin action), not a customer button. Data is kept for 30 days after offboarding, then deleted. | 2026-09-24 |
 | D7 | Meta production access, checked separately for organic posting and ads | pending (Meta App Dashboard) |
