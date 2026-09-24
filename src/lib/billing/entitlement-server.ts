@@ -1,8 +1,8 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
-import { featureFlags } from '@/env';
 import { requireAuthContext } from '@/lib/auth/server';
 import type { AuthContext } from '@/lib/auth/types';
+import { isBillingEnforcementEnabled } from '@/lib/billing/enforcement';
 import {
   can,
   resolveEntitlement,
@@ -14,8 +14,8 @@ import {
 /**
  * Server side of brand entitlement (spec §4.1, decision D3).
  *
- * While BILLING_ENFORCEMENT_ENABLED is off (the default) nothing here blocks
- * anything and the database is not consulted. When on, a held brand (lapsed,
+ * While the billing_enforcement switch (public.app_flags) is off, the default,
+ * nothing here blocks anything. When on, a held brand (lapsed,
  * incomplete, suspended) may still read, manage billing and export, but not
  * create or publish. Every guarded action re-checks the brand it acts on, so a
  * stale form cannot write to a brand that has since lapsed. A lookup failure
@@ -78,7 +78,7 @@ export async function getBrandEntitlement(
 
 /** Throws EntitlementError when enforcement is on and the brand lacks the capability. */
 export async function assertEntitled(ctx: Pick<AuthContext, 'supabase' | 'accountId'>, capability: Capability): Promise<void> {
-  if (!featureFlags.billingEnforcement) return;
+  if (!(await isBillingEnforcementEnabled(ctx.supabase))) return;
   const state = await getBrandEntitlement(ctx.supabase, ctx.accountId);
   if (!can(state, capability)) throw new EntitlementError(state);
 }

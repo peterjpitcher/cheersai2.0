@@ -29,6 +29,12 @@ const mockSupabase: any = {
 };
 
 class TestWorker extends PublishQueueWorker {
+    // Billing hold is covered in tests/publish-queue-hold.test.ts; stubbed here
+    // so these tests' ordered database mocks are not consumed by it.
+    protected async checkPublishHold(): Promise<null> {
+        return null;
+    }
+
     async publishByPlatform(platform: ProviderPlatform, request: ProviderPublishRequest): Promise<ProviderPublishResult> {
         return super.publishByPlatform(platform, request);
     }

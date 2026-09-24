@@ -69,3 +69,12 @@ if (!globalThis.Deno) {
         },
     };
 }
+
+// Billing enforcement is off in production until Stage 2 is complete, so unit
+// tests default to off too; guarded actions then never read app_flags through
+// each test's own database mock. Tests about enforcement mock this module
+// themselves (see src/lib/billing/entitlement-server.test.ts).
+vi.mock("@/lib/billing/enforcement", () => ({
+    BILLING_ENFORCEMENT_FLAG: "billing_enforcement",
+    isBillingEnforcementEnabled: vi.fn(async () => false),
+}));
