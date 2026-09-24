@@ -9,6 +9,7 @@
 import { zodResponseFormat } from 'openai/helpers/zod';
 
 import { getOpenAIClient } from './client';
+import { trackAiCall } from './usage';
 import { AiGenerationResponseSchema, type AiGenerationResponse } from './schemas';
 
 export interface GenerateOptions {
@@ -16,6 +17,8 @@ export interface GenerateOptions {
   userPrompt: string;
   temperature: number;
   model?: string;
+  /** Brand to record this call against (AI usage log). */
+  usageAccountId?: string;
 }
 
 /**
@@ -33,9 +36,11 @@ export async function generatePlatformCopy(
   const timeout = setTimeout(() => controller.abort(), 30_000); // AI-09: 30s timeout
 
   try {
-    const completion = await client.chat.completions.parse(
+    const model = options.model ?? process.env.OPENAI_MODEL ?? 'gpt-4o-mini';
+    const usage = options.usageAccountId ? { accountId: options.usageAccountId, feature: 'post_copy' as const } : undefined;
+    const completion = await trackAiCall(usage, model, () => client.chat.completions.parse(
       {
-        model: options.model ?? process.env.OPENAI_MODEL ?? 'gpt-4o-mini',
+        model,
         temperature: options.temperature,
         messages: [
           { role: 'system', content: options.systemPrompt },
@@ -47,7 +52,7 @@ export async function generatePlatformCopy(
         ),
       },
       { signal: controller.signal },
-    );
+    ));
 
     const parsed = completion.choices[0]?.message?.parsed;
     if (!parsed) {

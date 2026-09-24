@@ -68,6 +68,7 @@ describe("autoNameAndTagMediaAsset business type", () => {
 
     expect(generateMediaNameAndTagsMock).toHaveBeenCalledWith({
       imageUrl: "https://storage.example/signed.jpg",
+      usageAccountId: "brand-1",
       businessType: "websites and applications company",
     });
     expect(calls).toContainEqual({ table: "brand_profile", method: "eq", args: ["account_id", "brand-1"] });
@@ -82,6 +83,7 @@ describe("autoNameAndTagMediaAsset business type", () => {
 
     expect(generateMediaNameAndTagsMock).toHaveBeenCalledWith({
       imageUrl: "https://storage.example/signed.jpg",
+      usageAccountId: "brand-1",
       businessType: undefined,
     });
   });

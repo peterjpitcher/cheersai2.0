@@ -687,6 +687,7 @@ export async function generateCampaignAction(
       : EMPTY_EVENT_BOOKING_INSIGHTS;
 
     const rawPayload = await generateCampaign({
+      usageAccountId: accountId,
       campaignKind: input.campaignKind,
       promotionName: input.promotionName,
       problemBrief: input.problemBrief,
@@ -1225,6 +1226,7 @@ export async function createFoodBookingCampaign(
 
     // 4. Generate per-window booking copy (forces BOOK_NOW + validates per window).
     const rawPayload = await generateCampaign({
+      usageAccountId: accountId,
       campaignKind: 'food_booking',
       promotionName: input.promotionName,
       problemBrief: input.problemBrief,

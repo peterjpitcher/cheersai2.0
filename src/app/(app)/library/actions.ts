@@ -388,6 +388,7 @@ export async function autoNameAndTagMediaAsset(assetId: string): Promise<MediaAs
 
     const suggestion = await generateMediaNameAndTags({
       imageUrl,
+      usageAccountId: accountId,
       businessType: brandRow?.business_type ?? undefined,
     });
 
