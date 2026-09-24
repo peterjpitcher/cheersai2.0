@@ -104,6 +104,7 @@ export async function generateContent(
       systemPrompt,
       userPrompt,
       temperature,
+      usageAccountId: accountId,
     });
 
     const processed = postprocessCopy(rawCopy, {
@@ -191,6 +192,7 @@ export async function regenerateWithModifier(
       systemPrompt,
       userPrompt,
       temperature,
+      usageAccountId: accountId,
     });
 
     const processed = postprocessCopy(rawCopy, {

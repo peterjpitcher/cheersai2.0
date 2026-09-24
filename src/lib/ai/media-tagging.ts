@@ -13,6 +13,7 @@ import { zodResponseFormat } from 'openai/helpers/zod';
 import { z } from 'zod';
 
 import { getOpenAIClient } from './client';
+import { trackAiCall } from './usage';
 
 /** Max number of AI-suggested tags applied to an asset. */
 export const MAX_MEDIA_TAGS = 6;
@@ -68,6 +69,8 @@ export interface GenerateMediaNameAndTagsInput {
   model?: string;
   /** The brand's business type from Settings; unset means a pub. */
   businessType?: string;
+  /** Brand to record this call against (AI usage log). */
+  usageAccountId?: string;
 }
 
 export interface MediaNameAndTags {
@@ -89,9 +92,11 @@ export async function generateMediaNameAndTags(
   const timeout = setTimeout(() => controller.abort(), 30_000);
 
   try {
-    const completion = await client.chat.completions.parse(
+    const model = input.model ?? process.env.OPENAI_MODEL ?? 'gpt-4o-mini';
+    const usage = input.usageAccountId ? { accountId: input.usageAccountId, feature: 'media_tagging' as const } : undefined;
+    const completion = await trackAiCall(usage, model, () => client.chat.completions.parse(
       {
-        model: input.model ?? process.env.OPENAI_MODEL ?? 'gpt-4o-mini',
+        model,
         temperature: 0.3,
         messages: [
           { role: 'system', content: buildMediaTaggingSystemPrompt(input.businessType) },
@@ -107,7 +112,7 @@ export async function generateMediaNameAndTags(
         response_format: zodResponseFormat(MediaTagResponseSchema, 'media_name_and_tags'),
       },
       { signal: controller.signal },
-    );
+    ));
 
     const parsed = completion.choices[0]?.message?.parsed;
     if (!parsed) {

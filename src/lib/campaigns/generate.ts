@@ -1,5 +1,7 @@
 import OpenAI from 'openai';
 
+import { trackAiCall } from '@/lib/ai/usage';
+
 import { env } from '@/env';
 import type {
   AdTargeting,
@@ -28,6 +30,8 @@ import {
 import type { CampaignPhase } from './phases'; // ← must import from phases.ts
 
 interface GenerateInput {
+  /** Brand to record the OpenAI calls against (AI usage log). */
+  usageAccountId?: string;
   campaignKind: PaidCampaignKind;
   promotionName: string;
   problemBrief: string;
@@ -563,7 +567,10 @@ Return JSON matching this exact schema:
 }
 The ads array must contain EXACTLY 3 entries per ad set. Each must have a different angle.`;
 
-  const response = await client.chat.completions.create({
+  const usage = input.usageAccountId
+    ? { accountId: input.usageAccountId, feature: 'campaign_generation' as const }
+    : undefined;
+  const response = await trackAiCall(usage, 'gpt-4o', () => client.chat.completions.create({
     model: 'gpt-4o',
     messages: [
       { role: 'system', content: SYSTEM_PROMPT },
@@ -571,7 +578,7 @@ The ads array must contain EXACTLY 3 entries per ad set. Each must have a differ
     ],
     temperature: 0.7,
     response_format: { type: 'json_object' },
-  });
+  }));
 
   const content = response.choices[0]?.message?.content;
   if (!content) throw new Error('No content returned from AI');
@@ -630,7 +637,7 @@ The ads array must contain EXACTLY 3 entries per ad set. Each must have a differ
   const copyIssues = validateCampaignCopy(payload, validationOptions);
   const hardIssues = copyIssues.filter((issue) => issue.code !== 'over_limit');
   if (hardIssues.length > 0) {
-    const corrected = await attemptCopyCorrection(client, payload, hardIssues, validationOptions);
+    const corrected = await attemptCopyCorrection(client, payload, hardIssues, validationOptions, input.usageAccountId);
     if (corrected) return corrected;
     const uniqueMessages = [...new Set(hardIssues.map((issue) => issue.message))];
     throw new Error(`AI returned weak booking copy: ${uniqueMessages.join(' ')}`);
@@ -669,7 +676,7 @@ async function validateAndCorrectFoodCopy(
       .filter((issue) => issue.code !== 'over_limit');
     if (hardIssues.length === 0) continue;
 
-    const corrected = await attemptCopyCorrection(client, singleAdSetPayload, hardIssues, options);
+    const corrected = await attemptCopyCorrection(client, singleAdSetPayload, hardIssues, options, input.usageAccountId);
     if (corrected) {
       correctedAdSets[index] = corrected.ad_sets[0]!;
       continue;
@@ -889,13 +896,15 @@ export async function attemptCopyCorrection(
   payload: AiCampaignPayload,
   issues: AdCopyValidationIssue[],
   validationOptions: Parameters<typeof validateCampaignCopy>[1],
+  usageAccountId?: string,
 ): Promise<AiCampaignPayload | null> {
   const issueList = issues
     .map((i) => `Ad set "${i.adSetName}", ad "${i.adName}": ${i.message}`)
     .join('\n');
 
   try {
-    const response = await client.chat.completions.create({
+    const usage = usageAccountId ? { accountId: usageAccountId, feature: 'campaign_copy_correction' as const } : undefined;
+    const response = await trackAiCall(usage, 'gpt-4o', () => client.chat.completions.create({
       model: 'gpt-4o',
       messages: [
         {
@@ -910,7 +919,7 @@ export async function attemptCopyCorrection(
       ],
       temperature: 0.3,
       response_format: { type: 'json_object' },
-    });
+    }));
 
     const content = response.choices[0]?.message?.content;
     if (!content) return null;
