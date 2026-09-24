@@ -35,6 +35,58 @@ interface RetryableConversionRow {
   client_ip_address?: string | null;
 }
 
+// Per-brand share of each run. Without it one brand with a large backlog (for
+// example many not_configured rows waiting on pixel setup) filled the whole
+// batch every run and other brands' retries never ran.
+const RETRY_PER_ACCOUNT_LIMIT = 25;
+
+const RETRYABLE_FILTER =
+  'capi_status.is.null,capi_status.eq.failed,and(capi_status.eq.skipped,capi_error.eq.not_configured),and(capi_status.eq.skipped,capi_error.eq.missing_match_keys)';
+
+/**
+ * Oldest retryable rows, fairly shared between brands: up to
+ * RETRY_PER_ACCOUNT_LIMIT per brand, interleaved brand by brand up to
+ * RETRY_BATCH_LIMIT. not_configured and missing_match_keys rows stay eligible
+ * so a brand that configures its pixel later still recovers inside the window.
+ */
+async function loadRetryableRowsFairly(
+  supabase: ReturnType<typeof createServiceSupabaseClient>,
+  windowStart: string,
+): Promise<RetryableConversionRow[]> {
+  const { data: accounts, error: accountsError } = await supabase.from('accounts').select('id');
+  if (accountsError) throw accountsError;
+
+  const perAccount: RetryableConversionRow[][] = [];
+  for (const account of (accounts ?? []) as Array<{ id: string }>) {
+    // select('*') on purpose: naming the advanced-matching columns explicitly would
+    // error until their migration is applied, whereas '*' degrades gracefully.
+    const { data, error } = await supabase
+      .from('booking_conversion_events')
+      .select('*')
+      .eq('account_id', account.id)
+      .eq('meta_consent_granted', true)
+      .or(RETRYABLE_FILTER)
+      .gte('occurred_at', windowStart)
+      .order('occurred_at', { ascending: true })
+      .limit(RETRY_PER_ACCOUNT_LIMIT);
+    if (error) throw error;
+    if (data?.length) perAccount.push(data as RetryableConversionRow[]);
+  }
+
+  const rows: RetryableConversionRow[] = [];
+  for (let index = 0; rows.length < RETRY_BATCH_LIMIT; index++) {
+    let added = false;
+    for (const accountRows of perAccount) {
+      if (index < accountRows.length && rows.length < RETRY_BATCH_LIMIT) {
+        rows.push(accountRows[index]);
+        added = true;
+      }
+    }
+    if (!added) break;
+  }
+  return rows;
+}
+
 async function handle(request: Request) {
   const auth = verifyCronAuth(request);
   if (!auth.authorised) {
@@ -44,23 +96,13 @@ async function handle(request: Request) {
   const supabase = createServiceSupabaseClient();
   const windowStart = new Date(Date.now() - RETRY_WINDOW_MS).toISOString();
 
-  // select('*') on purpose: naming the advanced-matching columns explicitly would
-  // error until their migration is applied, whereas '*' degrades gracefully.
-  const { data, error } = await supabase
-    .from('booking_conversion_events')
-    .select('*')
-    .eq('meta_consent_granted', true)
-    .or('capi_status.is.null,capi_status.eq.failed,and(capi_status.eq.skipped,capi_error.eq.not_configured),and(capi_status.eq.skipped,capi_error.eq.missing_match_keys)')
-    .gte('occurred_at', windowStart)
-    .order('occurred_at', { ascending: true })
-    .limit(RETRY_BATCH_LIMIT);
-
-  if (error) {
+  let rows: RetryableConversionRow[];
+  try {
+    rows = await loadRetryableRowsFairly(supabase, windowStart);
+  } catch (error) {
     console.error('[retry-capi-conversions] Failed to load retryable conversions', error);
     return NextResponse.json({ error: 'Could not load retryable conversions.' }, { status: 500 });
   }
-
-  const rows = (data ?? []) as RetryableConversionRow[];
   let sent = 0;
   let failed = 0;
   let skipped = 0;

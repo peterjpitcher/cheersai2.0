@@ -131,7 +131,7 @@ export async function getPublishReadinessIssues({
     });
   }
 
-  const mediaAssets = await loadMediaAssets({ supabase, mediaIds });
+  const mediaAssets = await loadMediaAssets({ supabase, accountId, mediaIds });
   if (mediaAssets.length !== mediaIds.length) {
     issues.push({
       code: "media_missing_assets",
@@ -275,14 +275,18 @@ interface MediaAssetRow {
 
 async function loadMediaAssets({
   supabase,
+  accountId,
   mediaIds,
 }: {
   supabase: SupabaseClient;
+  accountId: string;
   mediaIds: string[];
 }): Promise<MediaAssetRow[]> {
+  // Scoped to the brand: another brand's media id counts as missing media.
   const { data, error } = await supabase
     .from("media_assets")
     .select("id, media_type, processed_status, derived_variants")
+    .eq("account_id", accountId)
     .in("id", mediaIds)
     .returns<MediaAssetRow[]>();
 
