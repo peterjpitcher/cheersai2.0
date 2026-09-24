@@ -2,6 +2,7 @@
 
 import { useActionState, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
+import Image from 'next/image';
 import Link from 'next/link';
 
 import { Button } from '@/components/ui/button';
@@ -59,12 +60,7 @@ export default function LoginPage() {
       >
         {/* Brand mark */}
         <div className="flex items-center gap-3">
-          <div
-            className="flex h-9 w-9 items-center justify-center rounded-[var(--r-lg)] text-lg font-bold text-white"
-            style={{ backgroundColor: "var(--c-orange)" }}
-          >
-            C
-          </div>
+          <Image src="/brand/cheers-icon-64.png" alt="" width={40} height={40} priority />
           <span className="text-lg font-semibold text-white">CheersAI</span>
         </div>
 
