@@ -30,7 +30,7 @@ type ConnectionRow = {
 };
 
 type AccountRow = {
-  auth_user_id: string;
+  email: string | null;
 };
 
 type PostingDefaultsRow = {
@@ -171,37 +171,35 @@ async function checkTokenHealth(): Promise<{
               .maybeSingle<PostingDefaultsRow>();
 
             if (isEmailEnabledForCategory(category, postingDefaults?.notifications)) {
-              // Fetch account owner's email via auth_user_id
+              // Send to the brand's own contact email, like the other brand
+              // alerts. The legacy auth_user_id is whoever created the brand
+              // (for admin-created brands, the admin), not the customer.
               const { data: account } = await service
                 .from('accounts')
-                .select('auth_user_id')
+                .select('email')
                 .eq('id', conn.account_id)
                 .single<AccountRow>();
 
-              if (account?.auth_user_id) {
-                const { data: { user } } = await service.auth.admin.getUserById(account.auth_user_id);
+              if (account?.email) {
+                const connectionsUrl = `${env.client.NEXT_PUBLIC_SITE_URL}/connections`;
 
-                if (user?.email) {
-                  const connectionsUrl = `${env.client.NEXT_PUBLIC_SITE_URL}/connections`;
-
-                  const html = `
+                const html = `
 <p>Hi,</p>
 <p><strong>Action required:</strong> Your <strong>${label}</strong> connection (${displayName}) has <strong>${statusLabel}</strong>.</p>
 <p>Scheduled posts to ${label} will fail until you reconnect.</p>
 <p>
   <a href="${connectionsUrl}">Reconnect your ${label} account now</a>
 </p>
-<p>— CheersAI</p>
+<p>CheersAI</p>
 `.trim();
 
-                  await sendEmail({
-                    to: user.email,
-                    subject: `[CheersAI] Action required: ${label} ${statusLabel}`,
-                    html,
-                  });
+                await sendEmail({
+                  to: account.email,
+                  subject: `[CheersAI] Action required: ${label} ${statusLabel}`,
+                  html,
+                });
 
-                  emailsSent++;
-                }
+                emailsSent++;
               }
             }
           } catch (emailErr) {

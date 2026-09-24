@@ -15,6 +15,10 @@ vi.mock('@/lib/email/resend', () => ({
   sendEmail: vi.fn(),
 }));
 
+vi.mock('@/lib/notifications/operator-alerts', () => ({
+  alertRepeatedPublishFailures: vi.fn().mockResolvedValue({ alerted: [], skipped: [] }),
+}));
+
 vi.mock('@/lib/notifications/insert', () => ({
   insertNotification: vi.fn(),
 }));
@@ -68,7 +72,7 @@ function createMockDb(tableResults: Record<string, { data: unknown; error: unkno
     chain.maybeSingle = terminal;
 
     // Chainable methods — each returns the chain
-    for (const method of ['select', 'eq', 'gt', 'filter', 'update', 'insert']) {
+    for (const method of ['select', 'eq', 'gt', 'filter', 'update', 'insert', 'in', 'limit']) {
       chain[method] = vi.fn(() => chain);
     }
 
@@ -107,7 +111,7 @@ describe('notify-failures cron route', () => {
       const res = await GET(makeRequest({ 'x-cron-secret': 'test-secret' }));
       expect(res.status).toBe(200);
       const body = await res.json();
-      expect(body).toEqual({ processed: 0, emailed: 0, skipped: 0 });
+      expect(body).toEqual({ processed: 0, emailed: 0, skipped: 0, operatorAlert: { alerted: [], skipped: [] } });
     });
   });
 
@@ -211,6 +215,39 @@ describe('notify-failures cron route', () => {
 
       // Email should NOT have been sent
       expect(sendEmail).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('duplicate emails', () => {
+    it('records each sent email and treats the immediate-failure email as already sent', async () => {
+      const mockDb = createMockDb({
+        publish_jobs: { data: [{ id: 'job-9', error_message: null, error_code: null, content_item_id: 'ci-9' }], error: null },
+        notifications: { data: null, error: null },
+        content_items: { data: { account_id: 'acc-9', platform: 'facebook' }, error: null },
+        posting_defaults: { data: { notifications: { emailFailures: true } }, error: null },
+        accounts: { data: { email: 'owner9@test.com', display_name: null }, error: null },
+      });
+      vi.mocked(tryCreateServiceSupabaseClient).mockReturnValue(mockDb as never);
+      vi.mocked(sendEmail).mockResolvedValue(undefined);
+      vi.mocked(insertNotification).mockResolvedValue({ inserted: true });
+
+      await GET(makeRequest({ 'x-cron-secret': 'test-secret' }));
+
+      const notificationChains = mockDb.from.mock.calls
+        .map((call, index) => ({ table: call[0], chain: mockDb.from.mock.results[index].value }))
+        .filter((entry) => entry.table === 'notifications')
+        .map((entry) => entry.chain);
+
+      // The lookup checks both this cron's record and the immediate-failure record.
+      expect(notificationChains[0].in).toHaveBeenCalledWith('category', [
+        'publish_failed_email_sent',
+        'publish_failed_immediate',
+      ]);
+      // After sending, the email is recorded against the job so the next run skips it.
+      expect(notificationChains[1].insert).toHaveBeenCalledWith(
+        expect.objectContaining({ account_id: 'acc-9', category: 'publish_failed_email_sent', metadata: { job_id: 'job-9' } }),
+      );
+      expect(vi.mocked(sendEmail).mock.calls[0][0].subject).toBe('Post failed to publish: action needed');
     });
   });
 });

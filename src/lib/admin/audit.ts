@@ -13,6 +13,7 @@ export type AdminAction =
   | 'invite_user'
   | 'send_password_link'
   | 'set_brand_feature'
+  | 'operator_publish_failure_alert'
   | 'assign_member'
   | 'revoke_member'
   | 'grant_admin'
@@ -21,7 +22,8 @@ export type AdminAction =
   | 'clear_booking_key';
 
 interface AdminAuditParams {
-  actorUserId: string;
+  /** Null for system actions (crons), e.g. operator alerts. */
+  actorUserId: string | null;
   action: AdminAction;
   targetUserId?: string | null;
   targetAccountId?: string | null;

@@ -3,13 +3,17 @@ import { NextResponse } from "next/server";
 import { env } from "@/env";
 import { sendEmail } from "@/lib/email/resend";
 import { insertNotification } from "@/lib/notifications/insert";
+import { alertRepeatedPublishFailures } from "@/lib/notifications/operator-alerts";
 import { tryCreateServiceSupabaseClient } from "@/lib/supabase/service";
 import { verifyCronAuth } from "@/lib/security/cron-auth";
 
 export const dynamic = "force-dynamic";
 
-// Idempotency category stored in the notifications table to track sent emails
+// Idempotency categories stored in the notifications table (with metadata.job_id)
+// to track sent emails: this cron's own, and the immediate email sent by
+// /api/webhooks/qstash-publish/failure. Either one means the owner has been told.
 const NOTIFICATION_CATEGORY = "publish_failed_email_sent";
+const IMMEDIATE_NOTIFICATION_CATEGORY = "publish_failed_immediate";
 
 // Only look at failures from the last 2 hours to avoid re-processing old jobs
 const FAILURE_WINDOW_HOURS = 2;
@@ -89,9 +93,10 @@ async function notifyFailures(): Promise<{
       const { data: existing } = await service
         .from("notifications")
         .select("id")
-        .eq("category", NOTIFICATION_CATEGORY)
-        // metadata is JSONB — filter by the job_id key
+        .in("category", [NOTIFICATION_CATEGORY, IMMEDIATE_NOTIFICATION_CATEGORY])
+        // metadata is JSONB: filter by the job_id key
         .filter("metadata->>job_id", "eq", job.id)
+        .limit(1)
         .maybeSingle<NotificationRow>();
 
       if (existing) {
@@ -163,14 +168,27 @@ ${
   Please visit your <a href="${plannerUrl}">Planner</a> to review and reschedule the post.
 </p>
 <p>If you believe this is an error or need help, please contact support.</p>
-<p>— CheersAI</p>
+<p>CheersAI</p>
 `.trim();
 
       await sendEmail({
         to: account.email,
-        subject: "Post failed to publish — action needed",
+        subject: "Post failed to publish: action needed",
         html,
       });
+
+      // Record the send so later runs of this cron skip the job. Without this
+      // the lookup above never matched and each failure was emailed on every
+      // run inside the window.
+      const { error: sentRecordError } = await service.from("notifications").insert({
+        account_id: contentItem.account_id,
+        category: NOTIFICATION_CATEGORY,
+        message: "Failure email sent",
+        metadata: { job_id: job.id },
+      });
+      if (sentRecordError) {
+        console.error(`[notify-failures] Failed to record sent email for job ${job.id}:`, sentRecordError.message);
+      }
 
       // ── Record the notification via shared helper ────────────────────────
       const { error: insertError } = await insertNotification({
@@ -227,7 +245,22 @@ async function handle(request: Request): Promise<NextResponse> {
   }
 
   const result = await notifyFailures();
-  return NextResponse.json(result.body, { status: result.status });
+
+  // Operator alert runs on every pass, independent of the customer emails
+  // above (a customer may have failure emails turned off). A failure here marks
+  // the cron run as failed so it shows up in Vercel.
+  const service = tryCreateServiceSupabaseClient();
+  if (!service) {
+    return NextResponse.json({ ...result.body, operatorAlert: { error: "service role not configured" } }, { status: 500 });
+  }
+  try {
+    const operatorAlert = await alertRepeatedPublishFailures(service);
+    return NextResponse.json({ ...result.body, operatorAlert }, { status: result.status });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("[notify-failures] Operator alert failed:", message);
+    return NextResponse.json({ ...result.body, operatorAlert: { error: message } }, { status: 500 });
+  }
 }
 
 export async function GET(request: Request): Promise<NextResponse> {
