@@ -492,7 +492,7 @@
 
 > **RLS:** enabled (1 policies) | **FKs:** account_id -> auth.users(id) CASCADE | **Audit:** created_at
 >
-> `access_token` and `conversions_api_access_token` are legacy plaintext columns: the tokens now live encrypted in `meta_ad_account_tokens` and are read only through `src/lib/meta/ad-account-tokens.ts` (tasks/SPEC-encrypt-meta-ad-tokens.md).
+> `access_token` and `conversions_api_access_token` are dead legacy columns, held empty by CHECK constraints (`access_token = ''`, `conversions_api_access_token is null`). The tokens live encrypted in `meta_ad_account_tokens`, used only through `src/lib/meta/ad-account-tokens.ts` (tasks/SPEC-encrypt-meta-ad-tokens.md). Service-role only: anon and authenticated have no grants.
 
 ### meta_ad_account_tokens
 | Name | Type | Nullable | Default |

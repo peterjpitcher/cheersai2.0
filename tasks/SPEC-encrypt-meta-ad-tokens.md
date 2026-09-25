@@ -1,6 +1,6 @@
 # SPEC: encrypt the paid-ads Meta tokens at rest
 
-Status: phase 1 built on branch `fix/encrypt-meta-ad-tokens` (not merged, migration not applied). Phase 2 drafted only.
+Status: phase 1 live 2026-09-25 (PR #102, deployment `dpl_8kwGk2WpeAFFy9KJX3UCi6LG7VtB`; migrations `meta_ad_account_tokens` 20260925172639 and `meta_ad_accounts_service_role_only` 20260925172645). Phase 2 built on branch `fix/meta-ad-tokens-phase2`, held until The Anchor's tokens have been copied into the vault and read back successfully in production.
 
 ## Problem
 
@@ -58,10 +58,10 @@ from meta_ad_accounts m;
 
    and confirm in Axiom that `[meta-ad-tokens]` shows `copied plaintext Meta Ads token into the vault` and no `could not be decrypted` errors, and that the next sync, optimiser run and CAPI forward succeeded.
 
-Phase 2 (separate PR, after step 4 is clean for every brand):
+Phase 2 (separate PR, after step 4 is clean for every brand). Order: apply the migration first (phase 1 code already tolerates cleared columns), then merge the code:
 
 1. Code: delete `readPlaintextTokens`, `copyPlaintextToVault` and the plaintext blanking from the module; drop the plaintext fallback from `scripts/ops/search-meta-interests.ts`.
-2. Migration: `tasks/DRAFT-phase2-clear-meta-ad-plaintext-tokens.sql` moves into `supabase/migrations/`. It aborts if any plaintext token lacks an encrypted copy, blanks both columns, and adds CHECK constraints so nothing can write plaintext there again.
+2. Migration `20260926070000_clear_meta_ad_plaintext_tokens.sql`. It aborts if any plaintext token lacks an encrypted copy, blanks both columns, and adds CHECK constraints so nothing can write plaintext there again.
 3. Dropping the two columns is a later, separate decision (column drop needs explicit approval).
 
 ## Rollback

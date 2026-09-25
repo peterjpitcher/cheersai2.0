@@ -1,19 +1,19 @@
--- DRAFT, NOT A MIGRATION. Phase 2 of tasks/SPEC-encrypt-meta-ad-tokens.md.
+-- Clear the plaintext Meta ads tokens (tasks/SPEC-encrypt-meta-ad-tokens.md, phase 2).
 --
--- Moves to supabase/migrations/ in the phase 2 PR, and is applied only after:
---   1. phase 1 code is live and has read each brand's tokens at least once
---      (the lazy copy fills meta_ad_account_tokens), and
---   2. the pre-check query in the spec shows every plaintext token has an
---      encrypted copy, and the app has served from the vault without errors.
---
--- What it does: blanks the plaintext token columns on meta_ad_accounts, then adds
--- CHECK constraints so no code path can ever write a plaintext token there again.
+-- Phase 1 (PR #102) moved every reader and writer to the encrypted
+-- meta_ad_account_tokens table and copied existing tokens into it on first read.
+-- This blanks the legacy plaintext columns on meta_ad_accounts, then adds CHECK
+-- constraints so no code path can ever write a plaintext token there again.
 -- It aborts, changing nothing, if any brand still has a plaintext token with no
 -- encrypted copy.
 --
+-- Apply only after the spec's pre-check shows every plaintext token has an
+-- encrypted copy that production has read successfully. Phase 1 code is
+-- compatible with the cleared columns (it reads the vault first and only ever
+-- writes '' or null to them), so this can apply before the phase 2 code deploys.
+--
 -- Rollback: drop the two constraints. The cleared plaintext cannot be restored
--- from the database; the encrypted copies are the source of truth, and the phase 1
--- code (which reads the vault first) keeps working after a code rollback.
+-- from the database; the encrypted copies are the source of truth.
 --   alter table public.meta_ad_accounts drop constraint if exists meta_ad_accounts_access_token_not_plaintext;
 --   alter table public.meta_ad_accounts drop constraint if exists meta_ad_accounts_capi_token_not_plaintext;
 

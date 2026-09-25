@@ -112,8 +112,8 @@ beforeEach(() => {
       { id: 'vx', social_connection_id: 'scx' },
     ],
     meta_ad_accounts: [
-      { id: 'ads', account_id: BRAND, access_token: 'ads', conversions_api_access_token: 'capi', setup_complete: true },
-      { id: 'ads-x', account_id: OTHER, access_token: 'keep', setup_complete: true },
+      { id: 'ads', account_id: BRAND, setup_complete: true },
+      { id: 'ads-x', account_id: OTHER, setup_complete: true },
     ],
     meta_ad_account_tokens: [
       { id: 'tok-1', account_id: BRAND, token_type: 'access' },
@@ -172,10 +172,10 @@ describe('offboardBrand', () => {
     expect(db.token_vault.map((r) => r.id)).toEqual(['vx']);
     expect(db.social_connections.find((r) => r.id === 'sc1')).toMatchObject({ status: 'needs_action', access_token: null });
     expect(db.social_connections.find((r) => r.id === 'scx')?.access_token).toBe('keep');
-    expect(db.meta_ad_accounts[0]).toMatchObject({ access_token: '', conversions_api_access_token: null, setup_complete: false });
+    expect(db.meta_ad_accounts[0]).toMatchObject({ setup_complete: false });
     // Encrypted tokens go too; another brand's are untouched.
     expect(db.meta_ad_account_tokens.map((r) => r.id)).toEqual(['tok-x']);
-    expect(db.meta_ad_accounts[1]).toMatchObject({ access_token: 'keep', setup_complete: true });
+    expect(db.meta_ad_accounts[1]).toMatchObject({ setup_complete: true });
     expect(db.accounts[0]).toMatchObject({ archived_at: NOW.toISOString(), offboarded_at: NOW.toISOString() });
 
     expect(await offboardBrand(service() as never, BRAND, NOW)).toEqual({ error: 'This brand has already been offboarded.' });
