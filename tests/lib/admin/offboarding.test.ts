@@ -19,21 +19,25 @@ const NOT_NULL: Record<string, string[]> = {
   social_connections: ['status'],
 };
 
-// Live foreign keys into media_assets with no ON DELETE action. Postgres can
-// reach media_assets in the accounts cascade before these rows, so any that
-// still point at the brand's media make the accounts delete fail.
+// ad_sets.adset_media_asset_id points at media_assets with no ON DELETE
+// action, and the live accounts cascade reaches media_assets before ad_sets
+// (proved on a replica of the live constraint graph), so an ad set still
+// pointing at the brand's media fails the accounts delete.
 function blockingMediaReference(): string | null {
   const media = new Set(db.media_assets.filter((r) => r.account_id === BRAND).map((r) => r.id));
-  if (db.ad_sets.some((r) => media.has(r.adset_media_asset_id))) return 'ad_sets_adset_media_asset_id_fkey';
-  if (db.campaigns.some((r) => media.has(r.hero_media_id))) return 'campaigns_hero_media_id_fkey';
-  return null;
+  return db.ad_sets.some((r) => media.has(r.adset_media_asset_id)) ? 'ad_sets_adset_media_asset_id_fkey' : null;
 }
+
+// PostgREST returns at most this many rows unless the caller pages with range().
+const ROW_CAP = 1000;
 
 function query(table: string) {
   let op: 'select' | 'update' | 'delete' = 'select';
   let patch: Row = {};
   let head = false;
   let columns: string[] | null = null;
+  let orderBy: string | null = null;
+  let window: [number, number] | null = null;
   const preds: Array<(r: Row) => boolean> = [];
   const matches = () => (db[table] ?? []).filter((r) => preds.every((p) => p(r)));
   const run = () => {
@@ -60,8 +64,13 @@ function query(table: string) {
       db.ad_sets = db.ad_sets.filter((r) => campaigns.has(r.campaign_id));
       return { data: null, error: null };
     }
-    const rows = matches();
+    let rows = matches();
     if (head) return { count: rows.length, error: null };
+    if (orderBy) {
+      const column = orderBy;
+      rows = [...rows].sort((a, b) => String(a[column]).localeCompare(String(b[column])));
+    }
+    rows = window ? rows.slice(window[0], window[1] + 1) : rows.slice(0, ROW_CAP);
     // Honour a plain column list, as PostgREST does.
     const project = columns;
     return { data: project ? rows.map((r) => Object.fromEntries(project.map((c) => [c, r[c]]))) : rows, error: null };
@@ -84,6 +93,14 @@ function query(table: string) {
     eq: (c: string, v: unknown) => (preds.push((r) => r[c] === v), q),
     neq: (c: string, v: unknown) => (preds.push((r) => r[c] !== v), q),
     in: (c: string, vs: unknown[]) => (preds.push((r) => vs.includes(r[c])), q),
+    // Only the "col.eq.value,col.eq.value" form the code uses.
+    or: (filter: string) => {
+      const terms = filter.split(',').map((term) => term.split('.eq.'));
+      preds.push((r) => terms.some(([c, v]) => r[c] === v));
+      return q;
+    },
+    order: (c: string) => ((orderBy = c), q),
+    range: (from: number, to: number) => ((window = [from, to]), q),
     maybeSingle: async () => {
       const result = run() as { data: Row[] | null; error: null };
       return { data: result.data?.[0] ?? null, error: null };
@@ -120,7 +137,7 @@ function service() {
     auth: {
       admin: {
         deleteUser: async (id: string) =>
-          id === failDeleteUser ? { error: { message: 'violates foreign key constraint "audit_log_user_id_fkey"' } } : (deletedUsers.push(id), { error: null }),
+          id === failDeleteUser ? { error: { message: 'Database error deleting user' } } : (deletedUsers.push(id), { error: null }),
       },
     },
   };
@@ -135,7 +152,7 @@ beforeEach(() => {
       { id: OTHER, business_name: 'Other', offboarded_at: null, booking_ingest_secret: 'bce_other' },
     ],
     subscriptions: [],
-    meta_campaigns: [{ id: 'c1', account_id: BRAND, status: 'PAUSED' }],
+    meta_campaigns: [{ id: 'c1', account_id: BRAND, status: 'PAUSED', meta_status: 'PAUSED' }],
     ad_sets: [{ id: 'as1', campaign_id: 'c1', adset_media_asset_id: 'm1' }],
     campaigns: [{ id: 'cp1', account_id: BRAND, hero_media_id: 'm1' }],
     tournaments: [
@@ -186,8 +203,16 @@ beforeEach(() => {
     app_admins: [{ user_id: 'operator' }],
     brand_profile: [],
     posting_defaults: [],
-    link_in_bio_profiles: [],
+    link_in_bio_profiles: [{ id: 'lp1', account_id: BRAND }],
     link_in_bio_tiles: [],
+    link_in_bio_clicks: [
+      { id: 'click-1', profile_id: 'lp1', tile_id: null, referrer: 'instagram.com' },
+      { id: 'click-x', profile_id: 'lp-other', tile_id: null, referrer: 'instagram.com' },
+    ],
+    link_in_bio_page_views: [
+      { id: 'view-1', profile_id: 'lp1', referrer: 'instagram.com' },
+      { id: 'view-x', profile_id: 'lp-other', referrer: 'instagram.com' },
+    ],
   };
   storage = new Set([
     `${BRAND}/m1/a.jpg`,
@@ -212,6 +237,12 @@ describe('offboardBrand', () => {
   it('refuses while a paid campaign is live', async () => {
     db.meta_campaigns[0].status = 'ACTIVE';
     expect((await offboardBrand(service() as never, BRAND, NOW) as { error: string }).error).toMatch(/Pause the brand's live Meta ad campaigns/);
+  });
+
+  it('refuses when Meta reports a campaign live that the app shows as paused', async () => {
+    db.meta_campaigns[0].meta_status = 'ACTIVE';
+    expect((await offboardBrand(service() as never, BRAND, NOW) as { error: string }).error).toMatch(/Pause the brand's live Meta ad campaigns/);
+    expect(db.accounts[0].offboarded_at).toBeNull();
   });
 
   it('stops posts, deletes tokens and archives with a 30-day purge date, touching no other brand', async () => {
@@ -265,6 +296,9 @@ describe('purgeBrand', () => {
     const result = await purgeBrand(service() as never, BRAND, NOW);
 
     expect(result).toEqual({ filesDeleted: 5, loginsDeleted: 1, loginsNotDeleted: [] });
+    // Clicks and page views have no foreign key to the brand; only this brand's go.
+    expect(db.link_in_bio_clicks.map((r) => r.id)).toEqual(['click-x']);
+    expect(db.link_in_bio_page_views.map((r) => r.id)).toEqual(['view-x']);
     expect(storage).toEqual(new Set(['banners/post-x/feed.jpg', `${OTHER}/m9/b.jpg`]));
     expect(db.accounts.map((r) => r.id)).toEqual([OTHER]);
     expect(db.content_items.map((r) => r.id)).toEqual(['post-x']);
@@ -272,6 +306,21 @@ describe('purgeBrand', () => {
     expect(deletedUsers).toEqual(['only-here']);
     expect(db.ad_sets).toEqual([]);
     expect(db.campaigns).toEqual([]);
+  });
+
+  it('finds every post banner for a brand with more than 1,000 posts', async () => {
+    Object.assign(db.accounts[0], { offboarded_at: '2026-09-01T00:00:00Z', purge_after: '2026-10-01T00:00:00Z' });
+    for (let i = 0; i < 1500; i++) {
+      const id = `bulk-post-${String(i).padStart(4, '0')}`;
+      db.content_items.push({ id, account_id: BRAND, status: 'posted' });
+      storage.add(`banners/${id}/feed.jpg`);
+    }
+
+    const result = await purgeBrand(service() as never, BRAND, NOW);
+
+    expect((result as { filesDeleted: number }).filesDeleted).toBe(1505);
+    expect([...storage].filter((p) => p.startsWith('banners/bulk-post-'))).toEqual([]);
+    expect(storage.has('banners/post-x/feed.jpg')).toBe(true);
   });
 
   it('reads every page of the brand folder', async () => {
@@ -290,7 +339,11 @@ describe('purgeBrand', () => {
 
     const result = await purgeBrand(service() as never, BRAND, NOW);
 
-    expect(result).toEqual({ filesDeleted: 5, loginsDeleted: 0, loginsNotDeleted: ['only-here'] });
+    expect(result).toEqual({
+      filesDeleted: 5,
+      loginsDeleted: 0,
+      loginsNotDeleted: [{ userId: 'only-here', reason: 'Database error deleting user' }],
+    });
     expect(db.accounts.map((r) => r.id)).toEqual([OTHER]);
   });
 });

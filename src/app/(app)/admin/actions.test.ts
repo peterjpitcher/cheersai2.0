@@ -352,12 +352,13 @@ describe('offboarding actions', () => {
   });
 
   it('report and log any login the purge could not delete', async () => {
-    mockPurge.mockResolvedValueOnce({ filesDeleted: 5, loginsDeleted: 0, loginsNotDeleted: ['user-9'] });
+    const stuck = [{ userId: 'user-9', reason: 'Database error deleting user' }];
+    mockPurge.mockResolvedValueOnce({ filesDeleted: 5, loginsDeleted: 0, loginsNotDeleted: stuck });
     const { purgeBrandAction } = await import('./actions');
-    expect(await purgeBrandAction(A_BRAND, 'The New Venue')).toEqual({ success: true, filesDeleted: 5, loginsDeleted: 0, loginsNotDeleted: ['user-9'] });
-    expect(mockLoggerError).toHaveBeenCalledWith('purge brand left logins behind', undefined, { accountId: A_BRAND, userIds: ['user-9'] });
+    expect(await purgeBrandAction(A_BRAND, 'The New Venue')).toEqual({ success: true, filesDeleted: 5, loginsDeleted: 0, loginsNotDeleted: stuck });
+    expect(mockLoggerError).toHaveBeenCalledWith('purge brand left logins behind', undefined, { accountId: A_BRAND, logins: stuck });
     expect(mockLogAdminEvent).toHaveBeenCalledWith(
-      expect.objectContaining({ action: 'purge_brand', detail: expect.objectContaining({ loginsNotDeleted: ['user-9'] }) }),
+      expect.objectContaining({ action: 'purge_brand', detail: expect.objectContaining({ loginsNotDeleted: stuck }) }),
     );
   });
 

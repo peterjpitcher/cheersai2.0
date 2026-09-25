@@ -6,7 +6,7 @@ import { z } from 'zod';
 
 import { env } from '@/env';
 import { logAdminEvent } from '@/lib/admin/audit';
-import { exportBrandData, offboardBrand, purgeBrand } from '@/lib/admin/offboarding';
+import { exportBrandData, offboardBrand, purgeBrand, type LoginNotDeleted } from '@/lib/admin/offboarding';
 import { buildAuthConfirmUrl, renderInviteEmail, renderPasswordResetEmail } from '@/lib/auth/email-links';
 import { sendEmail } from '@/lib/email/resend';
 import { can } from '@/lib/billing/entitlement';
@@ -529,7 +529,7 @@ export async function exportBrandDataAction(accountId: string): Promise<ActionRe
 export async function purgeBrandAction(
   accountId: string,
   typedName: string,
-): Promise<ActionResult & { filesDeleted?: number; loginsDeleted?: number; loginsNotDeleted?: string[] }> {
+): Promise<ActionResult & { filesDeleted?: number; loginsDeleted?: number; loginsNotDeleted?: LoginNotDeleted[] }> {
   const ctx = await requireSuperAdmin();
   if (!ctx) return { error: 'Forbidden.' };
   const confirmed = await confirmBrandName(ctx, accountId, typedName);
@@ -539,7 +539,7 @@ export async function purgeBrandAction(
     const result = await purgeBrand(ctx.supabase, accountId);
     if ('error' in result) return { error: result.error };
     if (result.loginsNotDeleted.length) {
-      logger.error('purge brand left logins behind', undefined, { accountId, userIds: result.loginsNotDeleted });
+      logger.error('purge brand left logins behind', undefined, { accountId, logins: result.loginsNotDeleted });
     }
     await logAdminEvent({
       actorUserId: ctx.user.id,

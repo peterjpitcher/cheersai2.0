@@ -268,7 +268,11 @@ function OffboardingCard({ brands }: { brands: AdminBrand[] }) {
         const stuck = r.loginsNotDeleted ?? [];
         setMsg(
           stuck.length
-            ? { error: `${done} ${stuck.length} login(s) could not be deleted; delete them in Supabase Auth: ${stuck.join(', ')}` }
+            ? {
+                error: `${done} ${stuck.length} login(s) could not be deleted (see the offboarding runbook): ${stuck
+                  .map((login) => `${login.userId} (${login.reason})`)
+                  .join(', ')}`,
+              }
             : { ok: done },
         );
         router.refresh();
