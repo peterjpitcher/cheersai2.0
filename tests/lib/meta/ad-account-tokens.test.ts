@@ -3,6 +3,7 @@ import crypto from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  deleteMetaAdAccountTokens,
   getMetaAdAccountTokens,
   MetaAdTokenDecryptError,
   storeMetaAdAccountToken,
@@ -282,5 +283,67 @@ describe('storeMetaAdAccountToken', () => {
     await expect(storeMetaAdAccountToken(client, ACCOUNT_ID, 'access', 'token')).rejects.toThrow('TOKEN_VAULT_KEY');
     expect(state.upserts).toHaveLength(0);
     expect(state.updates).toHaveLength(0);
+  });
+});
+
+describe('deleteMetaAdAccountTokens', () => {
+  function buildDeleteFake(errors: { delete?: { message: string; code?: string }; update?: { message: string } } = {}) {
+    const calls: Array<{ table: string; op: string; payload?: Row; filters: Array<[string, unknown]> }> = [];
+    const client = {
+      from(table: string) {
+        const call: { table: string; op: string; payload?: Row; filters: Array<[string, unknown]> } = { table, op: '', filters: [] };
+        calls.push(call);
+        const builder = {
+          delete: () => ((call.op = 'delete'), builder),
+          update: (payload: Row) => ((call.op = 'update'), (call.payload = payload), builder),
+          in: (column: string, values: unknown) => (call.filters.push([column, values]), builder),
+          then: (resolve: (value: unknown) => unknown) =>
+            resolve({ error: call.op === 'delete' ? errors.delete ?? null : errors.update ?? null }),
+        };
+        return builder;
+      },
+    };
+    return { client: client as never, calls };
+  }
+
+  it('deletes the encrypted rows for the given brands and types, then blanks the plaintext', async () => {
+    const { client, calls } = buildDeleteFake();
+
+    await deleteMetaAdAccountTokens(client, ['a1', 'a2'], ['access', 'conversions_api']);
+
+    expect(calls).toEqual([
+      {
+        table: 'meta_ad_account_tokens',
+        op: 'delete',
+        filters: [['account_id', ['a1', 'a2']], ['token_type', ['access', 'conversions_api']]],
+      },
+      {
+        table: 'meta_ad_accounts',
+        op: 'update',
+        payload: { access_token: '', conversions_api_access_token: null },
+        filters: [['account_id', ['a1', 'a2']]],
+      },
+    ]);
+  });
+
+  it('does nothing for an empty brand list', async () => {
+    const { client, calls } = buildDeleteFake();
+
+    await deleteMetaAdAccountTokens(client, [], ['access']);
+
+    expect(calls).toHaveLength(0);
+  });
+
+  it('throws when the encrypted rows cannot be deleted, before touching plaintext', async () => {
+    const { client, calls } = buildDeleteFake({ delete: { message: 'db down' } });
+
+    await expect(deleteMetaAdAccountTokens(client, ['a1'], ['access'])).rejects.toThrow('Failed to delete Meta Ads tokens: db down');
+    expect(calls).toHaveLength(1);
+  });
+
+  it('throws when the plaintext cannot be cleared', async () => {
+    const { client } = buildDeleteFake({ update: { message: 'db down' } });
+
+    await expect(deleteMetaAdAccountTokens(client, ['a1'], ['access'])).rejects.toThrow('Failed to clear plaintext Meta Ads tokens: db down');
   });
 });

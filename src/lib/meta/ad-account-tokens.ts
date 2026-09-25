@@ -123,6 +123,40 @@ export async function storeMetaAdAccountToken(
   }
 }
 
+/**
+ * Delete stored tokens for the given brands (revocation: Meta deauthorise or data
+ * deletion, brand offboarding), including any legacy plaintext copy. Throws on any
+ * failure so a revocation never half-succeeds silently.
+ */
+export async function deleteMetaAdAccountTokens(
+  supabase: SupabaseClientLike,
+  accountIds: string[],
+  tokenTypes: MetaAdTokenType[],
+): Promise<void> {
+  if (!accountIds.length || !tokenTypes.length) return;
+
+  const { error } = await supabase
+    .from(TOKEN_TABLE)
+    .delete()
+    .in('account_id', accountIds)
+    .in('token_type', tokenTypes);
+  if (error && !isSchemaMissingError(error)) {
+    throw new Error(`Failed to delete Meta Ads tokens: ${error.message}`);
+  }
+
+  // Phase 1 only: blank the plaintext copies too.
+  const cleared: Record<string, string | null> = {};
+  for (const tokenType of tokenTypes) {
+    const { column, cleared: blank } = PLAINTEXT_COLUMN[tokenType];
+    cleared[column] = blank;
+  }
+  const { error: clearError } = await supabase
+    .from('meta_ad_accounts')
+    .update(cleared)
+    .in('account_id', accountIds);
+  if (clearError) throw new Error(`Failed to clear plaintext Meta Ads tokens: ${clearError.message}`);
+}
+
 async function readVaultTokens(
   supabase: SupabaseClientLike,
   accountId: string,
