@@ -7,6 +7,8 @@
  * reads MUST additionally scope to the caller's ACTIVE brand via an explicit
  * account_id filter -- otherwise a multi-brand user would see other brands'
  * content. Callers pass the verified active accountId from the auth context.
+ * A blank accountId returns nothing without querying: it means the brand was
+ * never resolved (e.g. a signed-out render), and must not reach Postgres.
  */
 
 import { createServerSupabaseClient } from '@/lib/supabase/server';
@@ -56,6 +58,7 @@ export async function getContentById(
   id: string,
   accountId: string,
 ): Promise<ContentItem | null> {
+  if (!accountId) return null;
   const supabase = await createServerSupabaseClient();
 
   const { data, error } = await supabase
@@ -93,6 +96,7 @@ export async function getContentByAccount(
     offset?: number;
   },
 ): Promise<ContentItem[]> {
+  if (!accountId) return [];
   const supabase = await createServerSupabaseClient();
   const { status, limit = 50, offset = 0 } = options ?? {};
 
@@ -134,6 +138,7 @@ export async function getContentForCalendar(
   startDate: string,
   endDate: string,
 ): Promise<ContentItem[]> {
+  if (!accountId) return [];
   const supabase = await createServerSupabaseClient();
 
   const { data, error } = await supabase

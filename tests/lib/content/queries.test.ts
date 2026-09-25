@@ -88,6 +88,17 @@ describe('content queries', () => {
     expect(query.calls).toContainEqual({ method: 'in', args: ['status', ['scheduled', 'draft']] });
   });
 
+  it('never queries when the brand was not resolved (blank account id)', async () => {
+    // account_id=eq. is a Postgres 22P02 error; a blank id must not reach it.
+    await expect(getContentById('content-1', '')).resolves.toBeNull();
+    await expect(getContentByAccount('', { status: ['scheduled'] })).resolves.toEqual([]);
+    await expect(
+      getContentForCalendar('', '2026-06-01T00:00:00.000Z', '2026-06-30T23:59:59.999Z'),
+    ).resolves.toEqual([]);
+
+    expect(createServerSupabaseClient).not.toHaveBeenCalled();
+  });
+
   it('does not return soft-deleted rows in the planner calendar range', async () => {
     const query = createQueryMock({ data: [makeContentRow()], error: null });
     vi.mocked(createServerSupabaseClient).mockResolvedValue(query.client as never);
