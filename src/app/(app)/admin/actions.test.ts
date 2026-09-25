@@ -17,6 +17,11 @@ vi.mock('@/lib/admin/audit', () => ({
 
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
 
+const mockGetBrandEntitlement = vi.fn();
+vi.mock('@/lib/billing/entitlement-server', () => ({ getBrandEntitlement: (...a: unknown[]) => mockGetBrandEntitlement(...a) }));
+const mockReleaseHeld = vi.fn();
+vi.mock('@/lib/billing/publish-hold', () => ({ releaseHeldPublishJobs: (...a: unknown[]) => mockReleaseHeld(...a) }));
+
 // Configurable service-client responses.
 const state = {
   accountsInsert: { data: { id: 'brand-1' } as { id: string } | null, error: null as unknown },
@@ -252,6 +257,54 @@ describe('setBrandFeature', () => {
     state.accountsInsert = { data: null, error: { message: 'db down' } };
     const { setBrandFeature } = await import('./actions');
     expect(await setBrandFeature(A_BRAND, 'paidAds', false)).toEqual({ error: 'Could not update the feature.' });
+    expect(mockLogAdminEvent).not.toHaveBeenCalled();
+  });
+});
+
+describe('setBillingOverride', () => {
+  beforeEach(() => {
+    mockGetBrandEntitlement.mockResolvedValue('comped');
+    mockReleaseHeld.mockResolvedValue({ released: 3, stillHeld: 1 });
+  });
+
+  it('returns Forbidden when the caller is not a super-admin', async () => {
+    mockRequireAuthContext.mockResolvedValue({ ...SUPER_ADMIN_CTX, isSuperAdmin: false, supabase: buildSupabase() });
+    const { setBillingOverride } = await import('./actions');
+    expect(await setBillingOverride(A_BRAND, 'comped')).toEqual({ error: 'Forbidden.' });
+  });
+
+  it('rejects an unknown state or a non-uuid brand', async () => {
+    const { setBillingOverride } = await import('./actions');
+    expect(await setBillingOverride('nope', 'comped')).toEqual({ error: 'Invalid brand.' });
+    expect(await setBillingOverride(A_BRAND, 'free' as never)).toEqual({ error: 'Invalid billing state.' });
+  });
+
+  it('makes a brand free, audits it and releases its future held posts', async () => {
+    const { setBillingOverride } = await import('./actions');
+    expect(await setBillingOverride(A_BRAND, 'comped')).toEqual({ success: true, released: 3, stillHeld: 1 });
+    expect(mockLogAdminEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'set_billing_override', targetAccountId: A_BRAND, detail: { override: 'comped' } }),
+    );
+    expect(mockReleaseHeld).toHaveBeenCalledWith(expect.anything(), A_BRAND);
+  });
+
+  it('does not release anything when the brand still may not publish', async () => {
+    mockGetBrandEntitlement.mockResolvedValue('suspended');
+    const { setBillingOverride } = await import('./actions');
+    expect(await setBillingOverride(A_BRAND, 'suspended')).toEqual({ success: true, released: undefined, stillHeld: undefined });
+    expect(mockReleaseHeld).not.toHaveBeenCalled();
+  });
+
+  it('reports a release failure instead of claiming success', async () => {
+    mockReleaseHeld.mockRejectedValue(new Error('db down'));
+    const { setBillingOverride } = await import('./actions');
+    expect((await setBillingOverride(A_BRAND, null)).error).toMatch(/held posts could not be released/);
+  });
+
+  it('reports a failed update without auditing', async () => {
+    state.accountsInsert = { data: null, error: { message: 'db down' } };
+    const { setBillingOverride } = await import('./actions');
+    expect(await setBillingOverride(A_BRAND, 'comped')).toEqual({ error: 'Could not update the billing state.' });
     expect(mockLogAdminEvent).not.toHaveBeenCalled();
   });
 });

@@ -8,6 +8,9 @@ import { env } from '@/env';
 import { logAdminEvent } from '@/lib/admin/audit';
 import { buildAuthConfirmUrl, renderInviteEmail, renderPasswordResetEmail } from '@/lib/auth/email-links';
 import { sendEmail } from '@/lib/email/resend';
+import { can } from '@/lib/billing/entitlement';
+import { getBrandEntitlement } from '@/lib/billing/entitlement-server';
+import { releaseHeldPublishJobs } from '@/lib/billing/publish-hold';
 import { requireAuthContext } from '@/lib/auth/server';
 import { createLogger } from '@/lib/logging';
 import type { BrandFeature } from '@/lib/auth/features';
@@ -407,4 +410,57 @@ export async function setBrandFeature(
   });
   revalidatePath('/', 'layout');
   return { success: true };
+}
+
+// ---------------------------------------------------------------------------
+// setBillingOverride -- operator billing state (spec §4.1, piece 2.11):
+// comped (free), suspended (held) or none (Stripe decides). When the change
+// leaves the brand able to publish, its future held posts are released;
+// overdue ones stay held for the owner to review.
+// ---------------------------------------------------------------------------
+
+const billingOverrideSchema = z.enum(['comped', 'suspended']).nullable();
+
+export async function setBillingOverride(
+  accountId: string,
+  override: 'comped' | 'suspended' | null,
+): Promise<ActionResult & { released?: number; stillHeld?: number }> {
+  const ctx = await requireSuperAdmin();
+  if (!ctx) return { error: 'Forbidden.' };
+  if (!uuid.safeParse(accountId).success) return { error: 'Invalid brand.' };
+  const parsed = billingOverrideSchema.safeParse(override);
+  if (!parsed.success) return { error: 'Invalid billing state.' };
+
+  const { data, error } = await ctx.supabase
+    .from('accounts')
+    .update({ billing_override: parsed.data })
+    .eq('id', accountId)
+    .select('id')
+    .single<{ id: string }>();
+  if (error || !data) return { error: 'Could not update the billing state.' };
+
+  await logAdminEvent({
+    actorUserId: ctx.user.id,
+    action: 'set_billing_override',
+    targetAccountId: accountId,
+    detail: { override: parsed.data },
+  });
+
+  let released: number | undefined;
+  let stillHeld: number | undefined;
+  try {
+    const state = await getBrandEntitlement(ctx.supabase, accountId);
+    if (can(state, 'publish')) {
+      ({ released, stillHeld } = await releaseHeldPublishJobs(ctx.supabase, accountId));
+    }
+  } catch (releaseError) {
+    logger.error('release held posts after billing change failed', releaseError instanceof Error ? releaseError : undefined, {
+      accountId,
+    });
+    revalidatePath('/admin');
+    return { error: 'Billing state saved, but held posts could not be released. Try again.' };
+  }
+
+  revalidatePath('/admin');
+  return { success: true, released, stillHeld };
 }
