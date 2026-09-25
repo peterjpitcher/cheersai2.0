@@ -41,6 +41,7 @@ Nothing in `supabase/functions` reads these columns.
 
 Phase 1 (this branch):
 
+0. Apply migration `20260925181000_meta_ad_accounts_service_role_only.sql` (approved 2026-09-25): revokes `anon` and `authenticated` access to `meta_ad_accounts`, which closes the browser read of the plaintext tokens immediately. Every app path already uses the service role.
 1. Apply migration `20260925180000_meta_ad_account_tokens.sql` to production (needs explicit approval; expand-only).
 2. Merge and deploy the code. Order matters only softly: code before the migration still works (plaintext fallback), but a reconnect would fail until the table exists.
 3. The first read of each brand's tokens copies them into the vault: the daily `optimise-meta-campaigns` cron, any `/connections` or `/campaigns` load, or a CAPI forward. No backfill script is needed and the key never leaves production.
