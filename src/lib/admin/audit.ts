@@ -13,6 +13,7 @@ export type AdminAction =
   | 'invite_user'
   | 'send_password_link'
   | 'set_brand_feature'
+  | 'set_billing_override'
   | 'operator_publish_failure_alert'
   | 'team_invite'
   | 'team_remove'
