@@ -264,7 +264,17 @@ function OffboardingCard({ brands }: { brands: AdminBrand[] }) {
       if (r.success) {
         setTypedName('');
         setAccountId('');
-        setMsg({ ok: `Deleted: ${r.filesDeleted ?? 0} files and ${r.loginsDeleted ?? 0} login(s).` });
+        const done = `Deleted: ${r.filesDeleted ?? 0} files and ${r.loginsDeleted ?? 0} login(s).`;
+        const stuck = r.loginsNotDeleted ?? [];
+        setMsg(
+          stuck.length
+            ? {
+                error: `${done} ${stuck.length} login(s) could not be deleted (see the offboarding runbook): ${stuck
+                  .map((login) => `${login.userId} (${login.reason})`)
+                  .join(', ')}`,
+              }
+            : { ok: done },
+        );
         router.refresh();
       } else setMsg({ error: r.error });
     });
