@@ -27,6 +27,7 @@ import {
   type MetaAdSetScheduleEntry,
   type MetaGeoLocation,
 } from '@/lib/meta/marketing';
+import { getMetaAdAccountTokens } from '@/lib/meta/ad-account-tokens';
 import {
   DELIVERY_SCHEDULE_TIMEZONE,
   describeDeliverySchedule,
@@ -135,7 +136,6 @@ const ATTRIBUTION_QUERY_KEYS = [
 ] as const;
 
 interface PublishAdAccountRow {
-  access_token: string;
   meta_account_id: string;
   meta_pixel_id: string | null;
   conversion_event_name: string | null;
@@ -765,15 +765,24 @@ export async function publishCampaign(
 
   const { data: adAccount } = await supabase
     .from('meta_ad_accounts')
-    .select('access_token, meta_account_id, meta_pixel_id, conversion_event_name, conversion_optimisation_enabled, timezone')
+    .select('meta_account_id, meta_pixel_id, conversion_event_name, conversion_optimisation_enabled, timezone')
     .eq('account_id', accountId)
     .single<PublishAdAccountRow>();
 
-  if (!adAccount?.access_token) {
+  let accessToken: string | null = null;
+  if (adAccount) {
+    try {
+      ({ accessToken } = await getMetaAdAccountTokens(supabase, accountId));
+    } catch (tokenError) {
+      return { error: tokenError instanceof Error ? tokenError.message : 'Could not load the Meta Ads token.' };
+    }
+  }
+
+  if (!adAccount || !accessToken) {
     return { error: 'Meta Ads account not connected. Please reconnect in Connections.' };
   }
 
-  const { access_token: accessToken, meta_account_id: adAccountId } = adAccount;
+  const { meta_account_id: adAccountId } = adAccount;
   const conversionSetup = buildPublishConversionSetup(campaign, adAccount);
   // A draft generated while conversion optimisation was on still carries OUTCOME_SALES and
   // OFFSITE_CONVERSIONS. Publishing that after the switch would ask Meta to optimise for
@@ -1369,19 +1378,20 @@ export async function pauseCampaign(
   }
 
   // 2. Fetch access token.
-  const { data: adAccount } = await supabase
-    .from('meta_ad_accounts')
-    .select('access_token')
-    .eq('account_id', accountId)
-    .single<{ access_token: string }>();
+  let pauseAccessToken: string | null;
+  try {
+    ({ accessToken: pauseAccessToken } = await getMetaAdAccountTokens(supabase, accountId));
+  } catch (tokenError) {
+    return { error: tokenError instanceof Error ? tokenError.message : 'Could not load the Meta Ads token.' };
+  }
 
-  if (!adAccount?.access_token) {
+  if (!pauseAccessToken) {
     return { error: 'Meta Ads account not connected. Please reconnect in Connections.' };
   }
 
   // 3. Pause via Meta API.
   try {
-    await pauseMetaObject(campaign.meta_campaign_id, adAccount.access_token);
+    await pauseMetaObject(campaign.meta_campaign_id, pauseAccessToken);
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to pause campaign on Meta.';
     return { error: message };

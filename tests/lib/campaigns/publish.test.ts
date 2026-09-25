@@ -1,5 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+// Meta Ads tokens come from encrypted storage (src/lib/meta/ad-account-tokens.ts,
+// tested on its own). A plain function, so vi.resetAllMocks cannot wipe it.
+const DEFAULT_AD_TOKENS = { accessToken: 'token' as string | null, conversionsApiToken: null as string | null };
+const adTokens = vi.hoisted(() => ({ current: null as null | { accessToken: string | null; conversionsApiToken: string | null } }));
+vi.mock('@/lib/meta/ad-account-tokens', () => ({
+  getMetaAdAccountTokens: async () => adTokens.current ?? DEFAULT_AD_TOKENS,
+  storeMetaAdAccountToken: async () => undefined,
+}));
+
 vi.mock('@/lib/auth/server', () => ({
   requireAuthContext: vi.fn().mockResolvedValue({ features: { paidAds: true, tournaments: true, managementImport: true }, accountId: 'account-123' }),
 }));

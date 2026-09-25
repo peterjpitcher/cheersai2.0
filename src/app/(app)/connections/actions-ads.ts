@@ -10,6 +10,7 @@ import {
   BOOKING_CONVERSION_EVENT_NAME,
   buildConversionReadiness,
 } from "@/lib/campaigns/conversion-readiness";
+import { getMetaAdAccountTokens, storeMetaAdAccountToken } from "@/lib/meta/ad-account-tokens";
 import { getMetaGraphApiBase } from "@/lib/meta/graph";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
 
@@ -84,17 +85,14 @@ export async function fetchAdAccounts(): Promise<
   const { accountId } = adsCtx;
   const supabase = createServiceSupabaseClient();
 
-  const { data: adAccount, error: fetchError } = await supabase
-    .from("meta_ad_accounts")
-    .select("access_token")
-    .eq("account_id", accountId)
-    .maybeSingle<{ access_token: string }>();
-
-  if (fetchError) {
-    return { success: false, error: fetchError.message };
+  let accessToken: string | null;
+  try {
+    ({ accessToken } = await getMetaAdAccountTokens(supabase, accountId));
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : "Could not load the ads token." };
   }
 
-  if (!adAccount?.access_token) {
+  if (!accessToken) {
     return { success: false, error: "No ads token found." };
   }
 
@@ -102,7 +100,7 @@ export async function fetchAdAccounts(): Promise<
     const graphBase = getMetaGraphApiBase();
     const params = new URLSearchParams({
       fields: "id,name,currency,timezone_name",
-      access_token: adAccount.access_token,
+      access_token: accessToken,
     });
 
     const response = await fetch(`${graphBase}/me/adaccounts?${params.toString()}`);
@@ -152,21 +150,19 @@ export async function selectAdAccount(
   const { accountId } = adsCtx;
   const supabase = createServiceSupabaseClient();
 
-  const { data: adAccount, error: fetchError } = await supabase
-    .from("meta_ad_accounts")
-    .select("access_token")
-    .eq("account_id", accountId)
-    .maybeSingle<{ access_token: string }>();
-
-  if (fetchError) {
+  let accessToken: string | null;
+  try {
+    ({ accessToken } = await getMetaAdAccountTokens(supabase, accountId));
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Could not load the ads token.";
     console.error("[ads] failed to load Meta Ads token before account selection", {
       accountId,
-      error: fetchError,
+      error: message,
     });
-    return { error: fetchError.message };
+    return { error: message };
   }
 
-  if (!adAccount?.access_token) {
+  if (!accessToken) {
     return { error: "No ads token found." };
   }
 
@@ -174,7 +170,7 @@ export async function selectAdAccount(
     const graphBase = getMetaGraphApiBase();
     const params = new URLSearchParams({
       fields: "id,currency,timezone_name",
-      access_token: adAccount.access_token,
+      access_token: accessToken,
     });
 
     const response = await fetch(
@@ -211,7 +207,6 @@ export async function selectAdAccount(
           meta_account_id: normalizedMetaAccountId,
           currency,
           timezone,
-          access_token: adAccount.access_token,
           setup_complete: true,
         },
         { onConflict: "account_id" },
@@ -246,16 +241,14 @@ export async function getAdAccountSetupStatus(): Promise<AdAccountSetupStatus> {
 
   const { data, error } = await supabase
     .from("meta_ad_accounts")
-    .select("setup_complete, token_expires_at, access_token, meta_pixel_id, conversion_event_name, conversion_optimisation_enabled, conversions_api_access_token")
+    .select("setup_complete, token_expires_at, meta_pixel_id, conversion_event_name, conversion_optimisation_enabled")
     .eq("account_id", accountId)
     .maybeSingle<{
       setup_complete: boolean;
       token_expires_at: string | null;
-      access_token: string;
       meta_pixel_id: string | null;
       conversion_event_name: string | null;
       conversion_optimisation_enabled: boolean | null;
-      conversions_api_access_token?: string | null;
     }>();
 
   if (error) {
@@ -270,7 +263,19 @@ export async function getAdAccountSetupStatus(): Promise<AdAccountSetupStatus> {
     return buildEmptyAdAccountStatus();
   }
 
-  const connected = Boolean(data.access_token);
+  let tokens: { accessToken: string | null; conversionsApiToken: string | null };
+  try {
+    tokens = await getMetaAdAccountTokens(supabase, accountId);
+  } catch (tokenError) {
+    // An unreadable token is shown as disconnected, which prompts a reconnect.
+    console.error("[ads] failed to load Meta Ads tokens for setup status", {
+      accountId,
+      error: tokenError instanceof Error ? tokenError.message : tokenError,
+    });
+    tokens = { accessToken: null, conversionsApiToken: null };
+  }
+
+  const connected = Boolean(tokens.accessToken);
   const setupComplete = Boolean(data.setup_complete);
   const conversionReadiness = buildConversionReadiness(data);
 
@@ -290,7 +295,7 @@ export async function getAdAccountSetupStatus(): Promise<AdAccountSetupStatus> {
     conversionOptimisationEnabled: conversionReadiness.enabled,
     conversionReady: conversionReadiness.ready,
     conversionIssues: conversionReadiness.issues,
-    conversionsApiConfigured: Boolean(data.conversions_api_access_token?.trim()),
+    conversionsApiConfigured: Boolean(tokens.conversionsApiToken),
   };
 }
 
@@ -334,7 +339,6 @@ export async function updateAdAccountConversionSettings(input: {
       meta_pixel_id: pixelId,
       conversion_event_name: BOOKING_CONVERSION_EVENT_NAME,
       conversion_optimisation_enabled: true,
-      ...(capiToken ? { conversions_api_access_token: capiToken } : {}),
     })
     .eq("account_id", accountId);
 
@@ -343,6 +347,12 @@ export async function updateAdAccountConversionSettings(input: {
   }
 
   if (capiToken) {
+    try {
+      await storeMetaAdAccountToken(supabase, accountId, "conversions_api", capiToken);
+    } catch (storeError) {
+      return { error: storeError instanceof Error ? storeError.message : "Could not save the Conversions API token." };
+    }
+
     await skipSupersededCapiRecommendations(supabase, accountId);
   }
 

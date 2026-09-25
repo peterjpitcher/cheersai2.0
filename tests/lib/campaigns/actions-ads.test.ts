@@ -2,6 +2,10 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 const requireAuthContextMock = vi.fn();
 const revalidatePathMock = vi.hoisted(() => vi.fn());
+const adTokenMocks = vi.hoisted(() => ({
+  getMetaAdAccountTokens: vi.fn(),
+  storeMetaAdAccountToken: vi.fn(),
+}));
 
 interface FromQueueEntry {
   table: string;
@@ -54,6 +58,15 @@ vi.mock("@/lib/supabase/service", () => ({
   }),
 }));
 
+vi.mock("@/lib/meta/ad-account-tokens", () => adTokenMocks);
+
+function useStoredTokens(accessToken: string | null, conversionsApiToken: string | null = null) {
+  adTokenMocks.getMetaAdAccountTokens.mockReset();
+  adTokenMocks.getMetaAdAccountTokens.mockResolvedValue({ accessToken, conversionsApiToken });
+  adTokenMocks.storeMetaAdAccountToken.mockReset();
+  adTokenMocks.storeMetaAdAccountToken.mockResolvedValue(undefined);
+}
+
 vi.mock("@/lib/meta/graph", () => ({
   getMetaGraphApiBase: () => "https://graph.facebook.com/v24.0",
 }));
@@ -72,19 +85,12 @@ describe("selectAdAccount", () => {
     requireAuthContextMock.mockReset();
     revalidatePathMock.mockReset();
     fromQueue = [];
+    useStoredTokens(null);
     requireAuthContextMock.mockResolvedValue({ accountId: "account-uuid-1", features: { paidAds: true, tournaments: true, managementImport: true }, role: "owner" });
   });
 
   it("should return error when no ads token exists", async () => {
-    // Queue: meta_ad_accounts returns no row
-    const selectBuilder: Record<string, unknown> = {};
-    Object.assign(selectBuilder, {
-      select: vi.fn(() => selectBuilder),
-      eq: vi.fn(() => selectBuilder),
-      maybeSingle: vi.fn(async () => ({ data: null, error: null })),
-    });
-
-    fromQueue.push({ table: "meta_ad_accounts", builder: selectBuilder });
+    useStoredTokens(null);
 
     const { selectAdAccount } = await import(
       "@/app/(app)/connections/actions-ads"
@@ -96,16 +102,7 @@ describe("selectAdAccount", () => {
   });
 
   it("should return success when token exists and fetch succeeds", async () => {
-    // Queue: meta_ad_accounts returns a token
-    const selectBuilder: Record<string, unknown> = {};
-    Object.assign(selectBuilder, {
-      select: vi.fn(() => selectBuilder),
-      eq: vi.fn(() => selectBuilder),
-      maybeSingle: vi.fn(async () => ({
-        data: { access_token: "valid-token-abc" },
-        error: null,
-      })),
-    });
+    useStoredTokens("valid-token-abc");
 
     // Queue: meta_ad_accounts upsert
     const upsertBuilder: Record<string, unknown> = {};
@@ -113,10 +110,7 @@ describe("selectAdAccount", () => {
       upsert: vi.fn(async () => ({ error: null })),
     });
 
-    fromQueue.push(
-      { table: "meta_ad_accounts", builder: selectBuilder },
-      { table: "meta_ad_accounts", builder: upsertBuilder },
-    );
+    fromQueue.push({ table: "meta_ad_accounts", builder: upsertBuilder });
 
     // Mock fetch for the Graph API account details call
     const fetchSpy = vi.spyOn(global, "fetch").mockResolvedValueOnce(
@@ -145,11 +139,11 @@ describe("selectAdAccount", () => {
         meta_account_id: "act_123456789",
         currency: "GBP",
         timezone: "Europe/London",
-        access_token: "valid-token-abc",
         setup_complete: true,
       },
       { onConflict: "account_id" },
     );
+    expect(adTokenMocks.getMetaAdAccountTokens).toHaveBeenCalledWith(expect.anything(), "account-uuid-1");
     expect(revalidatePathMock).toHaveBeenCalledWith("/connections");
     expect(revalidatePathMock).toHaveBeenCalledWith("/campaigns");
     expect(fromQueue).toHaveLength(0);
@@ -157,26 +151,29 @@ describe("selectAdAccount", () => {
     fetchSpy.mockRestore();
   });
 
+  it("fails with the token store's error instead of acting on a missing token", async () => {
+    adTokenMocks.getMetaAdAccountTokens.mockReset();
+    adTokenMocks.getMetaAdAccountTokens.mockRejectedValue(new Error("token could not be decrypted"));
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const { selectAdAccount } = await import(
+      "@/app/(app)/connections/actions-ads"
+    );
+    const result = await selectAdAccount("act_123456789");
+
+    expect(result).toEqual({ error: "token could not be decrypted" });
+    expect(fromQueue).toHaveLength(0);
+  });
+
   it("normalises numeric Meta account IDs before saving", async () => {
-    const selectBuilder: Record<string, unknown> = {};
-    Object.assign(selectBuilder, {
-      select: vi.fn(() => selectBuilder),
-      eq: vi.fn(() => selectBuilder),
-      maybeSingle: vi.fn(async () => ({
-        data: { access_token: "valid-token-abc" },
-        error: null,
-      })),
-    });
+    useStoredTokens("valid-token-abc");
 
     const upsertBuilder: Record<string, unknown> = {};
     Object.assign(upsertBuilder, {
       upsert: vi.fn(async () => ({ error: null })),
     });
 
-    fromQueue.push(
-      { table: "meta_ad_accounts", builder: selectBuilder },
-      { table: "meta_ad_accounts", builder: upsertBuilder },
-    );
+    fromQueue.push({ table: "meta_ad_accounts", builder: upsertBuilder });
 
     const fetchSpy = vi.spyOn(global, "fetch").mockResolvedValueOnce(
       new Response(
@@ -208,15 +205,7 @@ describe("selectAdAccount", () => {
   });
 
   it("should return error when db upsert fails", async () => {
-    const selectBuilder: Record<string, unknown> = {};
-    Object.assign(selectBuilder, {
-      select: vi.fn(() => selectBuilder),
-      eq: vi.fn(() => selectBuilder),
-      maybeSingle: vi.fn(async () => ({
-        data: { access_token: "valid-token" },
-        error: null,
-      })),
-    });
+    useStoredTokens("valid-token");
 
     const upsertBuilder: Record<string, unknown> = {};
     Object.assign(upsertBuilder, {
@@ -225,10 +214,7 @@ describe("selectAdAccount", () => {
       })),
     });
 
-    fromQueue.push(
-      { table: "meta_ad_accounts", builder: selectBuilder },
-      { table: "meta_ad_accounts", builder: upsertBuilder },
-    );
+    fromQueue.push({ table: "meta_ad_accounts", builder: upsertBuilder });
 
     const fetchSpy = vi.spyOn(global, "fetch").mockResolvedValueOnce(
       new Response(
@@ -258,6 +244,7 @@ describe("getAdAccountSetupStatus", () => {
     requireAuthContextMock.mockReset();
     revalidatePathMock.mockReset();
     fromQueue = [];
+    useStoredTokens(null);
     requireAuthContextMock.mockResolvedValue({ accountId: "account-uuid-1", features: { paidAds: true, tournaments: true, managementImport: true }, role: "owner" });
   });
 
@@ -298,6 +285,65 @@ describe("getAdAccountSetupStatus", () => {
 
     consoleErrorSpy.mockRestore();
   });
+
+  it("reports connected and CAPI configured from the encrypted token store", async () => {
+    useStoredTokens("access-token", "capi-token");
+    const selectBuilder: Record<string, unknown> = {};
+    Object.assign(selectBuilder, {
+      select: vi.fn(() => selectBuilder),
+      eq: vi.fn(() => selectBuilder),
+      maybeSingle: vi.fn(async () => ({
+        data: {
+          setup_complete: true,
+          token_expires_at: null,
+          meta_pixel_id: "123456789012345",
+          conversion_event_name: "Purchase",
+          conversion_optimisation_enabled: true,
+        },
+        error: null,
+      })),
+    });
+    fromQueue.push({ table: "meta_ad_accounts", builder: selectBuilder });
+
+    const { getAdAccountSetupStatus } = await import(
+      "@/app/(app)/connections/actions-ads"
+    );
+    const result = await getAdAccountSetupStatus();
+
+    expect(selectBuilder.select).toHaveBeenCalledWith(expect.not.stringContaining("access_token"));
+    expect(result.connected).toBe(true);
+    expect(result.setupComplete).toBe(true);
+    expect(result.conversionsApiConfigured).toBe(true);
+  });
+
+  it("shows disconnected when the stored token cannot be read", async () => {
+    adTokenMocks.getMetaAdAccountTokens.mockReset();
+    adTokenMocks.getMetaAdAccountTokens.mockRejectedValue(new Error("token could not be decrypted"));
+    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const selectBuilder: Record<string, unknown> = {};
+    Object.assign(selectBuilder, {
+      select: vi.fn(() => selectBuilder),
+      eq: vi.fn(() => selectBuilder),
+      maybeSingle: vi.fn(async () => ({
+        data: { setup_complete: true, token_expires_at: null, meta_pixel_id: null, conversion_event_name: null, conversion_optimisation_enabled: null },
+        error: null,
+      })),
+    });
+    fromQueue.push({ table: "meta_ad_accounts", builder: selectBuilder });
+
+    const { getAdAccountSetupStatus } = await import(
+      "@/app/(app)/connections/actions-ads"
+    );
+    const result = await getAdAccountSetupStatus();
+
+    expect(result.connected).toBe(false);
+    expect(result.conversionsApiConfigured).toBe(false);
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      "[ads] failed to load Meta Ads tokens for setup status",
+      { accountId: "account-uuid-1", error: "token could not be decrypted" },
+    );
+    consoleErrorSpy.mockRestore();
+  });
 });
 
 describe("updateAdAccountConversionSettings", () => {
@@ -310,6 +356,7 @@ describe("updateAdAccountConversionSettings", () => {
     requireAuthContextMock.mockReset();
     revalidatePathMock.mockReset();
     fromQueue = [];
+    useStoredTokens(null);
     requireAuthContextMock.mockResolvedValue({ accountId: "account-uuid-1", features: { paidAds: true, tournaments: true, managementImport: true }, role: "owner" });
   });
 
@@ -437,8 +484,13 @@ describe("updateAdAccountConversionSettings", () => {
       meta_pixel_id: "123456789012345",
       conversion_event_name: "Purchase",
       conversion_optimisation_enabled: true,
-      conversions_api_access_token: "capi-token-1234567890",
     });
+    expect(adTokenMocks.storeMetaAdAccountToken).toHaveBeenCalledWith(
+      expect.anything(),
+      "account-uuid-1",
+      "conversions_api",
+      "capi-token-1234567890",
+    );
     expect(actionUpdateBuilder.update).toHaveBeenCalledWith({
       status: "skipped",
       error: "Superseded by updated Meta CAPI configuration.",
@@ -449,6 +501,36 @@ describe("updateAdAccountConversionSettings", () => {
     expect(contains).toHaveBeenCalledWith("recommendation_payload", {
       category: "missing_capi_token",
     });
+    expect(fromQueue).toHaveLength(0);
+  });
+
+  it("reports a failed CAPI token save and does not skip recommendations", async () => {
+    const selectBuilder: Record<string, unknown> = {};
+    Object.assign(selectBuilder, {
+      select: vi.fn(() => selectBuilder),
+      eq: vi.fn(() => selectBuilder),
+      maybeSingle: vi.fn(async () => ({ data: { setup_complete: true }, error: null })),
+    });
+    const updateBuilder: Record<string, unknown> = {};
+    Object.assign(updateBuilder, {
+      update: vi.fn(() => ({ eq: vi.fn(async () => ({ error: null })) })),
+    });
+    fromQueue.push(
+      { table: "meta_ad_accounts", builder: selectBuilder },
+      { table: "meta_ad_accounts", builder: updateBuilder },
+    );
+    adTokenMocks.storeMetaAdAccountToken.mockRejectedValue(new Error("Failed to store Meta Ads token: boom"));
+
+    const { updateAdAccountConversionSettings } = await import(
+      "@/app/(app)/connections/actions-ads"
+    );
+    const result = await updateAdAccountConversionSettings({
+      metaPixelId: "123456789012345",
+      conversionsApiAccessToken: "capi-token-1234567890",
+    });
+
+    expect(result).toEqual({ error: "Failed to store Meta Ads token: boom" });
+    expect(revalidatePathMock).not.toHaveBeenCalled();
     expect(fromQueue).toHaveLength(0);
   });
 });

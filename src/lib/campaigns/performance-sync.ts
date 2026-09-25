@@ -1,5 +1,6 @@
 import { DateTime } from 'luxon';
 
+import { getMetaAdAccountTokens } from '@/lib/meta/ad-account-tokens';
 import { fetchMetaObjectInsights, type CampaignInsights } from '@/lib/meta/marketing';
 import { createServiceSupabaseClient } from '@/lib/supabase/service';
 import { isSchemaMissingErrorWithWarning } from '@/lib/supabase/errors';
@@ -28,7 +29,6 @@ interface SyncCampaignRow {
 }
 
 interface SyncAdAccountRow {
-  access_token: string | null;
   token_expires_at: string | null;
 }
 
@@ -67,15 +67,17 @@ export async function syncMetaCampaignPerformance(
     throw new Error('Publish this campaign before syncing performance.');
   }
 
-  const { data: adAccount, error: adAccountError } = await supabase
+  const { data: adAccountRow, error: adAccountError } = await supabase
     .from('meta_ad_accounts')
-    .select('access_token, token_expires_at')
+    .select('token_expires_at')
     .eq('account_id', campaign.account_id)
     .single<SyncAdAccountRow>();
 
   if (adAccountError) {
     throw new Error(adAccountError.message);
   }
+  const { accessToken } = await getMetaAdAccountTokens(supabase, campaign.account_id);
+  const adAccount = adAccountRow && accessToken ? { ...adAccountRow, access_token: accessToken } : null;
   if (!adAccount?.access_token) {
     throw new Error('Meta Ads account not connected. Please reconnect in Connections.');
   }
