@@ -20,11 +20,19 @@ vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
 const mockGetBrandEntitlement = vi.fn();
 vi.mock('@/lib/billing/entitlement-server', () => ({ getBrandEntitlement: (...a: unknown[]) => mockGetBrandEntitlement(...a) }));
 const mockReleaseHeld = vi.fn();
+const mockOffboard = vi.fn();
+const mockPurge = vi.fn();
+vi.mock('@/lib/admin/offboarding', () => ({
+  offboardBrand: (...a: unknown[]) => mockOffboard(...a),
+  purgeBrand: (...a: unknown[]) => mockPurge(...a),
+  exportBrandData: vi.fn(async () => ({ posts: [] })),
+}));
 vi.mock('@/lib/billing/publish-hold', () => ({ releaseHeldPublishJobs: (...a: unknown[]) => mockReleaseHeld(...a) }));
 
 // Configurable service-client responses.
 const state = {
   accountsInsert: { data: { id: 'brand-1' } as { id: string } | null, error: null as unknown },
+  brandLookup: { data: { business_name: 'The New Venue' } as { business_name: string } | null, error: null as unknown },
   appAdminsCount: { count: 2 as number | null, error: null as unknown },
   mutationError: null as unknown,
 };
@@ -45,6 +53,7 @@ function buildSupabase() {
     return b;
   };
   b.single = () => Promise.resolve(state.accountsInsert);
+  b.maybeSingle = () => Promise.resolve(state.brandLookup);
   b.delete = () => b;
   b.eq = () => b;
   b.then = (resolve: (v: unknown) => unknown) => resolve({ error: state.mutationError });
@@ -72,6 +81,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   insertCalls.length = 0;
   state.accountsInsert = { data: { id: 'brand-1' }, error: null };
+  state.brandLookup = { data: { business_name: 'The New Venue' }, error: null };
   state.appAdminsCount = { count: 2, error: null };
   state.mutationError = null;
   mockRequireAuthContext.mockResolvedValue({ ...SUPER_ADMIN_CTX, supabase: buildSupabase() });
@@ -306,5 +316,47 @@ describe('setBillingOverride', () => {
     const { setBillingOverride } = await import('./actions');
     expect(await setBillingOverride(A_BRAND, 'comped')).toEqual({ error: 'Could not update the billing state.' });
     expect(mockLogAdminEvent).not.toHaveBeenCalled();
+  });
+});
+
+describe('offboarding actions', () => {
+  beforeEach(() => {
+    mockOffboard.mockResolvedValue({ postsStopped: 2, connectionsRevoked: 1, purgeAfter: '2026-10-31T12:00:00.000Z' });
+    mockPurge.mockResolvedValue({ filesDeleted: 5, loginsDeleted: 1 });
+  });
+
+  it('are super-admin only', async () => {
+    mockRequireAuthContext.mockResolvedValue({ ...SUPER_ADMIN_CTX, isSuperAdmin: false, supabase: buildSupabase() });
+    const { offboardBrandAction, purgeBrandAction, exportBrandDataAction } = await import('./actions');
+    expect(await offboardBrandAction(A_BRAND, 'The New Venue')).toEqual({ error: 'Forbidden.' });
+    expect(await purgeBrandAction(A_BRAND, 'The New Venue')).toEqual({ error: 'Forbidden.' });
+    expect(await exportBrandDataAction(A_BRAND)).toEqual({ error: 'Forbidden.' });
+    expect(mockOffboard).not.toHaveBeenCalled();
+    expect(mockPurge).not.toHaveBeenCalled();
+  });
+
+  it('need the brand name typed exactly', async () => {
+    const { offboardBrandAction, purgeBrandAction } = await import('./actions');
+    expect(await offboardBrandAction(A_BRAND, 'the new venue')).toEqual({ error: 'Type the brand name exactly to confirm.' });
+    expect(await purgeBrandAction(A_BRAND, '')).toEqual({ error: 'Type the brand name exactly to confirm.' });
+    expect(mockOffboard).not.toHaveBeenCalled();
+    expect(mockPurge).not.toHaveBeenCalled();
+  });
+
+  it('offboard and purge run and are audited when confirmed', async () => {
+    const { offboardBrandAction, purgeBrandAction } = await import('./actions');
+    expect(await offboardBrandAction(A_BRAND, 'The New Venue')).toEqual({ success: true, purgeAfter: '2026-10-31T12:00:00.000Z' });
+    expect(await purgeBrandAction(A_BRAND, 'The New Venue')).toEqual({ success: true, filesDeleted: 5, loginsDeleted: 1 });
+    expect(mockLogAdminEvent).toHaveBeenCalledWith(expect.objectContaining({ action: 'offboard_brand', targetAccountId: A_BRAND }));
+    expect(mockLogAdminEvent).toHaveBeenCalledWith(expect.objectContaining({ action: 'purge_brand', targetAccountId: A_BRAND }));
+  });
+
+  it('pass a refusal through and report a failure without claiming success', async () => {
+    mockOffboard.mockResolvedValueOnce({ error: "Cancel the brand's Stripe subscription first, then offboard." });
+    mockPurge.mockRejectedValueOnce(new Error('storage down'));
+    const { offboardBrandAction, purgeBrandAction } = await import('./actions');
+    expect(await offboardBrandAction(A_BRAND, 'The New Venue')).toEqual({ error: "Cancel the brand's Stripe subscription first, then offboard." });
+    expect((await purgeBrandAction(A_BRAND, 'The New Venue')).error).toMatch(/stopped part-way/);
+    expect(mockLogAdminEvent).toHaveBeenCalledWith(expect.objectContaining({ action: 'purge_brand', result: 'failure' }));
   });
 });

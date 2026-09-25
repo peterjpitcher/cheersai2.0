@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { env } from "@/env";
 import { storeMetaAdAccountToken } from "@/lib/meta/ad-account-tokens";
 import { getMetaGraphApiBase } from "@/lib/meta/graph";
+import { fetchMetaUserId } from "@/lib/connections/token-exchange";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
 
 const SITE_URL = env.client.NEXT_PUBLIC_SITE_URL.replace(/\/$/, "");
@@ -129,6 +130,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       }
     }
 
+    // App-scoped Meta user id, so the data-deletion and deauthorise callbacks
+    // can find this ads connection. Only written when known.
+    const metaUserId = await fetchMetaUserId(accessToken);
+
     // Upsert into meta_ad_accounts — setup_complete stays false until account is selected
     const { error: upsertError } = await supabase
       .from("meta_ad_accounts")
@@ -138,6 +143,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
           token_expires_at: tokenExpiresAt,
           setup_complete: false,
           meta_account_id: "",
+          ...(metaUserId ? { meta_user_id: metaUserId } : {}),
         },
         { onConflict: "account_id" },
       );

@@ -17,6 +17,12 @@ export interface AdminBrand {
   bookingIngestConfigured: boolean;
   features: BrandFeatures;
   billing: AdminBrandBilling;
+  /** Set when the operator offboarded the brand (decision D5). */
+  offboardedAt: string | null;
+  /** Earliest time the brand's data may be deleted. */
+  purgeAfter: string | null;
+  /** Whether that time has passed (worked out when the overview loads). */
+  purgeDue: boolean;
 }
 
 export interface AdminBrandBilling {
@@ -48,7 +54,7 @@ export async function getAdminOverview(): Promise<{ brands: AdminBrand[]; users:
   const db = createServiceSupabaseClient();
 
   const [accounts, snapshots, members, admins, subscriptions, heldJobs] = await Promise.all([
-    db.from('accounts').select('id, business_name, timezone, archived_at, booking_ingest_secret, paid_ads_enabled, tournaments_enabled, management_import_enabled, billing_override').order('business_name', { ascending: true }),
+    db.from('accounts').select('id, business_name, timezone, archived_at, booking_ingest_secret, paid_ads_enabled, tournaments_enabled, management_import_enabled, billing_override, offboarded_at, purge_after').order('business_name', { ascending: true }),
     db.from('user_auth_snapshot').select('user_id, email').order('email', { ascending: true }),
     db.from('account_members').select('account_id, user_id'),
     db.from('app_admins').select('user_id'),
@@ -88,6 +94,8 @@ export async function getAdminOverview(): Promise<{ brands: AdminBrand[]; users:
       tournaments_enabled: boolean | null;
       management_import_enabled: boolean | null;
       billing_override: 'comped' | 'suspended' | null;
+      offboarded_at: string | null;
+      purge_after: string | null;
     }[]
   ).map((a) => {
     const subscription = subscriptionByAccount.get(a.id) ?? null;
@@ -120,6 +128,9 @@ export async function getAdminOverview(): Promise<{ brands: AdminBrand[]; users:
         : null,
       heldPosts: heldByAccount.get(a.id) ?? 0,
     },
+    offboardedAt: a.offboarded_at,
+    purgeAfter: a.purge_after,
+    purgeDue: Boolean(a.purge_after && Date.parse(a.purge_after) <= now.getTime()),
   };
   });
 
