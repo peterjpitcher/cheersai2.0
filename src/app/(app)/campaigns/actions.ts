@@ -21,6 +21,7 @@ import {
   fetchFoodBookingInsights,
 } from '@/lib/campaigns/food-booking-insights';
 import { generateCampaign } from '@/lib/campaigns/generate';
+import { getMetaAdAccountTokens } from '@/lib/meta/ad-account-tokens';
 import {
   describeOffScheduleCopyProblem,
   findOffScheduleCopy,
@@ -233,17 +234,18 @@ async function getConversionOptimisationConfig(
 ): Promise<CampaignEffectivenessConfig> {
   const { data, error } = await supabase
     .from('meta_ad_accounts')
-    .select('meta_pixel_id, conversion_event_name, conversion_optimisation_enabled, conversions_api_access_token')
+    .select('meta_pixel_id, conversion_event_name, conversion_optimisation_enabled')
     .eq('account_id', accountId)
     .maybeSingle<{
       meta_pixel_id: string | null;
       conversion_event_name: string | null;
       conversion_optimisation_enabled: boolean | null;
-      conversions_api_access_token?: string | null;
     }>();
 
   if (error) throw error;
-  return buildConversionOptimisationConfig(data);
+  if (!data) return buildConversionOptimisationConfig(null);
+  const { conversionsApiToken } = await getMetaAdAccountTokens(supabase, accountId);
+  return buildConversionOptimisationConfig({ ...data, conversions_api_access_token: conversionsApiToken });
 }
 
 function applyCampaignEffectivenessMetadata(payload: AiCampaignPayload): AiCampaignPayload {
@@ -629,19 +631,34 @@ export async function generateCampaignAction(
   const supabase = createServiceSupabaseClient();
 
   // 1. Verify Meta Ads account is connected and setup_complete
-  const { data: adAccount } = await supabase
+  const { data: adAccountRow } = await supabase
     .from('meta_ad_accounts')
-      .select('setup_complete, meta_account_id, access_token, meta_pixel_id, conversion_event_name, conversion_optimisation_enabled, conversions_api_access_token')
+    .select('setup_complete, meta_account_id, meta_pixel_id, conversion_event_name, conversion_optimisation_enabled')
     .eq('account_id', accountId)
     .maybeSingle<{
       setup_complete: boolean;
       meta_account_id: string;
-      access_token: string | null;
       meta_pixel_id?: string | null;
       conversion_event_name?: string | null;
       conversion_optimisation_enabled?: boolean | null;
-      conversions_api_access_token?: string | null;
     }>();
+
+  let adAccount: (NonNullable<typeof adAccountRow> & {
+    access_token: string | null;
+    conversions_api_access_token: string | null;
+  }) | null = null;
+  if (adAccountRow?.setup_complete) {
+    try {
+      const tokens = await getMetaAdAccountTokens(supabase, accountId);
+      adAccount = {
+        ...adAccountRow,
+        access_token: tokens.accessToken,
+        conversions_api_access_token: tokens.conversionsApiToken,
+      };
+    } catch (tokenError) {
+      return { error: tokenError instanceof Error ? tokenError.message : 'Could not load the Meta Ads token.' };
+    }
+  }
 
   if (!adAccount?.setup_complete) {
     return {
@@ -1749,7 +1766,6 @@ const CONTROLLED_TEST_REWRITE_ERROR =
   'This campaign is marked as a controlled test, so copy rewrites are switched off: a new ad added mid-test takes over the ad set’s delivery. End the controlled test on the campaign page first.';
 
 interface ApplyRecommendationAdAccountRow {
-  access_token: string | null;
   meta_account_id: string | null;
 }
 
@@ -1902,9 +1918,9 @@ export async function applyOptimisationRecommendation(
     return fail('Campaign is missing its paid CTA URL.');
   }
 
-  const { data: adAccount, error: adAccountError } = await supabase
+  const { data: adAccountRow, error: adAccountError } = await supabase
     .from('meta_ad_accounts')
-    .select('access_token, meta_account_id')
+    .select('meta_account_id')
     .eq('account_id', accountId)
     .maybeSingle<ApplyRecommendationAdAccountRow>();
 
@@ -1912,9 +1928,19 @@ export async function applyOptimisationRecommendation(
     await recordFailure(adAccountError.message);
     return releaseClaim(adAccountError.message);
   }
-  if (!adAccount?.access_token || !adAccount.meta_account_id) {
+
+  let recommendationAccessToken: string | null = null;
+  try {
+    ({ accessToken: recommendationAccessToken } = await getMetaAdAccountTokens(supabase, accountId));
+  } catch (tokenError) {
+    const message = tokenError instanceof Error ? tokenError.message : 'Could not load the Meta Ads token.';
+    await recordFailure(message);
+    return releaseClaim(message);
+  }
+  if (!recommendationAccessToken || !adAccountRow?.meta_account_id) {
     return fail('Meta Ads account is not connected.');
   }
+  const adAccount = { access_token: recommendationAccessToken, meta_account_id: adAccountRow.meta_account_id };
 
   const { data: fbConnection, error: fbError } = await supabase
     .from('social_connections')
@@ -2167,14 +2193,14 @@ export async function activateOptimisationReplacementAd(
   if (adSetError) return { error: adSetError.message };
   if (!adSet || adSet.campaign_id !== campaign.id) return { error: 'The replacement ad does not belong to this campaign.' };
 
-  const { data: adAccount, error: adAccountError } = await supabase
-    .from('meta_ad_accounts')
-    .select('access_token')
-    .eq('account_id', accountId)
-    .maybeSingle<{ access_token: string | null }>();
-
-  if (adAccountError) return { error: adAccountError.message };
-  if (!adAccount?.access_token) return { error: 'Meta Ads account is not connected.' };
+  let replacementAccessToken: string | null;
+  try {
+    ({ accessToken: replacementAccessToken } = await getMetaAdAccountTokens(supabase, accountId));
+  } catch (tokenError) {
+    return { error: tokenError instanceof Error ? tokenError.message : 'Could not load the Meta Ads token.' };
+  }
+  if (!replacementAccessToken) return { error: 'Meta Ads account is not connected.' };
+  const adAccount = { access_token: replacementAccessToken };
 
   const audit = { accountId, userId: user.id, actionId: action.id };
   const details = { campaignId: campaign.id, replacementAdId: replacement.id, metaAdId: replacement.meta_ad_id };

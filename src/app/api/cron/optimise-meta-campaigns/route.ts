@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 
 import { runMetaCampaignOptimisation } from '@/lib/campaigns/optimisation';
+import { getMetaAdAccountTokens } from '@/lib/meta/ad-account-tokens';
 import { syncMetaCampaignPerformance } from '@/lib/campaigns/performance-sync';
 import { createServiceSupabaseClient } from '@/lib/supabase/service';
 import { verifyCronAuth } from '@/lib/security/cron-auth';
@@ -17,8 +18,7 @@ async function handle(request: Request) {
   const { data: accounts, error } = await supabase
     .from('meta_ad_accounts')
     .select('account_id')
-    .eq('setup_complete', true)
-    .neq('access_token', '');
+    .eq('setup_complete', true);
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
@@ -40,6 +40,11 @@ async function handle(request: Request) {
     if (!accountId) continue;
 
     try {
+      // Brands without a stored access token are skipped, as the old
+      // access_token <> '' filter did before tokens moved to encrypted storage.
+      const { accessToken } = await getMetaAdAccountTokens(supabase, accountId);
+      if (!accessToken) continue;
+
       const { synced, failed } = await syncAccountCampaignPerformance(supabase, accountId);
       const result = await runMetaCampaignOptimisation({
         accountId,

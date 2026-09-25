@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { MEDIA_BUCKET } from '@/lib/constants';
+import { deleteMetaAdAccountTokens } from '@/lib/meta/ad-account-tokens';
 
 /**
  * Brand offboarding (spec §4.7, decision D5): operator-run, never a customer
@@ -93,9 +94,10 @@ export async function offboardBrand(
       .eq('account_id', accountId);
     if (connError) throw new Error(`social_connections update failed: ${connError.message}`);
   }
+  await deleteMetaAdAccountTokens(service, [accountId], ['access', 'conversions_api']);
   const { error: adsError } = await service
     .from('meta_ad_accounts')
-    .update({ access_token: null, token_expires_at: null, setup_complete: false })
+    .update({ token_expires_at: null, setup_complete: false })
     .eq('account_id', accountId);
   if (adsError) throw new Error(`meta_ad_accounts update failed: ${adsError.message}`);
 

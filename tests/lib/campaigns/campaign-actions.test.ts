@@ -1,5 +1,14 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
+// Meta Ads tokens come from encrypted storage (src/lib/meta/ad-account-tokens.ts,
+// tested on its own). A plain function, so vi.resetAllMocks cannot wipe it.
+const DEFAULT_AD_TOKENS = { accessToken: 'token' as string | null, conversionsApiToken: null as string | null };
+const adTokens = vi.hoisted(() => ({ current: null as null | { accessToken: string | null; conversionsApiToken: string | null } }));
+vi.mock('@/lib/meta/ad-account-tokens', () => ({
+  getMetaAdAccountTokens: async () => adTokens.current ?? DEFAULT_AD_TOKENS,
+  storeMetaAdAccountToken: async () => undefined,
+}));
+
 // --- Mocks must be declared before imports ---
 
 vi.mock('@/lib/auth/server', () => ({
@@ -1407,8 +1416,7 @@ describe('activateOptimisationReplacementAd', () => {
   it('switches on a paused replacement and records who did it', async () => {
     queueActivationReads(pausedReplacement);
     mockMaybeSingle
-      .mockResolvedValueOnce({ data: { id: 'adset-weekday', campaign_id: 'campaign-weekday' }, error: null })
-      .mockResolvedValueOnce({ data: { access_token: 'token' }, error: null });
+      .mockResolvedValueOnce({ data: { id: 'adset-weekday', campaign_id: 'campaign-weekday' }, error: null });
 
     const result = await activateOptimisationReplacementAd('action-applied');
 
@@ -1461,8 +1469,7 @@ describe('activateOptimisationReplacementAd', () => {
   it('tells the user and records the failure when Meta refuses', async () => {
     queueActivationReads(pausedReplacement);
     mockMaybeSingle
-      .mockResolvedValueOnce({ data: { id: 'adset-weekday', campaign_id: 'campaign-weekday' }, error: null })
-      .mockResolvedValueOnce({ data: { access_token: 'token' }, error: null });
+      .mockResolvedValueOnce({ data: { id: 'adset-weekday', campaign_id: 'campaign-weekday' }, error: null });
     vi.mocked(setMetaObjectStatus).mockRejectedValueOnce(new Error('Meta API error: token expired'));
 
     const result = await activateOptimisationReplacementAd('action-applied');

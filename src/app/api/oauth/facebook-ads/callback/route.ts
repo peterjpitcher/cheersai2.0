@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { env } from "@/env";
+import { storeMetaAdAccountToken } from "@/lib/meta/ad-account-tokens";
 import { getMetaGraphApiBase } from "@/lib/meta/graph";
 import { fetchMetaUserId } from "@/lib/connections/token-exchange";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
@@ -139,7 +140,6 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       .upsert(
         {
           account_id: accountId,
-          access_token: accessToken,
           token_expires_at: tokenExpiresAt,
           setup_complete: false,
           meta_account_id: "",
@@ -150,6 +150,18 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
     if (upsertError) {
       console.error("[facebook-ads-callback] upsert failed", upsertError);
+      return NextResponse.redirect(`${SITE_URL}/connections?ads_error=db_error`);
+    }
+
+    // The token is never written to meta_ad_accounts: it goes encrypted into the
+    // token store, which references the row upserted above.
+    try {
+      await storeMetaAdAccountToken(supabase, accountId, "access", accessToken);
+    } catch (storeError) {
+      console.error(
+        "[facebook-ads-callback] token store failed",
+        storeError instanceof Error ? storeError.message : storeError,
+      );
       return NextResponse.redirect(`${SITE_URL}/connections?ads_error=db_error`);
     }
 

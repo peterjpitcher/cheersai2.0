@@ -7,6 +7,7 @@ import {
   setMetaObjectStatus,
   uploadMetaImage,
 } from '@/lib/meta/marketing';
+import { getMetaAdAccountTokens } from '@/lib/meta/ad-account-tokens';
 import { computeAdSetSpendCaps, withNormalisedBudgetWeights } from '@/lib/campaigns/food-budget-weighting';
 import { calculateFoodBookingPhases } from '@/lib/campaigns/food-booking-phases';
 import { toLondonDateTime } from '@/lib/campaigns/time-utils';
@@ -446,11 +447,10 @@ async function loadMetaCredentials(
   const { data: adAccount } = await supabase
     .from('meta_ad_accounts')
     .select(
-      'access_token, meta_account_id, token_expires_at, meta_pixel_id, conversion_event_name, conversion_optimisation_enabled',
+      'meta_account_id, token_expires_at, meta_pixel_id, conversion_event_name, conversion_optimisation_enabled',
     )
     .eq('account_id', accountId)
     .maybeSingle<{
-      access_token: string | null;
       meta_account_id: string | null;
       token_expires_at: string | null;
       meta_pixel_id: string | null;
@@ -458,7 +458,10 @@ async function loadMetaCredentials(
       conversion_optimisation_enabled: boolean | null;
     }>();
 
-  if (!adAccount?.access_token || !adAccount.meta_account_id) {
+  const { accessToken } = adAccount
+    ? await getMetaAdAccountTokens(supabase, accountId)
+    : { accessToken: null };
+  if (!accessToken || !adAccount?.meta_account_id) {
     throw new Error('Meta Ads account not connected.');
   }
   if (adAccount.token_expires_at && new Date(adAccount.token_expires_at) < new Date()) {
@@ -481,7 +484,7 @@ async function loadMetaCredentials(
   const readiness = buildConversionReadiness(adAccount);
 
   return {
-    accessToken: adAccount.access_token,
+    accessToken,
     adAccountId: adAccount.meta_account_id,
     pageId,
     readiness,

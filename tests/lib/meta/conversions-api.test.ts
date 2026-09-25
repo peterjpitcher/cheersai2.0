@@ -1,5 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+const adTokens = vi.hoisted(() => ({
+  get: null as null | (() => Promise<{ accessToken: string | null; conversionsApiToken: string | null }>),
+}));
+vi.mock('@/lib/meta/ad-account-tokens', () => ({
+  getMetaAdAccountTokens: () => adTokens.get?.() ?? Promise.resolve({ accessToken: null, conversionsApiToken: null }),
+}));
+
 import { forwardBookingConversionToMetaCapi } from '@/lib/meta/conversions-api';
 import type { BookingConversionForCapi } from '@/lib/meta/conversions-api';
 
@@ -9,6 +16,9 @@ function buildSupabaseMock(row: { meta_pixel_id?: string | null; conversions_api
   meta_pixel_id: 'pixel-123',
   conversions_api_access_token: 'capi-token',
 }) {
+  // The CAPI token lives in encrypted storage; the row's value stands in for it.
+  const capiToken = row?.conversions_api_access_token ?? null;
+  adTokens.get = async () => ({ accessToken: null, conversionsApiToken: capiToken });
   return {
     from: vi.fn(() => ({
       select: vi.fn(() => ({
@@ -98,6 +108,26 @@ describe('forwardBookingConversionToMetaCapi', () => {
       conversion: baseConversion(),
     });
     expect(result).toEqual({ status: 'skipped', reason: 'not_configured' });
+  });
+
+  it('fails (not skips) when the stored CAPI token cannot be decrypted, and sends nothing', async () => {
+    const supabase = buildSupabaseMock();
+    adTokens.get = async () => {
+      throw new Error('The stored Meta Ads Conversions API token could not be decrypted.');
+    };
+
+    const result = await forwardBookingConversionToMetaCapi({
+      supabase,
+      accountId: 'acc-1',
+      conversion: baseConversion(),
+    });
+
+    expect(result).toEqual({
+      status: 'failed',
+      eventId: 'TB-100',
+      error: 'The stored Meta Ads Conversions API token could not be decrypted.',
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it('sends a Purchase event with all supplied match keys and custom data', async () => {

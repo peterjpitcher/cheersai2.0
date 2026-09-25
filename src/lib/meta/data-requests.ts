@@ -1,5 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
+import { deleteMetaAdAccountTokens } from '@/lib/meta/ad-account-tokens';
+
 /**
  * Acting on Meta data-deletion and deauthorise callbacks (spec §4.8, M2).
  *
@@ -59,12 +61,23 @@ export async function revokeMetaUserData(
   // every match; the owner reconnects ads if they still want them.
   const { data: adAccounts, error: adLookupError } = await service
     .from('meta_ad_accounts')
-    .update({ access_token: null, token_expires_at: null, setup_complete: false, meta_user_id: null })
-    .eq('meta_user_id', metaUserId)
-    .select('id');
-  if (adLookupError) throw new Error(`meta_ad_accounts update failed: ${adLookupError.message}`);
+    .select('account_id')
+    .eq('meta_user_id', metaUserId);
+  if (adLookupError) throw new Error(`meta_ad_accounts lookup failed: ${adLookupError.message}`);
+  const adAccountIds = ((adAccounts ?? []) as Array<{ account_id: string }>).map((row) => row.account_id);
+  if (adAccountIds.length) {
+    // The person's ads token. The Conversions API token is the brand's system-user
+    // token, not theirs, so it stays.
+    await deleteMetaAdAccountTokens(service, adAccountIds, ['access']);
 
-  return { connectionsRevoked: connectionIds.length, adAccountsRevoked: adAccounts?.length ?? 0 };
+    const { error: adUpdateError } = await service
+      .from('meta_ad_accounts')
+      .update({ token_expires_at: null, setup_complete: false, meta_user_id: null })
+      .in('account_id', adAccountIds);
+    if (adUpdateError) throw new Error(`meta_ad_accounts update failed: ${adUpdateError.message}`);
+  }
+
+  return { connectionsRevoked: connectionIds.length, adAccountsRevoked: adAccountIds.length };
 }
 
 export async function recordMetaDataRequest(

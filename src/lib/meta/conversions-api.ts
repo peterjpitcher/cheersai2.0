@@ -1,3 +1,4 @@
+import { getMetaAdAccountTokens } from '@/lib/meta/ad-account-tokens';
 import { getMetaGraphApiBase } from '@/lib/meta/graph';
 import type { createServiceSupabaseClient } from '@/lib/supabase/service';
 
@@ -32,7 +33,6 @@ export type CapiForwardResult =
 
 interface MetaAdAccountCapiRow {
   meta_pixel_id: string | null;
-  conversions_api_access_token?: string | null;
 }
 
 export async function forwardBookingConversionToMetaCapi(args: {
@@ -65,7 +65,7 @@ export async function forwardBookingConversionToMetaCapi(args: {
 
   const { data, error } = await args.supabase
     .from('meta_ad_accounts')
-    .select('meta_pixel_id, conversions_api_access_token')
+    .select('meta_pixel_id')
     .eq('account_id', args.accountId)
     .maybeSingle<MetaAdAccountCapiRow>();
 
@@ -74,8 +74,21 @@ export async function forwardBookingConversionToMetaCapi(args: {
   }
 
   const pixelId = data?.meta_pixel_id?.trim();
-  const accessToken = data?.conversions_api_access_token?.trim();
-  if (!pixelId || !accessToken) {
+  if (!pixelId) {
+    return { status: 'skipped', reason: 'not_configured' };
+  }
+
+  let accessToken: string | null;
+  try {
+    ({ conversionsApiToken: accessToken } = await getMetaAdAccountTokens(args.supabase, args.accountId));
+  } catch (tokenError) {
+    return {
+      status: 'failed',
+      eventId: conversion.metaEventId,
+      error: tokenError instanceof Error ? tokenError.message : String(tokenError),
+    };
+  }
+  if (!accessToken) {
     return { status: 'skipped', reason: 'not_configured' };
   }
 

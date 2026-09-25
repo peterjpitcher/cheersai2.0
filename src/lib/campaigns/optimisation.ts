@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { getMetaAdAccountTokens } from '@/lib/meta/ad-account-tokens';
 import { createServiceSupabaseClient } from '@/lib/supabase/service';
 import { utmContentMatchesAd } from '@/lib/campaigns/ad-attribution';
 import { detectCreativeFatigue, type AdMetricsHistoryRow } from '@/lib/campaigns/creative-fatigue';
@@ -206,13 +207,21 @@ export async function runMetaCampaignOptimisation({
   const runId = runRow.id;
 
   try {
-    const { data: adAccount, error: adAccountError } = await supabase
+    const { data: adAccountRow, error: adAccountError } = await supabase
       .from('meta_ad_accounts')
-      .select('access_token, token_expires_at, meta_pixel_id, conversion_event_name, conversion_optimisation_enabled, conversions_api_access_token')
+      .select('token_expires_at, meta_pixel_id, conversion_event_name, conversion_optimisation_enabled')
       .eq('account_id', accountId)
-      .single<OptimisationAdAccountRow>();
+      .single<Omit<OptimisationAdAccountRow, 'access_token' | 'conversions_api_access_token'>>();
 
     if (adAccountError) throw new Error(adAccountError.message);
+    const adAccountTokens = adAccountRow ? await getMetaAdAccountTokens(supabase, accountId) : null;
+    const adAccount: OptimisationAdAccountRow | null = adAccountRow && adAccountTokens
+      ? {
+        ...adAccountRow,
+        access_token: adAccountTokens.accessToken,
+        conversions_api_access_token: adAccountTokens.conversionsApiToken,
+      }
+      : null;
     if (!adAccount?.access_token) {
       throw new Error('Meta Ads account not connected.');
     }

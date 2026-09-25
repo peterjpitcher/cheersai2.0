@@ -491,6 +491,23 @@
 | conversions_api_access_token | text | YES |  |
 
 > **RLS:** enabled (1 policies) | **FKs:** account_id -> auth.users(id) CASCADE | **Audit:** created_at
+>
+> `access_token` and `conversions_api_access_token` are legacy plaintext columns: the tokens now live encrypted in `meta_ad_account_tokens` and are read only through `src/lib/meta/ad-account-tokens.ts` (tasks/SPEC-encrypt-meta-ad-tokens.md).
+
+### meta_ad_account_tokens
+| Name | Type | Nullable | Default |
+|------|------|----------|---------|
+| id | uuid | NO | gen_random_uuid() |
+| account_id | uuid | NO |  |
+| token_type | text | NO |  |
+| ciphertext | text | NO |  |
+| iv | text | NO |  |
+| tag | text | NO |  |
+| key_version | integer | NO | 1 |
+| created_at | timestamptz | NO | now() |
+| updated_at | timestamptz | NO | now() |
+
+> **RLS:** enabled (0 policies, service-role only) | **FKs:** account_id -> meta_ad_accounts(account_id) CASCADE | **Unique:** (account_id, token_type) | token_type in ('access', 'conversions_api')
 
 ### meta_campaigns
 | Name | Type | Nullable | Default |
