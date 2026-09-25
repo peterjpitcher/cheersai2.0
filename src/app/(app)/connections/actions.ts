@@ -175,6 +175,9 @@ export async function completeOAuthConnect(
         metadata: exchange.metadata ?? {},
         display_name: exchange.displayName ?? null,
         last_synced_at: new Date().toISOString(),
+        // Lets the Meta deletion and deauthorise callbacks find this connection.
+        // Only written when known, so a failed lookup never erases a stored id.
+        ...(exchange.metaUserId ? { meta_user_id: exchange.metaUserId } : {}),
       },
       { onConflict: "account_id,provider" },
     )
