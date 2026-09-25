@@ -12,6 +12,7 @@ import {
   inviteUser,
   revokeMembership,
   sendPasswordLink,
+  setBillingOverride,
   setBrandFeature,
   setSuperAdmin,
 } from '@/app/(app)/admin/actions';
@@ -119,6 +120,94 @@ function InviteForm({ brands }: { brands: AdminBrand[] }) {
       >
         {isPending ? 'Inviting…' : 'Send invite'}
       </button>
+      <Feedback {...msg} />
+    </div>
+  );
+}
+
+const BILLING_STATE_LABELS: Record<string, string> = {
+  comped: 'Free',
+  active: 'Paying',
+  trialing: 'Trial',
+  past_due_grace: 'Payment late (grace)',
+  lapsed: 'Lapsed',
+  incomplete: 'Not set up',
+  suspended: 'Suspended',
+  archived: 'Archived',
+};
+
+function formatUkDate(iso: string | null): string {
+  if (!iso) return '';
+  return new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Europe/London' }).format(new Date(iso));
+}
+
+function BillingCard({ brands }: { brands: AdminBrand[] }) {
+  const router = useRouter();
+  const [isPending, start] = useTransition();
+  const [msg, setMsg] = useState<{ error?: string; ok?: string }>({});
+  const active = brands.filter((b) => !b.archivedAt);
+
+  function change(brand: AdminBrand, value: string) {
+    const override = value === 'comped' || value === 'suspended' ? value : null;
+    if (override === 'suspended' && !window.confirm(`Suspend ${brand.name ?? 'this brand'}? Its posts will be held while billing enforcement is on.`)) return;
+    start(async () => {
+      setMsg({});
+      const r = await setBillingOverride(brand.accountId, override);
+      if (r.success) {
+        const releasedNote = r.released ? ` ${r.released} held post(s) released${r.stillHeld ? `, ${r.stillHeld} overdue still held for review` : ''}.` : '';
+        setMsg({ ok: `Billing for ${brand.name ?? 'brand'} updated.${releasedNote}` });
+        router.refresh();
+      } else setMsg({ error: r.error });
+    });
+  }
+
+  return (
+    <div className={CARD} style={CARD_STYLE}>
+      <h2 className='mb-1 text-sm font-semibold' style={{ color: 'var(--c-ink)' }}>Billing</h2>
+      <p className='mb-3 text-xs' style={{ color: 'var(--c-ink-3)' }}>
+        Stripe decides unless a brand is set to Free or Suspended here. Held posts only happen while billing enforcement is on.
+      </p>
+      <div className='overflow-x-auto'>
+        <table className='w-full text-left'>
+          <thead>
+            <tr className='text-xs' style={{ color: 'var(--c-ink-3)' }}>
+              <th className='py-1 pr-3 font-medium'>Brand</th>
+              <th className='py-1 pr-3 font-medium'>State</th>
+              <th className='py-1 pr-3 font-medium'>Plan</th>
+              <th className='py-1 pr-3 font-medium'>Held posts</th>
+              <th className='py-1 pr-3 font-medium'>Billing</th>
+            </tr>
+          </thead>
+          <tbody>
+            {active.map((b) => (
+              <tr key={b.accountId} className='border-t' style={{ borderTopColor: 'var(--c-line)' }}>
+                <td className='py-2 pr-3 text-sm' style={{ color: 'var(--c-ink)' }}>{b.name ?? 'Brand'}</td>
+                <td className='py-2 pr-3 text-sm' style={{ color: 'var(--c-ink)' }}>{BILLING_STATE_LABELS[b.billing.state] ?? b.billing.state}</td>
+                <td className='py-2 pr-3 text-xs' style={{ color: 'var(--c-ink-2)' }}>
+                  {b.billing.subscription
+                    ? `${b.billing.subscription.plan}, ${b.billing.subscription.status}${b.billing.subscription.currentPeriodEnd ? `, ${b.billing.subscription.cancelAtPeriodEnd ? 'ends' : 'renews'} ${formatUkDate(b.billing.subscription.currentPeriodEnd)}` : ''}`
+                    : 'No subscription'}
+                </td>
+                <td className='py-2 pr-3 text-sm' style={{ color: 'var(--c-ink)' }}>{b.billing.heldPosts}</td>
+                <td className='py-2 pr-3'>
+                  <select
+                    className={INPUT}
+                    style={CARD_STYLE}
+                    value={b.billing.override ?? 'stripe'}
+                    disabled={isPending}
+                    onChange={(e) => change(b, e.target.value)}
+                    aria-label={`Billing for ${b.name ?? 'brand'}`}
+                  >
+                    <option value='stripe'>Stripe decides</option>
+                    <option value='comped'>Free</option>
+                    <option value='suspended'>Suspended</option>
+                  </select>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
       <Feedback {...msg} />
     </div>
   );
@@ -433,6 +522,7 @@ export function AdminClient({
         <InviteForm brands={brands} />
       </div>
 
+      <BillingCard brands={brands} />
       <BrandFeaturesCard brands={brands} />
       <BookingKeysCard brands={brands} ingestEndpoint={ingestEndpoint} />
 
