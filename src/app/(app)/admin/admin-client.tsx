@@ -264,7 +264,13 @@ function OffboardingCard({ brands }: { brands: AdminBrand[] }) {
       if (r.success) {
         setTypedName('');
         setAccountId('');
-        setMsg({ ok: `Deleted: ${r.filesDeleted ?? 0} files and ${r.loginsDeleted ?? 0} login(s).` });
+        const done = `Deleted: ${r.filesDeleted ?? 0} files and ${r.loginsDeleted ?? 0} login(s).`;
+        const stuck = r.loginsNotDeleted ?? [];
+        setMsg(
+          stuck.length
+            ? { error: `${done} ${stuck.length} login(s) could not be deleted; delete them in Supabase Auth: ${stuck.join(', ')}` }
+            : { ok: done },
+        );
         router.refresh();
       } else setMsg({ error: r.error });
     });

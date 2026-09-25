@@ -24,6 +24,7 @@ vi.mock('@/lib/logging', () => ({ createLogger: () => ({ info: vi.fn(), warn: vi
 type Row = Record<string, unknown>;
 let db: Record<string, Row[]>;
 let failTable: string | null = null;
+const NOT_NULL: Record<string, string[]> = { meta_ad_accounts: ['access_token', 'setup_complete'], social_connections: ['status'] };
 
 function query(table: string) {
   let op: 'select' | 'update' | 'delete' | 'insert' = 'select';
@@ -37,6 +38,12 @@ function query(table: string) {
     if (failTable === table) return { data: null, error: { message: `${table} down` } };
     if (op === 'update') {
       const rows = matches();
+      // Mirror the live NOT NULL columns so a null write fails as it would in production.
+      for (const column of NOT_NULL[table] ?? []) {
+        if (rows.length && column in patch && patch[column] === null) {
+          return { data: null, error: { message: `null value in column "${column}" violates not-null constraint` } };
+        }
+      }
       rows.forEach((row) => Object.assign(row, patch));
       return { data: rows.map((r) => ({ id: r.id })), error: null };
     }
@@ -165,7 +172,7 @@ describe('data deletion callback', () => {
     }
     expect(db.social_connections.find((r) => r.id === 'conn-other')).toMatchObject({ status: 'active', access_token: 'keep' });
     expect(db.token_vault.map((r) => r.id)).toEqual(['v3']);
-    expect(db.meta_ad_accounts[0]).toMatchObject({ access_token: null, setup_complete: false, meta_user_id: null });
+    expect(db.meta_ad_accounts[0]).toMatchObject({ access_token: '', setup_complete: false, meta_user_id: null });
     expect(db.meta_data_requests[0]).toMatchObject({ kind: 'deletion', status: 'completed', connections_revoked: 2, ad_accounts_revoked: 1 });
     // The Meta user id is never stored in the request log.
     expect(JSON.stringify(db.meta_data_requests)).not.toContain(PERSON);

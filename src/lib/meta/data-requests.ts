@@ -57,9 +57,10 @@ export async function revokeMetaUserData(
 
   // meta_ad_accounts keeps no reconnection timestamp, so deauthorise revokes
   // every match; the owner reconnects ads if they still want them.
+  // access_token is NOT NULL (default ''), so it is blanked rather than nulled.
   const { data: adAccounts, error: adLookupError } = await service
     .from('meta_ad_accounts')
-    .update({ access_token: null, token_expires_at: null, setup_complete: false, meta_user_id: null })
+    .update({ access_token: '', token_expires_at: null, setup_complete: false, meta_user_id: null })
     .eq('meta_user_id', metaUserId)
     .select('id');
   if (adLookupError) throw new Error(`meta_ad_accounts update failed: ${adLookupError.message}`);

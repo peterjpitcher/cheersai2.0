@@ -10,31 +10,66 @@ const OTHER = 'b0000000-0000-4000-8000-000000000002';
 let db: Record<string, Row[]>;
 let storage: Set<string>;
 const deletedUsers: string[] = [];
+let failDeleteUser: string | null = null;
+
+// Live NOT NULL columns, so a null write fails here as it does in production.
+const NOT_NULL: Record<string, string[]> = {
+  meta_ad_accounts: ['access_token', 'setup_complete'],
+  management_app_connections: ['api_key', 'enabled'],
+  social_connections: ['status'],
+};
+
+// Live foreign keys into media_assets with no ON DELETE action. Postgres can
+// reach media_assets in the accounts cascade before these rows, so any that
+// still point at the brand's media make the accounts delete fail.
+function blockingMediaReference(): string | null {
+  const media = new Set(db.media_assets.filter((r) => r.account_id === BRAND).map((r) => r.id));
+  if (db.ad_sets.some((r) => media.has(r.adset_media_asset_id))) return 'ad_sets_adset_media_asset_id_fkey';
+  if (db.campaigns.some((r) => media.has(r.hero_media_id))) return 'campaigns_hero_media_id_fkey';
+  return null;
+}
 
 function query(table: string) {
   let op: 'select' | 'update' | 'delete' = 'select';
   let patch: Row = {};
   let head = false;
+  let columns: string[] | null = null;
   const preds: Array<(r: Row) => boolean> = [];
   const matches = () => (db[table] ?? []).filter((r) => preds.every((p) => p(r)));
   const run = () => {
     if (op === 'update') {
       const rows = matches();
+      for (const column of NOT_NULL[table] ?? []) {
+        if (rows.length && column in patch && patch[column] === null) {
+          return { data: null, error: { message: `null value in column "${column}" violates not-null constraint` } };
+        }
+      }
       rows.forEach((r) => Object.assign(r, patch));
       return { data: rows, error: null };
     }
     if (op === 'delete') {
+      if (table === 'accounts') {
+        const blocked = blockingMediaReference();
+        if (blocked) return { data: null, error: { message: `update or delete on table "media_assets" violates foreign key constraint "${blocked}"` } };
+      }
       db[table] = (db[table] ?? []).filter((r) => !preds.every((p) => p(r)));
       // Cascade: deleting a brand removes every row that points at it.
       if (table === 'accounts') for (const t of Object.keys(db)) if (t !== 'accounts') db[t] = db[t].filter((r) => r.account_id !== BRAND || t === 'app_admins');
+      // ad_sets cascade from meta_campaigns.
+      const campaigns = new Set(db.meta_campaigns.map((r) => r.id));
+      db.ad_sets = db.ad_sets.filter((r) => campaigns.has(r.campaign_id));
       return { data: null, error: null };
     }
     const rows = matches();
-    return head ? { count: rows.length, error: null } : { data: rows, error: null };
+    if (head) return { count: rows.length, error: null };
+    // Honour a plain column list, as PostgREST does.
+    const project = columns;
+    return { data: project ? rows.map((r) => Object.fromEntries(project.map((c) => [c, r[c]]))) : rows, error: null };
   };
   const q: Record<string, unknown> = {
-    select: (_c?: string, opts?: { head?: boolean }) => {
+    select: (c?: string, opts?: { head?: boolean }) => {
       head = Boolean(opts?.head);
+      if (op === 'select' && c && !c.includes('*') && !c.includes('(')) columns = c.split(',').map((x) => x.trim());
       return q;
     },
     update: (p: Row) => {
@@ -63,7 +98,7 @@ function service() {
     from: (t: string) => query(t),
     storage: {
       from: () => ({
-        list: async (prefix: string) => {
+        list: async (prefix: string, opts: { limit: number; offset?: number }) => {
           const children = new Map<string, boolean>();
           for (const path of storage) {
             if (!path.startsWith(`${prefix}/`)) continue;
@@ -71,7 +106,9 @@ function service() {
             const [first, ...more] = rest.split('/');
             children.set(first, more.length === 0 || children.get(first) === true);
           }
-          return { data: [...children].map(([name, isFile]) => ({ name, id: isFile ? `id-${name}` : null })), error: null };
+          const all = [...children].map(([name, isFile]) => ({ name, id: isFile ? `id-${name}` : null }));
+          const offset = opts.offset ?? 0;
+          return { data: all.slice(offset, offset + opts.limit), error: null };
         },
         remove: async (paths: string[]) => {
           paths.forEach((p) => storage.delete(p));
@@ -80,19 +117,35 @@ function service() {
         createSignedUrls: async (paths: string[]) => ({ data: paths.map((path) => ({ path, signedUrl: `https://signed/${path}` })), error: null }),
       }),
     },
-    auth: { admin: { deleteUser: async (id: string) => (deletedUsers.push(id), { error: null }) } },
+    auth: {
+      admin: {
+        deleteUser: async (id: string) =>
+          id === failDeleteUser ? { error: { message: 'violates foreign key constraint "audit_log_user_id_fkey"' } } : (deletedUsers.push(id), { error: null }),
+      },
+    },
   };
 }
 
 beforeEach(() => {
   deletedUsers.length = 0;
+  failDeleteUser = null;
   db = {
     accounts: [
-      { id: BRAND, business_name: 'The New Venue', email: 'o@v.test', timezone: 'Europe/London', created_at: '2026-01-01', offboarded_at: null, purge_after: null, archived_at: null },
-      { id: OTHER, business_name: 'Other', offboarded_at: null },
+      { id: BRAND, business_name: 'The New Venue', email: 'o@v.test', timezone: 'Europe/London', created_at: '2026-01-01', offboarded_at: null, purge_after: null, archived_at: null, booking_ingest_secret: 'bce_brand' },
+      { id: OTHER, business_name: 'Other', offboarded_at: null, booking_ingest_secret: 'bce_other' },
     ],
     subscriptions: [],
     meta_campaigns: [{ id: 'c1', account_id: BRAND, status: 'PAUSED' }],
+    ad_sets: [{ id: 'as1', campaign_id: 'c1', adset_media_asset_id: 'm1' }],
+    campaigns: [{ id: 'cp1', account_id: BRAND, hero_media_id: 'm1' }],
+    tournaments: [
+      { id: 't1', account_id: BRAND, feed_api_key: 'feed-brand' },
+      { id: 'tx', account_id: OTHER, feed_api_key: 'feed-other' },
+    ],
+    management_app_connections: [
+      { account_id: BRAND, api_key: 'mgmt-brand', enabled: true },
+      { account_id: OTHER, api_key: 'mgmt-other', enabled: true },
+    ],
     content_items: [
       { id: 'post-1', account_id: BRAND, status: 'scheduled' },
       { id: 'post-2', account_id: BRAND, status: 'posted' },
@@ -111,7 +164,7 @@ beforeEach(() => {
       { id: 'v1', social_connection_id: 'sc1' },
       { id: 'vx', social_connection_id: 'scx' },
     ],
-    meta_ad_accounts: [{ id: 'ads', account_id: BRAND, access_token: 'ads', setup_complete: true }],
+    meta_ad_accounts: [{ id: 'ads', account_id: BRAND, access_token: 'ads', setup_complete: true, conversions_api_access_token: 'capi' }],
     media_assets: [
       { id: 'm1', account_id: BRAND, file_name: 'a.jpg', media_type: 'image', storage_path: `${BRAND}/m1/a.jpg`, uploaded_at: null, derived_variants: { story: 'derived/m1/story.jpg' } },
       { id: 'm2', account_id: BRAND, file_name: 't.jpg', media_type: 'image', storage_path: 'tournaments/t1/x/facebook-feed.jpg', uploaded_at: null, derived_variants: null },
@@ -164,8 +217,14 @@ describe('offboardBrand', () => {
     expect(db.token_vault.map((r) => r.id)).toEqual(['vx']);
     expect(db.social_connections.find((r) => r.id === 'sc1')).toMatchObject({ status: 'needs_action', access_token: null });
     expect(db.social_connections.find((r) => r.id === 'scx')?.access_token).toBe('keep');
-    expect(db.meta_ad_accounts[0]).toMatchObject({ access_token: null, setup_complete: false });
-    expect(db.accounts[0]).toMatchObject({ archived_at: NOW.toISOString(), offboarded_at: NOW.toISOString() });
+    expect(db.meta_ad_accounts[0]).toMatchObject({ access_token: '', setup_complete: false, conversions_api_access_token: null });
+    expect(db.tournaments.map((r) => r.feed_api_key)).toEqual([null, 'feed-other']);
+    expect(db.management_app_connections).toEqual([
+      { account_id: BRAND, api_key: '', enabled: false },
+      { account_id: OTHER, api_key: 'mgmt-other', enabled: true },
+    ]);
+    expect(db.accounts[0]).toMatchObject({ archived_at: NOW.toISOString(), offboarded_at: NOW.toISOString(), booking_ingest_secret: null });
+    expect(db.accounts[1].booking_ingest_secret).toBe('bce_other');
 
     expect(await offboardBrand(service() as never, BRAND, NOW)).toEqual({ error: 'This brand has already been offboarded.' });
   });
@@ -194,11 +253,33 @@ describe('purgeBrand', () => {
 
     const result = await purgeBrand(service() as never, BRAND, NOW);
 
-    expect(result).toEqual({ filesDeleted: 5, loginsDeleted: 1 });
+    expect(result).toEqual({ filesDeleted: 5, loginsDeleted: 1, loginsNotDeleted: [] });
     expect(storage).toEqual(new Set(['banners/post-x/feed.jpg', `${OTHER}/m9/b.jpg`]));
     expect(db.accounts.map((r) => r.id)).toEqual([OTHER]);
     expect(db.content_items.map((r) => r.id)).toEqual(['post-x']);
     // Only the login that belonged solely to this brand; not the operator, not someone in another brand.
     expect(deletedUsers).toEqual(['only-here']);
+    expect(db.ad_sets).toEqual([]);
+    expect(db.campaigns).toEqual([]);
+  });
+
+  it('reads every page of the brand folder', async () => {
+    Object.assign(db.accounts[0], { offboarded_at: '2026-09-01T00:00:00Z', purge_after: '2026-10-01T00:00:00Z' });
+    for (let i = 0; i < 1005; i++) storage.add(`${BRAND}/bulk-${i}/f.jpg`);
+
+    const result = await purgeBrand(service() as never, BRAND, NOW);
+
+    expect((result as { filesDeleted: number }).filesDeleted).toBe(1010);
+    expect([...storage].filter((p) => p.startsWith(`${BRAND}/`))).toEqual([]);
+  });
+
+  it('finishes the purge and reports a login it could not delete', async () => {
+    Object.assign(db.accounts[0], { offboarded_at: '2026-09-01T00:00:00Z', purge_after: '2026-10-01T00:00:00Z' });
+    failDeleteUser = 'only-here';
+
+    const result = await purgeBrand(service() as never, BRAND, NOW);
+
+    expect(result).toEqual({ filesDeleted: 5, loginsDeleted: 0, loginsNotDeleted: ['only-here'] });
+    expect(db.accounts.map((r) => r.id)).toEqual([OTHER]);
   });
 });

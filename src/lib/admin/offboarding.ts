@@ -9,17 +9,24 @@ import { MEDIA_BUCKET } from '@/lib/constants';
  * 1. offboardBrand: stop everything now. Refused while a Stripe subscription
  *    is still running (cancel it first) or a paid Meta campaign is live
  *    (revoking the token would leave spend running with no way to pause it).
- *    Scheduled posts become drafts and their jobs are held, all Facebook,
- *    Instagram and ads tokens are deleted, and the brand is archived (hidden
- *    from its users) with purge allowed 30 days later.
+ *    Scheduled posts become drafts and their jobs are held, every credential
+ *    we hold for the brand is deleted (Facebook, Instagram and ads tokens, the
+ *    Conversions API token, the booking-ingest key, tournament feed keys and
+ *    the management app key), and the brand is archived (hidden from its
+ *    users) with purge allowed 30 days later.
  * 2. exportBrandData: a JSON copy of the brand's content, schedule, profile,
  *    link-in-bio and media links, for the owner on request. No credentials.
  * 3. purgeBrand: after purge_after, delete the brand's files, then its rows
  *    (every table cascades from accounts), then any login that belonged only
  *    to this brand. Posts already on Facebook or Instagram stay there.
+ *
+ * Every step is safe to repeat: offboarded_at is set last, so a run that
+ * stops part-way can simply be run again.
  */
 
 export const PURGE_AFTER_DAYS = 30;
+
+const STORAGE_PAGE = 1000;
 
 const LIVE_SUBSCRIPTION_STATUSES = ['trialing', 'active', 'past_due', 'unpaid', 'incomplete', 'paused'];
 
@@ -93,16 +100,28 @@ export async function offboardBrand(
       .eq('account_id', accountId);
     if (connError) throw new Error(`social_connections update failed: ${connError.message}`);
   }
+  // access_token is NOT NULL (default ''), so it is blanked rather than nulled.
   const { error: adsError } = await service
     .from('meta_ad_accounts')
-    .update({ access_token: null, token_expires_at: null, setup_complete: false })
+    .update({ access_token: '', token_expires_at: null, setup_complete: false, conversions_api_access_token: null })
     .eq('account_id', accountId);
   if (adsError) throw new Error(`meta_ad_accounts update failed: ${adsError.message}`);
+  const { error: feedError } = await service
+    .from('tournaments')
+    .update({ feed_api_key: null, updated_at: nowIso })
+    .eq('account_id', accountId);
+  if (feedError) throw new Error(`tournaments update failed: ${feedError.message}`);
+  // api_key is NOT NULL; a blank key reads as "not configured".
+  const { error: managementError } = await service
+    .from('management_app_connections')
+    .update({ api_key: '', enabled: false })
+    .eq('account_id', accountId);
+  if (managementError) throw new Error(`management_app_connections update failed: ${managementError.message}`);
 
   const purgeAfter = new Date(now.getTime() + PURGE_AFTER_DAYS * 24 * 60 * 60 * 1000).toISOString();
   const { error: archiveError } = await service
     .from('accounts')
-    .update({ archived_at: nowIso, offboarded_at: nowIso, purge_after: purgeAfter })
+    .update({ archived_at: nowIso, offboarded_at: nowIso, purge_after: purgeAfter, booking_ingest_secret: null })
     .eq('id', accountId);
   if (archiveError) throw new Error(`accounts update failed: ${archiveError.message}`);
 
@@ -172,10 +191,16 @@ async function brandStoragePaths(service: Service, accountId: string): Promise<s
     }
   }
 
+  // Storage lists at most one page at a time; read every page.
   const listFolder = async (prefix: string) => {
-    const { data, error } = await service.storage.from(MEDIA_BUCKET).list(prefix, { limit: 1000 });
-    if (error) throw new Error(`storage list failed for ${prefix}: ${error.message}`);
-    return (data ?? []) as Array<{ name: string; id: string | null }>;
+    const entries: Array<{ name: string; id: string | null }> = [];
+    for (let offset = 0; ; offset += STORAGE_PAGE) {
+      const { data, error } = await service.storage.from(MEDIA_BUCKET).list(prefix, { limit: STORAGE_PAGE, offset });
+      if (error) throw new Error(`storage list failed for ${prefix}: ${error.message}`);
+      const page = (data ?? []) as Array<{ name: string; id: string | null }>;
+      entries.push(...page);
+      if (page.length < STORAGE_PAGE) return entries;
+    }
   };
 
   // The brand's own folder (uploads are {accountId}/{assetId}/file).
@@ -203,7 +228,7 @@ export async function purgeBrand(
   service: Service,
   accountId: string,
   now: Date = new Date(),
-): Promise<{ error: string } | { filesDeleted: number; loginsDeleted: number }> {
+): Promise<{ error: string } | { filesDeleted: number; loginsDeleted: number; loginsNotDeleted: string[] }> {
   const { data: account, error: accountError } = await service
     .from('accounts')
     .select('id, offboarded_at, purge_after')
@@ -242,16 +267,29 @@ export async function purgeBrand(
     if (error) throw new Error(`storage delete failed: ${error.message}`);
   }
 
-  // Every brand table cascades from accounts.
+  // Campaign rows go first. ad_sets.adset_media_asset_id and
+  // campaigns.hero_media_id point at media_assets with no ON DELETE action,
+  // and the accounts cascade can reach media_assets before those rows, which
+  // would fail the whole delete.
+  for (const table of ['meta_campaigns', 'campaigns']) {
+    const { error } = await service.from(table).delete().eq('account_id', accountId);
+    if (error) throw new Error(`${table} delete failed: ${error.message}`);
+  }
+
+  // Every other brand table cascades from accounts.
   const { error: deleteError } = await service.from('accounts').delete().eq('id', accountId);
   if (deleteError) throw new Error(`accounts delete failed: ${deleteError.message}`);
 
+  // The brand is gone, so a retry cannot reach these logins: report any that
+  // fail (for example, audit_log rows elsewhere still point at them) instead
+  // of throwing, so the operator can delete them by hand.
   let loginsDeleted = 0;
+  const loginsNotDeleted: string[] = [];
   for (const userId of soleLogins) {
     const { error } = await service.auth.admin.deleteUser(userId);
-    if (error) throw new Error(`login delete failed: ${error.message}`);
-    loginsDeleted++;
+    if (error) loginsNotDeleted.push(userId);
+    else loginsDeleted++;
   }
 
-  return { filesDeleted: paths.length, loginsDeleted };
+  return { filesDeleted: paths.length, loginsDeleted, loginsNotDeleted };
 }
