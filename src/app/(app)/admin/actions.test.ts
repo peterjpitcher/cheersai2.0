@@ -322,7 +322,7 @@ describe('setBillingOverride', () => {
 describe('offboarding actions', () => {
   beforeEach(() => {
     mockOffboard.mockResolvedValue({ postsStopped: 2, connectionsRevoked: 1, purgeAfter: '2026-10-31T12:00:00.000Z' });
-    mockPurge.mockResolvedValue({ filesDeleted: 5, loginsDeleted: 1 });
+    mockPurge.mockResolvedValue({ filesDeleted: 5, loginsDeleted: 1, loginsNotDeleted: [] });
   });
 
   it('are super-admin only', async () => {
@@ -346,9 +346,19 @@ describe('offboarding actions', () => {
   it('offboard and purge run and are audited when confirmed', async () => {
     const { offboardBrandAction, purgeBrandAction } = await import('./actions');
     expect(await offboardBrandAction(A_BRAND, 'The New Venue')).toEqual({ success: true, purgeAfter: '2026-10-31T12:00:00.000Z' });
-    expect(await purgeBrandAction(A_BRAND, 'The New Venue')).toEqual({ success: true, filesDeleted: 5, loginsDeleted: 1 });
+    expect(await purgeBrandAction(A_BRAND, 'The New Venue')).toEqual({ success: true, filesDeleted: 5, loginsDeleted: 1, loginsNotDeleted: [] });
     expect(mockLogAdminEvent).toHaveBeenCalledWith(expect.objectContaining({ action: 'offboard_brand', targetAccountId: A_BRAND }));
     expect(mockLogAdminEvent).toHaveBeenCalledWith(expect.objectContaining({ action: 'purge_brand', targetAccountId: A_BRAND }));
+  });
+
+  it('report and log any login the purge could not delete', async () => {
+    mockPurge.mockResolvedValueOnce({ filesDeleted: 5, loginsDeleted: 0, loginsNotDeleted: ['user-9'] });
+    const { purgeBrandAction } = await import('./actions');
+    expect(await purgeBrandAction(A_BRAND, 'The New Venue')).toEqual({ success: true, filesDeleted: 5, loginsDeleted: 0, loginsNotDeleted: ['user-9'] });
+    expect(mockLoggerError).toHaveBeenCalledWith('purge brand left logins behind', undefined, { accountId: A_BRAND, userIds: ['user-9'] });
+    expect(mockLogAdminEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'purge_brand', detail: expect.objectContaining({ loginsNotDeleted: ['user-9'] }) }),
+    );
   });
 
   it('pass a refusal through and report a failure without claiming success', async () => {

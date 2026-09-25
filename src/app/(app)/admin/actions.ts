@@ -526,7 +526,10 @@ export async function exportBrandDataAction(accountId: string): Promise<ActionRe
   }
 }
 
-export async function purgeBrandAction(accountId: string, typedName: string): Promise<ActionResult & { filesDeleted?: number; loginsDeleted?: number }> {
+export async function purgeBrandAction(
+  accountId: string,
+  typedName: string,
+): Promise<ActionResult & { filesDeleted?: number; loginsDeleted?: number; loginsNotDeleted?: string[] }> {
   const ctx = await requireSuperAdmin();
   if (!ctx) return { error: 'Forbidden.' };
   const confirmed = await confirmBrandName(ctx, accountId, typedName);
@@ -535,6 +538,9 @@ export async function purgeBrandAction(accountId: string, typedName: string): Pr
   try {
     const result = await purgeBrand(ctx.supabase, accountId);
     if ('error' in result) return { error: result.error };
+    if (result.loginsNotDeleted.length) {
+      logger.error('purge brand left logins behind', undefined, { accountId, userIds: result.loginsNotDeleted });
+    }
     await logAdminEvent({
       actorUserId: ctx.user.id,
       action: 'purge_brand',
