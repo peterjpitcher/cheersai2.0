@@ -67,6 +67,7 @@ describe("exchangeProviderAuthCode", () => {
     mockFetchSequence([
       jsonResponse({ access_token: "short-token", expires_in: 3600 }),
       jsonResponse({ access_token: "long-token", expires_in: 5184000 }),
+      jsonResponse({ id: "meta-user-1" }),
       jsonResponse({
         data: [
           {
@@ -86,12 +87,14 @@ describe("exchangeProviderAuthCode", () => {
     expect(result.metadata).toEqual({ pageId: "123" });
     expect(result.displayName).toBe("Cheers Page");
     expect(result.expiresAt).toBe("2025-03-02T00:00:00.000Z");
+    expect(result.metaUserId).toBe("meta-user-1");
   });
 
   it("prefers matching Instagram Business account metadata", async () => {
     mockFetchSequence([
       jsonResponse({ access_token: "short-token", expires_in: 3600 }),
       jsonResponse({ access_token: "long-token", expires_in: 5184000 }),
+      jsonResponse({ id: "meta-user-1" }),
       jsonResponse({
         data: [
           {
@@ -128,11 +131,26 @@ describe("exchangeProviderAuthCode", () => {
     mockFetchSequence([
       jsonResponse({ access_token: "short-token", expires_in: 3600 }),
       jsonResponse({ access_token: "long-token", expires_in: 5184000 }),
+      jsonResponse({ id: "meta-user-1" }),
       jsonResponse({ data: [] }),
     ]);
 
     await expect(exchangeProviderAuthCode("facebook", "AUTH_CODE")).rejects.toThrow(
       /No Facebook Pages found/i,
     );
+  });
+
+  it("still connects when the Meta user id lookup fails", async () => {
+    mockFetchSequence([
+      jsonResponse({ access_token: "short-token", expires_in: 3600 }),
+      jsonResponse({ access_token: "long-token", expires_in: 5184000 }),
+      jsonResponse({ error: { message: "nope" } }, { status: 400 }),
+      jsonResponse({ data: [{ id: "123", name: "Cheers Page", access_token: "page-token-123" }] }),
+    ]);
+
+    const result = await exchangeProviderAuthCode("facebook", "AUTH_CODE", { existingMetadata: { pageId: "123" } });
+
+    expect(result.accessToken).toBe("page-token-123");
+    expect(result.metaUserId).toBeNull();
   });
 });

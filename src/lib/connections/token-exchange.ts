@@ -27,6 +27,12 @@ export interface ProviderTokenExchange {
   expiresAt?: string | null;
   displayName?: string | null;
   metadata?: Record<string, unknown> | null;
+  /**
+   * App-scoped Meta user id of the person who connected. Meta sends it to the
+   * data-deletion and deauthorise callbacks; storing it is what lets those
+   * callbacks find this connection. Null when the lookup failed.
+   */
+  metaUserId?: string | null;
 }
 
 export async function exchangeProviderAuthCode(
@@ -86,6 +92,7 @@ async function exchangeFacebookFamilyCode(
   }
 
   const expiresAt = expiresIn ? toIsoExpiry(expiresIn) : null;
+  const metaUserId = await fetchMetaUserId(userAccessToken);
   const pages = await fetchManagedPages(userAccessToken);
 
   if (!pages.length) {
@@ -126,6 +133,7 @@ async function exchangeFacebookFamilyCode(
       expiresAt,
       displayName: displayName ?? null,
       metadata: Object.keys(metadata).length ? metadata : null,
+      metaUserId,
     };
   }
 
@@ -166,6 +174,7 @@ async function exchangeFacebookFamilyCode(
     expiresAt,
     displayName: displayName ?? null,
     metadata,
+    metaUserId,
   };
 }
 
@@ -195,6 +204,23 @@ async function exchangeLongLivedFacebookToken(shortToken: string) {
     accessToken,
     expiresIn: normaliseExpires(json?.expires_in),
   };
+}
+
+/**
+ * The app-scoped id of the person who connected. Never fails the connection:
+ * a missing id only means a later Meta deletion request cannot be matched
+ * automatically (it is then handled by hand from the request log).
+ */
+export async function fetchMetaUserId(userAccessToken: string): Promise<string | null> {
+  try {
+    const params = new URLSearchParams({ access_token: userAccessToken, fields: "id" });
+    const response = await fetch(`${GRAPH_BASE}/me?${params.toString()}`);
+    const json = await safeJson(response);
+    return response.ok ? getString((json as { id?: unknown } | null)?.id) : null;
+  } catch (error) {
+    console.warn("[connections] could not read the Meta user id", error);
+    return null;
+  }
 }
 
 async function fetchManagedPages(userAccessToken: string) {
