@@ -61,3 +61,45 @@ describe("buildFacebookAdsOAuthUrl", () => {
     expect(url).toContain("test-fb-app-id");
   });
 });
+
+describe("buildOAuthRedirectUrl (organic publishing scopes)", () => {
+  beforeAll(() => {
+    seedBaseEnv();
+  });
+
+  function scopesOf(url: string): string[] {
+    return (new URL(url).searchParams.get("scope") ?? "").split(",");
+  }
+
+  it("requests exactly the Facebook publishing permissions", async () => {
+    const { buildOAuthRedirectUrl } = await import("@/lib/connections/oauth");
+    expect(scopesOf(buildOAuthRedirectUrl("facebook", "s"))).toEqual([
+      "pages_show_list",
+      "pages_read_engagement",
+      "pages_manage_posts",
+      "instagram_basic",
+      "instagram_content_publish",
+      "business_management",
+    ]);
+  });
+
+  it("requests exactly the Instagram publishing permissions", async () => {
+    const { buildOAuthRedirectUrl } = await import("@/lib/connections/oauth");
+    expect(scopesOf(buildOAuthRedirectUrl("instagram", "s"))).toEqual([
+      "instagram_basic",
+      "instagram_content_publish",
+      "pages_show_list",
+      "pages_read_engagement",
+      "business_management",
+    ]);
+  });
+
+  it("never requests the unused comment or Page webhook permissions", async () => {
+    const { buildOAuthRedirectUrl } = await import("@/lib/connections/oauth");
+    for (const provider of ["facebook", "instagram"] as const) {
+      const scopes = scopesOf(buildOAuthRedirectUrl(provider, "s"));
+      expect(scopes).not.toContain("pages_manage_metadata");
+      expect(scopes).not.toContain("instagram_manage_comments");
+    }
+  });
+});

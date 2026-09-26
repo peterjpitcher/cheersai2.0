@@ -7,7 +7,11 @@ import { z } from "zod";
 
 import { requireOwnerContext } from "@/lib/auth/roles";
 import { evaluateConnectionMetadata } from "@/lib/connections/metadata";
-import { buildOAuthRedirectUrl } from "@/lib/connections/oauth";
+import {
+  buildOAuthRedirectUrl,
+  FACEBOOK_SCOPE_LIST,
+  INSTAGRAM_SCOPE_LIST,
+} from "@/lib/connections/oauth";
 import { deriveConnectionReadiness, hasTokenValue } from "@/lib/connections/readiness";
 import { exchangeProviderAuthCode } from "@/lib/connections/token-exchange";
 import { storeEncryptedToken } from "@/lib/providers/token-helpers";
@@ -475,21 +479,15 @@ function derivePlatformAccountId(
 }
 
 /**
- * Return the OAuth scopes used for each provider.
+ * Return the OAuth scopes requested for each provider (the same lists the
+ * OAuth URL uses, so the stored record cannot drift from the request).
  */
 function getScopesForProvider(provider: Provider): string[] {
   switch (provider) {
     case "facebook":
-      return [
-        "pages_show_list", "pages_read_engagement", "pages_manage_posts",
-        "pages_manage_metadata", "instagram_basic", "instagram_content_publish",
-        "instagram_manage_comments", "business_management",
-      ];
+      return [...FACEBOOK_SCOPE_LIST];
     case "instagram":
-      return [
-        "instagram_basic", "instagram_content_publish", "instagram_manage_comments",
-        "pages_show_list", "pages_read_engagement", "business_management",
-      ];
+      return [...INSTAGRAM_SCOPE_LIST];
     default:
       return [];
   }
