@@ -110,6 +110,7 @@ tasks/                  SPEC-*.md, PLAN-*.md, ADS-PLAYBOOK-the-anchor.md
 ## Known gotchas and past bugs
 
 - **The v1 baseline is not a migration.** The v2 chain assumes v1 objects that no migration creates. `npm run db:rebuild` and CI copy `supabase/baseline/v1_baseline.sql` to `supabase/migrations/20260519230001_v1_baseline.sql`, run the reset, then delete it. Never commit or push that staged file.
+- **A rebuild is reshaped to production at the end.** `20260926130000_local_rebuild_matches_production.sql` turns the v2-shaped tables the chain builds (content_items, publish_jobs, social_connections, oauth_states, notifications, link_in_bio_*, and others) into production's v1 shape and copies production's grants; it does nothing on production. A later migration must target production's shape (text status columns, no `publish_jobs.platform`), and must state its own grants. `supabase/tests/local_rebuild_matches_production_verify.sql` checks a rebuild.
 - `src/lib/scheduling/proximity-label.ts` is duplicated in `supabase/functions/publish-queue/banner-label.ts`; change both.
 - Legacy host redirects are 307 and browser-only: a cross-origin redirect strips `Authorization`, so server-to-server callers must target `cheers.orangejelly.co.uk` directly.
 - Instagram media-fetch failures (Meta error code 9004) are transient and retried (PR #45); do not treat them as hard failures.

@@ -1,3 +1,20 @@
+# Local rebuild matches production (2026-09-26)
+
+Spec: `tasks/SPEC-local-rebuild-matches-production.md`.
+
+- [x] Read-only catalogue diff of a fresh rebuild against production (`nbkjciurhvkfpcpatbnt`):
+      grants, 9 tables in v1 shape on production, 1 production migration missing from the repo
+- [x] Restore `20260905053345_revoke_anon_grants_on_secret_bearing_tables.sql` from production history
+- [x] Migration `20260926130000_local_rebuild_matches_production.sql` (SHA-256 a710e455...f2bb):
+      rebuild fingerprint equals production in every schema category; production dry run: every
+      block skips, 0 grant statements
+- [x] Verify script passes on the rebuild and fails without the migration; the app's
+      `releaseHeldPublishJobs` released a held job through the local API
+- [x] `ci:verify` green (2869 tests, both time zones; build clean with CI's placeholder env)
+- [x] CI green on PR #121, including migration-check (CLI 2.67.1: both migrations applied, "No schema errors found")
+- [ ] Owner approval, then apply the migration to production as a history-only no-op
+      (re-run the dry run first; it must still read all false and 0)
+
 # Brand-aware AI copy: business type and description (2026-09-22)
 
 Spec: `tasks/SPEC-brand-business-type.md`. Two stacked PRs; migration before either merges.
