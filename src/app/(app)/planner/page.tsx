@@ -6,7 +6,7 @@ import { getContentForCalendar, getContentByAccount } from '@/lib/content/querie
 import { resolveThumbnails } from '@/lib/media/resolve-thumbnails';
 import { materialiseRecurring } from '@/lib/scheduling/materialise';
 import { PlannerSkeleton } from '@/features/planner/planner-skeleton';
-import { getCurrentUser } from '@/lib/auth/server';
+import { requireAuthContext } from '@/lib/auth/server';
 import { getFailedPublishCount, listActiveFailedPosts, listPlannerNotifications, type ActiveFailedPost } from '@/lib/planner/notifications';
 import { AttentionNeededBanner } from '@/features/planner/attention-needed-banner';
 import { PlannerShell } from '@/features/planner/planner-shell';
@@ -33,9 +33,11 @@ export default async function PlannerPage({ searchParams }: PlannerPageProps) {
   const statusParam = rawStatusParam ? (STATUS_QUERY_ALIASES[rawStatusParam] ?? rawStatusParam) : undefined;
   const failedFilterActive = statusParam === 'failed';
 
-  // Get accountId for realtime subscriptions (non-blocking — used by client components)
-  const user = await getCurrentUser();
-  const accountId = user?.accountId ?? '';
+  // Resolve the active brand here, before any query. The (app) layout's auth
+  // redirect does not protect this page: layouts and pages render in parallel,
+  // so a signed-out visit used to reach the content queries with a blank
+  // account id (Postgres 22P02 on every visit). This redirects instead.
+  const { accountId, role } = await requireAuthContext();
 
   // Compute display values for header
   const now = DateTime.now().setZone(DEFAULT_TIMEZONE);
@@ -51,7 +53,7 @@ export default async function PlannerPage({ searchParams }: PlannerPageProps) {
     listPlannerNotifications(20).catch(() => []),
     failedFilterActive ? listActiveFailedPosts(100).catch(() => []) : Promise.resolve([]),
     // A lookup failure just hides the checklist; it is guidance, not a gate.
-    accountId ? getSetupProgress(createServiceSupabaseClient(), accountId).catch(() => null) : Promise.resolve(null),
+    getSetupProgress(createServiceSupabaseClient(), accountId).catch(() => null),
   ]);
 
   // Map server notifications to PlannerActivityItem[] for the feed
@@ -68,11 +70,9 @@ export default async function PlannerPage({ searchParams }: PlannerPageProps) {
   return (
     <div className="flex h-full flex-col gap-6">
       {/* Attention Needed banner — shows failed publish count with realtime updates */}
-      {accountId ? (
-        <AttentionNeededBanner accountId={accountId} initialCount={failedCount} />
-      ) : null}
+      <AttentionNeededBanner accountId={accountId} initialCount={failedCount} />
 
-      {setupProgress ? <SetupChecklist progress={setupProgress} isOwner={user?.role === 'owner'} /> : null}
+      {setupProgress ? <SetupChecklist progress={setupProgress} isOwner={role === 'owner'} /> : null}
 
       {failedFilterActive ? (
         <FailedPostsList posts={activeFailedPosts} />
