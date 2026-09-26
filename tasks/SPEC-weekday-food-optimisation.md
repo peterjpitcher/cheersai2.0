@@ -67,6 +67,7 @@ Not a fault: the booking system works. The availability API returned 20 open slo
 | D12 | The page and ad label is treated as personal data, because it sits against named bookings. The Anchor's privacy notice must say so when it ships | R08 |
 | D13 | The Meta ad account spending limit stays as it is: about £310 left against roughly £287 still planned. Raise it only if other ads are added before 16 October | C2, C4 |
 | D14 | From 25 September: run the full test to 16 October and optimise; never recommend stopping | Section 10 |
+| D15 | The dinner challenger headline drops "tonight" and becomes "Dinner Tue to Fri, just walk in from 4pm" (40), so one rule covers the ads and the page: no "today" or "tonight" wording anywhere | D9 |
 
 D14 does not change the narrow emergency pause Peter pre-authorised on 10 September (runbook section 6); the review asks for that authority to stay intact (R12).
 
@@ -279,12 +280,12 @@ The script prints no tokens, keys or connection secrets. It writes only: 4 short
 | | Lunch A and Lunch B | Dinner A and Dinner B |
 |---|---|---|
 | Name | Evergreen Test \| Walk in \| Var 4 | Evergreen Test \| Walk in \| Var 4 |
-| Headline (limit 40) | Lunch, no booking needed, Tue to Fri (36) | Dinner tonight, just walk in, from 4pm (38) |
+| Headline (limit 40) | Lunch, no booking needed, Tue to Fri (36) | Dinner Tue to Fri, just walk in from 4pm (40, D15) |
 | Primary text (limit 300) | Just turn up. We serve lunch Tuesday to Friday, 12pm to 3pm, with snack pots at £9 and wraps at £10. Free on-site parking and dogs welcome, in Stanwell Moor. (157) | No need to book. We serve dinner 4pm to 9pm, Tuesday to Friday: stone-baked pizzas from £13 and our beef and ale pie with mash at £16. Free on-site parking and dogs welcome. (173) |
 | Description (limit 25) | Walk in 12pm to 3pm (19) | Kitchen open 4pm to 9pm (23) |
 | Button | Book now (as the originals, D7) | Book now (as the originals, D7) |
 
-Price sources (management app `menu_dishes`, active, 25 September): snack pots £9 (all three); Chicken Goujon Wrap and Fish Finger Wrap £10; Margherita £13 (cheapest pizza); Beef & Ale Pie £16. In the dinner headline, "tonight" is ad copy only: dinner ads deliver only Tuesday to Friday, 14:00 to 20:00, and the pre-authorised emergency pause covers a day the kitchen is closed (runbook section 6). The landing page itself uses no "tonight" wording (D9). Neither text matches the app's `WALK_IN_PATTERN` ("walk-ins welcome/available", `src/lib/campaigns/generate.ts:87`), but both deliberately go against the app's booking-first stance ("walk-ins welcome weakens the reason to reserve", `src/lib/campaigns/optimisation.ts:1326`); testing that stance is the point of the challenger (D3).
+Price sources (management app `menu_dishes`, active, 25 September): snack pots £9 (all three); Chicken Goujon Wrap and Fish Finger Wrap £10; Margherita £13 (cheapest pizza); Beef & Ale Pie £16. Neither headline says "today" or "tonight" (D15), matching the landing page (D9); both state the regular Tuesday to Friday times, and the pre-authorised emergency pause still covers a day the kitchen is closed (runbook section 6). Neither text matches the app's `WALK_IN_PATTERN` ("walk-ins welcome/available", `src/lib/campaigns/generate.ts:87`), but both deliberately go against the app's booking-first stance ("walk-ins welcome weakens the reason to reserve", `src/lib/campaigns/optimisation.ts:1326`); testing that stance is the point of the challenger (D3).
 
 Known effect: adding an ad to a live ad set counts as a significant edit to Meta, and on 22 September a new ad took all of Lunch A's delivery within hours. Expect the challengers to take a large share of spend at first. That is accepted (D3); budgets are lifetime and unchanged, so total spend does not rise.
 
