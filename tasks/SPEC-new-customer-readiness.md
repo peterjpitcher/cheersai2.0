@@ -26,6 +26,7 @@ Verified 2026-09-24:
 | D2b | Orange Jelly Limited is VAT-registered; VAT is charged on subscriptions. | 2026-09-24 |
 | D2c | The trial requires a card at the start. | 2026-09-24 |
 | D2d | Launch with AI usage logged but not capped; caps (§4.6) are set from real usage data later. | 2026-09-25 |
+| D2e | Changing plan during the free trial keeps the trial running: nothing is charged until the trial ends (Stripe portal `trial_update_behavior=continue_trial`, test and live). | 2026-09-26 |
 | D3 | Lapse and suspension behaviour as proposed in §4.1: a lapsed or suspended brand keeps read access, the billing page (owner) and export, but cannot create, edit, generate or upload, and new publishing is held. On restore, future posts resume; overdue posts wait for the owner to review (§4.2). Past-due grace: 7 days after the paid period ends. | 2026-09-24 |
 | D4 | Roles as proposed in §4.5: owners handle billing, inviting and removing people, Facebook and Instagram connections, export and deletion requests; members create, edit and schedule content. Every existing membership becomes owner. | 2026-09-24 |
 | D5 | Offboarding is handled by the operator on request (runbook plus admin action), not a customer button. Data is kept for 30 days after offboarding, then deleted. | 2026-09-24 |
