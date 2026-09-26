@@ -23,6 +23,12 @@ vi.mock("@/features/connections/connection-oauth-button", () => ({
   ConnectionOAuthButton: () => <div data-testid="oauth-button" />,
 }));
 
+vi.mock("@/features/connections/connection-disconnect-button", () => ({
+  ConnectionDisconnectButton: ({ provider }: { provider: string }) => (
+    <div data-testid={`disconnect-button-${provider}`} />
+  ),
+}));
+
 // Mock listConnectionSummaries
 const mockListConnectionSummaries = vi.fn();
 vi.mock("@/lib/connections/data", () => ({
@@ -63,7 +69,7 @@ describe("ConnectionCards — token expiry display", () => {
       makeConnection({ provider: "facebook", expiresAt: undefined }),
     ]);
 
-    const element = await ConnectionCards();
+    const element = await ConnectionCards({ canDisconnect: true });
     render(element);
 
     expect(screen.getByText("Does not expire")).toBeDefined();
@@ -74,7 +80,7 @@ describe("ConnectionCards — token expiry display", () => {
       makeConnection({ provider: "instagram", expiresAt: undefined }),
     ]);
 
-    const element = await ConnectionCards();
+    const element = await ConnectionCards({ canDisconnect: true });
     render(element);
 
     expect(screen.getByText("Does not expire")).toBeDefined();
@@ -86,7 +92,7 @@ describe("ConnectionCards — token expiry display", () => {
       makeConnection({ provider: "instagram", expiresAt: pastDate }),
     ]);
 
-    const element = await ConnectionCards();
+    const element = await ConnectionCards({ canDisconnect: true });
     render(element);
 
     expect(screen.getByText("Expired — reconnect required")).toBeDefined();
@@ -102,7 +108,7 @@ describe("ConnectionCards — token expiry display", () => {
       makeConnection({ provider: "instagram", expiresAt: soonIso }),
     ]);
 
-    const element = await ConnectionCards();
+    const element = await ConnectionCards({ canDisconnect: true });
     render(element);
 
     const label = screen.getByText(`Expires ${formatted}`);
@@ -119,7 +125,7 @@ describe("ConnectionCards — token expiry display", () => {
       makeConnection({ provider: "instagram", expiresAt: futureIso }),
     ]);
 
-    const element = await ConnectionCards();
+    const element = await ConnectionCards({ canDisconnect: true });
     render(element);
 
     const label = screen.getByText(formatted);
@@ -127,5 +133,39 @@ describe("ConnectionCards — token expiry display", () => {
     // Should NOT have warning styling
     expect(label.className).not.toContain("text-amber-600");
     expect(label.className).not.toContain("text-rose-600");
+  });
+});
+
+describe("ConnectionCards: disconnect control", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  it("offers Disconnect only for a provider with a stored token", async () => {
+    mockListConnectionSummaries.mockResolvedValue([
+      makeConnection({ provider: "facebook", hasAccessToken: true }),
+      makeConnection({ provider: "instagram", hasAccessToken: false, status: "needs_action" }),
+    ]);
+
+    const element = await ConnectionCards({ canDisconnect: true });
+    render(element);
+
+    expect(screen.queryByTestId("disconnect-button-facebook")).not.toBeNull();
+    expect(screen.queryByTestId("disconnect-button-instagram")).toBeNull();
+  });
+
+  it("never offers Disconnect to a member", async () => {
+    mockListConnectionSummaries.mockResolvedValue([
+      makeConnection({ provider: "facebook", hasAccessToken: true }),
+    ]);
+
+    const element = await ConnectionCards({ canDisconnect: false });
+    render(element);
+
+    expect(screen.queryByTestId("disconnect-button-facebook")).toBeNull();
   });
 });
