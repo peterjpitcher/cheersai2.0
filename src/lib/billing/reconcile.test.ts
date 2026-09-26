@@ -456,3 +456,64 @@ describe('hasLiveCheersSubscription', () => {
     await expect(check()).rejects.toThrow('Stripe API unavailable');
   });
 });
+
+describe('reconcileBrandFromStripe: brand scoping', () => {
+  beforeEach(() => {
+    // The other brand has its own customer and a newer, live stored subscription.
+    db.seed('billing_customers', [{ account_id: OTHER_BRAND, stripe_customer_id: 'cus_other_brand' }]);
+    db.seed('subscriptions', [
+      storedRow({
+        stripe_subscription_id: 'sub_other_brand',
+        account_id: OTHER_BRAND,
+        stripe_customer_id: 'cus_other_brand',
+        status: 'active',
+        stripe_state_at: '2026-09-26T11:00:00.000Z',
+      }),
+    ]);
+    fake.subscriptions.push(fakeSubscription({ id: 'sub_other_brand', customer: 'cus_other_brand', status: 'active' }));
+  });
+
+  it('lists only this brand\'s customer and decides the state from this brand\'s rows alone', async () => {
+    fake.subscriptions.push(fakeSubscription({ id: 'sub_mine', customer: CUSTOMER, status: 'canceled' }));
+
+    const result = await reconcile();
+
+    expect(fake.subscriptionsList).toHaveBeenCalledTimes(1);
+    expect(fake.subscriptionsList).toHaveBeenCalledWith(expect.objectContaining({ customer: CUSTOMER }));
+    expect(result).toMatchObject({ subscriptionId: 'sub_mine', state: 'lapsed' });
+    expect(storedSubscription('sub_other_brand')).toMatchObject({ account_id: OTHER_BRAND, status: 'active', stripe_state_at: '2026-09-26T11:00:00.000Z' });
+  });
+
+  it('scopes every subscriptions and billing_customers query to this brand', async () => {
+    db.seed('subscriptions', [storedRow({ stripe_subscription_id: 'sub_vanished' })]);
+    fake.subscriptions.push(fakeSubscription({ id: 'sub_mine', customer: CUSTOMER, status: 'active' }));
+
+    await reconcile();
+    await hasLiveCheersSubscription(db.client(), BRAND, { stripe: fake.stripe });
+
+    const billingQueries = db.queries.filter((query) => query.table === 'subscriptions' || query.table === 'billing_customers');
+    expect(billingQueries.length).toBeGreaterThan(5);
+    for (const query of billingQueries) {
+      // The one deliberate exception: the ownership check that refuses a
+      // subscription id already stored against another brand.
+      const ownershipCheck = query.op === 'select' && query.columns === 'account_id' && query.eq.length === 1 && query.eq[0][0] === 'stripe_subscription_id';
+      if (ownershipCheck) continue;
+      if (query.op === 'insert') continue;
+      expect(query.eq, `${query.op} ${query.table} ${query.columns ?? ''}`).toContainEqual(['account_id', BRAND]);
+    }
+    expect(storedSubscription('sub_vanished')?.status).toBe('canceled');
+  });
+
+  it('never takes over a subscription stored against another brand', async () => {
+    // An older stored state, so only the brand filter stops this read overwriting it.
+    Object.assign(db.tables.subscriptions.find((row) => row.stripe_subscription_id === 'sub_other_brand') ?? {}, {
+      stripe_state_at: '2026-09-01T00:00:00.000Z',
+    });
+    // Stripe lists the other brand's subscription id on this brand's customer.
+    fake.subscriptions.push(fakeSubscription({ id: 'sub_other_brand', customer: CUSTOMER, status: 'active', metadata: { app: 'cheersai' } }));
+    fake.subscriptions = fake.subscriptions.filter((subscription) => subscription.customer === CUSTOMER);
+
+    await expect(reconcile()).rejects.toThrow(/stored against another brand/);
+    expect(storedSubscription('sub_other_brand')).toMatchObject({ account_id: OTHER_BRAND, stripe_customer_id: 'cus_other_brand' });
+  });
+});

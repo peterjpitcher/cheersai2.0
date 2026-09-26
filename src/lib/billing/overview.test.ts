@@ -137,3 +137,47 @@ describe('billingPlanOptions', () => {
     ]);
   });
 });
+
+describe('getBillingOverview: brand scoping', () => {
+  it('reads only the active brand\'s customer and subscriptions, even when another brand\'s are newer', async () => {
+    db.seed('accounts', [{ id: OTHER_BRAND, business_name: 'Someone Else', billing_override: null }]);
+    db.seed('billing_customers', [{ account_id: OTHER_BRAND, stripe_customer_id: 'cus_other_brand' }]);
+    db.seed('subscriptions', [
+      subscription({
+        stripe_subscription_id: 'sub_other_brand',
+        account_id: OTHER_BRAND,
+        stripe_customer_id: 'cus_other_brand',
+        status: 'active',
+        plan: 'professional',
+        stripe_price_id: TEST_PRICES.professionalMonthly,
+        stripe_state_at: '2026-09-26T11:00:00Z',
+      }),
+    ]);
+
+    const overview = await getBillingOverview(db.client(), BRAND, new Date('2026-09-26T12:00:00Z'));
+
+    expect(overview).toMatchObject({ state: 'incomplete', subscription: null, hasCustomer: false, liveSubscription: false, trial: 'eligible' });
+  });
+
+  it('uses this brand\'s own state when both brands have subscriptions', async () => {
+    db.seed('accounts', [{ id: OTHER_BRAND, business_name: 'Someone Else', billing_override: null }]);
+    db.seed('billing_customers', [
+      { account_id: BRAND, stripe_customer_id: 'cus_1' },
+      { account_id: OTHER_BRAND, stripe_customer_id: 'cus_other_brand' },
+    ]);
+    db.seed('subscriptions', [
+      subscription({ status: 'canceled', stripe_state_at: '2026-09-20T10:00:00Z' }),
+      subscription({
+        stripe_subscription_id: 'sub_other_brand',
+        account_id: OTHER_BRAND,
+        stripe_customer_id: 'cus_other_brand',
+        status: 'active',
+        stripe_state_at: '2026-09-26T11:00:00Z',
+      }),
+    ]);
+
+    const overview = await getBillingOverview(db.client(), BRAND, new Date('2026-09-26T12:00:00Z'));
+
+    expect(overview).toMatchObject({ state: 'lapsed', hasCustomer: true, liveSubscription: false, subscription: { status: 'canceled' } });
+  });
+});

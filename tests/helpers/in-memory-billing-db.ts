@@ -168,7 +168,8 @@ export class InMemoryBillingDb {
   private failures: Failure[] = [];
   /** Every write, in order, for assertions about ordering. */
   writes: Array<{ table: string; op: Op; rows: Row[] }> = [];
-
+  /** Every query run, with its equality filters, for assertions about brand scoping. */
+  queries: Array<{ table: string; op: Op; columns: string | null; eq: Array<[string, unknown]> }> = [];
 
   seed(table: string, rows: Row[]): void {
     for (const row of rows) {
@@ -275,6 +276,7 @@ function compare(spec: ColumnSpec | undefined, a: unknown, b: unknown): number {
 class Query implements PromiseLike<{ data: unknown; error: DbError | null; count?: number | null }> {
   private op: Op = 'select';
   private filters: Filter[] = [];
+  private eqFilters: Array<[string, unknown]> = [];
   private payload: Row | Row[] | null = null;
   private returning = false;
   private columns: string | null = null;
@@ -328,6 +330,7 @@ class Query implements PromiseLike<{ data: unknown; error: DbError | null; count
 
   eq(column: string, value: unknown): this {
     this.column(column);
+    this.eqFilters.push([column, value]);
     this.filters.push((row) => row[column] === value);
     return this;
   }
@@ -422,6 +425,7 @@ class Query implements PromiseLike<{ data: unknown; error: DbError | null; count
   }
 
   private async execute(): Promise<{ data: unknown; error: DbError | null; count?: number | null }> {
+    this.db.queries.push({ table: this.table, op: this.op, columns: this.columns, eq: [...this.eqFilters] });
     const failure = this.db.takeFailure(this.table, this.op);
     if (failure) return { data: null, error: failure, count: null };
 
