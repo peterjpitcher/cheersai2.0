@@ -14,20 +14,28 @@ type Tables = {
   flag: { enabled: boolean } | null;
   flagError?: unknown;
   account: { archived_at: string | null; billing_override: 'comped' | 'suspended' | null } | null;
-  subscription: { status: string; current_period_end: string | null } | null;
+  subscription: { status: string; current_period_start?: string | null; current_period_end: string | null } | null;
+  /** Simulate the function running before migration 20260926120000 added current_period_start. */
+  periodStartColumnMissing?: boolean;
 };
 
 const writes: Array<{ table: string; op: string; payload: unknown; filters: Array<[string, unknown]> }> = [];
+const subscriptionSelects: string[] = [];
 
 function mockSupabase(tables: Tables) {
   return {
     from: vi.fn((table: string) => {
       let op = 'select';
       let payload: unknown = null;
+      let columns = '';
       const filters: Array<[string, unknown]> = [];
       const c: Record<string, unknown> = {};
       const chain = () => c;
-      c.select = vi.fn(chain);
+      c.select = vi.fn((cols?: string) => {
+        columns = cols ?? '*';
+        if (table === 'subscriptions') subscriptionSelects.push(columns);
+        return c;
+      });
       c.order = vi.fn(chain);
       c.limit = vi.fn(chain);
       c.lte = vi.fn(chain);
@@ -51,7 +59,17 @@ function mockSupabase(tables: Tables) {
         }
         if (table === 'app_flags') return { data: tables.flag, error: tables.flagError ?? null };
         if (table === 'accounts') return { data: tables.account, error: null };
-        if (table === 'subscriptions') return { data: tables.subscription, error: null };
+        if (table === 'subscriptions') {
+          if (tables.periodStartColumnMissing && columns.includes('current_period_start')) {
+            return { data: null, error: { code: '42703', message: 'column subscriptions.current_period_start does not exist' } };
+          }
+          if (!tables.subscription) return { data: null, error: null };
+          // Return only the selected columns, as PostgREST would.
+          const picked = Object.fromEntries(
+            columns.split(',').map((name) => name.trim()).map((name) => [name, (tables.subscription as Record<string, unknown>)[name] ?? null]),
+          );
+          return { data: picked, error: null };
+        }
         if (table === 'content_items') {
           return {
             data: { id: 'content-1', account_id: 'brand-1', platform: 'facebook', placement: 'feed', scheduled_for: '2026-10-15T09:00:00Z', prompt_context: null, campaigns: null },
@@ -88,7 +106,9 @@ function worker(tables: Tables) {
 
 beforeEach(() => {
   writes.length = 0;
-  vi.spyOn(console, 'error').mockImplementation(() => {});
+  subscriptionSelects.length = 0;
+  vi.spyOn(console, 'error').mockImplementation(() => {}).mockClear();
+  vi.spyOn(console, 'warn').mockImplementation(() => {}).mockClear();
 });
 
 describe('checkPublishHold', () => {
@@ -107,7 +127,36 @@ describe('checkPublishHold', () => {
     expect(await worker({ flag: { enabled: true }, account: { archived_at: null, billing_override: 'comped' }, subscription: null }).checkHold('brand-1', NOW)).toBeNull();
     expect(await worker({ flag: { enabled: true }, account: plain, subscription: { status: 'active', current_period_end: null } }).checkHold('brand-1', NOW)).toBeNull();
     expect(await worker({ flag: { enabled: true }, account: plain, subscription: { status: 'trialing', current_period_end: null } }).checkHold('brand-1', NOW)).toBeNull();
-    expect(await worker({ flag: { enabled: true }, account: plain, subscription: { status: 'past_due', current_period_end: '2026-10-10T00:00:00Z' } }).checkHold('brand-1', NOW)).toBeNull();
+    expect(
+      await worker({
+        flag: { enabled: true },
+        account: plain,
+        subscription: { status: 'past_due', current_period_start: '2026-10-09T09:00:00Z', current_period_end: '2026-11-09T09:00:00Z' },
+      }).checkHold('brand-1', NOW),
+    ).toBeNull();
+  });
+
+  it('measures past-due grace from the start of the unpaid period, not the (future) period end', async () => {
+    // NOW is 2026-10-15T09:00Z. Stripe has moved the period on to 2026-11-07 before the payment failed.
+    const unpaidSince = (start: string) =>
+      worker({ flag: { enabled: true }, account: plain, subscription: { status: 'past_due', current_period_start: start, current_period_end: '2026-11-07T09:00:00Z' } });
+    expect(await unpaidSince('2026-10-07T09:00:00Z').checkHold('brand-1', NOW)).toBe('lapsed');
+    expect(await unpaidSince('2026-10-09T09:00:00Z').checkHold('brand-1', NOW)).toBeNull();
+    expect(subscriptionSelects[0]).toBe('status, current_period_start, current_period_end');
+  });
+
+  it('still works before the period-start column exists: reads the old columns and uses the period end', async () => {
+    const legacy = (periodEnd: string) =>
+      worker({
+        flag: { enabled: true },
+        account: plain,
+        subscription: { status: 'past_due', current_period_end: periodEnd },
+        periodStartColumnMissing: true,
+      });
+    expect(await legacy('2026-10-10T00:00:00Z').checkHold('brand-1', NOW)).toBeNull();
+    expect(subscriptionSelects).toEqual(['status, current_period_start, current_period_end', 'status, current_period_end']);
+    expect(await legacy('2026-10-01T00:00:00Z').checkHold('brand-1', NOW)).toBe('lapsed');
+    expect(console.error).not.toHaveBeenCalled();
   });
 
   it('publishes (and logs) when the check itself fails, so a read error never stops every brand', async () => {

@@ -1,7 +1,28 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { DateTime } from "luxon";
 
-import { formatEventDateLong, formatUkDate, formatUkDateTime, ordinalSuffix } from "@/lib/utils/date";
+import { formatEventDateLong, formatUkDate, formatUkDateTime, formatUkLongDate, ordinalSuffix } from "@/lib/utils/date";
+
+describe("formatUkLongDate", () => {
+  it("uses the London calendar in summer (BST): late UTC evening is the next day", () => {
+    expect(formatUkLongDate("2026-10-09T23:30:00Z")).toBe("10 October 2026");
+  });
+
+  it("uses the London calendar in winter (GMT): UTC and London agree", () => {
+    expect(formatUkLongDate("2026-11-08T23:30:00Z")).toBe("8 November 2026");
+  });
+
+  it("formats the day the clocks go back correctly", () => {
+    // 25 October 2026 01:30 BST is 00:30 UTC; 23:30 UTC that evening is GMT.
+    expect(formatUkLongDate("2026-10-25T00:30:00Z")).toBe("25 October 2026");
+    expect(formatUkLongDate("2026-10-25T23:30:00Z")).toBe("25 October 2026");
+  });
+
+  it("accepts a Date and returns an empty string for nonsense", () => {
+    expect(formatUkLongDate(new Date("2026-03-29T00:30:00Z"))).toBe("29 March 2026");
+    expect(formatUkLongDate("not a date")).toBe("");
+  });
+});
 
 describe("formatUkDate and formatUkDateTime", () => {
   const originalTimeZone = process.env.TZ;
