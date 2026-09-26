@@ -4,7 +4,7 @@ import type Stripe from 'stripe';
 import { reconcileBrandFromStripe, type ReconcileResult } from '@/lib/billing/reconcile';
 import { CHEERSAI_APP_TAG, stripeId } from '@/lib/billing/stripe';
 import { createLogger } from '@/lib/logging';
-import { alertStripeWebhookFailure } from '@/lib/notifications/operator-alerts';
+import { alertStripeInvoiceFinalizationFailed, alertStripeWebhookFailure } from '@/lib/notifications/operator-alerts';
 
 /**
  * Stripe webhook processing (spec §4.3), after the signature has been verified.
@@ -15,7 +15,8 @@ import { alertStripeWebhookFailure } from '@/lib/notifications/operator-alerts';
  *    shared with the management app). Ignored events are still recorded and
  *    marked processed.
  * 3. Reconcile the brand by reading its current state from Stripe, never from
- *    the event payload, so the order events arrive in does not matter.
+ *    the event payload, so the order events arrive in does not matter. An
+ *    invoice Stripe could not finalise alerts the operator instead.
  * 4. Mark the event processed, or store the error and answer 500 so Stripe
  *    retries. A 2xx is only ever returned once the event row is stored.
  */
@@ -34,6 +35,18 @@ export const RECONCILE_EVENT_TYPES: ReadonlySet<string> = new Set([
   'invoice.payment_failed',
 ]);
 
+/** Events that alert the operator instead of reconciling (nothing is charged until fixed). */
+export const OPERATOR_ALERT_EVENT_TYPES: ReadonlySet<string> = new Set(['invoice.finalization_failed']);
+
+/**
+ * Every event type the webhook endpoint should be subscribed to; see
+ * docs/runbooks/stripe-billing.md. Deliberately not invoice.created or any
+ * customer.* event: the Stripe account is shared with the management app, and
+ * invoice.created on a slow endpoint delays invoice finalisation for the
+ * whole account.
+ */
+export const SUBSCRIBED_EVENT_TYPES: readonly string[] = [...RECONCILE_EVENT_TYPES, ...OPERATOR_ALERT_EVENT_TYPES];
+
 export interface WebhookOutcome {
   status: 200 | 500;
   body: Record<string, unknown>;
@@ -50,6 +63,8 @@ interface EventObjectShape {
   customer?: string | { id: string } | null;
   metadata?: Record<string, string> | null;
   client_reference_id?: string | null;
+  /** Invoices: why Stripe could not finalise it. */
+  last_finalization_error?: { message?: string | null } | null;
 }
 
 async function recordEvent(service: SupabaseClient, event: Stripe.Event): Promise<'new' | 'retry' | 'done' | 'error'> {
@@ -118,8 +133,9 @@ export async function processStripeEvent(
   }
 
   if (!accountId) {
-    // Not a CheersAI customer: most likely the management app's. Recorded and done.
-    const taggedForUs = object.metadata?.app === CHEERSAI_APP_TAG;
+    // Not a CheersAI customer: most likely the management app's. Recorded and
+    // done. Only a subscription-changing event tagged as ours is suspicious.
+    const taggedForUs = object.metadata?.app === CHEERSAI_APP_TAG && RECONCILE_EVENT_TYPES.has(event.type);
     if (taggedForUs) {
       // Should never happen (customers are stored before any Checkout starts).
       logger.error('CheersAI-tagged Stripe event for an unknown customer', undefined, {
@@ -133,6 +149,25 @@ export async function processStripeEvent(
       error: taggedForUs ? 'ignored: CheersAI metadata but no billing customer row' : null,
     });
     return marked ? { status: 200, body: { received: true, ignored: true } } : { status: 500, body: { error: 'Could not record the event.' } };
+  }
+
+  if (OPERATOR_ALERT_EVENT_TYPES.has(event.type)) {
+    const reason = object.last_finalization_error?.message ?? null;
+    logger.error('Stripe could not finalise a CheersAI invoice', undefined, { eventId: event.id, accountId, invoiceId: object.id, reason });
+    try {
+      await alertStripeInvoiceFinalizationFailed(service, {
+        eventId: event.id,
+        invoiceId: object.id ?? null,
+        customerId,
+        accountId,
+        reason,
+      });
+    } catch (error) {
+      // Not told yet: answer 500 so Stripe redelivers and the alert is tried again.
+      return fail(service, event, error, accountId);
+    }
+    const marked = await markEvent(service, event.id, { processed_at: now().toISOString(), error: null });
+    return marked ? { status: 200, body: { received: true, alerted: true } } : { status: 500, body: { error: 'Could not record the event.' } };
   }
 
   if (!RECONCILE_EVENT_TYPES.has(event.type)) {
@@ -178,7 +213,14 @@ async function fail(service: SupabaseClient, event: Stripe.Event, error: unknown
     type: event.type,
     accountId,
   });
-  await markEvent(service, event.id, { processed_at: null, error: message.slice(0, 1000) });
+  // Only an event not yet processed: a concurrent delivery of the same event
+  // that succeeded must not be marked failed (and retried) by this one.
+  const { error: markError } = await service
+    .from('stripe_events')
+    .update({ error: message.slice(0, 1000) })
+    .eq('id', event.id)
+    .is('processed_at', null);
+  if (markError) logger.error('could not update a Stripe event row', undefined, { eventId: event.id, reason: markError.message });
   try {
     await alertStripeWebhookFailure(service, { eventId: event.id, eventType: event.type, message, accountId: accountId ?? null });
   } catch (alertError) {

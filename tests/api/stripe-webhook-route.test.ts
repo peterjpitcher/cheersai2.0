@@ -148,6 +148,15 @@ describe('POST /api/stripe/webhook: processing', () => {
     expect(mockReconcile).not.toHaveBeenCalled();
   });
 
+  it('does not raise the unknown-customer error for a tagged event that cannot change a subscription', async () => {
+    const response = await POST(
+      signedRequest(event('evt_tagged_other', 'customer.updated', { id: 'cus_unknown', object: 'customer', metadata: { app: 'cheersai' } })),
+    );
+    expect(response.status).toBe(200);
+    expect(storedEvent('evt_tagged_other')).toMatchObject({ error: null });
+    expect(logger.error).not.toHaveBeenCalled();
+  });
+
   it('records other event types for a CheersAI customer without reconciling or raising an error', async () => {
     const response = await POST(
       signedRequest(event('evt_other', 'customer.updated', { id: CHEERS_CUSTOMER, object: 'customer', metadata: { app: 'cheersai', account_id: BRAND } })),
@@ -199,6 +208,21 @@ describe('POST /api/stripe/webhook: processing', () => {
     expect(db.rows('stripe_events').every((row) => row.error === 'still failing')).toBe(true);
   });
 
+  it('never marks an event failed that a concurrent delivery has already processed', async () => {
+    mockReconcile.mockImplementationOnce(async () => {
+      // Another delivery of the same event finishes first...
+      const row = db.tables.stripe_events.find((stored) => stored.id === 'evt_race');
+      Object.assign(row ?? {}, { processed_at: '2026-09-26T10:00:00.000Z', error: null });
+      // ...then this one fails.
+      throw new Error('Stripe API unavailable');
+    });
+
+    const response = await POST(signedRequest(subscriptionUpdated('evt_race')));
+
+    expect(response.status).toBe(500);
+    expect(storedEvent('evt_race')).toMatchObject({ processed_at: '2026-09-26T10:00:00.000Z', error: null });
+  });
+
   it('answers 500 without processing when the event cannot be stored (database down)', async () => {
     db.fail('stripe_events', 'insert');
     const response = await POST(signedRequest(subscriptionUpdated('evt_nodb')));
@@ -211,5 +235,49 @@ describe('POST /api/stripe/webhook: processing', () => {
     const response = await POST(signedRequest(subscriptionUpdated('evt_lookup')));
     expect(response.status).toBe(500);
     expect(storedEvent('evt_lookup')?.error).toMatch(/billing_customers lookup failed/);
+  });
+});
+
+describe('POST /api/stripe/webhook: invoices Stripe could not finalise', () => {
+  const finalizationFailed = (id: string, customer = CHEERS_CUSTOMER) =>
+    event(id, 'invoice.finalization_failed', {
+      id: 'in_test_1',
+      object: 'invoice',
+      customer,
+      last_finalization_error: { message: 'The customer address is required to calculate tax.' },
+    });
+
+  it('alerts the operator for a CheersAI customer, without reconciling, and marks the event processed', async () => {
+    const response = await POST(signedRequest(finalizationFailed('evt_fin')));
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ alerted: true });
+    expect(mockReconcile).not.toHaveBeenCalled();
+    expect(mockSendEmail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        to: 'operator@example.test',
+        required: true,
+        subject: expect.stringMatching(/could not finalise/),
+        html: expect.stringContaining('The customer address is required to calculate tax.'),
+      }),
+    );
+    expect(mockAudit).toHaveBeenCalledWith(expect.objectContaining({ action: 'operator_stripe_invoice_alert', targetAccountId: BRAND }));
+    expect(storedEvent('evt_fin')).toMatchObject({ error: null });
+    expect(storedEvent('evt_fin')?.processed_at).toBeTruthy();
+    expect(logger.error).toHaveBeenCalledWith('Stripe could not finalise a CheersAI invoice', undefined, expect.objectContaining({ accountId: BRAND }));
+  });
+
+  it('ignores a management app customer\'s invoice', async () => {
+    const response = await POST(signedRequest(finalizationFailed('evt_fin_foreign', MANAGEMENT_APP_CUSTOMER)));
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ ignored: true });
+    expect(mockSendEmail).not.toHaveBeenCalled();
+  });
+
+  it('answers 500 so Stripe redelivers when the alert cannot be sent', async () => {
+    mockSendEmail.mockRejectedValue(new Error('Resend down'));
+    const response = await POST(signedRequest(finalizationFailed('evt_fin_noemail')));
+    expect(response.status).toBe(500);
+    expect(storedEvent('evt_fin_noemail')).toMatchObject({ processed_at: null, error: 'Resend down' });
   });
 });
