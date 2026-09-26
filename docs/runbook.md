@@ -73,16 +73,16 @@ Provide procedures for monitoring, incident response, and routine maintenance of
 - **Publishing**: `/api/cron/publish-scheduler` runs every minute. It promotes due `publish_jobs` to `queued` and dispatches them to QStash, which delivers each job to `/api/webhooks/qstash-publish`. It calls the Supabase `publish-queue` edge function instead only while `publish_jobs` lacks a `platform` column (the legacy bridge).
 - `/api/cron/publish` is a 410 tombstone and is not in `vercel.json`. Do not schedule it.
 - **There are no Supabase-side schedules.** The live project (`nbkjciurhvkfpcpatbnt`) has neither `pg_cron` nor `pg_net` installed (checked 2026-09-26), so nothing calls the edge functions on a timer:
-  - `publish-queue` runs only when the legacy bridge above or tournament publishing (`src/app/actions/tournament.ts`) invokes it.
+  - `publish-queue` runs only when the legacy bridge above or tournament publishing (`src/app/actions/tournament.ts`) invokes it, and tournament publishing also does so only while `publish_jobs` lacks a `platform` column.
   - `media-derivatives` runs only on demand, through `npm run ops:regenerate-story-derivatives` or `npm run ops:invoke -- media-derivatives '{"assetId":"<uuid>"}'`. Library uploads create their derivatives in the browser and do not call it.
 
 > **Deploy notes:** To change a schedule, edit `vercel.json` and deploy, then update the table in `docs/agent-reference.md` section 5 to match. `supabase/config.toml` holds only the `verify_jwt` flags for the two edge functions.
 
 ## 12. Media Processing Pipeline
-- Upload flow triggers `media-derivatives` edge function with the asset ID.
-- FFmpeg wasm generates square (1080×1350), story (1080×1920), and landscape (1920×1080) JPEG derivatives.
-- Status transitions: `pending` → `processing` → `ready` (or `failed`/`skipped` when videos are uploaded).
-- Troubleshooting: inspect function logs for FFmpeg errors; trigger a retry via `npm run ops:invoke -- media-derivatives '{"assetId":"..."}'`. Videos currently skip processing and raise a Planner alert so operators can fall back to manual publishing.
+- **Library uploads generate image derivatives in the browser.** `generateImageDerivatives()` in `src/lib/library/client-derivatives.ts` draws square (1080×1350), story (1080×1920) and landscape (1920×1080) JPEGs on a canvas. The upload components (`src/features/library/media-asset-grid-client.tsx`, `media-upload-panel.tsx`, `upload-panel.tsx` and `media-replace-button.tsx`) upload them to signed URLs and pass their paths to `finaliseMediaUpload()`. No upload calls the `media-derivatives` edge function.
+- `finaliseMediaUpload()` (`src/app/(app)/library/actions.ts`) sets `processed_status` to `ready` when an image has a story derivative and `failed` when it does not. Videos are saved as `ready` with no derivatives.
+- **The `media-derivatives` edge function runs only on demand**, through the ops scripts: `npm run ops:regenerate-story-derivatives` invokes it for every image that has no story derivative, and `npm run ops:invoke -- media-derivatives '{"assetId":"<uuid>"}'` invokes it for one asset. It renders the same three sizes with FFmpeg WASM and moves the asset `processing` → `ready` (or `failed`); for a video it sets `skipped` and writes a `media_derivative_skipped` notification.
+- Troubleshooting: an image left on `failed` usually means the browser could not render or upload its derivatives (the uploader's browser console logs "derivative generation failed"). Re-run it through the edge function with one of the ops commands above, then check the function logs for FFmpeg errors.
 
 ## 13. Email Alerts
 - Publish failures and metadata issues send alerts via Resend to `ALERT_EMAIL`/`RESEND_FROM`.
