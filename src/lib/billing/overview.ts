@@ -6,7 +6,15 @@ import {
   type EntitlementState,
   type StripeSubscriptionStatus,
 } from '@/lib/billing/entitlement';
-import { PLANS, SELF_SERVE_PLAN_IDS, TRIAL_DAYS, type BillingInterval, type PlanId, type SelfServePlanId } from '@/lib/billing/plans';
+import {
+  PLANS,
+  SELF_SERVE_PLAN_IDS,
+  TRIAL_DAYS,
+  TRIAL_PLAN,
+  type BillingInterval,
+  type PlanId,
+  type SelfServePlanId,
+} from '@/lib/billing/plans';
 import { missingBillingEnv } from '@/lib/billing/stripe';
 import { formatUkLongDate } from '@/lib/utils/date';
 
@@ -37,6 +45,8 @@ export interface BillingOverview {
   trialEligible: boolean;
   checkoutReady: boolean;
   portalReady: boolean;
+  /** A trial of any plan runs on this plan's limits (spec §2.1). */
+  trialLimitsPlan: { plan: PlanId; name: string };
 }
 
 export interface BillingPlanOption {
@@ -139,5 +149,6 @@ export async function getBillingOverview(service: SupabaseClient, accountId: str
     trialEligible: !row,
     checkoutReady: missingBillingEnv('checkout').length === 0,
     portalReady: missingBillingEnv('portal').length === 0,
+    trialLimitsPlan: { plan: TRIAL_PLAN, name: PLANS[TRIAL_PLAN].name },
   };
 }

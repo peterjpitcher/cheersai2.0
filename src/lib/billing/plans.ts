@@ -74,6 +74,16 @@ export const TRIAL_PLAN: PlanId = 'starter';
 export const TRIAL_DAYS = 14;
 
 /**
+ * The plan whose limits apply now. Spec §2.1: "Trial: 14 days on Starter
+ * limits", so a trial of any plan uses TRIAL_PLAN's limits and the chosen
+ * plan's limits start when the trial ends. Every reader of plan limits or
+ * seats goes through this; the chosen plan is still shown as the plan.
+ */
+export function effectivePlanForLimits(status: string | null | undefined, plan: PlanId): PlanId {
+  return status === 'trialing' ? TRIAL_PLAN : plan;
+}
+
+/**
  * The only mapping between Stripe prices and plans. Each value names the
  * server env var that holds the price id for that plan and interval, so test
  * and live mode can use their own prices without a code change.

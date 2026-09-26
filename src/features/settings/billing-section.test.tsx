@@ -30,6 +30,7 @@ const NEW_BRAND: BillingOverview = {
   trialEligible: true,
   checkoutReady: true,
   portalReady: true,
+  trialLimitsPlan: { plan: "starter", name: "Starter" },
 };
 
 const assign = vi.fn();
@@ -75,6 +76,33 @@ describe("BillingSection", () => {
 
     await waitFor(() => expect(assign).toHaveBeenCalledWith("https://checkout.stripe.com/c/pay/cs_test_1"));
     expect(mockStartCheckout).toHaveBeenCalledWith({ plan: "professional", interval: "year" });
+  });
+
+  it("says a Professional trial runs on Starter limits, before and during the trial (spec §2.1)", () => {
+    renderSection(NEW_BRAND);
+    const note = "Your free trial uses Starter limits; Professional limits start when the trial ends.";
+    expect(screen.queryByText(note)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByLabelText(/Professional/));
+    expect(screen.getByText(note)).toBeInTheDocument();
+    cleanup();
+
+    renderSection({
+      ...NEW_BRAND,
+      state: "trialing",
+      hasCustomer: true,
+      trialEligible: false,
+      subscription: {
+        plan: "professional",
+        planName: "Professional",
+        interval: "month",
+        status: "trialing",
+        cancelAtPeriodEnd: false,
+        trialEndLabel: "10 October 2026",
+        periodEndLabel: "10 October 2026",
+        graceEndLabel: null,
+      },
+    });
+    expect(screen.getByText(note)).toBeInTheDocument();
   });
 
   it("shows the owner an error when Checkout cannot start", async () => {

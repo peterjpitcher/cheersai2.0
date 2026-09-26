@@ -7,7 +7,7 @@ import { useToast } from "@/components/providers/toast-provider";
 import { Button } from "@/components/ui/button";
 import { checkBillingAgain, openBillingPortal, startCheckout } from "@/app/(app)/settings/billing-actions";
 import type { BillingOverview, BillingPlanOption } from "@/lib/billing/overview";
-import type { BillingInterval, SelfServePlanId } from "@/lib/billing/plans";
+import type { BillingInterval, PlanId, SelfServePlanId } from "@/lib/billing/plans";
 
 export type CheckoutReturn = "success" | "cancelled" | null;
 
@@ -56,6 +56,12 @@ function Muted({ children }: { children: ReactNode }) {
 
 function intervalWord(interval: BillingInterval): string {
   return interval === "year" ? "annually" : "monthly";
+}
+
+/** Spec §2.1: a trial of any plan runs on the trial plan's limits. Null when the chosen plan is the trial plan. */
+function trialLimitsNote(trialPlan: { plan: PlanId; name: string }, chosen: { plan: PlanId; name: string }): string | null {
+  if (chosen.plan === trialPlan.plan) return null;
+  return `Your free trial uses ${trialPlan.name} limits; ${chosen.name} limits start when the trial ends.`;
 }
 
 /**
@@ -147,6 +153,7 @@ export function BillingSection({ overview, plans, canManage, checkoutReturn, tri
   }
 
   if (state === "trialing" && subscription) {
+    const limitsNote = trialLimitsNote(overview.trialLimitsPlan, { plan: subscription.plan, name: subscription.planName });
     return (
       <div className="space-y-3">
         {confirmedNotice}
@@ -154,6 +161,7 @@ export function BillingSection({ overview, plans, canManage, checkoutReturn, tri
           Free trial of {subscription.planName}, billed {intervalWord(subscription.interval)}
           {subscription.trialEndLabel ? `, until ${subscription.trialEndLabel}` : ""}.
         </Line>
+        {limitsNote ? <Muted>{limitsNote}</Muted> : null}
         <Muted>
           {subscription.cancelAtPeriodEnd
             ? "Your plan is set to end when the trial finishes, so you will not be charged."
@@ -234,6 +242,7 @@ export function BillingSection({ overview, plans, canManage, checkoutReturn, tri
           <PlanPicker
             plans={plans}
             trial={overview.trialEligible}
+            trialLimitsPlan={overview.trialLimitsPlan}
             trialDays={trialDays}
             isPending={isPending}
             onStart={(plan, interval) => goTo(() => startCheckout({ plan, interval }))}
@@ -294,18 +303,22 @@ function ConfirmingPayment({
 function PlanPicker({
   plans,
   trial,
+  trialLimitsPlan,
   trialDays,
   isPending,
   onStart,
 }: {
   plans: BillingPlanOption[];
   trial: boolean;
+  trialLimitsPlan: { plan: PlanId; name: string };
   trialDays: number;
   isPending: boolean;
   onStart: (plan: SelfServePlanId, interval: BillingInterval) => void;
 }) {
   const [plan, setPlan] = useState<SelfServePlanId>(plans[0]?.plan ?? "starter");
   const [interval, setBillingInterval] = useState<BillingInterval>("month");
+  const chosen = plans.find((option) => option.plan === plan);
+  const limitsNote = trial && chosen ? trialLimitsNote(trialLimitsPlan, { plan: chosen.plan, name: chosen.name }) : null;
 
   return (
     <form
@@ -375,6 +388,7 @@ function PlanPicker({
         </div>
       </fieldset>
 
+      {limitsNote ? <Muted>{limitsNote}</Muted> : null}
       <Button type="submit" variant="primary" disabled={isPending} className="w-full sm:w-auto">
         {isPending ? "Opening checkout..." : trial ? `Start ${trialDays}-day free trial` : "Continue to payment"}
       </Button>

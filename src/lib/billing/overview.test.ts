@@ -42,6 +42,7 @@ describe('getBillingOverview', () => {
       trialEligible: true,
       checkoutReady: true,
       portalReady: true,
+      trialLimitsPlan: { plan: 'starter', name: 'Starter' },
     });
   });
 

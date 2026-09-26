@@ -51,3 +51,14 @@ describe('planForStripePrice', () => {
     expect(planForStripePrice('')).toBeNull();
   });
 });
+
+describe('effectivePlanForLimits', () => {
+  it('uses the trial plan (Starter) for any plan while trialing, and the chosen plan otherwise', async () => {
+    const { effectivePlanForLimits, TRIAL_PLAN } = await import('./plans');
+    expect(TRIAL_PLAN).toBe('starter');
+    expect(effectivePlanForLimits('trialing', 'professional')).toBe('starter');
+    expect(effectivePlanForLimits('trialing', 'starter')).toBe('starter');
+    expect(effectivePlanForLimits('active', 'professional')).toBe('professional');
+    expect(effectivePlanForLimits('past_due', 'professional')).toBe('professional');
+  });
+});
