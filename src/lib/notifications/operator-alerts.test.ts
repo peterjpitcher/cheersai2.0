@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { InMemoryBillingDb } from '../../../tests/helpers/in-memory-billing-db';
+
 const mockSendEmail = vi.fn();
 vi.mock('@/lib/email/resend', () => ({ sendEmail: (...args: unknown[]) => mockSendEmail(...args) }));
 
@@ -9,7 +11,9 @@ vi.mock('@/lib/admin/audit', () => ({ logAdminEvent: (...args: unknown[]) => moc
 const envState = { OPERATOR_ALERT_EMAIL: 'ops@test.example' };
 vi.mock('@/env', () => ({ env: { server: envState, client: {} } }));
 
-const { alertRepeatedPublishFailures } = await import('@/lib/notifications/operator-alerts');
+const { alertPossibleDoubleBilling, alertRepeatedPublishFailures, alertStripeInvoiceFinalizationFailed, alertStripeWebhookFailure } = await import(
+  '@/lib/notifications/operator-alerts'
+);
 
 type Result = { data: unknown; error: unknown };
 
@@ -100,5 +104,70 @@ describe('alertRepeatedPublishFailures', () => {
 
     const broken = mockService({ publish_jobs: { data: null, error: { message: 'db down' } } });
     await expect(alertRepeatedPublishFailures(broken as never, NOW)).rejects.toThrow('db down');
+  });
+});
+
+describe('Stripe operator alerts: one per brand per 24 hours', () => {
+  const BRAND_A = '6f1d2c3b-4a59-4e68-8d7c-9b0a1f2e3d4c';
+  const BRAND_B = '7a2e3d4c-5b6a-4f79-9e8d-0c1b2a3f4e5d';
+  let db: InMemoryBillingDb;
+
+  beforeEach(() => {
+    db = new InMemoryBillingDb();
+    // The audit row lands in admin_audit, as it does in production.
+    mockLogAdminEvent.mockImplementation(async (params: { action: string; targetAccountId?: string | null; detail?: unknown }) => {
+      db.seed('admin_audit', [{ action: params.action, target_account_id: params.targetAccountId ?? null, detail: params.detail ?? null }]);
+    });
+  });
+
+  const failure = (accountId: string | null, eventId: string) =>
+    alertStripeWebhookFailure(db.client(), { eventId, eventType: 'invoice.paid', message: 'Stripe API unavailable', accountId }, NOW);
+
+  it('throttles per brand, so one brand failing never hides another', async () => {
+    expect(await failure(BRAND_A, 'evt_1')).toBe('sent');
+    expect(await failure(BRAND_A, 'evt_2')).toBe('skipped');
+    expect(await failure(BRAND_B, 'evt_3')).toBe('sent');
+    expect(mockSendEmail).toHaveBeenCalledTimes(2);
+    expect(db.rows('admin_audit').map((row) => row.target_account_id)).toEqual([BRAND_A, BRAND_B]);
+  });
+
+  it('keeps unknown customers in their own bucket', async () => {
+    expect(await failure(BRAND_A, 'evt_1')).toBe('sent');
+    expect(await failure(null, 'evt_2')).toBe('sent');
+    expect(await failure(null, 'evt_3')).toBe('skipped');
+    expect(await failure(BRAND_B, 'evt_4')).toBe('sent');
+    expect(mockSendEmail).toHaveBeenCalledTimes(3);
+  });
+
+  it('alerts again for a brand once 24 hours have passed', async () => {
+    db.seed('admin_audit', [{ action: 'operator_stripe_webhook_alert', target_account_id: BRAND_A, created_at: '2026-09-23T11:59:59Z' }]);
+    expect(await failure(BRAND_A, 'evt_1')).toBe('sent');
+  });
+
+  it('throttles invoice and double-billing alerts separately from webhook failures', async () => {
+    expect(await failure(BRAND_A, 'evt_1')).toBe('sent');
+    const invoice = () =>
+      alertStripeInvoiceFinalizationFailed(
+        db.client(),
+        { eventId: 'evt_inv', invoiceId: 'in_1', customerId: 'cus_a', accountId: BRAND_A, reason: 'Customer address is required for tax' },
+        NOW,
+      );
+    expect(await invoice()).toBe('sent');
+    expect(await invoice()).toBe('skipped');
+    const doubleBilling = () =>
+      alertPossibleDoubleBilling(db.client(), { accountId: BRAND_A, customerId: 'cus_a', subscriptionIds: ['sub_1', 'sub_2'] }, NOW);
+    expect(await doubleBilling()).toBe('sent');
+    expect(await doubleBilling()).toBe('skipped');
+    const emails = mockSendEmail.mock.calls.map((call) => (call[0] as { subject: string; html: string }));
+    expect(emails[1].subject).toMatch(/could not finalise/);
+    expect(emails[1].html).toContain('Customer address is required for tax');
+    expect(emails[2].subject).toMatch(/Possible double billing/);
+    expect(emails[2].html).toContain('sub_1, sub_2');
+  });
+
+  it('fails loudly when the audit lookup fails', async () => {
+    db.fail('admin_audit', 'select');
+    await expect(failure(BRAND_A, 'evt_1')).rejects.toThrow(/admin_audit lookup failed/);
+    expect(mockSendEmail).not.toHaveBeenCalled();
   });
 });

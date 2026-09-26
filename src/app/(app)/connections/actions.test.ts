@@ -357,22 +357,217 @@ describe('completeOAuthConnect', () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// In-memory store for disconnectProvider. It enforces the live rules
+// (checked 2026-09-25) so a write the database would reject fails here too:
+// social_connections_status_check allows only active, expiring, needs_action,
+// and status and updated_at are NOT NULL.
+// ---------------------------------------------------------------------------
+
+type Row = Record<string, unknown>;
+
+const LIVE_STATUSES = ['active', 'expiring', 'needs_action'];
+const NOT_NULL: Record<string, string[]> = {
+  social_connections: ['id', 'account_id', 'provider', 'status', 'created_at', 'updated_at'],
+  token_vault: ['id', 'social_connection_id', 'token_type', 'ciphertext', 'iv', 'tag'],
+};
+
+let memDb: Record<string, Row[]>;
+let failures: Partial<Record<string, { op: 'select' | 'update' | 'delete'; message: string }>>;
+let rejectedWrites: Array<{ table: string; code: string }>;
+
+function violation(table: string, patch: Row): { code: string; message: string } | null {
+  for (const column of NOT_NULL[table] ?? []) {
+    if (column in patch && patch[column] === null) {
+      return { code: '23502', message: `null value in column "${column}" of relation "${table}" violates not-null constraint` };
+    }
+  }
+  if (table === 'social_connections' && 'status' in patch && !LIVE_STATUSES.includes(patch.status as string)) {
+    return { code: '23514', message: 'new row for relation "social_connections" violates check constraint "social_connections_status_check"' };
+  }
+  return null;
+}
+
+interface MemResult {
+  data: Row[] | null;
+  error: { code?: string; message: string } | null;
+}
+
+interface MemQuery {
+  select: () => MemQuery;
+  update: (patch: Row) => MemQuery;
+  delete: () => MemQuery;
+  eq: (column: string, value: unknown) => MemQuery;
+  in: (column: string, values: unknown[]) => MemQuery;
+  then: (resolve: (result: MemResult) => unknown) => unknown;
+}
+
+function memQuery(table: string): MemQuery {
+  let op: 'select' | 'update' | 'delete' = 'select';
+  let patch: Row = {};
+  const preds: Array<(r: Row) => boolean> = [];
+  const run = (): MemResult => {
+    const injected = failures[table];
+    if (injected && injected.op === op) return { data: null, error: { message: injected.message } };
+    const rows = (memDb[table] ?? []).filter((r) => preds.every((p) => p(r)));
+    if (op === 'update') {
+      const error = violation(table, patch);
+      if (error) {
+        rejectedWrites.push({ table, code: error.code });
+        return { data: null, error };
+      }
+      rows.forEach((r) => Object.assign(r, patch));
+      return { data: rows, error: null };
+    }
+    if (op === 'delete') {
+      memDb[table] = (memDb[table] ?? []).filter((r) => !preds.every((p) => p(r)));
+      return { data: null, error: null };
+    }
+    return { data: rows, error: null };
+  };
+  const q: MemQuery = {
+    select: () => q,
+    update: (p) => {
+      op = 'update';
+      patch = p;
+      return q;
+    },
+    delete: () => {
+      op = 'delete';
+      return q;
+    },
+    eq: (c, v) => {
+      preds.push((r) => r[c] === v);
+      return q;
+    },
+    in: (c, vs) => {
+      preds.push((r) => vs.includes(r[c]));
+      return q;
+    },
+    then: (resolve) => resolve(run()),
+  };
+  return q;
+}
+
+function connection(id: string, accountId: string, provider: string): Row {
+  return {
+    id,
+    account_id: accountId,
+    provider,
+    status: 'active',
+    access_token: `plain-${id}`,
+    refresh_token: `refresh-${id}`,
+    token_expires_at: '2026-11-01T00:00:00Z',
+    expires_at: '2026-11-01T00:00:00Z',
+    metadata: { pageId: '123' },
+    created_at: '2026-01-01T00:00:00Z',
+    updated_at: '2026-01-01T00:00:00Z',
+  };
+}
+
+function vaultRow(id: string, connectionId: string, tokenType: 'access' | 'refresh'): Row {
+  return { id, social_connection_id: connectionId, token_type: tokenType, ciphertext: 'c', iv: 'i', tag: 't', key_version: 1 };
+}
+
 describe('disconnectProvider', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockRequireAuthContext.mockResolvedValue(authContext());
+    failures = {};
+    rejectedWrites = [];
+    memDb = {
+      social_connections: [
+        connection('fb-1', 'acc-1', 'facebook'),
+        connection('ig-1', 'acc-1', 'instagram'),
+        connection('fb-other', 'acc-2', 'facebook'),
+      ],
+      token_vault: [
+        vaultRow('v-fb-access', 'fb-1', 'access'),
+        vaultRow('v-fb-refresh', 'fb-1', 'refresh'),
+        vaultRow('v-ig-access', 'ig-1', 'access'),
+        vaultRow('v-other-access', 'fb-other', 'access'),
+      ],
+    };
+    mockFrom.mockImplementation((table: string) => memQuery(table));
   });
 
-  it('should update status to disconnected, not delete', async () => {
-    const updateChain = mockUpdateChain();
-    mockFrom.mockReturnValue(updateChain);
+  const row = (id: string) => memDb.social_connections.find((r) => r.id === id);
+  const vaultIds = () => memDb.token_vault.map((r) => r.id);
+
+  it('the store rejects the status the old code wrote, as the live CHECK does', async () => {
+    const result = await memQuery('social_connections').update({ status: 'disconnected' }).eq('id', 'fb-1');
+
+    expect(result.error?.code).toBe('23514');
+    expect(row('fb-1')?.status).toBe('active');
+  });
+
+  it('writes needs_action and deletes every stored token for that provider only', async () => {
+    const result = await disconnectProvider('facebook');
+
+    expect(result).toEqual({ success: true });
+    expect(rejectedWrites).toEqual([]);
+    expect(row('fb-1')).toMatchObject({
+      status: 'needs_action',
+      access_token: null,
+      refresh_token: null,
+      token_expires_at: null,
+      expires_at: null,
+      metadata: { pageId: '123' },
+    });
+    expect(row('fb-1')?.updated_at).not.toBe('2026-01-01T00:00:00Z');
+    expect(vaultIds()).toEqual(['v-ig-access', 'v-other-access']);
+
+    // The brand's other provider and another brand's Facebook are untouched.
+    expect(row('ig-1')).toMatchObject({ status: 'active', access_token: 'plain-ig-1' });
+    expect(row('fb-other')).toMatchObject({ status: 'active', access_token: 'plain-fb-other' });
+  });
+
+  it('succeeds without writing when the brand has no connection for that provider', async () => {
+    memDb.social_connections = memDb.social_connections.filter((r) => r.id !== 'ig-1');
+
+    const result = await disconnectProvider('instagram');
+
+    expect(result).toEqual({ success: true });
+    expect(vaultIds()).toContain('v-ig-access');
+    expect(mockFrom).toHaveBeenCalledTimes(1);
+  });
+
+  it('fails visibly and deletes nothing when the connection lookup fails', async () => {
+    failures.social_connections = { op: 'select', message: 'connection reset' };
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
 
     const result = await disconnectProvider('facebook');
 
-    expect(result.success).toBe(true);
-    expect(mockFrom).toHaveBeenCalledWith('social_connections');
-    const updateCall = updateChain.update.mock.calls[0][0];
-    expect(updateCall).toHaveProperty('status', 'disconnected');
+    expect(result).toEqual({ success: false, error: 'Failed to disconnect provider' });
+    expect(vaultIds()).toHaveLength(4);
+    expect(row('fb-1')).toMatchObject({ status: 'active', access_token: 'plain-fb-1' });
+    expect(consoleError).toHaveBeenCalled();
+    consoleError.mockRestore();
+  });
+
+  it('fails visibly, and never reports success, when the token_vault delete fails', async () => {
+    failures.token_vault = { op: 'delete', message: 'permission denied for table token_vault' };
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const result = await disconnectProvider('facebook');
+
+    expect(result).toEqual({ success: false, error: 'Failed to disconnect provider' });
+    expect(vaultIds()).toContain('v-fb-access');
+    expect(row('fb-1')).toMatchObject({ status: 'active', access_token: 'plain-fb-1' });
+    expect(consoleError).toHaveBeenCalled();
+    consoleError.mockRestore();
+  });
+
+  it('fails visibly when the connection update fails after the vault delete', async () => {
+    failures.social_connections = { op: 'update', message: 'statement timeout' };
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const result = await disconnectProvider('facebook');
+
+    expect(result).toEqual({ success: false, error: 'Failed to disconnect provider' });
+    expect(row('fb-1')?.access_token).toBe('plain-fb-1');
+    expect(consoleError).toHaveBeenCalled();
+    consoleError.mockRestore();
   });
 });
 

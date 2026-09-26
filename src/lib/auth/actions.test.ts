@@ -23,6 +23,8 @@ vi.mock('@/lib/email/resend', () => ({ sendEmail: (...args: unknown[]) => mockSe
 
 vi.mock('@/lib/auth/rate-limit', () => ({ checkAuthRateLimit: vi.fn(async () => ({ allowed: true })) }));
 vi.mock('@/lib/auth/server', () => ({ getCurrentUser: vi.fn() }));
+const mockDestination = vi.fn(async () => '/planner');
+vi.mock('@/lib/billing/setup-redirect', () => ({ destinationAfterPasswordSet: () => mockDestination() }));
 vi.mock('@/env', () => ({ env: { client: { NEXT_PUBLIC_SITE_URL: 'https://cheers.orangejelly.co.uk' }, server: {} } }));
 vi.mock('next/headers', () => ({ cookies: vi.fn() }));
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
@@ -94,8 +96,16 @@ describe('setPassword', () => {
     mockGetUser.mockResolvedValue({ data: { user: { id: 'u1' } } });
     mockUpdateUser.mockResolvedValue({ error: null });
     const result = await setPassword(form({ password: 'a-long-password-1', confirm: 'a-long-password-1' }));
-    expect(result).toEqual({ success: true });
+    expect(result).toEqual({ success: true, next: '/planner' });
     expect(mockUpdateUser).toHaveBeenCalledWith({ password: 'a-long-password-1' });
+  });
+
+  it('sends an owner whose brand has not set up billing to the Billing section', async () => {
+    mockGetUser.mockResolvedValue({ data: { user: { id: 'u1' } } });
+    mockUpdateUser.mockResolvedValue({ error: null });
+    mockDestination.mockResolvedValueOnce('/settings#billing');
+    const result = await setPassword(form({ password: 'a-long-password-1', confirm: 'a-long-password-1' }));
+    expect(result).toEqual({ success: true, next: '/settings#billing' });
   });
 });
 
