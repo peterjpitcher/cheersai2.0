@@ -51,7 +51,7 @@ export default async function ConnectionsPage() {
               <p className="text-sm" style={{ color: "var(--c-ink-3)" }}>Connect your Meta Ads account to create and manage paid campaigns.</p>
             </div>
             <Suspense fallback={null}>
-              <AdAccountSetup initialStatus={adAccountStatus} />
+              <AdAccountSetup initialStatus={adAccountStatus} canDisconnect={isOwner(ctx)} />
             </Suspense>
             {adAccountStatus.setupComplete ? (
               <MetaConversionSetup status={adAccountStatus} />

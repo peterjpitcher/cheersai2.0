@@ -4,6 +4,7 @@ import { useEffect, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import {
+  disconnectAdAccount,
   fetchAdAccounts,
   selectAdAccount,
   startAdsOAuth,
@@ -13,7 +14,13 @@ import { useToast } from "@/components/providers/toast-provider";
 
 interface AdAccountSetupProps {
   initialStatus: AdAccountSetupStatus;
+  /** Owners only (decision D4); the server action enforces it too. */
+  canDisconnect: boolean;
 }
+
+const DISCONNECT_CONFIRMATION =
+  "Disconnect Meta Ads? CheersAI will delete its access to your ad account and your Conversions API token. " +
+  "You won't be able to create or manage campaigns, and booking conversions stop reaching Meta, until you reconnect and re-enter the token.";
 
 interface AdAccountOption {
   id: string;
@@ -22,12 +29,13 @@ interface AdAccountOption {
   timezoneName: string;
 }
 
-export function AdAccountSetup({ initialStatus }: AdAccountSetupProps) {
+export function AdAccountSetup({ initialStatus, canDisconnect }: AdAccountSetupProps) {
   const toast = useToast();
   const router = useRouter();
   const searchParams = useSearchParams();
   const [isPendingOAuth, startOAuthTransition] = useTransition();
   const [isPendingSelect, startSelectTransition] = useTransition();
+  const [isPendingDisconnect, startDisconnectTransition] = useTransition();
 
   const [accounts, setAccounts] = useState<AdAccountOption[]>([]);
   const [loadingAccounts, setLoadingAccounts] = useState(false);
@@ -109,6 +117,40 @@ export function AdAccountSetup({ initialStatus }: AdAccountSetupProps) {
     });
   };
 
+  const handleDisconnectClick = () => {
+    if (!window.confirm(DISCONNECT_CONFIRMATION)) return;
+
+    startDisconnectTransition(async () => {
+      try {
+        const result = await disconnectAdAccount();
+        if (result.error) {
+          toast.error("Could not disconnect Meta Ads", { description: result.error });
+          return;
+        }
+        toast.success("Meta Ads disconnected");
+        // Drops any ?ads_step=select_account, which would otherwise keep the
+        // account picker showing.
+        router.replace("/connections");
+        router.refresh();
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Something went wrong";
+        toast.error("Could not disconnect Meta Ads", { description: message });
+      }
+    });
+  };
+
+  const disconnectButton = canDisconnect ? (
+    <button
+      type="button"
+      onClick={handleDisconnectClick}
+      disabled={isPendingDisconnect}
+      className="shrink-0 rounded-full border px-4 py-2 text-sm font-semibold transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-60"
+      style={{ borderColor: 'var(--c-claret)', color: 'var(--c-claret)', backgroundColor: 'var(--c-card)' }}
+    >
+      {isPendingDisconnect ? "Disconnecting…" : "Disconnect"}
+    </button>
+  ) : null;
+
   // Setup complete state
   if (initialStatus.setupComplete) {
     return (
@@ -128,17 +170,20 @@ export function AdAccountSetup({ initialStatus }: AdAccountSetupProps) {
             Your ad account is selected and ready for campaign management.
           </p>
         </div>
-        {initialStatus.tokenExpiringSoon && (
-          <button
-            type="button"
-            onClick={handleConnectClick}
-            disabled={isPendingOAuth}
-            className="shrink-0 rounded-full px-4 py-2 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-60"
-            style={{ backgroundColor: 'var(--c-orange)', color: 'white' }}
-          >
-            {isPendingOAuth ? "Redirecting…" : "Reconnect"}
-          </button>
-        )}
+        <div className="flex shrink-0 flex-col gap-2 sm:flex-row">
+          {initialStatus.tokenExpiringSoon && (
+            <button
+              type="button"
+              onClick={handleConnectClick}
+              disabled={isPendingOAuth}
+              className="shrink-0 rounded-full px-4 py-2 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-60"
+              style={{ backgroundColor: 'var(--c-orange)', color: 'white' }}
+            >
+              {isPendingOAuth ? "Redirecting…" : "Reconnect"}
+            </button>
+          )}
+          {disconnectButton}
+        </div>
       </div>
     );
   }
@@ -201,6 +246,8 @@ export function AdAccountSetup({ initialStatus }: AdAccountSetupProps) {
             })}
           </ul>
         )}
+
+        {disconnectButton}
       </div>
     );
   }

@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import { exportBrandData, offboardBrand, purgeBrand } from '@/lib/admin/offboarding';
 
+import { orPredicate } from '../../helpers/postgrest-or';
+
 type Row = Record<string, unknown>;
 
 const BRAND = 'b0000000-0000-4000-8000-000000000001';
@@ -93,12 +95,8 @@ function query(table: string) {
     eq: (c: string, v: unknown) => (preds.push((r) => r[c] === v), q),
     neq: (c: string, v: unknown) => (preds.push((r) => r[c] !== v), q),
     in: (c: string, vs: unknown[]) => (preds.push((r) => vs.includes(r[c])), q),
-    // Only the "col.eq.value,col.eq.value" form the code uses.
-    or: (filter: string) => {
-      const terms = filter.split(',').map((term) => term.split('.eq.'));
-      preds.push((r) => terms.some(([c, v]) => r[c] === v));
-      return q;
-    },
+    // Each or() is its own predicate, so two or() calls are ANDed as PostgREST does.
+    or: (filter: string) => (preds.push(orPredicate(filter)), q),
     order: (c: string) => ((orderBy = c), q),
     range: (from: number, to: number) => ((window = [from, to]), q),
     maybeSingle: async () => {
@@ -152,7 +150,13 @@ beforeEach(() => {
       { id: OTHER, business_name: 'Other', offboarded_at: null, booking_ingest_secret: 'bce_other' },
     ],
     subscriptions: [],
-    meta_campaigns: [{ id: 'c1', account_id: BRAND, status: 'PAUSED', meta_status: 'PAUSED' }],
+    meta_campaigns: [
+      { id: 'c1', account_id: BRAND, status: 'PAUSED', meta_status: 'PAUSED', end_date: '2026-10-16' },
+      // Ended months ago but still ACTIVE in the table, as The Anchor's are: cannot spend, must not block.
+      { id: 'c-ended', account_id: BRAND, status: 'ACTIVE', meta_status: 'ACTIVE', end_date: '2026-08-14' },
+      // Another brand's running campaign is not this brand's business.
+      { id: 'c-other', account_id: OTHER, status: 'ACTIVE', meta_status: 'ACTIVE', end_date: null },
+    ],
     ad_sets: [{ id: 'as1', campaign_id: 'c1', adset_media_asset_id: 'm1' }],
     campaigns: [{ id: 'cp1', account_id: BRAND, hero_media_id: 'm1' }],
     tournaments: [
@@ -234,15 +238,35 @@ describe('offboardBrand', () => {
     expect(db.accounts[0].offboarded_at).toBeNull();
   });
 
-  it('refuses while a paid campaign is live', async () => {
-    db.meta_campaigns[0].status = 'ACTIVE';
+  it.each([
+    ['ends later', '2026-10-16'],
+    ['ends today', '2026-10-01'],
+    ['has no end date', null],
+  ])('refuses while an ACTIVE campaign that %s can still spend', async (_label, endDate) => {
+    Object.assign(db.meta_campaigns[0], { status: 'ACTIVE', meta_status: 'ACTIVE', end_date: endDate });
     expect((await offboardBrand(service() as never, BRAND, NOW) as { error: string }).error).toMatch(/Pause the brand's live Meta ad campaigns/);
+    expect(db.accounts[0].offboarded_at).toBeNull();
+    expect(db.meta_ad_account_tokens).toHaveLength(3);
   });
 
   it('refuses when Meta reports a campaign live that the app shows as paused', async () => {
     db.meta_campaigns[0].meta_status = 'ACTIVE';
     expect((await offboardBrand(service() as never, BRAND, NOW) as { error: string }).error).toMatch(/Pause the brand's live Meta ad campaigns/);
     expect(db.accounts[0].offboarded_at).toBeNull();
+    expect(db.meta_ad_account_tokens).toHaveLength(3);
+  });
+
+  it('is not blocked by an ACTIVE campaign whose end date has passed', async () => {
+    Object.assign(db.meta_campaigns[0], { status: 'ACTIVE', meta_status: 'ACTIVE', end_date: '2026-09-30' });
+    expect(await offboardBrand(service() as never, BRAND, NOW)).toMatchObject({ postsStopped: 1 });
+    expect(db.accounts[0].offboarded_at).toBe(NOW.toISOString());
+  });
+
+  it('uses the London date: at 00:30 BST a campaign that ended the day before does not block', async () => {
+    // 23:30 UTC on 30 September is 00:30 on 1 October in London.
+    const justAfterMidnight = new Date('2026-09-30T23:30:00Z');
+    Object.assign(db.meta_campaigns[0], { status: 'ACTIVE', meta_status: 'ACTIVE', end_date: '2026-09-30' });
+    expect(await offboardBrand(service() as never, BRAND, justAfterMidnight)).toMatchObject({ postsStopped: 1 });
   });
 
   it('stops posts, deletes tokens and archives with a 30-day purge date, touching no other brand', async () => {

@@ -8,7 +8,7 @@ Everything below is in **Admin → Offboarding**. Each step asks you to type the
 
 1. **Confirm who is asking.** Only an owner of the brand (Settings → Team shows owners) can ask. Reply from the support address and keep the email.
 2. **Cancel billing.** Cancel the brand's subscription in Stripe (or from Admin → Billing once Stripe re-sync is live), effective now or at period end as agreed. Offboarding is refused while a subscription is still running.
-3. **Stop paid ads.** If the brand runs paid Meta campaigns, pause them in the app first (and check Ads Manager: a campaign switched back on there counts as live). Offboarding is refused while any campaign is live in the app or at Meta, because deleting the ads token would leave spend running with no way to pause it.
+3. **Stop paid ads.** If the brand runs paid Meta campaigns, pause them in the app first (and check Ads Manager: a campaign switched back on there counts as live). Offboarding is refused while any campaign can still spend: active in the app or at Meta, with no end date or one today or later (London date), because deleting the ads token would leave spend running with no way to pause it. A campaign whose end date has passed does not block.
 4. **Export, if asked.** Admin → Offboarding → *Export data* downloads a JSON file: posts and schedule, brand profile, link-in-bio, and media download links valid for 7 days. It contains no tokens or passwords. Send it to the owner.
 5. **Offboard.** Admin → Offboarding → *Offboard*. This:
    - turns every scheduled post back into a draft and holds its publish job;
