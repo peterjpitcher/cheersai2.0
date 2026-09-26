@@ -90,7 +90,7 @@ Vercel Cron (`vercel.json`; Vercel evaluates schedules in UTC), all authenticate
 | `/api/cron/notify-expiring-connections` | 08:00 daily | warn about expiring tokens |
 | `/api/cron/materialise-food-windows` | Sundays 01:00 | extend rolling food campaigns (no-op unless `FOOD_AUTO_MATERIALISE_ENABLED`) |
 
-Routes that exist but are not in `vercel.json`: `/api/cron/token-health` and `/api/cron/publish` (a 410 tombstone). Supabase-side schedules for the edge functions are documented in `docs/runbook.md` (section 11) and applied with `supabase functions schedule create`; `supabase/config.toml` only declares the two functions.
+Route that exists but is not in `vercel.json`: `/api/cron/publish` (a 410 tombstone). The unscheduled `/api/cron/token-health` was removed on 2026-09-26 (`tasks/SPEC-remove-token-health-cron.md`). Supabase-side schedules for the edge functions are documented in `docs/runbook.md` (section 11) and applied with `supabase functions schedule create`; `supabase/config.toml` only declares the two functions.
 
 ## 6. Environment variables
 

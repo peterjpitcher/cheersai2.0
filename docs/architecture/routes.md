@@ -88,7 +88,6 @@ project: cheersai-2.0
 | `/api/cron/recurring-publish` | POST | `src/app/api/cron/recurring-publish/route.ts` |
 | `/api/cron/sync-gbp-reviews` | GET, POST | `src/app/api/cron/sync-gbp-reviews/route.ts` |
 | `/api/cron/sync-meta-campaigns` | POST | `src/app/api/cron/sync-meta-campaigns/route.ts` |
-| `/api/cron/token-health` | GET, POST | `src/app/api/cron/token-health/route.ts` |
 
 ### Webhooks
 

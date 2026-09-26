@@ -22,8 +22,8 @@ describe('deriveConnectionHealth', () => {
     expect(deriveConnectionHealth('active', pastDate, 'instagram')).toBe('red');
   });
 
-  it('should return red when status is revoked', () => {
-    // Even though DB enum uses "disconnected", test both possible values
+  it('should return red for the legacy disconnected status', () => {
+    // The live CHECK allows only active, expiring and needs_action; legacy values still map to red
     expect(deriveConnectionHealth('disconnected', null, 'facebook')).toBe('red');
   });
 

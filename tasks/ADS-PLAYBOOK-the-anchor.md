@@ -33,8 +33,7 @@ spends money.
 **Do not raise the Instagram `status` column as a problem.** The stored value is `expiring`, but
 that is a dead label. Facebook and Instagram are both in `NEVER_EXPIRING_PROVIDERS`
 (`src/lib/connections/readiness.ts:40`), so a null expiry produces no warning and the UI
-computes the status fresh as active. Nothing in the codebase writes `expiring` any more; the
-nightly token-health cron only ever writes `expired` or `needs_action`, and only on red health.
+computes the status fresh as active. Nothing in the codebase writes `expiring` any more.
 The publish worker blocks on `needs_action` alone (`supabase/functions/publish-queue/worker.ts:998`
 and `:1782`). The row was last written on 2026-05-31 by a code path that no longer exists.
 Instagram publishes daily without issue.
