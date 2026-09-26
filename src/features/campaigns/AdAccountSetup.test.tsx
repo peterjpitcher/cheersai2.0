@@ -7,6 +7,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-libra
 const fetchAdAccountsMock = vi.hoisted(() => vi.fn());
 const selectAdAccountMock = vi.hoisted(() => vi.fn());
 const startAdsOAuthMock = vi.hoisted(() => vi.fn());
+const disconnectAdAccountMock = vi.hoisted(() => vi.fn());
 const replaceMock = vi.hoisted(() => vi.fn());
 const refreshMock = vi.hoisted(() => vi.fn());
 const toastErrorMock = vi.hoisted(() => vi.fn());
@@ -21,6 +22,7 @@ vi.mock("next/navigation", () => ({
 }));
 
 vi.mock("@/app/(app)/connections/actions-ads", () => ({
+  disconnectAdAccount: disconnectAdAccountMock,
   fetchAdAccounts: fetchAdAccountsMock,
   selectAdAccount: selectAdAccountMock,
   startAdsOAuth: startAdsOAuthMock,
@@ -84,7 +86,7 @@ describe("AdAccountSetup", () => {
         }),
     );
 
-    render(<AdAccountSetup initialStatus={baseStatus} />);
+    render(<AdAccountSetup initialStatus={baseStatus} canDisconnect={false} />);
 
     await screen.findByText("The Anchor");
     await screen.findByText("Barons Paid Media");
@@ -106,5 +108,85 @@ describe("AdAccountSetup", () => {
     expect(toastSuccessMock).toHaveBeenCalledWith('Ad account "Barons Paid Media" selected');
     expect(replaceMock).toHaveBeenCalledWith("/connections");
     expect(refreshMock).toHaveBeenCalled();
+  });
+});
+
+describe("AdAccountSetup: disconnect", () => {
+  const connectedStatus: AdAccountSetupStatus = { ...baseStatus, setupComplete: true };
+  let confirmSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    fetchAdAccountsMock.mockResolvedValue({ success: true, accounts: [] });
+    confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+  });
+
+  afterEach(() => {
+    confirmSpy.mockRestore();
+    cleanup();
+    vi.clearAllMocks();
+  });
+
+  it("offers Disconnect to owners only", () => {
+    const { unmount } = render(<AdAccountSetup initialStatus={connectedStatus} canDisconnect={false} />);
+    expect(screen.queryByRole("button", { name: "Disconnect" })).toBeNull();
+    unmount();
+
+    render(<AdAccountSetup initialStatus={connectedStatus} canDisconnect />);
+    expect(screen.getByRole("button", { name: "Disconnect" })).toBeTruthy();
+  });
+
+  it("offers Disconnect while an owner is still choosing an ad account", async () => {
+    render(<AdAccountSetup initialStatus={baseStatus} canDisconnect />);
+
+    await screen.findByText("No ad accounts found on this Meta connection.");
+    expect(screen.getByRole("button", { name: "Disconnect" })).toBeTruthy();
+  });
+
+  it("does nothing when the owner cancels the confirmation", () => {
+    confirmSpy.mockReturnValue(false);
+    render(<AdAccountSetup initialStatus={connectedStatus} canDisconnect />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Disconnect" }));
+
+    expect(confirmSpy).toHaveBeenCalledWith(expect.stringContaining("Conversions API token"));
+    expect(disconnectAdAccountMock).not.toHaveBeenCalled();
+  });
+
+  it("disconnects and returns to the clean connections route", async () => {
+    disconnectAdAccountMock.mockResolvedValue({ success: true });
+    render(<AdAccountSetup initialStatus={connectedStatus} canDisconnect />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Disconnect" }));
+
+    await waitFor(() => expect(toastSuccessMock).toHaveBeenCalledWith("Meta Ads disconnected"));
+    expect(disconnectAdAccountMock).toHaveBeenCalledTimes(1);
+    expect(replaceMock).toHaveBeenCalledWith("/connections");
+    expect(refreshMock).toHaveBeenCalled();
+  });
+
+  it("shows the refusal when campaigns are still running", async () => {
+    const refusal = "Pause your running campaigns in Campaigns first, so spend cannot carry on after CheersAI loses access.";
+    disconnectAdAccountMock.mockResolvedValue({ error: refusal });
+    render(<AdAccountSetup initialStatus={connectedStatus} canDisconnect />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Disconnect" }));
+
+    await waitFor(() =>
+      expect(toastErrorMock).toHaveBeenCalledWith("Could not disconnect Meta Ads", { description: refusal }),
+    );
+    expect(toastSuccessMock).not.toHaveBeenCalled();
+    expect(replaceMock).not.toHaveBeenCalled();
+  });
+
+  it("shows the failure when the server action throws", async () => {
+    disconnectAdAccountMock.mockRejectedValue(new Error("network down"));
+    render(<AdAccountSetup initialStatus={connectedStatus} canDisconnect />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Disconnect" }));
+
+    await waitFor(() =>
+      expect(toastErrorMock).toHaveBeenCalledWith("Could not disconnect Meta Ads", { description: "network down" }),
+    );
+    expect(replaceMock).not.toHaveBeenCalled();
   });
 });

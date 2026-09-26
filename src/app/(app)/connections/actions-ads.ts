@@ -1,6 +1,7 @@
 "use server";
 
 import { randomUUID } from "crypto";
+import { DateTime } from "luxon";
 import { revalidatePath } from "next/cache";
 
 import { requireFeatureContext } from "@/lib/auth/features";
@@ -10,7 +11,12 @@ import {
   BOOKING_CONVERSION_EVENT_NAME,
   buildConversionReadiness,
 } from "@/lib/campaigns/conversion-readiness";
-import { getMetaAdAccountTokens, storeMetaAdAccountToken } from "@/lib/meta/ad-account-tokens";
+import { DEFAULT_TIMEZONE } from "@/lib/constants";
+import {
+  deleteMetaAdAccountTokens,
+  getMetaAdAccountTokens,
+  storeMetaAdAccountToken,
+} from "@/lib/meta/ad-account-tokens";
 import { getMetaGraphApiBase } from "@/lib/meta/graph";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
 
@@ -297,6 +303,70 @@ export async function getAdAccountSetupStatus(): Promise<AdAccountSetupStatus> {
     conversionIssues: conversionReadiness.issues,
     conversionsApiConfigured: Boolean(tokens.conversionsApiToken),
   };
+}
+
+/**
+ * Disconnects Meta Ads: deletes the stored ads and Conversions API tokens and
+ * marks setup incomplete, so CheersAI holds no Meta ads credentials afterwards.
+ * The ad account id, pixel id and conversion settings stay for a reconnect.
+ *
+ * Refused while a campaign can still spend, because without the token the app
+ * could no longer pause it. Campaigns stay ACTIVE in meta_campaigns after their
+ * end date, so only those with no end date or one on or after today count.
+ */
+export async function disconnectAdAccount(): Promise<{ success?: boolean; error?: string }> {
+  const adsCtx = await requireFeatureContext('paidAds');
+  assertOwner(adsCtx);
+  const { accountId } = adsCtx;
+  const supabase = createServiceSupabaseClient();
+
+  // London calendar day: a campaign ending today still spends today.
+  const today = DateTime.now().setZone(DEFAULT_TIMEZONE).toISODate();
+  const { count: runningCampaigns, error: campaignError } = await supabase
+    .from("meta_campaigns")
+    .select("id", { count: "exact", head: true })
+    .eq("account_id", accountId)
+    .eq("status", "ACTIVE")
+    .or(`end_date.is.null,end_date.gte.${today}`);
+
+  if (campaignError) {
+    console.error("[ads] failed to check running campaigns before disconnect", {
+      accountId,
+      error: campaignError,
+    });
+    return { error: "Could not check your campaigns, so Meta Ads is still connected. Please try again." };
+  }
+
+  if ((runningCampaigns ?? 0) > 0) {
+    return {
+      error: "Pause your running campaigns in Campaigns first, so spend cannot carry on after CheersAI loses access.",
+    };
+  }
+
+  try {
+    await deleteMetaAdAccountTokens(supabase, [accountId], ["access", "conversions_api"]);
+  } catch (tokenError) {
+    console.error("[ads] failed to delete Meta Ads tokens on disconnect", {
+      accountId,
+      error: tokenError instanceof Error ? tokenError.message : tokenError,
+    });
+    return { error: "Could not disconnect Meta Ads. Please try again." };
+  }
+
+  const { error: updateError } = await supabase
+    .from("meta_ad_accounts")
+    .update({ token_expires_at: null, setup_complete: false })
+    .eq("account_id", accountId);
+
+  if (updateError) {
+    console.error("[ads] failed to mark Meta Ads disconnected", { accountId, error: updateError });
+    return { error: "Could not disconnect Meta Ads. Please try again." };
+  }
+
+  revalidatePath("/connections");
+  revalidatePath("/campaigns");
+
+  return { success: true };
 }
 
 export async function updateAdAccountConversionSettings(input: {

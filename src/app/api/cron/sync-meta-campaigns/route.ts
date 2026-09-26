@@ -30,7 +30,22 @@ async function handle(request: Request) {
     return NextResponse.json({ error: `accounts lookup failed: ${offboardedError.message}` }, { status: 500 });
   }
   const skip = new Set((offboarded ?? []).map((row) => row.id as string));
-  const campaigns = (published ?? []).filter((campaign) => !skip.has(campaign.account_id as string));
+
+  // Brands that disconnected Meta Ads (or are mid-reconnect) have no usable
+  // token either; sync only brands whose ads setup is complete, as the
+  // optimiser cron does.
+  const { data: setUpAds, error: setUpAdsError } = await supabase
+    .from('meta_ad_accounts')
+    .select('account_id')
+    .eq('setup_complete', true);
+  if (setUpAdsError) {
+    return NextResponse.json({ error: `meta_ad_accounts lookup failed: ${setUpAdsError.message}` }, { status: 500 });
+  }
+  const setUp = new Set((setUpAds ?? []).map((row) => row.account_id as string));
+
+  const campaigns = (published ?? []).filter(
+    (campaign) => !skip.has(campaign.account_id as string) && setUp.has(campaign.account_id as string),
+  );
 
   if (!campaigns.length) {
     return NextResponse.json({ synced: 0 });
