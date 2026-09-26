@@ -224,6 +224,34 @@ describe('reconcileBrandFromStripe: ordering and safety', () => {
     expect(fake.subscriptionsList).not.toHaveBeenCalled();
   });
 
+  it('keeps a subscriber on a replaced (grandfathered) CheersAI price, mapped by the price metadata', async () => {
+    fake.subscriptions.push(
+      fakeSubscription({
+        id: 'sub_grandfathered',
+        customer: CUSTOMER,
+        status: 'active',
+        priceId: 'price_2025_professional_monthly',
+        priceMetadata: { app: 'cheersai', plan: 'professional', interval: 'month' },
+        priceInterval: 'month',
+      }),
+    );
+    const result = await reconcile();
+    expect(result).toMatchObject({ outcome: 'synced', state: 'active' });
+    expect(storedSubscription('sub_grandfathered')).toMatchObject({
+      plan: 'professional',
+      billing_interval: 'month',
+      stripe_price_id: 'price_2025_professional_monthly',
+    });
+  });
+
+  it('maps a new CheersAI price by its lookup key', async () => {
+    fake.subscriptions.push(
+      fakeSubscription({ id: 'sub_new_price', customer: CUSTOMER, status: 'active', priceId: 'price_2027_starter_annual', priceLookupKey: 'cheers_starter_annual' }),
+    );
+    await reconcile();
+    expect(storedSubscription('sub_new_price')).toMatchObject({ plan: 'starter', billing_interval: 'year' });
+  });
+
   it('refuses a CheersAI subscription on a price it does not know, and writes nothing', async () => {
     fake.subscriptions.push(fakeSubscription({ id: 'sub_odd', customer: CUSTOMER, status: 'active', priceId: 'price_unknown' }));
     await expect(reconcile()).rejects.toBeInstanceOf(ReconcileError);

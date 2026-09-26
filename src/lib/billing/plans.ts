@@ -95,13 +95,66 @@ export function stripePriceIdFor(plan: SelfServePlanId, interval: BillingInterva
   return value ? value : null;
 }
 
-/** Which plan and interval a Stripe price id belongs to, or null for any other price. */
-export function planForStripePrice(priceId: string): { plan: SelfServePlanId; interval: BillingInterval } | null {
-  if (!priceId) return null;
+/** The parts of a Stripe price the plan mapping reads (a Stripe.Price fits). */
+export interface StripePriceLike {
+  id: string;
+  metadata?: Record<string, string> | null;
+  lookup_key?: string | null;
+  recurring?: { interval?: string | null } | null;
+}
+
+export interface PriceMatch {
+  plan: SelfServePlanId;
+  interval: BillingInterval;
+}
+
+const INTERVAL_WORDS: Record<string, BillingInterval> = {
+  month: 'month',
+  monthly: 'month',
+  year: 'year',
+  yearly: 'year',
+  annual: 'year',
+};
+
+function isSelfServePlan(value: string | undefined | null): value is SelfServePlanId {
+  return (SELF_SERVE_PLAN_IDS as readonly string[]).includes(value ?? '');
+}
+
+/** Price metadata set when the CheersAI prices were created: app=cheersai, plan, interval. */
+function planFromMetadata(metadata: StripePriceLike['metadata']): PriceMatch | null {
+  if (!metadata || metadata.app !== 'cheersai') return null;
+  const interval = INTERVAL_WORDS[(metadata.interval ?? '').toLowerCase()];
+  return isSelfServePlan(metadata.plan) && interval ? { plan: metadata.plan, interval } : null;
+}
+
+const LOOKUP_KEY_PATTERN = /^cheers_(starter|professional)_(monthly|annual)$/;
+
+/** Lookup keys of the form cheers_<plan>_<monthly|annual>. */
+function planFromLookupKey(lookupKey: StripePriceLike['lookup_key']): PriceMatch | null {
+  const match = LOOKUP_KEY_PATTERN.exec(lookupKey ?? '');
+  if (!match || !isSelfServePlan(match[1])) return null;
+  return { plan: match[1], interval: INTERVAL_WORDS[match[2]] };
+}
+
+/**
+ * Which plan and interval a Stripe price belongs to, or null for any other
+ * price (for example the management app's). The configured env price ids win;
+ * after that the price's own metadata or lookup key, so a replaced or
+ * grandfathered CheersAI price keeps mapping to its plan instead of freezing
+ * its subscribers. A label that disagrees with how Stripe actually bills the
+ * price (its recurring interval) is not trusted.
+ */
+export function planForStripePrice(price: StripePriceLike | string): PriceMatch | null {
+  const candidate: StripePriceLike = typeof price === 'string' ? { id: price } : price;
+  if (!candidate.id) return null;
   for (const plan of SELF_SERVE_PLAN_IDS) {
     for (const interval of BILLING_INTERVALS) {
-      if (stripePriceIdFor(plan, interval) === priceId) return { plan, interval };
+      if (stripePriceIdFor(plan, interval) === candidate.id) return { plan, interval };
     }
   }
-  return null;
+  const labelled = planFromMetadata(candidate.metadata) ?? planFromLookupKey(candidate.lookup_key);
+  if (!labelled) return null;
+  const billed = candidate.recurring?.interval;
+  if (billed && billed !== labelled.interval) return null;
+  return labelled;
 }

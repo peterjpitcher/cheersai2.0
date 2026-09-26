@@ -34,6 +34,10 @@ export interface FakeSubscriptionInput {
   customer: string;
   status: string;
   priceId?: string;
+  /** Price metadata and lookup key, as the CheersAI test-mode prices carry them. */
+  priceMetadata?: Record<string, string>;
+  priceLookupKey?: string | null;
+  priceInterval?: 'month' | 'year';
   created?: string;
   trialEnd?: string | null;
   /** Start of the current period. For past_due, Stripe has already moved it to the start of the unpaid period. */
@@ -68,7 +72,13 @@ export function fakeSubscription(input: FakeSubscriptionInput): Stripe.Subscript
         {
           id: `si_${id}`,
           object: 'subscription_item',
-          price: { id: input.priceId ?? TEST_PRICES.starterMonthly, object: 'price' },
+          price: {
+            id: input.priceId ?? TEST_PRICES.starterMonthly,
+            object: 'price',
+            metadata: input.priceMetadata ?? {},
+            lookup_key: input.priceLookupKey ?? null,
+            recurring: input.priceInterval ? { interval: input.priceInterval } : null,
+          },
           current_period_start: seconds(input.currentPeriodStart ?? '2026-09-26T09:00:00Z'),
           current_period_end: seconds(input.currentPeriodEnd ?? '2026-10-10T09:00:00Z'),
         },

@@ -104,7 +104,8 @@ function toIso(seconds: number | null | undefined): string | null {
 /** The subscription item on a CheersAI price, if any. */
 function cheersItem(subscription: Stripe.Subscription): { item: Stripe.SubscriptionItem; plan: SelfServePlanId; interval: BillingInterval } | null {
   for (const item of subscription.items?.data ?? []) {
-    const match = planForStripePrice(item.price?.id ?? '');
+    if (!item.price) continue;
+    const match = planForStripePrice(item.price);
     if (match) return { item, ...match };
   }
   return null;
