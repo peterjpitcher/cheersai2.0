@@ -60,18 +60,44 @@ All go to `OPERATOR_ALERT_EMAIL`, at most one of each kind per brand per 24 hour
 | Invoice could not be finalised | `operator_stripe_invoice_alert` | Open the invoice in Stripe, fix the cause (usually the customer's address or tax details), finalise it. |
 | Possible double billing | `operator_stripe_double_billing_alert` | The brand's customer has more than one live CheersAI subscription. Cancel the extra one in Stripe (refund if it charged), then re-sync. |
 
-## Testing in test mode with the Stripe CLI
+## Customer portal configuration
 
-Use Orange Jelly Limited's **test-mode** key only (never `--live`):
+CheersAI's portal configuration (the id in `STRIPE_PORTAL_CONFIGURATION_ID`) must have:
+
+- plan switching between the four CheersAI prices (Starter and Professional, monthly and annual), upgrades prorated and invoiced immediately (`proration_behavior=always_invoice`), downgrades at the end of the period (`schedule_at_period_end` on a decreasing amount);
+- **`trial_update_behavior=continue_trial`**. Without it, changing plan during the free trial ends the trial and charges the full price that day, which contradicts the Billing page ("nothing is charged until the 14-day trial ends"). Found in the end-to-end test on 2026-09-26;
+- cancel at period end, payment method update, invoice history, and name, address, email and tax id updates.
+
+Test mode: `bpc_1UJs0QIMsxxxvzCCRkUnIFH8` has all of this. Live needs its own configuration created the same way.
+
+## Testing in test mode (never against production)
+
+`.env.local` points at the **production** Supabase project, and so do Preview deployments. Never run a test Checkout there: it writes test customers and subscriptions into the live billing tables. Test against the local Supabase stack instead:
+
+1. `supabase start` (give it free ports in `supabase/config.toml` if another project's stack holds the defaults; do not commit that change), then `npm run db:rebuild`.
+2. The local chain differs from production in three ways that matter for billing, so fix them locally only: grant the table privileges production has (`service_role` has all; see `information_schema.role_table_grants` on production), add `accounts.email text`, and `alter type content_status add value 'held'` (production's `publish_jobs.status` is text with a CHECK; the local chain still has the enum).
+3. Create a local owner, brand and `account_members` row with the local service-role key.
+4. Run the dev server with the local Supabase URL and keys, Orange Jelly's **test-mode** Stripe key, the test price and portal ids, and the forwarding secret from:
 
 ```bash
 stripe listen \
-  --api-key "$STRIPE_TEST_SECRET_KEY" \
-  --forward-to localhost:3000/api/stripe/webhook \
+  --forward-to localhost:3100/api/stripe/webhook \
   --events checkout.session.completed,customer.subscription.created,customer.subscription.updated,customer.subscription.deleted,customer.subscription.paused,customer.subscription.resumed,invoice.paid,invoice.payment_failed,invoice.finalization_failed
 ```
 
-Put the `whsec_...` it prints into `STRIPE_WEBHOOK_SECRET` in `.env.local` and restart `npm run dev`. Then go through a real test Checkout from Settings, Billing with card `4242 4242 4242 4242`. `stripe trigger` creates customers CheersAI does not know, so the webhook correctly ignores those events.
+5. Settings, Billing, start the trial, pay with `4242 4242 4242 4242`. For a failed payment, attach `pm_card_chargeCustomerFail` as the subscription's default payment method and end the trial (`trial_end=now`). `stripe trigger` creates customers CheersAI does not know, so the webhook correctly ignores those events. `stripe subscriptions cancel` waits for a confirmation prompt; use `stripe delete /v1/subscriptions/<id> --confirm`.
+
+### Verified end to end (2026-09-26, test mode, local stack)
+
+| Step | Result |
+|---|---|
+| Starter monthly trial through Checkout | Checkout showed 14 days free, £0.00 today, £29.99 + £6.00 VAT from 10 Oct; webhooks 200; app: "Free trial of Starter, billed monthly, until 10 October 2026" |
+| Upgrade to Professional in the portal during the trial | With `continue_trial`: £0.00 today, £71.99 from 10 Oct; app: "Free trial of Professional", "Your free trial uses Starter limits" |
+| Trial ends, card declines | `past_due`; app: "Update your payment details by 3 October 2026" (7 days from the start of the unpaid period) |
+| Pay the invoice with a working card | £71.99 paid (£12.00 VAT); `active` |
+| Cancel in the portal | app: "Professional, billed monthly. Ends on 26 October 2026" |
+| Subscription deleted | app: "Your subscription has ended", no second free trial offered |
+| Admin, Re-sync from Stripe | "Subscription updated from Stripe", audited as `stripe_resync` |
 
 ## Re-syncing a brand
 
