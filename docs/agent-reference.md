@@ -84,13 +84,14 @@ Vercel Cron (`vercel.json`; Vercel evaluates schedules in UTC), all authenticate
 | `/api/cron/publish-scheduler` | every minute | promote due `publish_jobs` to `queued` and dispatch to QStash |
 | `/api/cron/notify-failures` | hourly at :30 | alert on publish failures |
 | `/api/cron/retry-capi-conversions` | hourly at :20 | retry booking-conversion sends |
+| `/api/cron/token-health` | 02:00 daily | mark expired connections and email the brand (one alert per connection per 24 hours) |
 | `/api/cron/purge-trash` | 03:15 daily | purge soft-deleted content |
 | `/api/cron/sync-meta-campaigns` | 06:00 daily | pull Meta campaign performance |
 | `/api/cron/optimise-meta-campaigns` | 06:30 daily | run the campaign optimiser |
 | `/api/cron/notify-expiring-connections` | 08:00 daily | warn about expiring tokens |
 | `/api/cron/materialise-food-windows` | Sundays 01:00 | extend rolling food campaigns (no-op unless `FOOD_AUTO_MATERIALISE_ENABLED`) |
 
-Routes that exist but are not in `vercel.json`: `/api/cron/token-health` and `/api/cron/publish` (a 410 tombstone). Supabase-side schedules for the edge functions are documented in `docs/runbook.md` (section 11) and applied with `supabase functions schedule create`; `supabase/config.toml` only declares the two functions.
+Route that exists but is not in `vercel.json`: `/api/cron/publish` (a 410 tombstone). Supabase-side schedules for the edge functions are documented in `docs/runbook.md` (section 11) and applied with `supabase functions schedule create`; `supabase/config.toml` only declares the two functions.
 
 ## 6. Environment variables
 
