@@ -98,6 +98,17 @@ export function formatUkDate(input: Date | string): string {
 }
 
 /**
+ * Format an instant as a long UK date, "10 October 2026", on the
+ * Europe/London calendar (a late-evening UTC instant in summer lands on the
+ * next London day). Same string on the server and in the browser. Returns ""
+ * for input that is not a valid date.
+ */
+export function formatUkLongDate(input: Date | string): string {
+  const dt = toLondonDateTime(input).setLocale("en-GB");
+  return dt.isValid ? dt.toFormat("d LLLL yyyy") : "";
+}
+
+/**
  * Format an instant as a UK date and time, "06/09/2026, 14:30:15", in
  * Europe/London time: the layout en-GB `toLocaleString()` gives in a UK
  * browser, but identical on the server. Returns "" for an invalid date.
