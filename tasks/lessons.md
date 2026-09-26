@@ -6,3 +6,5 @@
 - Distinguish usual closing and booking arrival limits from an owner-approved conditional late finish. The Anchor stays open to the end of a game if people are still in watching; kitchen service does not extend automatically. Never describe that as guaranteed late opening.
 
 - Menu descriptions in the management app can lag what the kitchen actually serves. On 10 September 2026 the owner confirmed an ad photo showed a pizza the pub sells (mushrooms, rocket, cherry tomatoes) though no menu description listed it. Before calling a food image inaccurate, ask the owner; then get the menu description updated so the ad, the menu and the website agree.
+
+- When replacing scheduled post artwork, update both content_variants.media_ids and content_media_attachments. Calendar thumbnails prioritise attachments while post details and publishing use variants. Verify both views before reporting the replacement complete.
