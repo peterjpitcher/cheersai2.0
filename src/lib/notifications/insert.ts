@@ -1,11 +1,13 @@
 /**
  * Type-safe notification insert helper.
- * Uses the correct notifications table schema columns:
- *   id, account_id, urgency, title, body, category, resource_type, resource_id,
- *   read_at, dismissed_at, created_at
+ * Live `public.notifications` columns (information_schema, checked 2026-09-26):
+ *   id, account_id (NOT NULL), category, message (NOT NULL, no default), read_at,
+ *   metadata, created_at, urgency, title, body, resource_type, resource_id (uuid),
+ *   dismissed_at
  *
- * Note: The schema does NOT have `message` or `metadata` columns.
- * `title` is the short notification headline; `body` is the detailed message.
+ * `message` is what the planner feed and notification history display, and every
+ * other writer fills it with a one-line headline, so it gets the title.
+ * `title` repeats the headline; `body` is the detailed message.
  * `resource_type` + `resource_id` enable idempotency dedup and linking.
  */
 
@@ -24,22 +26,30 @@ interface InsertNotificationParams {
 }
 
 /**
+ * `duplicate` means the same alert was already recorded; `failed` means nothing
+ * was recorded and the caller must treat it as a failure, never as a duplicate.
+ */
+export type InsertNotificationResult =
+  | { status: 'inserted' }
+  | { status: 'duplicate' }
+  | { status: 'failed'; error: string };
+
+/**
  * Insert a notification with correct schema columns and idempotency check.
- * Returns { inserted: true } if new, { inserted: false } if duplicate.
  *
  * Idempotency: if resourceType and resourceId are provided, checks for an
  * existing notification with the same category + resource within the last 24h.
  */
 export async function insertNotification(
   params: InsertNotificationParams,
-): Promise<{ inserted: boolean; error?: string }> {
+): Promise<InsertNotificationResult> {
   const { supabase, accountId, category, title, body, resourceType, resourceId } = params;
   const urgency = classifyUrgency(category);
 
   // Idempotency: check if notification with same category + resource already exists in last 24h
   if (resourceType && resourceId) {
     const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-    const { data: existing } = await supabase
+    const { data: existing, error: lookupError } = await supabase
       .from('notifications')
       .select('id')
       .eq('account_id', accountId)
@@ -49,8 +59,13 @@ export async function insertNotification(
       .gte('created_at', cutoff)
       .limit(1);
 
+    if (lookupError) {
+      // Without the lookup a duplicate cannot be told from a new alert.
+      return { status: 'failed', error: `Duplicate check failed: ${lookupError.message}` };
+    }
+
     if (existing && existing.length > 0) {
-      return { inserted: false };
+      return { status: 'duplicate' };
     }
   }
 
@@ -58,6 +73,7 @@ export async function insertNotification(
     account_id: accountId,
     urgency,
     title,
+    message: title,
     body: body ?? null,
     category,
     resource_type: resourceType ?? null,
@@ -65,8 +81,8 @@ export async function insertNotification(
   });
 
   if (error) {
-    return { inserted: false, error: error.message };
+    return { status: 'failed', error: error.message };
   }
 
-  return { inserted: true };
+  return { status: 'inserted' };
 }

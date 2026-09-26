@@ -79,12 +79,13 @@ async function notifyFailures(): Promise<{
   if (!failedJobs || failedJobs.length === 0) {
     return {
       status: 200,
-      body: { processed: 0, emailed: 0, skipped: 0 },
+      body: { processed: 0, emailed: 0, skipped: 0, errors: 0 },
     };
   }
 
   let emailed = 0;
   let skipped = 0;
+  let errors = 0;
 
   for (const job of failedJobs) {
     try {
@@ -187,41 +188,46 @@ ${
         metadata: { job_id: job.id },
       });
       if (sentRecordError) {
+        // Without the record the next run emails the owner again.
+        errors++;
         console.error(`[notify-failures] Failed to record sent email for job ${job.id}:`, sentRecordError.message);
       }
 
       // ── Record the notification via shared helper ────────────────────────
-      const { error: insertError } = await insertNotification({
+      const notification = await insertNotification({
         supabase: service,
         accountId: contentItem.account_id,
         category: "publish_failed",
         title: `${platformLabel} post failed to publish`,
         body: job.error_message
           ? (job.error_code ? `[${job.error_code}] ${job.error_message}` : job.error_message)
-          : "Publishing failed — please check the Planner for details.",
+          : "Publishing failed. Please check the Planner for details.",
         resourceType: "content_item",
         resourceId: job.content_item_id,
       });
 
-      if (insertError) {
-        // Log but don't abort — email was already sent, this is just housekeeping
-        console.error(`[notify-failures] Failed to insert notification record for job ${job.id}:`, insertError);
+      if (notification.status === "failed") {
+        // The email has gone, but the in-app alert is missing: report it.
+        errors++;
+        console.error(`[notify-failures] Failed to insert notification record for job ${job.id}:`, notification.error);
       }
 
       emailed++;
     } catch (err) {
       // Isolate per-job errors so one failure doesn't abort the rest
       console.error(`[notify-failures] Unexpected error processing job ${job.id}:`, err instanceof Error ? err.message : String(err));
-      skipped++;
+      errors++;
     }
   }
 
+  // Any error fails the run so it shows up in Vercel instead of passing quietly.
   return {
-    status: 200,
+    status: errors > 0 ? 500 : 200,
     body: {
       processed: failedJobs.length,
       emailed,
       skipped,
+      errors,
     },
   };
 }
