@@ -28,9 +28,14 @@ describe('getSeatLimit', () => {
   });
 
   it('uses the subscribed plan', async () => {
-    expect(await getSeatLimit(service(plain, { data: { plan: 'professional' }, error: null }) as never, 'b')).toBe(5);
-    expect(await getSeatLimit(service(plain, { data: { plan: 'starter' }, error: null }) as never, 'b')).toBe(2);
-    expect(await getSeatLimit(service(plain, { data: { plan: 'group' }, error: null }) as never, 'b')).toBeNull();
+    expect(await getSeatLimit(service(plain, { data: { plan: 'professional', status: 'active' }, error: null }) as never, 'b')).toBe(5);
+    expect(await getSeatLimit(service(plain, { data: { plan: 'professional', status: 'past_due' }, error: null }) as never, 'b')).toBe(5);
+    expect(await getSeatLimit(service(plain, { data: { plan: 'starter', status: 'active' }, error: null }) as never, 'b')).toBe(2);
+    expect(await getSeatLimit(service(plain, { data: { plan: 'group', status: 'active' }, error: null }) as never, 'b')).toBeNull();
+  });
+
+  it('gives a Professional trial Starter seats until the trial ends (spec §2.1)', async () => {
+    expect(await getSeatLimit(service(plain, { data: { plan: 'professional', status: 'trialing' }, error: null }) as never, 'b')).toBe(2);
   });
 
   it('treats a brand without a subscription as on the trial plan (Starter)', async () => {

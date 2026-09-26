@@ -290,7 +290,7 @@ export async function reorderLinkInBioTiles(input: ReorderLinkInBioTilesInput) {
     return;
   }
 
-  // Validate all tile IDs belong to the authenticated account before upsert.
+  // Validate all tile IDs belong to the authenticated account before updating.
   // Prevents an attacker from injecting foreign tile IDs into the reorder payload.
   const { data: ownedTiles, error: ownedError } = await supabase
     .from("link_in_bio_tiles")
@@ -308,18 +308,24 @@ export async function reorderLinkInBioTiles(input: ReorderLinkInBioTilesInput) {
     throw new Error("One or more link-in-bio tiles were not found for this account");
   }
 
-  const updates = input.tileIdsInOrder.map((tileId, index) => ({
-    id: tileId,
-    account_id: accountId,
-    position: index,
-    updated_at: new Date().toISOString(),
-  }));
+  // Update each tile's position in place rather than upserting. An upsert is
+  // INSERT ... ON CONFLICT DO UPDATE, and Postgres checks NOT NULL on the
+  // proposed insert row (title, cta_label, cta_url) before the conflict, so a
+  // position-only upsert failed on every call. There is no unique index on
+  // position, so the separate updates cannot collide part-way through.
+  const updatedAt = new Date().toISOString();
+  const results = await Promise.all(
+    input.tileIdsInOrder.map((tileId, index) =>
+      supabase
+        .from("link_in_bio_tiles")
+        .update({ position: index, updated_at: updatedAt })
+        .eq("id", tileId)
+        .eq("account_id", accountId),
+    ),
+  );
 
-  const { error } = await supabase
-    .from("link_in_bio_tiles")
-    .upsert(updates, { onConflict: "id" });
-
-  if (error) {
-    throw error;
+  const failed = results.find((result) => result.error);
+  if (failed?.error) {
+    throw failed.error;
   }
 }

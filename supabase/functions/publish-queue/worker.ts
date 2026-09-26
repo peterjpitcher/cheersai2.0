@@ -138,6 +138,17 @@ const HOLD_MESSAGES: Partial<Record<EntitlementState, string>> = {
     archived: "On hold: this brand has been closed.",
 };
 
+/**
+ * Postgres "undefined column" (42703, what PostgREST returns for a select of a
+ * column that does not exist) or PostgREST's schema-cache miss (PGRST204).
+ * Mirrors isSchemaMissingError in src/lib/supabase/errors.ts for columns.
+ */
+export function isMissingColumnError(error: unknown): boolean {
+    if (typeof error !== "object" || error === null) return false;
+    const code = (error as { code?: string }).code;
+    return code === "42703" || code === "PGRST204";
+}
+
 const SUPPORTED_PUBLISH_PLATFORMS = new Set<ProviderPlatform>(["facebook", "instagram"]);
 
 function isSupportedPublishPlatform(platform: ProviderPlatform): platform is "facebook" | "instagram" {
@@ -1863,15 +1874,7 @@ export class PublishQueueWorker {
 
             let subscription: EntitlementInput["subscription"] = null;
             if (!account.archived_at && !account.billing_override) {
-                const { data: sub, error: subError } = await this.supabase
-                    .from("subscriptions")
-                    .select("status, current_period_end")
-                    .eq("account_id", accountId)
-                    .order("stripe_state_at", { ascending: false })
-                    .limit(1)
-                    .maybeSingle<{ status: StripeSubscriptionStatus; current_period_end: string | null }>();
-                if (subError) throw subError;
-                subscription = sub ? { status: sub.status, currentPeriodEnd: sub.current_period_end } : null;
+                subscription = await this.loadNewestSubscription(accountId);
             }
 
             const state = resolveEntitlement({
@@ -1885,6 +1888,42 @@ export class PublishQueueWorker {
             console.error(`[publish-queue] entitlement check failed for account ${accountId}; publishing`, error);
             return null;
         }
+    }
+
+    /**
+     * The brand's newest stored subscription. Reads current_period_start (the
+     * start of an unpaid period, which past-due grace is measured from). If
+     * that column does not exist yet (this function deployed before migration
+     * 20260926120000_subscriptions_period_start.sql), it reads the old columns
+     * instead and the rules fall back to the period end, so deploy order is safe.
+     */
+    private async loadNewestSubscription(accountId: string): Promise<EntitlementInput["subscription"]> {
+        type SubscriptionRow = {
+            status: StripeSubscriptionStatus;
+            current_period_start?: string | null;
+            current_period_end: string | null;
+        };
+        const read = (columns: string) =>
+            this.supabase
+                .from("subscriptions")
+                .select(columns)
+                .eq("account_id", accountId)
+                .order("stripe_state_at", { ascending: false })
+                .limit(1)
+                .maybeSingle<SubscriptionRow>();
+
+        let { data, error } = await read("status, current_period_start, current_period_end");
+        if (error && isMissingColumnError(error)) {
+            console.warn("[publish-queue] subscriptions.current_period_start is missing; using the period end for past-due grace");
+            ({ data, error } = await read("status, current_period_end"));
+        }
+        if (error) throw error;
+        if (!data) return null;
+        return {
+            status: data.status,
+            currentPeriodStart: data.current_period_start ?? null,
+            currentPeriodEnd: data.current_period_end,
+        };
     }
 
     private async holdJob(job: PublishJobRow, accountId: string, state: EntitlementState, nowIso: string) {

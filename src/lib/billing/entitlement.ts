@@ -25,8 +25,10 @@ export type Capability =
   | 'export'
   | 'switch_brand';
 
-/** Days after the paid period ends that a past-due brand keeps working. */
+/** Days after the unpaid period starts that a past-due brand keeps working. */
 export const PAST_DUE_GRACE_DAYS = 7;
+
+const GRACE_MS = PAST_DUE_GRACE_DAYS * 24 * 60 * 60 * 1000;
 
 export type StripeSubscriptionStatus =
   | 'trialing'
@@ -38,14 +40,60 @@ export type StripeSubscriptionStatus =
   | 'incomplete_expired'
   | 'paused';
 
+/**
+ * Stripe statuses where a subscription still runs, or still waits on a
+ * payment, and so can still bill the customer.
+ */
+export const LIVE_SUBSCRIPTION_STATUSES: ReadonlySet<StripeSubscriptionStatus> = new Set<StripeSubscriptionStatus>([
+  'trialing',
+  'active',
+  'past_due',
+  'unpaid',
+  'paused',
+  'incomplete',
+]);
+
+export function isLiveSubscriptionStatus(status: string): boolean {
+  return LIVE_SUBSCRIPTION_STATUSES.has(status as StripeSubscriptionStatus);
+}
+
+export interface EntitlementSubscription {
+  status: StripeSubscriptionStatus;
+  /**
+   * Start of the current billing period. When a renewal payment fails, Stripe
+   * has already moved the period forward, so for a past-due subscription this
+   * is the start of the unpaid period. Null on rows stored before the column
+   * existed.
+   */
+  currentPeriodStart: string | null;
+  currentPeriodEnd: string | null;
+}
+
 export interface EntitlementInput {
   archivedAt: string | null;
   billingOverride: 'comped' | 'suspended' | null;
-  subscription: {
-    status: StripeSubscriptionStatus;
-    currentPeriodEnd: string | null;
-  } | null;
+  subscription: EntitlementSubscription | null;
   now: Date;
+}
+
+function parseTime(value: string | null): number | null {
+  if (!value) return null;
+  const time = Date.parse(value);
+  return Number.isNaN(time) ? null : time;
+}
+
+/**
+ * When a past-due brand stops working: PAST_DUE_GRACE_DAYS after the unpaid
+ * period started. Measured in absolute time, so a clock change does not move
+ * it. A legacy row with no period start falls back to the period end (the old
+ * rule) so it never loses access early. Null when neither date is usable; the
+ * caller then treats the brand as lapsed (fail closed).
+ */
+export function pastDueGraceEndsAt(subscription: Pick<EntitlementSubscription, 'currentPeriodStart' | 'currentPeriodEnd'>): Date | null {
+  const anchor = subscription.currentPeriodStart !== null
+    ? parseTime(subscription.currentPeriodStart)
+    : parseTime(subscription.currentPeriodEnd);
+  return anchor === null ? null : new Date(anchor + GRACE_MS);
 }
 
 /** Precedence: archived > suspended > comped > the Stripe-derived state. */
@@ -63,10 +111,9 @@ export function resolveEntitlement(input: EntitlementInput): EntitlementState {
     case 'active':
       return 'active';
     case 'past_due': {
-      const periodEnd = subscription.currentPeriodEnd ? Date.parse(subscription.currentPeriodEnd) : NaN;
-      if (Number.isNaN(periodEnd)) return 'lapsed';
-      const graceEnds = periodEnd + PAST_DUE_GRACE_DAYS * 24 * 60 * 60 * 1000;
-      return input.now.getTime() <= graceEnds ? 'past_due_grace' : 'lapsed';
+      const graceEnds = pastDueGraceEndsAt(subscription);
+      if (!graceEnds) return 'lapsed';
+      return input.now.getTime() <= graceEnds.getTime() ? 'past_due_grace' : 'lapsed';
     }
     case 'incomplete':
       return 'incomplete';

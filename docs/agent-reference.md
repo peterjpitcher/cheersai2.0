@@ -27,7 +27,7 @@ Historical planning residue: `.planning/` (GSD phases, archived 2026-07-03), `do
 | Forms and validation | `react-hook-form` 7, `@hookform/resolvers` 5, `zod` 4 |
 | Data | `@supabase/supabase-js` 2.89, `@supabase/ssr` 0.8, `@tanstack/react-query` 5.90 (+ devtools) |
 | Background and infra | `@upstash/qstash` 2, `@upstash/ratelimit` 2, `@upstash/redis` 1, `@axiomhq/js` 1, `p-limit` 7 |
-| External services | `openai` 6.38, `resend` 6.6 |
+| External services | `openai` 6.38, `resend` 6.6, `stripe` 22.6 (API version pinned to `2026-08-26.dahlia` in `src/lib/billing/stripe.ts`) |
 | Dates | `luxon` 3.7 (`@types/luxon`) |
 | Images | `sharp` 0.34 (declared in `serverExternalPackages`), `satori` 0.26, `text-to-svg` 3 |
 | Testing | `vitest` 4 with `@vitest/coverage-v8`, `@testing-library/react` 16, `@testing-library/jest-dom` 6, `jsdom` 29, `msw` 2, `@playwright/test` 1.60, `autocannon` 8 (`perf:load-test`) |
@@ -73,7 +73,7 @@ Data flow: auth context is server-initialised and exposed read-only through `src
 
 ## 4. API route surface (`src/app/api/`)
 
-`auth/login`, `auth/magic-link`, `booking-conversions`, `content/[id]`, `create/event-artwork`, `create/generate-stream`, `cron/*` (see section 5), `feed/[tournamentId]`, `internal/link-in-bio-timing`, `internal/render-banner`, `oauth/[provider]` and `oauth/[provider]/callback`, `oauth/facebook-ads` and its callback, `planner/activity`, `social/delete-data`, `webhooks/qstash-publish` and `webhooks/qstash-publish/failure`, `webhooks/qstash-food-materialise`.
+`auth/login`, `auth/magic-link`, `booking-conversions`, `content/[id]`, `create/event-artwork`, `create/generate-stream`, `cron/*` (see section 5), `feed/[tournamentId]`, `internal/link-in-bio-timing`, `internal/render-banner`, `oauth/[provider]` and `oauth/[provider]/callback`, `oauth/facebook-ads` and its callback, `planner/activity`, `social/delete-data`, `stripe/webhook` (Stripe-signed, not behind the login gate), `webhooks/qstash-publish` and `webhooks/qstash-publish/failure`, `webhooks/qstash-food-materialise`.
 
 ## 5. Scheduled jobs
 
@@ -84,13 +84,14 @@ Vercel Cron (`vercel.json`; Vercel evaluates schedules in UTC), all authenticate
 | `/api/cron/publish-scheduler` | every minute | promote due `publish_jobs` to `queued` and dispatch to QStash |
 | `/api/cron/notify-failures` | hourly at :30 | alert on publish failures |
 | `/api/cron/retry-capi-conversions` | hourly at :20 | retry booking-conversion sends |
+| `/api/cron/token-health` | 02:00 daily | mark expired connections and email the brand (one alert per connection per 24 hours) |
 | `/api/cron/purge-trash` | 03:15 daily | purge soft-deleted content |
 | `/api/cron/sync-meta-campaigns` | 06:00 daily | pull Meta campaign performance |
 | `/api/cron/optimise-meta-campaigns` | 06:30 daily | run the campaign optimiser |
 | `/api/cron/notify-expiring-connections` | 08:00 daily | warn about expiring tokens |
 | `/api/cron/materialise-food-windows` | Sundays 01:00 | extend rolling food campaigns (no-op unless `FOOD_AUTO_MATERIALISE_ENABLED`) |
 
-Routes that exist but are not in `vercel.json`: `/api/cron/token-health` and `/api/cron/publish` (a 410 tombstone). Supabase-side schedules for the edge functions are documented in `docs/runbook.md` (section 11) and applied with `supabase functions schedule create`; `supabase/config.toml` only declares the two functions.
+Route that exists but is not in `vercel.json`: `/api/cron/publish` (a 410 tombstone). Supabase-side schedules for the edge functions are documented in `docs/runbook.md` (section 11) and applied with `supabase functions schedule create`; `supabase/config.toml` only declares the two functions.
 
 ## 6. Environment variables
 
@@ -113,6 +114,10 @@ Routes that exist but are not in `vercel.json`: `/api/cron/token-health` and `/a
 | `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN` | Auth rate limiting (skipped when unset) |
 | `AXIOM_TOKEN`, `AXIOM_DATASET` | Structured logging (silent when unset) |
 | `BOOKING_CONVERSION_INGEST_SECRET`, `BOOKING_CONVERSION_ACCOUNT_ID` | Booking-conversion ingest defaults |
+| `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | Stripe billing, server only and optional at build time (billing says "not set up yet" and the webhook answers 503 without them); test and live mode each have their own. In production only a live key (`sk_live_`, `rk_live_`) counts. Setup and rotation: `docs/runbooks/stripe-billing.md` |
+| `STRIPE_PRICE_STARTER_MONTHLY`, `STRIPE_PRICE_STARTER_ANNUAL`, `STRIPE_PRICE_PROFESSIONAL_MONTHLY`, `STRIPE_PRICE_PROFESSIONAL_ANNUAL` | Stripe price ids; mapped to plans only in `src/lib/billing/plans.ts` |
+| `STRIPE_PORTAL_CONFIGURATION_ID` | CheersAI's own customer portal configuration (the Stripe account is shared with the management app, whose portal is the account default) |
+| `VERCEL_ENV` | Set by Vercel (`production`, `preview`, `development`); billing refuses a test-mode Stripe key when it is `production` |
 | `MANAGEMENT_ARTWORK_ORIGINS` | Allowed hosts for management-app artwork fetches |
 | `ENABLE_CONNECTION_DIAGNOSTICS` | Verbose integration logging |
 | `FOOD_OPTIMISATION_ENABLED`, `FOOD_AUTO_MATERIALISE_ENABLED`, `NEXT_PUBLIC_ENABLE_FOOD_BOOKING` | Feature flags, default off |

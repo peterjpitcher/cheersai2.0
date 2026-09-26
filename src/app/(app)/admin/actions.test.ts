@@ -28,6 +28,14 @@ vi.mock('@/lib/admin/offboarding', () => ({
   exportBrandData: vi.fn(async () => ({ posts: [] })),
 }));
 vi.mock('@/lib/billing/publish-hold', () => ({ releaseHeldPublishJobs: (...a: unknown[]) => mockReleaseHeld(...a) }));
+const mockReconcile = vi.fn();
+const mockHasLiveSubscription = vi.fn();
+vi.mock('@/lib/billing/reconcile', () => ({
+  reconcileBrandFromStripe: (...a: unknown[]) => mockReconcile(...a),
+  hasLiveCheersSubscription: (...a: unknown[]) => mockHasLiveSubscription(...a),
+}));
+const mockMissingBillingEnv = vi.fn((): string[] => []);
+vi.mock('@/lib/billing/stripe', () => ({ missingBillingEnv: () => mockMissingBillingEnv() }));
 
 // Configurable service-client responses.
 const state = {
@@ -275,6 +283,50 @@ describe('setBillingOverride', () => {
   beforeEach(() => {
     mockGetBrandEntitlement.mockResolvedValue('comped');
     mockReleaseHeld.mockResolvedValue({ released: 3, stillHeld: 1 });
+    mockHasLiveSubscription.mockResolvedValue(false);
+  });
+
+  it('refuses Free while the brand still has a live Stripe subscription, changing nothing', async () => {
+    mockHasLiveSubscription.mockResolvedValue(true);
+    const { setBillingOverride } = await import('./actions');
+    expect(await setBillingOverride(A_BRAND, 'comped')).toEqual({
+      error: 'This brand still has a Stripe subscription. Cancel it in Stripe first, then set it to Free.',
+    });
+    expect(mockHasLiveSubscription).toHaveBeenCalledWith(expect.anything(), A_BRAND);
+    expect(mockLogAdminEvent).not.toHaveBeenCalled();
+    expect(mockReleaseHeld).not.toHaveBeenCalled();
+  });
+
+  it('refuses Free when Stripe cannot be checked (fails closed)', async () => {
+    mockHasLiveSubscription.mockRejectedValue(new Error('Stripe API unavailable'));
+    const { setBillingOverride } = await import('./actions');
+    expect((await setBillingOverride(A_BRAND, 'comped')).error).toMatch(/Could not check the brand's Stripe subscription/);
+    expect(mockLogAdminEvent).not.toHaveBeenCalled();
+    expect(mockLoggerError).toHaveBeenCalled();
+  });
+
+  it('suspends a brand that Stripe still bills, and says Stripe keeps billing it', async () => {
+    mockHasLiveSubscription.mockResolvedValue(true);
+    mockGetBrandEntitlement.mockResolvedValue('suspended');
+    const { setBillingOverride } = await import('./actions');
+    const result = await setBillingOverride(A_BRAND, 'suspended');
+    expect(result).toMatchObject({ success: true, notice: 'Stripe keeps billing this brand until its subscription is cancelled in Stripe.' });
+    expect(mockLogAdminEvent).toHaveBeenCalledWith(expect.objectContaining({ action: 'set_billing_override', detail: { override: 'suspended' } }));
+  });
+
+  it('still suspends when Stripe cannot be checked, with a warning', async () => {
+    mockHasLiveSubscription.mockRejectedValue(new Error('Stripe API unavailable'));
+    mockGetBrandEntitlement.mockResolvedValue('suspended');
+    const { setBillingOverride } = await import('./actions');
+    const result = await setBillingOverride(A_BRAND, 'suspended');
+    expect(result.success).toBe(true);
+    expect(result.notice).toMatch(/Stripe could not be checked/);
+  });
+
+  it('does not check Stripe when handing the brand back to Stripe', async () => {
+    const { setBillingOverride } = await import('./actions');
+    expect((await setBillingOverride(A_BRAND, null)).success).toBe(true);
+    expect(mockHasLiveSubscription).not.toHaveBeenCalled();
   });
 
   it('returns Forbidden when the caller is not a super-admin', async () => {
@@ -301,7 +353,7 @@ describe('setBillingOverride', () => {
   it('does not release anything when the brand still may not publish', async () => {
     mockGetBrandEntitlement.mockResolvedValue('suspended');
     const { setBillingOverride } = await import('./actions');
-    expect(await setBillingOverride(A_BRAND, 'suspended')).toEqual({ success: true, released: undefined, stillHeld: undefined });
+    expect(await setBillingOverride(A_BRAND, 'suspended')).toStrictEqual({ success: true, released: undefined, stillHeld: undefined });
     expect(mockReleaseHeld).not.toHaveBeenCalled();
   });
 
@@ -316,6 +368,60 @@ describe('setBillingOverride', () => {
     const { setBillingOverride } = await import('./actions');
     expect(await setBillingOverride(A_BRAND, 'comped')).toEqual({ error: 'Could not update the billing state.' });
     expect(mockLogAdminEvent).not.toHaveBeenCalled();
+  });
+});
+
+describe('resyncBrandFromStripe', () => {
+  beforeEach(() => {
+    mockMissingBillingEnv.mockReturnValue([]);
+    mockReconcile.mockResolvedValue({ outcome: 'synced', subscriptionId: 'sub_1', status: 'active', state: 'active', released: 2, stillHeld: 0 });
+  });
+
+  it('returns Forbidden when the caller is not a super-admin', async () => {
+    mockRequireAuthContext.mockResolvedValue({ ...SUPER_ADMIN_CTX, isSuperAdmin: false, supabase: buildSupabase() });
+    const { resyncBrandFromStripe } = await import('./actions');
+    expect(await resyncBrandFromStripe(A_BRAND)).toEqual({ error: 'Forbidden.' });
+    expect(mockReconcile).not.toHaveBeenCalled();
+  });
+
+  it('rejects a non-uuid brand', async () => {
+    const { resyncBrandFromStripe } = await import('./actions');
+    expect(await resyncBrandFromStripe('nope')).toEqual({ error: 'Invalid brand.' });
+  });
+
+  it('says billing is not set up when Stripe settings are missing', async () => {
+    mockMissingBillingEnv.mockReturnValue(['STRIPE_SECRET_KEY']);
+    const { resyncBrandFromStripe } = await import('./actions');
+    expect((await resyncBrandFromStripe(A_BRAND)).error).toMatch(/Billing is not set up yet/);
+    expect(mockReconcile).not.toHaveBeenCalled();
+  });
+
+  it('re-syncs through the shared reconcile and audits it', async () => {
+    const { resyncBrandFromStripe } = await import('./actions');
+    expect(await resyncBrandFromStripe(A_BRAND)).toEqual({
+      success: true,
+      message: 'Subscription updated from Stripe.',
+      state: 'active',
+      released: 2,
+    });
+    expect(mockReconcile).toHaveBeenCalledWith(A_BRAND, expect.objectContaining({ service: expect.anything() }));
+    expect(mockLogAdminEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'stripe_resync',
+        targetAccountId: A_BRAND,
+        detail: expect.objectContaining({ outcome: 'synced', subscriptionId: 'sub_1', state: 'active' }),
+      }),
+    );
+  });
+
+  it('reports and audits a failure instead of claiming success', async () => {
+    mockReconcile.mockRejectedValue(new Error('Stripe API unavailable'));
+    const { resyncBrandFromStripe } = await import('./actions');
+    const result = await resyncBrandFromStripe(A_BRAND);
+    expect(result.error).toMatch(/Re-sync failed: Stripe API unavailable/);
+    expect(result.success).toBeUndefined();
+    expect(mockLoggerError).toHaveBeenCalled();
+    expect(mockLogAdminEvent).toHaveBeenCalledWith(expect.objectContaining({ action: 'stripe_resync', result: 'failure' }));
   });
 });
 
