@@ -27,6 +27,7 @@ const NEW_BRAND: BillingOverview = {
   state: "incomplete",
   subscription: null,
   hasCustomer: false,
+  liveSubscription: false,
   trialEligible: true,
   checkoutReady: true,
   portalReady: true,
@@ -62,6 +63,20 @@ describe("BillingSection", () => {
     expect(screen.getByText("Included, no billing.")).toBeInTheDocument();
     expect(screen.queryAllByRole("button")).toHaveLength(0);
     expect(screen.queryByText(/free trial/i)).not.toBeInTheDocument();
+  });
+
+  it("keeps Manage billing for an owner of a comped brand that still has a live Stripe subscription", async () => {
+    mockOpenPortal.mockResolvedValue({ success: true, url: "https://billing.stripe.com/p/session/test_1" });
+    renderSection({ ...NEW_BRAND, state: "comped", hasCustomer: true, liveSubscription: true });
+    expect(screen.getByText("Included, no billing.")).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent("This brand still has a Stripe subscription.");
+    fireEvent.click(screen.getByRole("button", { name: "Manage billing" }));
+    await waitFor(() => expect(assign).toHaveBeenCalledWith("https://billing.stripe.com/p/session/test_1"));
+    cleanup();
+
+    // A member of the same brand sees only the plan line.
+    renderSection({ ...NEW_BRAND, state: "comped", hasCustomer: true, liveSubscription: true }, { canManage: false });
+    expect(screen.queryAllByRole("button")).toHaveLength(0);
   });
 
   it("lets an owner of a new brand pick a plan and period, then sends them to Checkout", async () => {

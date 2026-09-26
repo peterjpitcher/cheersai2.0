@@ -12,7 +12,7 @@ import { sendEmail } from '@/lib/email/resend';
 import { can } from '@/lib/billing/entitlement';
 import { getBrandEntitlement } from '@/lib/billing/entitlement-server';
 import { releaseHeldPublishJobs } from '@/lib/billing/publish-hold';
-import { reconcileBrandFromStripe, type ReconcileResult } from '@/lib/billing/reconcile';
+import { hasLiveCheersSubscription, reconcileBrandFromStripe, type ReconcileResult } from '@/lib/billing/reconcile';
 import { missingBillingEnv } from '@/lib/billing/stripe';
 import { requireAuthContext } from '@/lib/auth/server';
 import { createLogger } from '@/lib/logging';
@@ -420,19 +420,53 @@ export async function setBrandFeature(
 // comped (free), suspended (held) or none (Stripe decides). When the change
 // leaves the brand able to publish, its future held posts are released;
 // overdue ones stay held for the owner to review.
+//
+// The override never touches Stripe. So Free is refused while a CheersAI
+// subscription can still bill the brand (Stripe would keep charging a brand
+// the app treats as free, and its owners would lose the portal), and
+// Suspended goes ahead with a notice that Stripe keeps billing.
 // ---------------------------------------------------------------------------
 
 const billingOverrideSchema = z.enum(['comped', 'suspended']).nullable();
 
+const LIVE_SUBSCRIPTION_BLOCKS_FREE =
+  'This brand still has a Stripe subscription. Cancel it in Stripe first, then set it to Free.';
+const SUSPENDED_STILL_BILLED_NOTICE =
+  'Stripe keeps billing this brand until its subscription is cancelled in Stripe.';
+const SUSPENDED_STRIPE_UNCHECKED_NOTICE =
+  'Stripe could not be checked: if this brand has a subscription, Stripe keeps billing it until it is cancelled in Stripe.';
+
 export async function setBillingOverride(
   accountId: string,
   override: 'comped' | 'suspended' | null,
-): Promise<ActionResult & { released?: number; stillHeld?: number }> {
+): Promise<ActionResult & { released?: number; stillHeld?: number; notice?: string }> {
   const ctx = await requireSuperAdmin();
   if (!ctx) return { error: 'Forbidden.' };
   if (!uuid.safeParse(accountId).success) return { error: 'Invalid brand.' };
   const parsed = billingOverrideSchema.safeParse(override);
   if (!parsed.success) return { error: 'Invalid billing state.' };
+
+  let notice: string | undefined;
+  if (parsed.data !== null) {
+    let live: boolean | null;
+    try {
+      live = await hasLiveCheersSubscription(ctx.supabase, accountId);
+    } catch (checkError) {
+      logger.error('billing override: live subscription check failed', checkError instanceof Error ? checkError : undefined, {
+        accountId,
+        override: parsed.data,
+      });
+      live = null;
+    }
+    if (parsed.data === 'comped') {
+      // Fail closed: never make a brand free without knowing Stripe has stopped billing it.
+      if (live === null) return { error: 'Could not check the brand\'s Stripe subscription, so it was not set to Free. Try again.' };
+      if (live) return { error: LIVE_SUBSCRIPTION_BLOCKS_FREE };
+    } else if (live !== false) {
+      // Suspending protects us, so it goes ahead either way, with a warning.
+      notice = live ? SUSPENDED_STILL_BILLED_NOTICE : SUSPENDED_STRIPE_UNCHECKED_NOTICE;
+    }
+  }
 
   const { data, error } = await ctx.supabase
     .from('accounts')
@@ -465,7 +499,7 @@ export async function setBillingOverride(
   }
 
   revalidatePath('/admin');
-  return { success: true, released, stillHeld };
+  return { success: true, released, stillHeld, ...(notice ? { notice } : {}) };
 }
 
 // ---------------------------------------------------------------------------

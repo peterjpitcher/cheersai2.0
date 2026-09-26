@@ -39,6 +39,7 @@ describe('getBillingOverview', () => {
       state: 'incomplete',
       subscription: null,
       hasCustomer: false,
+      liveSubscription: false,
       trialEligible: true,
       checkoutReady: true,
       portalReady: true,
@@ -49,6 +50,21 @@ describe('getBillingOverview', () => {
   it('shows a comped brand as comped whatever Stripe says', async () => {
     db.tables.accounts[0].billing_override = 'comped';
     expect((await getBillingOverview(db.client(), BRAND)).state).toBe('comped');
+  });
+
+  it('flags a comped brand that still has a live stored subscription, so its owners keep the portal', async () => {
+    db.tables.accounts[0].billing_override = 'comped';
+    db.seed('billing_customers', [{ account_id: BRAND, stripe_customer_id: 'cus_1' }]);
+    db.seed('subscriptions', [subscription({ status: 'active' })]);
+    expect(await getBillingOverview(db.client(), BRAND)).toMatchObject({ state: 'comped', hasCustomer: true, liveSubscription: true });
+  });
+
+  it('does not flag ended subscriptions as live, even behind a newer row', async () => {
+    db.seed('subscriptions', [
+      subscription({ stripe_subscription_id: 'sub_old', status: 'canceled', stripe_state_at: '2026-09-01T10:00:00Z' }),
+      subscription({ stripe_subscription_id: 'sub_new', status: 'incomplete_expired' }),
+    ]);
+    expect((await getBillingOverview(db.client(), BRAND)).liveSubscription).toBe(false);
   });
 
   it('labels a trial end on the London calendar (a late UTC time in summer is the next day)', async () => {

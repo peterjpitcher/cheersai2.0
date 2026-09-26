@@ -9,7 +9,7 @@ import { z } from 'zod';
 import { env } from '@/env';
 import { OwnerRequiredError, requireOwnerContext } from '@/lib/auth/roles';
 import type { AuthContext } from '@/lib/auth/types';
-import type { EntitlementState, StripeSubscriptionStatus } from '@/lib/billing/entitlement';
+import { isLiveSubscriptionStatus, type EntitlementState } from '@/lib/billing/entitlement';
 import {
   BILLING_INTERVALS,
   SELF_SERVE_PLAN_IDS,
@@ -18,7 +18,7 @@ import {
   type BillingInterval,
   type SelfServePlanId,
 } from '@/lib/billing/plans';
-import { LIVE_SUBSCRIPTION_STATUSES, listCheersSubscriptions, reconcileBrandFromStripe } from '@/lib/billing/reconcile';
+import { listCheersSubscriptions, reconcileBrandFromStripe } from '@/lib/billing/reconcile';
 import {
   BILLING_NOT_CONFIGURED_MESSAGE,
   BillingNotConfiguredError,
@@ -163,7 +163,7 @@ export async function startCheckout(input: { plan: SelfServePlanId; interval: Bi
     const customerId = await getOrCreateCustomer(ctx, stripe, brand);
 
     const previous = await listCheersSubscriptions(stripe, customerId);
-    if (previous.some((subscription) => LIVE_SUBSCRIPTION_STATUSES.has(subscription.status as StripeSubscriptionStatus))) {
+    if (previous.some((subscription) => isLiveSubscriptionStatus(subscription.status))) {
       return { error: 'This brand already has a subscription. Use Manage billing to change or restart it.' };
     }
     await expireOpenCheckouts(stripe, customerId);

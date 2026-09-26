@@ -129,6 +129,18 @@ export function BillingSection({ overview, plans, canManage, checkoutReturn, tri
   const errorNotice = error ? <Notice tone="error">{error}</Notice> : null;
 
   if (state === "comped") {
+    // Comped brands never pay. If Stripe was somehow not cancelled, owners
+    // still need the portal to stop it charging.
+    if (canManage && overview.hasCustomer && overview.liveSubscription) {
+      return (
+        <div className="space-y-3">
+          <Line>Included, no billing.</Line>
+          <Notice tone="error">This brand still has a Stripe subscription. Use Manage billing to cancel it so you are not charged.</Notice>
+          {portalButton}
+          {errorNotice}
+        </div>
+      );
+    }
     return <Line>Included, no billing.</Line>;
   }
 

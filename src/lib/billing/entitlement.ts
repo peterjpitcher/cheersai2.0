@@ -40,6 +40,23 @@ export type StripeSubscriptionStatus =
   | 'incomplete_expired'
   | 'paused';
 
+/**
+ * Stripe statuses where a subscription still runs, or still waits on a
+ * payment, and so can still bill the customer.
+ */
+export const LIVE_SUBSCRIPTION_STATUSES: ReadonlySet<StripeSubscriptionStatus> = new Set<StripeSubscriptionStatus>([
+  'trialing',
+  'active',
+  'past_due',
+  'unpaid',
+  'paused',
+  'incomplete',
+]);
+
+export function isLiveSubscriptionStatus(status: string): boolean {
+  return LIVE_SUBSCRIPTION_STATUSES.has(status as StripeSubscriptionStatus);
+}
+
 export interface EntitlementSubscription {
   status: StripeSubscriptionStatus;
   /**

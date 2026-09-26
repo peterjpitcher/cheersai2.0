@@ -159,7 +159,8 @@ function BillingCard({ brands }: { brands: AdminBrand[] }) {
       const r = await setBillingOverride(brand.accountId, override);
       if (r.success) {
         const releasedNote = r.released ? ` ${r.released} held post(s) released${r.stillHeld ? `, ${r.stillHeld} overdue still held for review` : ''}.` : '';
-        setMsg({ ok: `Billing for ${brand.name ?? 'brand'} updated.${releasedNote}` });
+        const stripeNote = r.notice ? ` ${r.notice}` : '';
+        setMsg({ ok: `Billing for ${brand.name ?? 'brand'} updated.${releasedNote}${stripeNote}` });
         router.refresh();
       } else setMsg({ error: r.error });
     });

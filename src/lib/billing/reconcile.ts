@@ -1,7 +1,13 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type Stripe from 'stripe';
 
-import { can, type EntitlementState, type StripeSubscriptionStatus } from '@/lib/billing/entitlement';
+import {
+  can,
+  isLiveSubscriptionStatus,
+  LIVE_SUBSCRIPTION_STATUSES,
+  type EntitlementState,
+  type StripeSubscriptionStatus,
+} from '@/lib/billing/entitlement';
 import { getBrandEntitlement } from '@/lib/billing/entitlement-server';
 import { planForStripePrice, type BillingInterval, type SelfServePlanId } from '@/lib/billing/plans';
 import { releaseHeldPublishJobs } from '@/lib/billing/publish-hold';
@@ -80,19 +86,6 @@ const KNOWN_STATUSES: ReadonlySet<string> = new Set<StripeSubscriptionStatus>([
   'incomplete',
   'incomplete_expired',
   'paused',
-]);
-
-/**
- * Stripe statuses where a subscription still runs, or still waits on a
- * payment, and so can still bill the customer.
- */
-export const LIVE_SUBSCRIPTION_STATUSES: ReadonlySet<StripeSubscriptionStatus> = new Set<StripeSubscriptionStatus>([
-  'trialing',
-  'active',
-  'past_due',
-  'unpaid',
-  'paused',
-  'incomplete',
 ]);
 
 /**
@@ -266,7 +259,7 @@ export async function hasLiveCheersSubscription(
   const customerId = await loadCustomerId(service, accountId);
   if (!customerId) return false;
   const subscriptions = await listCheersSubscriptions(deps.stripe ?? getStripe(), customerId);
-  return subscriptions.some((subscription) => LIVE_SUBSCRIPTION_STATUSES.has(subscription.status as StripeSubscriptionStatus));
+  return subscriptions.some((subscription) => isLiveSubscriptionStatus(subscription.status));
 }
 
 /**
@@ -319,7 +312,7 @@ async function warnIfBilledTwice(
   customerId: string,
   subscriptions: Stripe.Subscription[],
 ): Promise<void> {
-  const live = subscriptions.filter((subscription) => LIVE_SUBSCRIPTION_STATUSES.has(subscription.status as StripeSubscriptionStatus));
+  const live = subscriptions.filter((subscription) => isLiveSubscriptionStatus(subscription.status));
   if (live.length < 2) return;
   const subscriptionIds = live.map((subscription) => subscription.id);
   logger.error('brand has more than one live CheersAI subscription (possible double billing)', undefined, {

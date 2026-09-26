@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import {
+  isLiveSubscriptionStatus,
   pastDueGraceEndsAt,
   resolveEntitlement,
   type EntitlementState,
@@ -41,6 +42,12 @@ export interface BillingOverview {
   subscription: BillingSubscriptionSummary | null;
   /** A Stripe customer exists, so the portal can open. */
   hasCustomer: boolean;
+  /**
+   * A stored subscription could still bill the brand. Normally only for paying
+   * brands; for a comped brand it means Stripe was not cancelled, so owners
+   * still get Manage billing to cancel it.
+   */
+  liveSubscription: boolean;
   /** No subscription has ever been recorded for this brand, so Checkout adds the free trial. */
   trialEligible: boolean;
   checkoutReady: boolean;
@@ -100,13 +107,15 @@ export async function getBillingOverview(service: SupabaseClient, accountId: str
       .select('archived_at, billing_override')
       .eq('id', accountId)
       .maybeSingle<{ archived_at: string | null; billing_override: 'comped' | 'suspended' | null }>(),
+    // Every stored row for the brand, newest first: the newest decides the
+    // state; the rest say whether anything else could still bill it.
     service
       .from('subscriptions')
       .select('plan, billing_interval, status, trial_end, current_period_start, current_period_end, cancel_at_period_end')
       .eq('account_id', accountId)
       .order('stripe_state_at', { ascending: false })
-      .limit(1)
-      .maybeSingle<SubscriptionRow>(),
+      .limit(50)
+      .returns<SubscriptionRow[]>(),
     service.from('billing_customers').select('stripe_customer_id').eq('account_id', accountId).maybeSingle<{ stripe_customer_id: string }>(),
   ]);
   if (accountResult.error) throw new Error(`billing overview: accounts lookup failed: ${accountResult.error.message}`);
@@ -115,7 +124,8 @@ export async function getBillingOverview(service: SupabaseClient, accountId: str
   if (customerResult.error) throw new Error(`billing overview: customer lookup failed: ${customerResult.error.message}`);
 
   const account = accountResult.data;
-  const row = subscriptionResult.data;
+  const rows = subscriptionResult.data ?? [];
+  const row = rows[0] ?? null;
   const state = resolveEntitlement({
     archivedAt: account.archived_at,
     billingOverride: account.billing_override,
@@ -146,6 +156,7 @@ export async function getBillingOverview(service: SupabaseClient, accountId: str
         }
       : null,
     hasCustomer: Boolean(customerResult.data),
+    liveSubscription: rows.some((stored) => isLiveSubscriptionStatus(stored.status)),
     trialEligible: !row,
     checkoutReady: missingBillingEnv('checkout').length === 0,
     portalReady: missingBillingEnv('portal').length === 0,
