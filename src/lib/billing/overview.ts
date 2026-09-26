@@ -48,13 +48,23 @@ export interface BillingOverview {
    * still get Manage billing to cancel it.
    */
   liveSubscription: boolean;
-  /** No subscription has ever been recorded for this brand, so Checkout adds the free trial. */
-  trialEligible: boolean;
+  /**
+   * Whether Checkout will add the free trial. The server gives one only when
+   * Stripe lists no earlier CheersAI subscription for the brand's customer:
+   * - eligible: no Stripe customer yet, so there cannot be one;
+   * - ineligible: a subscription is already recorded;
+   * - uncertain: a customer exists but nothing is recorded (for example an
+   *   abandoned Checkout, or a subscription not synced), so the page words
+   *   the trial as conditional instead of promising it.
+   */
+  trial: TrialEligibility;
   checkoutReady: boolean;
   portalReady: boolean;
   /** A trial of any plan runs on this plan's limits (spec §2.1). */
   trialLimitsPlan: { plan: PlanId; name: string };
 }
+
+export type TrialEligibility = 'eligible' | 'uncertain' | 'ineligible';
 
 export interface BillingPlanOption {
   plan: SelfServePlanId;
@@ -157,7 +167,7 @@ export async function getBillingOverview(service: SupabaseClient, accountId: str
       : null,
     hasCustomer: Boolean(customerResult.data),
     liveSubscription: rows.some((stored) => isLiveSubscriptionStatus(stored.status)),
-    trialEligible: !row,
+    trial: rows.length > 0 ? 'ineligible' : customerResult.data ? 'uncertain' : 'eligible',
     checkoutReady: missingBillingEnv('checkout').length === 0,
     portalReady: missingBillingEnv('portal').length === 0,
     trialLimitsPlan: { plan: TRIAL_PLAN, name: PLANS[TRIAL_PLAN].name },

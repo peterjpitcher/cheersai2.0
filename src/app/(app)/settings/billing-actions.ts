@@ -31,10 +31,13 @@ import { createLogger } from '@/lib/logging';
 /**
  * Billing actions for the active brand (spec §4.3, decision D4: owners only).
  *
- * The browser only ever says which plan and billing period it wants; the
- * Stripe price, customer and brand are all decided here from the signed-in
- * owner's active brand. Every failure returns an error the Billing section
- * shows, and is logged.
+ * The browser only ever says which plan and billing period it wants, plus the
+ * brand the page was rendered for; the Stripe price, customer and brand are
+ * all decided here from the signed-in owner's active brand. The page's brand
+ * is only a guard: if the active brand changed in another tab since the page
+ * loaded, the action refuses instead of acting on a brand the owner is not
+ * looking at. Every failure returns an error the Billing section shows, and
+ * is logged.
  */
 
 type ActionResult = { success?: boolean; error?: string };
@@ -46,8 +49,21 @@ const checkoutSchema = z
   .object({
     plan: z.enum(SELF_SERVE_PLAN_IDS),
     interval: z.enum(BILLING_INTERVALS),
+    accountId: z.string(),
   })
   .strict();
+
+/** Which brand the Billing section was rendered for. */
+export interface BillingPageBrand {
+  accountId: string;
+}
+
+const BRAND_SWITCHED = 'You switched brand in another tab. Refresh the page and try again.';
+
+/** Null when the page's brand is still the active brand, else the message to show. */
+function brandSwitched(ctx: AuthContext, pageAccountId: unknown): string | null {
+  return typeof pageAccountId === 'string' && pageAccountId === ctx.accountId ? null : BRAND_SWITCHED;
+}
 
 const TRY_AGAIN = 'Please try again, or contact Cheers support if it keeps happening.';
 
@@ -103,6 +119,48 @@ async function findCustomerId(ctx: AuthContext): Promise<string | null> {
 }
 
 /**
+ * The email of the brand's longest-standing owner, used only when the brand
+ * has no contact email. Deterministic per brand, so any owner's retry builds
+ * the same customer.
+ */
+async function firstOwnerEmail(ctx: AuthContext): Promise<string | null> {
+  const { data: owner, error } = await ctx.supabase
+    .from('account_members')
+    .select('user_id')
+    .eq('account_id', ctx.accountId)
+    .eq('role', 'owner')
+    .order('created_at', { ascending: true })
+    .order('user_id', { ascending: true })
+    .limit(1)
+    .maybeSingle<{ user_id: string }>();
+  if (error) throw new Error(`account_members lookup failed: ${error.message}`);
+  if (!owner) return null;
+  const { data: snapshot, error: snapshotError } = await ctx.supabase
+    .from('user_auth_snapshot')
+    .select('email')
+    .eq('user_id', owner.user_id)
+    .maybeSingle<{ email: string | null }>();
+  if (snapshotError) throw new Error(`user_auth_snapshot lookup failed: ${snapshotError.message}`);
+  return snapshot?.email?.trim() || null;
+}
+
+/**
+ * Customer details from brand data only: the brand's name and contact email
+ * (accounts.email), else its first owner's email. Never the clicking user's
+ * email, which may be a super-admin's, and never anything that differs
+ * between owners, because the idempotency key is per brand and Stripe rejects
+ * a reused key with different parameters.
+ */
+async function customerParams(ctx: AuthContext, brand: BrandBillingRow): Promise<Stripe.CustomerCreateParams> {
+  const email = brand.email?.trim() || (await firstOwnerEmail(ctx)) || undefined;
+  return {
+    name: brand.business_name ?? undefined,
+    email,
+    metadata: { app: CHEERSAI_APP_TAG, account_id: ctx.accountId },
+  };
+}
+
+/**
  * The brand's Stripe customer, created and stored (before any use) if it has
  * none. The idempotency key is per brand, so a retry after a failed save gets
  * the same Stripe customer back instead of a duplicate.
@@ -111,14 +169,9 @@ async function getOrCreateCustomer(ctx: AuthContext, stripe: Stripe, brand: Bran
   const existing = await findCustomerId(ctx);
   if (existing) return existing;
 
-  const customer = await stripe.customers.create(
-    {
-      name: brand.business_name ?? undefined,
-      email: ctx.user.email || brand.email || undefined,
-      metadata: { app: CHEERSAI_APP_TAG, account_id: ctx.accountId },
-    },
-    { idempotencyKey: `cheersai-customer-${ctx.accountId}` },
-  );
+  const customer = await stripe.customers.create(await customerParams(ctx, brand), {
+    idempotencyKey: `cheersai-customer-${ctx.accountId}`,
+  });
 
   const { error } = await ctx.supabase
     .from('billing_customers')
@@ -142,9 +195,13 @@ async function expireOpenCheckouts(stripe: Stripe, customerId: string): Promise<
 }
 
 /** Start Stripe Checkout for the active brand. Returns the Checkout URL to send the owner to. */
-export async function startCheckout(input: { plan: SelfServePlanId; interval: BillingInterval }): Promise<BillingRedirectResult> {
+export async function startCheckout(
+  input: { plan: SelfServePlanId; interval: BillingInterval } & BillingPageBrand,
+): Promise<BillingRedirectResult> {
   const ctx = await ownerContext();
   if ('error' in ctx) return ctx;
+  const switched = brandSwitched(ctx, input?.accountId);
+  if (switched) return { error: switched };
 
   const parsed = checkoutSchema.safeParse(input);
   if (!parsed.success) return { error: 'Choose a plan and a billing period.' };
@@ -204,9 +261,11 @@ export async function startCheckout(input: { plan: SelfServePlanId; interval: Bi
 }
 
 /** Open the Stripe customer portal (change plan, card, invoices, cancel) for the active brand. */
-export async function openBillingPortal(): Promise<BillingRedirectResult> {
+export async function openBillingPortal(input: BillingPageBrand): Promise<BillingRedirectResult> {
   const ctx = await ownerContext();
   if ('error' in ctx) return ctx;
+  const switched = brandSwitched(ctx, input?.accountId);
+  if (switched) return { error: switched };
   if (missingBillingEnv('portal').length) return { error: BILLING_NOT_CONFIGURED_MESSAGE };
 
   try {
@@ -232,9 +291,11 @@ export async function openBillingPortal(): Promise<BillingRedirectResult> {
 }
 
 /** "Check again" after Checkout: read the brand's subscription from Stripe now. */
-export async function checkBillingAgain(): Promise<ActionResult & { state?: EntitlementState }> {
+export async function checkBillingAgain(input: BillingPageBrand): Promise<ActionResult & { state?: EntitlementState }> {
   const ctx = await ownerContext();
   if ('error' in ctx) return ctx;
+  const switched = brandSwitched(ctx, input?.accountId);
+  if (switched) return { error: switched };
   if (missingBillingEnv('reconcile').length) return { error: BILLING_NOT_CONFIGURED_MESSAGE };
 
   try {

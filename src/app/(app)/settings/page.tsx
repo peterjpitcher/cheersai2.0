@@ -59,6 +59,7 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
         </p>
       </div>
       <BillingSection
+        accountId={accountId}
         overview={billing}
         plans={billingPlanOptions()}
         canManage={role === "owner"}

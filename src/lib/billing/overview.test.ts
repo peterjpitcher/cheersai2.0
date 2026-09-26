@@ -9,6 +9,7 @@ vi.mock('@/env', () => ({ env: { server: serverEnv, client: {} } }));
 const { billingPlanOptions, getBillingOverview } = await import('./overview');
 
 const BRAND = '6f1d2c3b-4a59-4e68-8d7c-9b0a1f2e3d4c';
+const OTHER_BRAND = '7a2e3d4c-5b6a-4f79-9e8d-0c1b2a3f4e5d';
 let db: InMemoryBillingDb;
 
 function subscription(values: Record<string, unknown>) {
@@ -40,11 +41,18 @@ describe('getBillingOverview', () => {
       subscription: null,
       hasCustomer: false,
       liveSubscription: false,
-      trialEligible: true,
+      trial: 'eligible',
       checkoutReady: true,
       portalReady: true,
       trialLimitsPlan: { plan: 'starter', name: 'Starter' },
     });
+  });
+
+  it('words the trial as uncertain when a Stripe customer exists but no subscription is recorded', async () => {
+    // For example an abandoned Checkout, or an earlier subscription never synced:
+    // the server gives no trial if Stripe lists any earlier CheersAI subscription.
+    db.seed('billing_customers', [{ account_id: BRAND, stripe_customer_id: 'cus_1' }]);
+    expect((await getBillingOverview(db.client(), BRAND)).trial).toBe('uncertain');
   });
 
   it('shows a comped brand as comped whatever Stripe says', async () => {
@@ -73,7 +81,7 @@ describe('getBillingOverview', () => {
     const overview = await getBillingOverview(db.client(), BRAND, new Date('2026-09-26T10:00:00Z'));
     expect(overview.state).toBe('trialing');
     expect(overview.hasCustomer).toBe(true);
-    expect(overview.trialEligible).toBe(false);
+    expect(overview.trial).toBe('ineligible');
     expect(overview.subscription).toMatchObject({ planName: 'Starter', interval: 'month', trialEndLabel: '10 October 2026' });
   });
 

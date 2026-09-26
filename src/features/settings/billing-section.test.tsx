@@ -18,6 +18,8 @@ vi.mock("@/app/(app)/settings/billing-actions", () => ({
   checkBillingAgain: (...a: unknown[]) => mockCheckAgain(...a),
 }));
 
+const BRAND = "2c3d4e5f-6071-4b8c-9dae-1f2a3b4c5d6e";
+
 const PLANS: BillingPlanOption[] = [
   { plan: "starter", name: "Starter", monthlyLabel: "£29.99 + VAT a month", annualLabel: "£323.89 + VAT a year", summary: "120 posts" },
   { plan: "professional", name: "Professional", monthlyLabel: "£59.99 + VAT a month", annualLabel: "£647.89 + VAT a year", summary: "400 posts" },
@@ -28,7 +30,7 @@ const NEW_BRAND: BillingOverview = {
   subscription: null,
   hasCustomer: false,
   liveSubscription: false,
-  trialEligible: true,
+  trial: "eligible",
   checkoutReady: true,
   portalReady: true,
   trialLimitsPlan: { plan: "starter", name: "Starter" },
@@ -40,6 +42,7 @@ function renderSection(overview: BillingOverview | null, options: { canManage?: 
   return render(
     <ToastProvider>
       <BillingSection
+        accountId={BRAND}
         overview={overview}
         plans={PLANS}
         canManage={options.canManage ?? true}
@@ -90,7 +93,7 @@ describe("BillingSection", () => {
     fireEvent.click(screen.getByRole("button", { name: "Start 14-day free trial" }));
 
     await waitFor(() => expect(assign).toHaveBeenCalledWith("https://checkout.stripe.com/c/pay/cs_test_1"));
-    expect(mockStartCheckout).toHaveBeenCalledWith({ plan: "professional", interval: "year" });
+    expect(mockStartCheckout).toHaveBeenCalledWith({ plan: "professional", interval: "year", accountId: BRAND });
   });
 
   it("says a Professional trial runs on Starter limits, before and during the trial (spec §2.1)", () => {
@@ -105,7 +108,7 @@ describe("BillingSection", () => {
       ...NEW_BRAND,
       state: "trialing",
       hasCustomer: true,
-      trialEligible: false,
+      trial: "ineligible",
       subscription: {
         plan: "professional",
         planName: "Professional",
@@ -145,8 +148,83 @@ describe("BillingSection", () => {
     renderSection(NEW_BRAND, { checkoutReturn: "success" });
     expect(screen.getByText(/Confirming your payment/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Check again" }));
-    await waitFor(() => expect(mockCheckAgain).toHaveBeenCalled());
+    await waitFor(() => expect(mockCheckAgain).toHaveBeenCalledWith({ accountId: BRAND }));
     await waitFor(() => expect(refresh).toHaveBeenCalled());
+  });
+
+  it("shows a returning (lapsed) customer 'Confirming your payment' after Checkout, not 'Your subscription has ended'", async () => {
+    mockCheckAgain.mockResolvedValue({ success: true, state: "lapsed" });
+    renderSection(
+      {
+        ...NEW_BRAND,
+        state: "lapsed",
+        hasCustomer: true,
+        trial: "ineligible",
+        subscription: {
+          plan: "starter",
+          planName: "Starter",
+          interval: "month",
+          status: "canceled",
+          cancelAtPeriodEnd: false,
+          trialEndLabel: null,
+          periodEndLabel: "1 September 2026",
+          graceEndLabel: null,
+        },
+      },
+      { checkoutReturn: "success" },
+    );
+
+    expect(screen.getByText(/Confirming your payment/)).toBeInTheDocument();
+    expect(screen.queryByText(/Your subscription has ended/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Continue to payment/ })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Check again" }));
+    expect(await screen.findByText("Not confirmed yet")).toBeInTheDocument();
+  });
+
+  it("still tells a lapsed brand its subscription has ended when it has not just been through Checkout", () => {
+    renderSection({
+      ...NEW_BRAND,
+      state: "lapsed",
+      hasCustomer: true,
+      trial: "ineligible",
+      subscription: {
+        plan: "starter",
+        planName: "Starter",
+        interval: "month",
+        status: "canceled",
+        cancelAtPeriodEnd: false,
+        trialEndLabel: null,
+        periodEndLabel: null,
+        graceEndLabel: null,
+      },
+    });
+    expect(screen.getByText(/Your subscription has ended/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Continue to payment" })).toBeInTheDocument();
+  });
+
+  it("does not promise a free trial it cannot be sure of", () => {
+    renderSection({ ...NEW_BRAND, hasCustomer: true, trial: "uncertain" });
+    expect(screen.queryByRole("button", { name: /free trial/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Continue to checkout" })).toBeInTheDocument();
+    expect(screen.getByText(/Includes a 14-day free trial if this is the brand's first Cheers subscription\./)).toBeInTheDocument();
+    fireEvent.click(screen.getByLabelText(/Professional/));
+    expect(screen.getByText(/If a free trial applies, it uses Starter limits/)).toBeInTheDocument();
+  });
+
+  it("offers no trial to a brand that has subscribed before", () => {
+    renderSection({ ...NEW_BRAND, hasCustomer: true, trial: "ineligible" });
+    expect(screen.queryByText(/free trial/i)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Continue to payment" })).toBeInTheDocument();
+  });
+
+  it("opens the portal for the brand the page was rendered for", async () => {
+    mockOpenPortal.mockResolvedValue({ error: "You switched brand in another tab. Refresh the page and try again." });
+    renderSection({ ...NEW_BRAND, state: "lapsed", hasCustomer: true, trial: "ineligible" });
+    fireEvent.click(screen.getByRole("button", { name: "Manage billing" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("You switched brand in another tab.");
+    expect(mockOpenPortal).toHaveBeenCalledWith({ accountId: BRAND });
+    expect(assign).not.toHaveBeenCalled();
   });
 
   it("shows a trial with its end date and a Manage billing button", async () => {
@@ -155,7 +233,7 @@ describe("BillingSection", () => {
       ...NEW_BRAND,
       state: "trialing",
       hasCustomer: true,
-      trialEligible: false,
+      trial: "ineligible",
       subscription: {
         plan: "starter",
         planName: "Starter",
@@ -177,7 +255,7 @@ describe("BillingSection", () => {
       ...NEW_BRAND,
       state: "past_due_grace",
       hasCustomer: true,
-      trialEligible: false,
+      trial: "ineligible",
       subscription: {
         plan: "starter",
         planName: "Starter",

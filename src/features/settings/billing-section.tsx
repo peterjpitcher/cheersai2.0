@@ -6,12 +6,14 @@ import { useRouter } from "next/navigation";
 import { useToast } from "@/components/providers/toast-provider";
 import { Button } from "@/components/ui/button";
 import { checkBillingAgain, openBillingPortal, startCheckout } from "@/app/(app)/settings/billing-actions";
-import type { BillingOverview, BillingPlanOption } from "@/lib/billing/overview";
+import type { BillingOverview, BillingPlanOption, TrialEligibility } from "@/lib/billing/overview";
 import type { BillingInterval, PlanId, SelfServePlanId } from "@/lib/billing/plans";
 
 export type CheckoutReturn = "success" | "cancelled" | null;
 
 interface BillingSectionProps {
+  /** The brand this page was rendered for; the server refuses if the active brand has changed since. */
+  accountId: string;
   /** Null when the billing details could not be loaded. */
   overview: BillingOverview | null;
   plans: BillingPlanOption[];
@@ -58,10 +60,20 @@ function intervalWord(interval: BillingInterval): string {
   return interval === "year" ? "annually" : "monthly";
 }
 
-/** Spec §2.1: a trial of any plan runs on the trial plan's limits. Null when the chosen plan is the trial plan. */
-function trialLimitsNote(trialPlan: { plan: PlanId; name: string }, chosen: { plan: PlanId; name: string }): string | null {
+/**
+ * Spec §2.1: a trial of any plan runs on the trial plan's limits. Null when
+ * the chosen plan is the trial plan. Worded as a condition when the page
+ * cannot be sure the brand gets a trial.
+ */
+function trialLimitsNote(
+  trialPlan: { plan: PlanId; name: string },
+  chosen: { plan: PlanId; name: string },
+  certain = true,
+): string | null {
   if (chosen.plan === trialPlan.plan) return null;
-  return `Your free trial uses ${trialPlan.name} limits; ${chosen.name} limits start when the trial ends.`;
+  return certain
+    ? `Your free trial uses ${trialPlan.name} limits; ${chosen.name} limits start when the trial ends.`
+    : `If a free trial applies, it uses ${trialPlan.name} limits; ${chosen.name} limits start when the trial ends.`;
 }
 
 /**
@@ -71,7 +83,7 @@ function trialLimitsNote(trialPlan: { plan: PlanId; name: string }, chosen: { pl
  * server actions re-check the owner and the brand, so hiding a button here is
  * convenience, not security.
  */
-export function BillingSection({ overview, plans, canManage, checkoutReturn, trialDays }: BillingSectionProps) {
+export function BillingSection({ accountId, overview, plans, canManage, checkoutReturn, trialDays }: BillingSectionProps) {
   const router = useRouter();
   const toast = useToast();
   const [isPending, startTransition] = useTransition();
@@ -94,14 +106,14 @@ export function BillingSection({ overview, plans, canManage, checkoutReturn, tri
   function checkAgain() {
     setError(null);
     startTransition(async () => {
-      const result = await checkBillingAgain();
+      const result = await checkBillingAgain({ accountId });
       if (!result.success) {
         const message = result.error ?? "Could not check with Stripe. Please try again.";
         setError(message);
         toast.error("Billing", { description: message });
         return;
       }
-      if (result.state === "incomplete") {
+      if (result.state === "incomplete" || result.state === "lapsed") {
         toast.info("Not confirmed yet", {
           description: "Stripe has not confirmed a subscription yet. If you finished checkout, wait a minute and check again.",
         });
@@ -118,7 +130,7 @@ export function BillingSection({ overview, plans, canManage, checkoutReturn, tri
   const portalButton =
     canManage && overview.hasCustomer ? (
       overview.portalReady ? (
-        <Button type="button" variant="secondary" disabled={isPending} onClick={() => goTo(openBillingPortal)}>
+        <Button type="button" variant="secondary" disabled={isPending} onClick={() => goTo(() => openBillingPortal({ accountId }))}>
           {isPending ? "Opening..." : "Manage billing"}
         </Button>
       ) : (
@@ -219,7 +231,13 @@ export function BillingSection({ overview, plans, canManage, checkoutReturn, tri
     );
   }
 
-  // Held states: lapsed or incomplete.
+  // Held states: lapsed or incomplete. Back from Checkout, both mean "not
+  // confirmed yet": a first subscription (incomplete) or a returning brand
+  // whose old subscription has ended (lapsed).
+  if (checkoutReturn === "success") {
+    return <ConfirmingPayment canManage={canManage} isPending={isPending} onCheckAgain={checkAgain} error={errorNotice} />;
+  }
+
   const endedOrNone = !subscription || subscription.status === "canceled" || subscription.status === "incomplete_expired";
   if (!endedOrNone) {
     // A subscription still exists in Stripe but needs a payment.
@@ -237,10 +255,6 @@ export function BillingSection({ overview, plans, canManage, checkoutReturn, tri
     );
   }
 
-  if (state === "incomplete" && checkoutReturn === "success") {
-    return <ConfirmingPayment canManage={canManage} isPending={isPending} onCheckAgain={checkAgain} error={errorNotice} />;
-  }
-
   return (
     <div className="space-y-4">
       {checkoutReturn === "cancelled" ? <Notice>Checkout was cancelled. Nothing has been charged.</Notice> : null}
@@ -253,11 +267,11 @@ export function BillingSection({ overview, plans, canManage, checkoutReturn, tri
         overview.checkoutReady ? (
           <PlanPicker
             plans={plans}
-            trial={overview.trialEligible}
+            trial={overview.trial}
             trialLimitsPlan={overview.trialLimitsPlan}
             trialDays={trialDays}
             isPending={isPending}
-            onStart={(plan, interval) => goTo(() => startCheckout({ plan, interval }))}
+            onStart={(plan, interval) => goTo(() => startCheckout({ plan, interval, accountId }))}
           />
         ) : (
           <Muted>{NOT_SET_UP}</Muted>
@@ -321,7 +335,7 @@ function PlanPicker({
   onStart,
 }: {
   plans: BillingPlanOption[];
-  trial: boolean;
+  trial: TrialEligibility;
   trialLimitsPlan: { plan: PlanId; name: string };
   trialDays: number;
   isPending: boolean;
@@ -330,7 +344,10 @@ function PlanPicker({
   const [plan, setPlan] = useState<SelfServePlanId>(plans[0]?.plan ?? "starter");
   const [interval, setBillingInterval] = useState<BillingInterval>("month");
   const chosen = plans.find((option) => option.plan === plan);
-  const limitsNote = trial && chosen ? trialLimitsNote(trialLimitsPlan, { plan: chosen.plan, name: chosen.name }) : null;
+  const limitsNote =
+    trial !== "ineligible" && chosen
+      ? trialLimitsNote(trialLimitsPlan, { plan: chosen.plan, name: chosen.name }, trial === "eligible")
+      : null;
 
   return (
     <form
@@ -402,12 +419,20 @@ function PlanPicker({
 
       {limitsNote ? <Muted>{limitsNote}</Muted> : null}
       <Button type="submit" variant="primary" disabled={isPending} className="w-full sm:w-auto">
-        {isPending ? "Opening checkout..." : trial ? `Start ${trialDays}-day free trial` : "Continue to payment"}
+        {isPending
+          ? "Opening checkout..."
+          : trial === "eligible"
+            ? `Start ${trialDays}-day free trial`
+            : trial === "uncertain"
+              ? "Continue to checkout"
+              : "Continue to payment"}
       </Button>
       <p className="text-xs" style={{ color: "var(--c-ink-3)" }}>
-        {trial
+        {trial === "eligible"
           ? `Your card is needed today but nothing is charged until the ${trialDays}-day trial ends. Cancel any time before then. Prices exclude VAT, which is added at checkout.`
-          : "Prices exclude VAT, which is added at checkout. Change or cancel any time from Manage billing."}
+          : trial === "uncertain"
+            ? `Includes a ${trialDays}-day free trial if this is the brand's first Cheers subscription. Prices exclude VAT, which is added at checkout.`
+            : "Prices exclude VAT, which is added at checkout. Change or cancel any time from Manage billing."}
       </p>
     </form>
   );

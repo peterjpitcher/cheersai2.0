@@ -6,7 +6,8 @@ import type { SupabaseClient } from '@supabase/supabase-js';
  * A small in-memory stand-in for the Supabase query builder, for billing tests.
  *
  * It enforces the constraints of the live billing tables (checked against
- * production on 2026-09-26 with SELECT-only queries): NOT NULL columns, CHECK
+ * production on 2026-09-26 with SELECT-only queries, including
+ * account_members and user_auth_snapshot): NOT NULL columns, CHECK
  * lists, primary keys, unique keys and the account foreign keys, and rejects
  * unknown columns. A write the real database would refuse is refused here with
  * the same Postgres error code, so a test cannot pass on a row production
@@ -93,6 +94,29 @@ export const BILLING_SCHEMA: Record<string, TableSpec> = {
     },
     primaryKey: ['id'],
   },
+  // Who owns a brand: the fallback contact email for its Stripe customer.
+  account_members: {
+    columns: {
+      account_id: { type: 'uuid', notNull: true },
+      user_id: { type: 'uuid', notNull: true },
+      role: { type: 'text', notNull: true, default: () => 'owner', check: ['owner', 'member'] },
+      created_at: { type: 'timestamptz', notNull: true, default: now },
+      created_by: { type: 'uuid' },
+    },
+    primaryKey: ['account_id', 'user_id'],
+    foreignKeys: [{ column: 'account_id', table: 'accounts', references: 'id' }],
+  },
+  user_auth_snapshot: {
+    columns: {
+      user_id: { type: 'uuid', notNull: true },
+      email: { type: 'text', notNull: true },
+      status: { type: 'text', notNull: true, default: () => 'active' },
+      created_at: { type: 'timestamptz', notNull: true, default: now },
+      last_sign_in_at: { type: 'timestamptz' },
+      updated_at: { type: 'timestamptz', notNull: true, default: now },
+    },
+    primaryKey: ['user_id'],
+  },
   // Only the columns releaseHeldPublishJobs touches.
   publish_jobs: {
     columns: {
@@ -144,6 +168,7 @@ export class InMemoryBillingDb {
   private failures: Failure[] = [];
   /** Every write, in order, for assertions about ordering. */
   writes: Array<{ table: string; op: Op; rows: Row[] }> = [];
+
 
   seed(table: string, rows: Row[]): void {
     for (const row of rows) {
@@ -253,7 +278,7 @@ class Query implements PromiseLike<{ data: unknown; error: DbError | null; count
   private payload: Row | Row[] | null = null;
   private returning = false;
   private columns: string | null = null;
-  private orderBy: { column: string; ascending: boolean } | null = null;
+  private orderBy: Array<{ column: string; ascending: boolean }> = [];
   private limitTo: number | null = null;
   private mode: 'many' | 'maybe' | 'one' = 'many';
   private head = false;
@@ -349,9 +374,10 @@ class Query implements PromiseLike<{ data: unknown; error: DbError | null; count
     return this;
   }
 
+  /** Repeated calls add tie-breakers, as in PostgREST. */
   order(column: string, options?: { ascending?: boolean }): this {
     this.column(column);
-    this.orderBy = { column, ascending: options?.ascending ?? true };
+    this.orderBy.push({ column, ascending: options?.ascending ?? true });
     return this;
   }
 
@@ -404,10 +430,14 @@ class Query implements PromiseLike<{ data: unknown; error: DbError | null; count
 
     if (this.op === 'select') {
       let rows = [...matched];
-      if (this.orderBy) {
-        const { column, ascending } = this.orderBy;
-        const spec = this.column(column);
-        rows.sort((a, b) => (ascending ? 1 : -1) * compare(spec, a[column], b[column]));
+      if (this.orderBy.length) {
+        rows.sort((a, b) => {
+          for (const { column, ascending } of this.orderBy) {
+            const difference = compare(this.column(column), a[column], b[column]);
+            if (difference !== 0) return ascending ? difference : -difference;
+          }
+          return 0;
+        });
       }
       if (this.limitTo !== null) rows = rows.slice(0, this.limitTo);
       if (this.head) return { data: null, error: null, count: this.counted ? matched.length : null };
