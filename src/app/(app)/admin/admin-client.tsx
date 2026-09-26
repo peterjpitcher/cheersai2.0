@@ -13,6 +13,7 @@ import {
   inviteUser,
   offboardBrandAction,
   purgeBrandAction,
+  resyncBrandFromStripe,
   revokeMembership,
   sendPasswordLink,
   setBillingOverride,
@@ -164,11 +165,24 @@ function BillingCard({ brands }: { brands: AdminBrand[] }) {
     });
   }
 
+  function resync(brand: AdminBrand) {
+    start(async () => {
+      setMsg({});
+      const r = await resyncBrandFromStripe(brand.accountId);
+      if (r.success) {
+        const releasedNote = r.released ? ` ${r.released} held post(s) released.` : '';
+        setMsg({ ok: `${brand.name ?? 'Brand'}: ${r.message ?? 'Re-synced.'}${releasedNote}` });
+        router.refresh();
+      } else setMsg({ error: r.error });
+    });
+  }
+
   return (
     <div className={CARD} style={CARD_STYLE}>
       <h2 className='mb-1 text-sm font-semibold' style={{ color: 'var(--c-ink)' }}>Billing</h2>
       <p className='mb-3 text-xs' style={{ color: 'var(--c-ink-3)' }}>
         Stripe decides unless a brand is set to Free or Suspended here. Held posts only happen while billing enforcement is on.
+        Re-sync reads the brand&apos;s subscription from Stripe now (the same check the webhook runs).
       </p>
       <div className='overflow-x-auto'>
         <table className='w-full text-left'>
@@ -179,6 +193,7 @@ function BillingCard({ brands }: { brands: AdminBrand[] }) {
               <th className='py-1 pr-3 font-medium'>Plan</th>
               <th className='py-1 pr-3 font-medium'>Held posts</th>
               <th className='py-1 pr-3 font-medium'>Billing</th>
+              <th className='py-1 pr-3 font-medium'>Stripe</th>
             </tr>
           </thead>
           <tbody>
@@ -205,6 +220,17 @@ function BillingCard({ brands }: { brands: AdminBrand[] }) {
                     <option value='comped'>Free</option>
                     <option value='suspended'>Suspended</option>
                   </select>
+                </td>
+                <td className='py-2 pr-3'>
+                  <button
+                    type='button'
+                    disabled={isPending}
+                    className={`${BTN} border`}
+                    style={{ ...CARD_STYLE, color: 'var(--c-ink)' }}
+                    onClick={() => resync(b)}
+                  >
+                    Re-sync from Stripe
+                  </button>
                 </td>
               </tr>
             ))}

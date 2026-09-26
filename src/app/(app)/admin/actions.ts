@@ -12,6 +12,8 @@ import { sendEmail } from '@/lib/email/resend';
 import { can } from '@/lib/billing/entitlement';
 import { getBrandEntitlement } from '@/lib/billing/entitlement-server';
 import { releaseHeldPublishJobs } from '@/lib/billing/publish-hold';
+import { reconcileBrandFromStripe, type ReconcileResult } from '@/lib/billing/reconcile';
+import { missingBillingEnv } from '@/lib/billing/stripe';
 import { requireAuthContext } from '@/lib/auth/server';
 import { createLogger } from '@/lib/logging';
 import type { BrandFeature } from '@/lib/auth/features';
@@ -464,6 +466,60 @@ export async function setBillingOverride(
 
   revalidatePath('/admin');
   return { success: true, released, stillHeld };
+}
+
+// ---------------------------------------------------------------------------
+// resyncBrandFromStripe -- operator repair (spec §4.3, pieces 2.3 and 2.11):
+// read one brand's subscription from Stripe now, through the same reconcile
+// the webhook uses. Audited like setBillingOverride.
+// ---------------------------------------------------------------------------
+
+const RESYNC_MESSAGES: Record<ReconcileResult['outcome'], string> = {
+  synced: 'Subscription updated from Stripe.',
+  stale: 'Already up to date with Stripe.',
+  no_customer: 'This brand has no Stripe customer yet, so there is nothing to re-sync.',
+  no_subscription: 'This brand has a Stripe customer but no Cheers subscription.',
+};
+
+export async function resyncBrandFromStripe(
+  accountId: string,
+): Promise<ActionResult & { message?: string; state?: string; released?: number }> {
+  const ctx = await requireSuperAdmin();
+  if (!ctx) return { error: 'Forbidden.' };
+  if (!uuid.safeParse(accountId).success) return { error: 'Invalid brand.' };
+  const missing = missingBillingEnv('reconcile');
+  if (missing.length) return { error: `Billing is not set up yet (missing ${missing.join(', ')}).` };
+
+  let result: ReconcileResult;
+  try {
+    result = await reconcileBrandFromStripe(accountId, { service: ctx.supabase });
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    logger.error('re-sync from Stripe failed', error instanceof Error ? error : undefined, { accountId });
+    await logAdminEvent({
+      actorUserId: ctx.user.id,
+      action: 'stripe_resync',
+      targetAccountId: accountId,
+      detail: { error: reason.slice(0, 500) },
+      result: 'failure',
+    });
+    return { error: `Re-sync failed: ${reason}` };
+  }
+
+  await logAdminEvent({
+    actorUserId: ctx.user.id,
+    action: 'stripe_resync',
+    targetAccountId: accountId,
+    detail: {
+      outcome: result.outcome,
+      subscriptionId: result.subscriptionId,
+      status: result.status,
+      state: result.state,
+      released: result.released,
+    },
+  });
+  revalidatePath('/admin');
+  return { success: true, message: RESYNC_MESSAGES[result.outcome], state: result.state, released: result.released };
 }
 
 // ---------------------------------------------------------------------------
