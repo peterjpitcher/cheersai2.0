@@ -36,6 +36,8 @@ export interface FakeSubscriptionInput {
   priceId?: string;
   created?: string;
   trialEnd?: string | null;
+  /** Start of the current period. For past_due, Stripe has already moved it to the start of the unpaid period. */
+  currentPeriodStart?: string;
   currentPeriodEnd?: string;
   cancelAtPeriodEnd?: boolean;
   cancelAt?: string | null;
@@ -67,6 +69,7 @@ export function fakeSubscription(input: FakeSubscriptionInput): Stripe.Subscript
           id: `si_${id}`,
           object: 'subscription_item',
           price: { id: input.priceId ?? TEST_PRICES.starterMonthly, object: 'price' },
+          current_period_start: seconds(input.currentPeriodStart ?? '2026-09-26T09:00:00Z'),
           current_period_end: seconds(input.currentPeriodEnd ?? '2026-10-10T09:00:00Z'),
         },
       ],

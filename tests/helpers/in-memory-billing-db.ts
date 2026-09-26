@@ -71,6 +71,8 @@ export const BILLING_SCHEMA: Record<string, TableSpec> = {
       billing_interval: { type: 'text', notNull: true, check: ['month', 'year'] },
       stripe_price_id: { type: 'text', notNull: true },
       trial_end: { type: 'timestamptz' },
+      // Added by 20260926120000_subscriptions_period_start.sql (not yet applied live).
+      current_period_start: { type: 'timestamptz' },
       current_period_end: { type: 'timestamptz' },
       cancel_at_period_end: { type: 'boolean', notNull: true, default: () => false },
       canceled_at: { type: 'timestamptz' },

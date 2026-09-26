@@ -1,7 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import {
-  PAST_DUE_GRACE_DAYS,
+  pastDueGraceEndsAt,
   resolveEntitlement,
   type EntitlementState,
   type StripeSubscriptionStatus,
@@ -24,7 +24,7 @@ export interface BillingSubscriptionSummary {
   /** "10 October 2026" style, Europe/London. */
   trialEndLabel: string | null;
   periodEndLabel: string | null;
-  /** When a past-due brand stops working (paid period end plus the grace days). */
+  /** When a past-due brand stops working (start of the unpaid period plus the grace days). */
   graceEndLabel: string | null;
 }
 
@@ -78,6 +78,7 @@ interface SubscriptionRow {
   billing_interval: BillingInterval;
   status: StripeSubscriptionStatus;
   trial_end: string | null;
+  current_period_start: string | null;
   current_period_end: string | null;
   cancel_at_period_end: boolean;
 }
@@ -91,7 +92,7 @@ export async function getBillingOverview(service: SupabaseClient, accountId: str
       .maybeSingle<{ archived_at: string | null; billing_override: 'comped' | 'suspended' | null }>(),
     service
       .from('subscriptions')
-      .select('plan, billing_interval, status, trial_end, current_period_end, cancel_at_period_end')
+      .select('plan, billing_interval, status, trial_end, current_period_start, current_period_end, cancel_at_period_end')
       .eq('account_id', accountId)
       .order('stripe_state_at', { ascending: false })
       .limit(1)
@@ -108,13 +109,16 @@ export async function getBillingOverview(service: SupabaseClient, accountId: str
   const state = resolveEntitlement({
     archivedAt: account.archived_at,
     billingOverride: account.billing_override,
-    subscription: row ? { status: row.status, currentPeriodEnd: row.current_period_end } : null,
+    subscription: row
+      ? { status: row.status, currentPeriodStart: row.current_period_start ?? null, currentPeriodEnd: row.current_period_end }
+      : null,
     now,
   });
 
+  // The same date the entitlement rule uses, so the page and the hold agree.
   const graceEnd =
-    row?.current_period_end && !Number.isNaN(Date.parse(row.current_period_end))
-      ? new Date(Date.parse(row.current_period_end) + PAST_DUE_GRACE_DAYS * 24 * 60 * 60 * 1000)
+    row?.status === 'past_due'
+      ? pastDueGraceEndsAt({ currentPeriodStart: row.current_period_start ?? null, currentPeriodEnd: row.current_period_end })
       : null;
 
   return {

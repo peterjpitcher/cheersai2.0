@@ -62,6 +62,7 @@ export interface SubscriptionRow {
   billing_interval: BillingInterval;
   stripe_price_id: string;
   trial_end: string | null;
+  current_period_start: string | null;
   current_period_end: string | null;
   cancel_at_period_end: boolean;
   canceled_at: string | null;
@@ -152,6 +153,9 @@ export function mapStripeSubscription(
     billing_interval: match.interval,
     stripe_price_id: match.item.price.id,
     trial_end: toIso(subscription.trial_end),
+    // Both period dates live on the subscription item in this API version. For
+    // a past-due subscription the start is when the unpaid period began.
+    current_period_start: toIso(match.item.current_period_start),
     current_period_end: toIso(match.item.current_period_end),
     // Newer API versions can schedule the end with cancel_at instead of the flag.
     cancel_at_period_end: subscription.cancel_at_period_end || subscription.cancel_at !== null,

@@ -61,17 +61,23 @@ export async function getBrandEntitlement(
 
   const { data: subscription, error: subscriptionError } = await service
     .from('subscriptions')
-    .select('status, current_period_end')
+    .select('status, current_period_start, current_period_end')
     .eq('account_id', accountId)
     .order('stripe_state_at', { ascending: false })
     .limit(1)
-    .maybeSingle<{ status: StripeSubscriptionStatus; current_period_end: string | null }>();
+    .maybeSingle<{ status: StripeSubscriptionStatus; current_period_start: string | null; current_period_end: string | null }>();
   if (subscriptionError) throw new Error(`entitlement: subscriptions lookup failed: ${subscriptionError.message}`);
 
   return resolveEntitlement({
     archivedAt: null,
     billingOverride: null,
-    subscription: subscription ? { status: subscription.status, currentPeriodEnd: subscription.current_period_end } : null,
+    subscription: subscription
+      ? {
+          status: subscription.status,
+          currentPeriodStart: subscription.current_period_start ?? null,
+          currentPeriodEnd: subscription.current_period_end,
+        }
+      : null,
     now,
   });
 }

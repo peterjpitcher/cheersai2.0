@@ -60,10 +60,26 @@ describe('getBillingOverview', () => {
     expect(overview.subscription).toMatchObject({ planName: 'Starter', interval: 'month', trialEndLabel: '10 October 2026' });
   });
 
-  it('gives a past-due brand the date its 7-day grace ends', async () => {
-    db.seed('subscriptions', [subscription({ status: 'past_due', current_period_end: '2026-11-01T12:00:00Z' })]);
+  it('gives a past-due brand the date its 7-day grace ends, counted from the start of the unpaid period', async () => {
+    // Stripe's real shape: the unpaid period started 1 November and runs to 1 December.
+    db.seed('subscriptions', [
+      subscription({ status: 'past_due', current_period_start: '2026-11-01T12:00:00Z', current_period_end: '2026-12-01T12:00:00Z' }),
+    ]);
     const overview = await getBillingOverview(db.client(), BRAND, new Date('2026-11-03T12:00:00Z'));
     expect(overview.state).toBe('past_due_grace');
+    expect(overview.subscription?.graceEndLabel).toBe('8 November 2026');
+  });
+
+  it('shows a brand unpaid for 8 days as lapsed', async () => {
+    db.seed('subscriptions', [
+      subscription({ status: 'past_due', current_period_start: '2026-11-01T12:00:00Z', current_period_end: '2026-12-01T12:00:00Z' }),
+    ]);
+    expect((await getBillingOverview(db.client(), BRAND, new Date('2026-11-09T12:00:00Z'))).state).toBe('lapsed');
+  });
+
+  it('falls back to the period end for a legacy row with no period start', async () => {
+    db.seed('subscriptions', [subscription({ status: 'past_due', current_period_start: null, current_period_end: '2026-11-01T12:00:00Z' })]);
+    const overview = await getBillingOverview(db.client(), BRAND, new Date('2026-11-03T12:00:00Z'));
     expect(overview.subscription?.graceEndLabel).toBe('8 November 2026');
   });
 

@@ -129,6 +129,26 @@ describe("BillingSection", () => {
     await waitFor(() => expect(assign).toHaveBeenCalledWith("https://billing.stripe.com/p/session/test_1"));
   });
 
+  it("tells a past-due owner the date the grace ends", () => {
+    renderSection({
+      ...NEW_BRAND,
+      state: "past_due_grace",
+      hasCustomer: true,
+      trialEligible: false,
+      subscription: {
+        plan: "starter",
+        planName: "Starter",
+        interval: "month",
+        status: "past_due",
+        cancelAtPeriodEnd: false,
+        trialEndLabel: null,
+        periodEndLabel: "1 December 2026",
+        graceEndLabel: "8 November 2026",
+      },
+    });
+    expect(screen.getByRole("alert")).toHaveTextContent("Update your payment details by 8 November 2026 to keep posting.");
+  });
+
   it("shows a load failure as an error", () => {
     renderSection(null);
     expect(screen.getByRole("alert")).toHaveTextContent("Billing details could not be loaded");

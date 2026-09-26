@@ -46,6 +46,7 @@ describe('reconcileBrandFromStripe: mapping Stripe onto the subscriptions row', 
         customer: CUSTOMER,
         status: 'trialing',
         trialEnd: '2026-10-10T09:00:00Z',
+        currentPeriodStart: '2026-09-26T09:00:00Z',
         currentPeriodEnd: '2026-10-10T09:00:00Z',
       }),
     );
@@ -61,6 +62,7 @@ describe('reconcileBrandFromStripe: mapping Stripe onto the subscriptions row', 
       billing_interval: 'month',
       stripe_price_id: TEST_PRICES.starterMonthly,
       trial_end: '2026-10-10T09:00:00.000Z',
+      current_period_start: '2026-09-26T09:00:00.000Z',
       current_period_end: '2026-10-10T09:00:00.000Z',
       cancel_at_period_end: false,
       canceled_at: null,
@@ -78,13 +80,38 @@ describe('reconcileBrandFromStripe: mapping Stripe onto the subscriptions row', 
     expect(storedSubscription('sub_pro')).toMatchObject({ plan: 'professional', billing_interval: 'year', status: 'active' });
   });
 
-  it('treats past due as grace for 7 days after the paid period, then lapsed', async () => {
+  it('treats past due as grace for 7 days after the unpaid period starts, then lapsed', async () => {
+    // Stripe's real shape: the renewal on 20 September moved the period on to
+    // 20 October before the payment failed.
     fake.subscriptions.push(
-      fakeSubscription({ id: 'sub_late', customer: CUSTOMER, status: 'past_due', currentPeriodEnd: '2026-09-24T09:00:00Z' }),
+      fakeSubscription({
+        id: 'sub_late',
+        customer: CUSTOMER,
+        status: 'past_due',
+        currentPeriodStart: '2026-09-20T09:00:00Z',
+        currentPeriodEnd: '2026-10-20T09:00:00Z',
+      }),
     );
     expect((await reconcile()).state).toBe('past_due_grace');
-    expect((await reconcile(new Date('2026-10-02T09:00:00.001Z'))).state).toBe('lapsed');
-    expect(storedSubscription('sub_late')?.status).toBe('past_due');
+    expect(storedSubscription('sub_late')).toMatchObject({
+      status: 'past_due',
+      current_period_start: '2026-09-20T09:00:00.000Z',
+      current_period_end: '2026-10-20T09:00:00.000Z',
+    });
+    expect((await reconcile(new Date('2026-09-27T09:00:00.001Z'))).state).toBe('lapsed');
+  });
+
+  it('lapses a brand whose unpaid period started 8 days ago, even with most of the month left', async () => {
+    fake.subscriptions.push(
+      fakeSubscription({
+        id: 'sub_late',
+        customer: CUSTOMER,
+        status: 'past_due',
+        currentPeriodStart: '2026-09-18T10:00:00Z',
+        currentPeriodEnd: '2026-10-18T10:00:00Z',
+      }),
+    );
+    expect((await reconcile()).state).toBe('lapsed');
   });
 
   it('records a cancelled subscription as lapsed with its cancel time', async () => {
