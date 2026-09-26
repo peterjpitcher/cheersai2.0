@@ -104,6 +104,10 @@ section 5 of `docs/agent-reference.md`.
 | `/api/webhooks/qstash-publish` | POST | QStash signature | `src/app/api/webhooks/qstash-publish/route.ts` |
 | `/api/webhooks/qstash-publish/failure` | POST | QStash signature | `src/app/api/webhooks/qstash-publish/failure/route.ts` |
 | `/api/webhooks/qstash-food-materialise` | POST | QStash signature | `src/app/api/webhooks/qstash-food-materialise/route.ts` |
+| `/api/stripe/webhook` | POST | Stripe signature (`STRIPE_WEBHOOK_SECRET`); not behind the login gate | `src/app/api/stripe/webhook/route.ts` |
+
+`/api/stripe/webhook` receives Stripe billing events for CheersAI customers and
+reconciles the brand's subscription (see `docs/runbooks/stripe-billing.md`).
 
 ### Meta data callbacks
 
