@@ -17,7 +17,8 @@ vi.mock('@/lib/auth/server', () => ({
 }));
 
 const mockBuildOAuthRedirectUrl = vi.fn();
-vi.mock('@/lib/connections/oauth', () => ({
+vi.mock('@/lib/connections/oauth', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/connections/oauth')>()),
   buildOAuthRedirectUrl: (...args: unknown[]) => mockBuildOAuthRedirectUrl(...args),
 }));
 
@@ -351,6 +352,11 @@ describe('completeOAuthConnect', () => {
     expect(upsertCall).toHaveProperty('platform_account_name', 'My Facebook Page');
     expect(upsertCall).toHaveProperty('token_expires_at');
     expect(upsertCall).toHaveProperty('metadata');
+    // The stored scopes are the requested list, without the dropped permissions
+    expect(upsertCall.scopes).toEqual([
+      'pages_show_list', 'pages_read_engagement', 'pages_manage_posts',
+      'instagram_basic', 'instagram_content_publish', 'business_management',
+    ]);
     // Must NOT contain plaintext token columns
     expect(upsertCall).not.toHaveProperty('access_token');
     expect(upsertCall).not.toHaveProperty('refresh_token');

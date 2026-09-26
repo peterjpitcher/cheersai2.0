@@ -1,25 +1,32 @@
 import { env } from "@/env";
 import { getMetaOAuthBase } from "@/lib/meta/graph";
 
-const FACEBOOK_SCOPES = [
+// Only what publishing uses. Meta App Review rejects permissions the app never
+// calls, so pages_manage_metadata and instagram_manage_comments were dropped
+// (no webhook subscription or comment call exists). Facebook posts and stories
+// need pages_show_list, pages_read_engagement and pages_manage_posts; Instagram
+// publishing needs instagram_basic, instagram_content_publish and
+// pages_read_engagement; business_management lists Pages held in a business
+// portfolio. See docs/runbooks/meta-app-review.md.
+export const FACEBOOK_SCOPE_LIST: readonly string[] = [
   "pages_show_list",
   "pages_read_engagement",
   "pages_manage_posts",
-  "pages_manage_metadata",
   "instagram_basic",
   "instagram_content_publish",
-  "instagram_manage_comments",
   "business_management",
-].join(",");
+];
 
-const INSTAGRAM_SCOPES = [
+export const INSTAGRAM_SCOPE_LIST: readonly string[] = [
   "instagram_basic",
   "instagram_content_publish",
-  "instagram_manage_comments",
   "pages_show_list",
   "pages_read_engagement",
   "business_management",
-].join(",");
+];
+
+const FACEBOOK_SCOPES = FACEBOOK_SCOPE_LIST.join(",");
+const INSTAGRAM_SCOPES = INSTAGRAM_SCOPE_LIST.join(",");
 
 const SITE_URL = env.client.NEXT_PUBLIC_SITE_URL.replace(/\/$/, "");
 
