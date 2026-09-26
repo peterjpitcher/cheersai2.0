@@ -9,7 +9,8 @@ import * as worker from '../supabase/functions/publish-queue/entitlement';
  */
 const STATUSES = ['trialing', 'active', 'past_due', 'canceled', 'unpaid', 'incomplete', 'incomplete_expired', 'paused'] as const;
 const OVERRIDES = [null, 'comped', 'suspended'] as const;
-const PERIOD_ENDS = [null, '2026-10-01T00:00:00Z', '2026-10-10T00:00:00Z', '2026-10-20T00:00:00Z'];
+const PERIOD_STARTS = [null, '2026-10-01T00:00:00Z', '2026-10-09T00:00:00Z', '2026-10-20T00:00:00Z', 'not a date'];
+const PERIOD_ENDS = [null, '2026-10-01T00:00:00Z', '2026-10-10T00:00:00Z', '2026-10-20T00:00:00Z', '2027-10-01T00:00:00Z'];
 const NOWS = [new Date('2026-10-15T12:00:00Z'), new Date('2026-10-27T00:00:01Z')];
 
 describe('publish-queue entitlement copy matches the app', () => {
@@ -22,7 +23,12 @@ describe('publish-queue entitlement copy matches the app', () => {
     for (const archivedAt of [null, '2026-09-01T00:00:00Z']) {
       for (const billingOverride of OVERRIDES) {
         for (const now of NOWS) {
-          const subscriptions = [null, ...STATUSES.flatMap((status) => PERIOD_ENDS.map((currentPeriodEnd) => ({ status, currentPeriodEnd })))];
+          const subscriptions = [
+            null,
+            ...STATUSES.flatMap((status) =>
+              PERIOD_STARTS.flatMap((currentPeriodStart) => PERIOD_ENDS.map((currentPeriodEnd) => ({ status, currentPeriodStart, currentPeriodEnd }))),
+            ),
+          ];
           for (const subscription of subscriptions) {
             const input = { archivedAt, billingOverride, subscription, now };
             const appState = app.resolveEntitlement(input);
@@ -33,6 +39,15 @@ describe('publish-queue entitlement copy matches the app', () => {
         }
       }
     }
-    expect(checked).toBeGreaterThan(300);
+    expect(checked).toBeGreaterThan(2000);
+  });
+
+  it('works out the same past-due grace end', () => {
+    for (const currentPeriodStart of PERIOD_STARTS) {
+      for (const currentPeriodEnd of PERIOD_ENDS) {
+        const period = { currentPeriodStart, currentPeriodEnd };
+        expect(worker.pastDueGraceEndsAt(period)?.toISOString() ?? null).toBe(app.pastDueGraceEndsAt(period)?.toISOString() ?? null);
+      }
+    }
   });
 });

@@ -41,8 +41,16 @@ describe('getBrandEntitlement', () => {
   });
 
   it('uses the newest subscription', async () => {
-    expect(await getBrandEntitlement(service(plainAccount, { data: { status: 'active', current_period_end: null }, error: null }) as never, 'b', NOW)).toBe('active');
-    expect(await getBrandEntitlement(service(plainAccount, { data: { status: 'canceled', current_period_end: null }, error: null }) as never, 'b', NOW)).toBe('lapsed');
+    expect(await getBrandEntitlement(service(plainAccount, { data: { status: 'active', current_period_start: null, current_period_end: null }, error: null }) as never, 'b', NOW)).toBe('active');
+    expect(await getBrandEntitlement(service(plainAccount, { data: { status: 'canceled', current_period_start: null, current_period_end: null }, error: null }) as never, 'b', NOW)).toBe('lapsed');
+  });
+
+  it('measures past-due grace from the start of the unpaid period (Stripe\'s real shape)', async () => {
+    // NOW is 2026-10-15T12:00Z; the unpaid period runs to 2026-11-07, but grace ends 7 days after it began.
+    const unpaidSince = (start: string) =>
+      service(plainAccount, { data: { status: 'past_due', current_period_start: start, current_period_end: '2026-11-07T12:00:00Z' }, error: null });
+    expect(await getBrandEntitlement(unpaidSince('2026-10-07T12:00:00Z') as never, 'b', NOW)).toBe('lapsed');
+    expect(await getBrandEntitlement(unpaidSince('2026-10-09T12:00:00Z') as never, 'b', NOW)).toBe('past_due_grace');
   });
 
   it('treats a brand with no subscription as not set up', async () => {
@@ -65,7 +73,7 @@ describe('assertEntitled', () => {
 
   it('refuses a held brand when enforcement is on, with the owner-facing reason', async () => {
     flags.billingEnforcement = true;
-    const db = service(plainAccount, { data: { status: 'unpaid', current_period_end: null }, error: null });
+    const db = service(plainAccount, { data: { status: 'unpaid', current_period_start: null, current_period_end: null }, error: null });
     const error = await assertEntitled({ supabase: db as never, accountId: 'b' }, 'create').catch((e: unknown) => e);
     expect(error).toBeInstanceOf(EntitlementError);
     expect((error as Error).message).toMatch(/on hold because its subscription has lapsed/);
@@ -81,7 +89,7 @@ describe('assertEntitled', () => {
   it('lets comped and paying brands create', async () => {
     flags.billingEnforcement = true;
     await expect(assertEntitled({ supabase: service({ data: { archived_at: null, billing_override: 'comped' }, error: null }) as never, accountId: 'b' }, 'create')).resolves.toBeUndefined();
-    await expect(assertEntitled({ supabase: service(plainAccount, { data: { status: 'trialing', current_period_end: null }, error: null }) as never, accountId: 'b' }, 'publish')).resolves.toBeUndefined();
+    await expect(assertEntitled({ supabase: service(plainAccount, { data: { status: 'trialing', current_period_start: null, current_period_end: null }, error: null }) as never, accountId: 'b' }, 'publish')).resolves.toBeUndefined();
   });
 });
 

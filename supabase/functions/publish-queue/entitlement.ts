@@ -25,13 +25,42 @@ export type StripeSubscriptionStatus =
   | "incomplete_expired"
   | "paused";
 
+/** Days after the unpaid period starts that a past-due brand keeps working. */
 export const PAST_DUE_GRACE_DAYS = 7;
+
+const GRACE_MS = PAST_DUE_GRACE_DAYS * 24 * 60 * 60 * 1000;
+
+export interface EntitlementSubscription {
+  status: StripeSubscriptionStatus;
+  /** Start of the unpaid period for a past-due subscription; null on legacy rows. */
+  currentPeriodStart: string | null;
+  currentPeriodEnd: string | null;
+}
 
 export interface EntitlementInput {
   archivedAt: string | null;
   billingOverride: "comped" | "suspended" | null;
-  subscription: { status: StripeSubscriptionStatus; currentPeriodEnd: string | null } | null;
+  subscription: EntitlementSubscription | null;
   now: Date;
+}
+
+function parseTime(value: string | null): number | null {
+  if (!value) return null;
+  const time = Date.parse(value);
+  return Number.isNaN(time) ? null : time;
+}
+
+/**
+ * PAST_DUE_GRACE_DAYS after the unpaid period started; a legacy row with no
+ * period start falls back to the period end. Null when neither date is usable.
+ */
+export function pastDueGraceEndsAt(
+  subscription: Pick<EntitlementSubscription, "currentPeriodStart" | "currentPeriodEnd">,
+): Date | null {
+  const anchor = subscription.currentPeriodStart !== null
+    ? parseTime(subscription.currentPeriodStart)
+    : parseTime(subscription.currentPeriodEnd);
+  return anchor === null ? null : new Date(anchor + GRACE_MS);
 }
 
 export function resolveEntitlement(input: EntitlementInput): EntitlementState {
@@ -48,10 +77,9 @@ export function resolveEntitlement(input: EntitlementInput): EntitlementState {
     case "active":
       return "active";
     case "past_due": {
-      const periodEnd = subscription.currentPeriodEnd ? Date.parse(subscription.currentPeriodEnd) : NaN;
-      if (Number.isNaN(periodEnd)) return "lapsed";
-      const graceEnds = periodEnd + PAST_DUE_GRACE_DAYS * 24 * 60 * 60 * 1000;
-      return input.now.getTime() <= graceEnds ? "past_due_grace" : "lapsed";
+      const graceEnds = pastDueGraceEndsAt(subscription);
+      if (!graceEnds) return "lapsed";
+      return input.now.getTime() <= graceEnds.getTime() ? "past_due_grace" : "lapsed";
     }
     case "incomplete":
       return "incomplete";

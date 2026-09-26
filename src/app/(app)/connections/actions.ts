@@ -227,8 +227,11 @@ export async function completeOAuthConnect(
 }
 
 /**
- * Disconnect a provider by updating status to 'disconnected'.
- * Does NOT delete the row -- preserves history for audit trail.
+ * Disconnect a provider: delete its stored tokens and mark it needs_action.
+ * Tokens are only held while needed, so the token_vault rows and any legacy
+ * plaintext copy go (as in offboardBrand and revokeMetaUserData). The row
+ * itself stays, keeping its metadata and history for a reconnect.
+ * 'disconnected' is not an allowed status (social_connections_status_check).
  */
 export async function disconnectProvider(
   providerInput: string,
@@ -236,24 +239,51 @@ export async function disconnectProvider(
   const provider = providerSchema.parse(providerInput);
   const { accountId } = await requireOwnerContext();
   const supabase = createServiceSupabaseClient();
+  const failure = { success: false, error: "Failed to disconnect provider" };
 
-  const { error } = await supabase
+  const { data: connections, error: lookupError } = await supabase
     .from("social_connections")
-    .update({ status: "disconnected" })
+    .select("id")
     .eq("account_id", accountId)
     .eq("provider", provider);
 
-  if (error) {
-    const fallback = await supabase
-      .from("social_connections")
-      .update({ status: "needs_action" })
-      .eq("account_id", accountId)
-      .eq("provider", provider);
+  if (lookupError) {
+    console.error("[connections] disconnectProvider lookup failed", lookupError);
+    return failure;
+  }
 
-    if (fallback.error) {
-      console.error("[connections] disconnectProvider failed", error);
-      return { success: false, error: "Failed to disconnect provider" };
-    }
+  const connectionIds = ((connections ?? []) as Array<{ id: string }>).map((row) => row.id);
+  if (!connectionIds.length) {
+    return { success: true };
+  }
+
+  // token_vault has no account_id; the ids above are already brand-scoped.
+  const { error: vaultError } = await supabase
+    .from("token_vault")
+    .delete()
+    .in("social_connection_id", connectionIds);
+
+  if (vaultError) {
+    console.error("[connections] disconnectProvider token_vault delete failed", vaultError);
+    return failure;
+  }
+
+  const { error: updateError } = await supabase
+    .from("social_connections")
+    .update({
+      status: "needs_action",
+      access_token: null,
+      refresh_token: null,
+      token_expires_at: null,
+      expires_at: null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("account_id", accountId)
+    .eq("provider", provider);
+
+  if (updateError) {
+    console.error("[connections] disconnectProvider update failed", updateError);
+    return failure;
   }
 
   revalidatePath("/connections");

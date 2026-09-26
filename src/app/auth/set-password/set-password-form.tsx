@@ -10,10 +10,12 @@ import { setPassword } from '@/lib/auth/actions';
 
 export function SetPasswordForm() {
   const [state, action, pending] = useActionState(
-    async (_prev: { success?: boolean; error?: string } | null, formData: FormData) => {
+    async (_prev: { success?: boolean; error?: string; next?: string } | null, formData: FormData) => {
       const result = await setPassword(formData);
       if (result.success) {
-        window.location.href = '/planner';
+        // Same-origin paths only (the server picks planner or Billing).
+        const next = result.next && result.next.startsWith('/') && !result.next.startsWith('//') ? result.next : '/planner';
+        window.location.href = next;
       }
       return result;
     },

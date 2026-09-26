@@ -45,6 +45,7 @@ interface SubscriptionRow {
   account_id: string;
   plan: string;
   status: StripeSubscriptionStatus;
+  current_period_start: string | null;
   current_period_end: string | null;
   cancel_at_period_end: boolean;
   stripe_state_at: string;
@@ -58,7 +59,7 @@ export async function getAdminOverview(): Promise<{ brands: AdminBrand[]; users:
     db.from('user_auth_snapshot').select('user_id, email').order('email', { ascending: true }),
     db.from('account_members').select('account_id, user_id'),
     db.from('app_admins').select('user_id'),
-    db.from('subscriptions').select('account_id, plan, status, current_period_end, cancel_at_period_end, stripe_state_at'),
+    db.from('subscriptions').select('account_id, plan, status, current_period_start, current_period_end, cancel_at_period_end, stripe_state_at'),
     db.from('publish_jobs').select('account_id').eq('status', 'held'),
   ]);
 
@@ -115,7 +116,13 @@ export async function getAdminOverview(): Promise<{ brands: AdminBrand[]; users:
       state: resolveEntitlement({
         archivedAt: a.archived_at,
         billingOverride: a.billing_override,
-        subscription: subscription ? { status: subscription.status, currentPeriodEnd: subscription.current_period_end } : null,
+        subscription: subscription
+          ? {
+              status: subscription.status,
+              currentPeriodStart: subscription.current_period_start ?? null,
+              currentPeriodEnd: subscription.current_period_end,
+            }
+          : null,
         now,
       }),
       subscription: subscription

@@ -70,6 +70,10 @@ if (!globalThis.Deno) {
     };
 }
 
+// `server-only` is resolved by Next's bundler, not installed as a package, so
+// Vitest cannot import it. It only guards against client bundling; stub it.
+vi.mock("server-only", () => ({}));
+
 // Billing enforcement is off in production until Stage 2 is complete, so unit
 // tests default to off too; guarded actions then never read app_flags through
 // each test's own database mock. Tests about enforcement mock this module

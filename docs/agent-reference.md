@@ -27,7 +27,7 @@ Historical planning residue: `.planning/` (GSD phases, archived 2026-07-03), `do
 | Forms and validation | `react-hook-form` 7, `@hookform/resolvers` 5, `zod` 4 |
 | Data | `@supabase/supabase-js` 2.89, `@supabase/ssr` 0.8, `@tanstack/react-query` 5.90 (+ devtools) |
 | Background and infra | `@upstash/qstash` 2, `@upstash/ratelimit` 2, `@upstash/redis` 1, `@axiomhq/js` 1, `p-limit` 7 |
-| External services | `openai` 6.38, `resend` 6.6 |
+| External services | `openai` 6.38, `resend` 6.6, `stripe` 22.6 (API version pinned to `2026-08-26.dahlia` in `src/lib/billing/stripe.ts`) |
 | Dates | `luxon` 3.7 (`@types/luxon`) |
 | Images | `sharp` 0.34 (declared in `serverExternalPackages`), `satori` 0.26, `text-to-svg` 3 |
 | Testing | `vitest` 4 with `@vitest/coverage-v8`, `@testing-library/react` 16, `@testing-library/jest-dom` 6, `jsdom` 29, `msw` 2, `@playwright/test` 1.60, `autocannon` 8 (`perf:load-test`) |
@@ -73,7 +73,7 @@ Data flow: auth context is server-initialised and exposed read-only through `src
 
 ## 4. API route surface (`src/app/api/`)
 
-`auth/login`, `auth/magic-link`, `booking-conversions`, `content/[id]`, `create/event-artwork`, `cron/*` (see section 5), `feed/[tournamentId]`, `internal/link-in-bio-timing`, `internal/render-banner`, `oauth/[provider]/callback`, `oauth/facebook-ads/callback`, `planner/activity`, `social/deauthorize`, `social/delete-data`, `tournaments/base-image`, `webhooks/qstash-publish` and `webhooks/qstash-publish/failure`, `webhooks/qstash-food-materialise`.
+`auth/login`, `auth/magic-link`, `booking-conversions`, `content/[id]`, `create/event-artwork`, `cron/*` (see section 5), `feed/[tournamentId]`, `internal/link-in-bio-timing`, `internal/render-banner`, `oauth/[provider]/callback`, `oauth/facebook-ads/callback`, `planner/activity`, `social/deauthorize`, `social/delete-data`, `stripe/webhook` (Stripe-signed, not behind the login gate), `tournaments/base-image`, `webhooks/qstash-publish` and `webhooks/qstash-publish/failure`, `webhooks/qstash-food-materialise`.
 
 ## 5. Scheduled jobs
 
@@ -114,6 +114,10 @@ Route that exists but is not in `vercel.json`: `/api/cron/publish` (a 410 tombst
 | `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN` | Auth rate limiting (skipped when unset) |
 | `AXIOM_TOKEN`, `AXIOM_DATASET` | Structured logging (silent when unset) |
 | `BOOKING_CONVERSION_INGEST_SECRET`, `BOOKING_CONVERSION_ACCOUNT_ID` | Booking-conversion ingest defaults |
+| `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | Stripe billing, server only and optional at build time (billing says "not set up yet" and the webhook answers 503 without them); test and live mode each have their own. In production only a live key (`sk_live_`, `rk_live_`) counts. Setup and rotation: `docs/runbooks/stripe-billing.md` |
+| `STRIPE_PRICE_STARTER_MONTHLY`, `STRIPE_PRICE_STARTER_ANNUAL`, `STRIPE_PRICE_PROFESSIONAL_MONTHLY`, `STRIPE_PRICE_PROFESSIONAL_ANNUAL` | Stripe price ids; mapped to plans only in `src/lib/billing/plans.ts` |
+| `STRIPE_PORTAL_CONFIGURATION_ID` | CheersAI's own customer portal configuration (the Stripe account is shared with the management app, whose portal is the account default) |
+| `VERCEL_ENV` | Set by Vercel (`production`, `preview`, `development`); billing refuses a test-mode Stripe key when it is `production` |
 | `MANAGEMENT_ARTWORK_ORIGINS` | Allowed hosts for management-app artwork fetches |
 | `ENABLE_CONNECTION_DIAGNOSTICS` | Verbose integration logging |
 | `FOOD_OPTIMISATION_ENABLED`, `FOOD_AUTO_MATERIALISE_ENABLED`, `NEXT_PUBLIC_ENABLE_FOOD_BOOKING` | Feature flags, default off |
