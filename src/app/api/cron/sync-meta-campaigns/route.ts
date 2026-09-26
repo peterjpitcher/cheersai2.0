@@ -14,13 +14,25 @@ async function handle(request: Request) {
   const supabase = createServiceSupabaseClient();
 
   // Fetch all active/paused campaigns that have been published (have meta_campaign_id)
-  const { data: campaigns } = await supabase
+  const { data: published } = await supabase
     .from('meta_campaigns')
-    .select('id')
+    .select('id, account_id')
     .not('meta_campaign_id', 'is', null)
     .in('status', ['ACTIVE', 'PAUSED']);
 
-  if (!campaigns?.length) {
+  // Offboarded brands have had their ads token deleted on purpose, so their
+  // campaigns cannot sync; skip them rather than log a failure every day.
+  const { data: offboarded, error: offboardedError } = await supabase
+    .from('accounts')
+    .select('id')
+    .not('offboarded_at', 'is', null);
+  if (offboardedError) {
+    return NextResponse.json({ error: `accounts lookup failed: ${offboardedError.message}` }, { status: 500 });
+  }
+  const skip = new Set((offboarded ?? []).map((row) => row.id as string));
+  const campaigns = (published ?? []).filter((campaign) => !skip.has(campaign.account_id as string));
+
+  if (!campaigns.length) {
     return NextResponse.json({ synced: 0 });
   }
 
