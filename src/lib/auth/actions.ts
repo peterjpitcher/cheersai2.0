@@ -11,6 +11,7 @@ import { checkAuthRateLimit } from '@/lib/auth/rate-limit';
 import { getCurrentUser } from '@/lib/auth/server';
 import { isUnknownUserOtpError } from '@/lib/auth/otp-errors';
 import { buildAuthConfirmUrl, renderPasswordResetEmail } from '@/lib/auth/email-links';
+import { destinationAfterPasswordSet } from '@/lib/billing/setup-redirect';
 import { sendEmail } from '@/lib/email/resend';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { createServiceSupabaseClient } from '@/lib/supabase/service';
@@ -136,7 +137,7 @@ const newPasswordSchema = z
  */
 export async function setPassword(
   formData: FormData,
-): Promise<{ success?: boolean; error?: string }> {
+): Promise<{ success?: boolean; error?: string; next?: string }> {
   const parsed = newPasswordSchema.safeParse({
     password: formData.get('password'),
     confirm: formData.get('confirm'),
@@ -159,7 +160,8 @@ export async function setPassword(
       console.error('[auth] setPassword error:', error.message);
       return { error: 'Could not save your password. Please try again.' };
     }
-    return { success: true };
+    // An invited owner whose brand has not set up billing goes to Billing next (spec §4.4).
+    return { success: true, next: await destinationAfterPasswordSet() };
   } catch (error) {
     console.error('[auth] setPassword unexpected error:', error);
     return { error: 'Could not save your password. Please try again.' };
