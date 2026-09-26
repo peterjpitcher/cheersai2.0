@@ -33,3 +33,10 @@ Security rule in CLAUDE.md: tokens are only held while needed. After Disconnect,
 ## Rollback
 
 Revert the PR. No data or schema to undo.
+
+## Follow-up: Disconnect button (approved by Peter 2026-09-26)
+
+- A Disconnect button on each Facebook and Instagram card (`src/features/connections/connection-disconnect-button.tsx`), calling `disconnectProvider`. Stacked on the fix above; it must not ship without it.
+- Shown only when a token is stored and only to owners (`isOwner`, passed from the Connections page). The server action still enforces owner-only; hiding the button only avoids a member seeing a production-redacted error.
+- A `window.confirm` step first (the house pattern for destructive actions), warning that scheduled posts for that platform will fail until the venue reconnects. That is what the live publish worker does with a `needs_action` connection: the job fails and the usual failure alert goes out.
+- Success and failure both show a toast; `revalidatePath("/connections")` in the action refreshes the card.

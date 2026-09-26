@@ -2,6 +2,7 @@ import { Suspense } from "react";
 
 import { getAdAccountSetupStatus } from "@/app/(app)/connections/actions-ads";
 import { featureFlags } from "@/env";
+import { isOwner } from "@/lib/auth/roles";
 import { requireAuthContext } from "@/lib/auth/server";
 import { ConnectionCards } from "@/features/connections/connection-cards";
 import { ConnectionDiagnostics } from "@/features/connections/connection-diagnostics";
@@ -11,7 +12,8 @@ import { MetaConversionSetup } from "@/features/campaigns/MetaConversionSetup";
 import { PageHeader } from "@/components/layout/PageHeader";
 
 export default async function ConnectionsPage() {
-  const { features } = await requireAuthContext();
+  const ctx = await requireAuthContext();
+  const { features } = ctx;
   // Paid ads are a per-brand switch; brands without it never see the ads setup.
   const adAccountStatus = features.paidAds ? await getAdAccountSetupStatus() : null;
 
@@ -39,7 +41,7 @@ export default async function ConnectionsPage() {
             <h3 className="text-lg font-semibold" style={{ color: "var(--c-ink)" }}>Connected accounts</h3>
             <p className="text-sm" style={{ color: "var(--c-ink-3)" }}>Status, tokens, and reconnect controls for each provider.</p>
           </div>
-          <ConnectionCards />
+          <ConnectionCards canDisconnect={isOwner(ctx)} />
         </section>
 
         {adAccountStatus ? (

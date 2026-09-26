@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { ConnectionDisconnectButton } from "@/features/connections/connection-disconnect-button";
 import { ConnectionMetadataForm } from "@/features/connections/connection-metadata-form";
 import { ConnectionOAuthButton } from "@/features/connections/connection-oauth-button";
 import { listConnectionSummaries } from "@/lib/connections/data";
@@ -41,7 +42,12 @@ const METADATA_FIELDS = {
   },
 } as const;
 
-export async function ConnectionCards() {
+interface ConnectionCardsProps {
+  /** Owners only (decision D4); the server action enforces it too. */
+  canDisconnect: boolean;
+}
+
+export async function ConnectionCards({ canDisconnect }: ConnectionCardsProps) {
   const connections = await listConnectionSummaries();
 
   return (
@@ -128,6 +134,9 @@ export async function ConnectionCards() {
             </div>
             <div className="mt-6 flex flex-col gap-2">
               <ConnectionOAuthButton provider={connection.provider} status={connection.status} />
+              {canDisconnect && connection.hasAccessToken ? (
+                <ConnectionDisconnectButton provider={connection.provider} />
+              ) : null}
               <Link
                 href={PROVIDER_DOC_LINKS[connection.provider]}
                 target="_blank"
