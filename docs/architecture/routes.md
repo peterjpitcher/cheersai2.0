@@ -1,6 +1,6 @@
 ---
 generated: true
-last_updated: 2026-05-21
+last_updated: 2026-09-26
 source: session-setup
 project: cheersai-2.0
 ---
@@ -13,6 +13,7 @@ project: cheersai-2.0
 
 | URL | File | Purpose |
 |-----|------|---------|
+| `/admin` | `src/app/(app)/admin/page.tsx` | Brands and user access (super-admin only; gated in the layout and again in the page) |
 | `/analytics` | `src/app/(app)/analytics/page.tsx` | Analytics dashboard |
 | `/campaigns` | `src/app/(app)/campaigns/page.tsx` | Campaign list |
 | `/campaigns/new` | `src/app/(app)/campaigns/new/page.tsx` | Create new campaign |
@@ -27,7 +28,6 @@ project: cheersai-2.0
 | `/planner` | `src/app/(app)/planner/page.tsx` | Content planner/calendar |
 | `/planner/[contentId]` | `src/app/(app)/planner/[contentId]/page.tsx` | Content detail |
 | `/planner/notifications` | `src/app/(app)/planner/notifications/page.tsx` | Notification centre |
-| `/reviews` | `src/app/(app)/reviews/page.tsx` | GBP review management |
 | `/settings` | `src/app/(app)/settings/page.tsx` | Account settings |
 | `/tournaments` | `src/app/(app)/tournaments/page.tsx` | Tournament list |
 | `/tournaments/[id]` | `src/app/(app)/tournaments/[id]/page.tsx` | Tournament detail |
@@ -37,6 +37,7 @@ project: cheersai-2.0
 | URL | File | Purpose |
 |-----|------|---------|
 | `/login` | `src/app/(auth)/login/page.tsx` | Sign in |
+| `/forgot-password` | `src/app/(auth)/forgot-password/page.tsx` | Request a password reset email |
 
 ### Public `(public)` -- no auth
 
@@ -52,9 +53,11 @@ project: cheersai-2.0
 | `/` | `src/app/page.tsx` | Landing/home page |
 | `/terms` | `src/app/terms/page.tsx` | Terms of service |
 | `/help/[...slug]` | `src/app/help/[[...slug]]/page.tsx` | Help centre |
-| `/auth/login` | `src/app/auth/login/page.tsx` | Alternate login |
-| `/auth/signup` | `src/app/auth/signup/page.tsx` | Sign up |
-| `/auth/forgot-password` | `src/app/auth/forgot-password/page.tsx` | Password reset |
+| `/auth/login` | `src/app/auth/login/page.tsx` | Permanent redirect to `/login` |
+| `/auth/signup` | `src/app/auth/signup/page.tsx` | Permanent redirect to `/login` |
+| `/auth/forgot-password` | `src/app/auth/forgot-password/page.tsx` | Permanent redirect to `/forgot-password` |
+| `/auth/set-password` | `src/app/auth/set-password/page.tsx` | Choose a password after an invite or reset link (needs the session `/auth/confirm` sets) |
+| `/no-access` | `src/app/no-access/page.tsx` | Signed-in user with no brand assigned (outside `(app)`, so no active brand is needed) |
 
 ## API Routes
 
@@ -74,21 +77,25 @@ project: cheersai-2.0
 | `/api/oauth/[provider]/callback` | GET | OAuth state | `src/app/api/oauth/[provider]/callback/route.ts` |
 | `/api/oauth/facebook-ads/callback` | GET | OAuth state | `src/app/api/oauth/facebook-ads/callback/route.ts` |
 
-### Cron Jobs -- all use CRON_SECRET header auth
+### Cron Jobs -- `verifyCronAuth` (`CRON_SECRET` as `Authorization: Bearer` or `x-cron-secret`)
 
 | Path | Method | File |
 |------|--------|------|
-| `/api/cron/gbp-metrics` | POST | `src/app/api/cron/gbp-metrics/route.ts` |
-| `/api/cron/notify-expiring-connections` | GET/POST | `src/app/api/cron/notify-expiring-connections/route.ts` |
+| `/api/cron/materialise-food-windows` | GET, POST | `src/app/api/cron/materialise-food-windows/route.ts` |
+| `/api/cron/notify-expiring-connections` | GET, POST | `src/app/api/cron/notify-expiring-connections/route.ts` |
 | `/api/cron/notify-failures` | GET, POST | `src/app/api/cron/notify-failures/route.ts` |
-| `/api/cron/optimise-meta-campaigns` | POST | `src/app/api/cron/optimise-meta-campaigns/route.ts` |
-| `/api/cron/publish` | POST | `src/app/api/cron/publish/route.ts` |
+| `/api/cron/optimise-meta-campaigns` | GET, POST | `src/app/api/cron/optimise-meta-campaigns/route.ts` |
+| `/api/cron/publish` | GET, POST | `src/app/api/cron/publish/route.ts` |
 | `/api/cron/publish-scheduler` | GET, POST | `src/app/api/cron/publish-scheduler/route.ts` |
-| `/api/cron/purge-trash` | POST | `src/app/api/cron/purge-trash/route.ts` |
-| `/api/cron/recurring-publish` | POST | `src/app/api/cron/recurring-publish/route.ts` |
-| `/api/cron/sync-gbp-reviews` | GET, POST | `src/app/api/cron/sync-gbp-reviews/route.ts` |
-| `/api/cron/sync-meta-campaigns` | POST | `src/app/api/cron/sync-meta-campaigns/route.ts` |
-| `/api/cron/token-health` | GET, POST | `src/app/api/cron/token-health/route.ts` |
+| `/api/cron/purge-trash` | GET, POST | `src/app/api/cron/purge-trash/route.ts` |
+| `/api/cron/retry-capi-conversions` | GET, POST | `src/app/api/cron/retry-capi-conversions/route.ts` |
+| `/api/cron/sync-meta-campaigns` | GET, POST | `src/app/api/cron/sync-meta-campaigns/route.ts` |
+| `/api/cron/token-health` | GET | `src/app/api/cron/token-health/route.ts` |
+
+`/api/cron/publish` is a tombstone: both methods return 410 with no auth check,
+and it is not scheduled in `vercel.json`. Every other route above is scheduled
+there, and Vercel Cron calls them with GET. Schedules are in `vercel.json` and
+section 5 of `docs/agent-reference.md`.
 
 ### Webhooks
 
@@ -96,13 +103,26 @@ project: cheersai-2.0
 |------|--------|------|------|
 | `/api/webhooks/qstash-publish` | POST | QStash signature | `src/app/api/webhooks/qstash-publish/route.ts` |
 | `/api/webhooks/qstash-publish/failure` | POST | QStash signature | `src/app/api/webhooks/qstash-publish/failure/route.ts` |
+| `/api/webhooks/qstash-food-materialise` | POST | QStash signature | `src/app/api/webhooks/qstash-food-materialise/route.ts` |
+| `/api/stripe/webhook` | POST | Stripe signature (`STRIPE_WEBHOOK_SECRET`); not behind the login gate | `src/app/api/stripe/webhook/route.ts` |
+
+`/api/stripe/webhook` receives Stripe billing events for CheersAI customers and
+reconciles the brand's subscription (see `docs/runbooks/stripe-billing.md`).
+
+### Meta data callbacks
+
+| Path | Method | Auth | File |
+|------|--------|------|------|
+| `/api/social/deauthorize` | POST | Meta `signed_request` (`FACEBOOK_APP_SECRET`) | `src/app/api/social/deauthorize/route.ts` |
+| `/api/social/delete-data` | POST, GET | POST: Meta `signed_request`; GET: public status lookup by confirmation code | `src/app/api/social/delete-data/route.ts` |
 
 ### Content & Data
 
 | Path | Method | Auth | File |
 |------|--------|------|------|
 | `/api/content/[id]` | GET | Session (getUser) | `src/app/api/content/[id]/route.ts` |
-| `/api/create/generate-stream` | POST | Session (getUser) | `src/app/api/create/generate-stream/route.ts` |
+| `/api/create/event-artwork` | POST | Session (getCurrentUser, active brand), rate limited per brand | `src/app/api/create/event-artwork/route.ts` |
+| `/api/tournaments/base-image` | POST | Same-origin check, then session (`requireFeatureContext`) | `src/app/api/tournaments/base-image/route.ts` |
 | `/api/planner/activity` | GET | Session | `src/app/api/planner/activity/route.ts` |
 | `/api/feed/[tournamentId]` | GET | API key (public feed) | `src/app/api/feed/[tournamentId]/route.ts` |
 | `/api/booking-conversions` | POST | BOOKING_CONVERSION_INGEST_SECRET | `src/app/api/booking-conversions/route.ts` |
@@ -111,6 +131,7 @@ project: cheersai-2.0
 
 | Path | Method | Auth | File |
 |------|--------|------|------|
+| `/api/internal/link-in-bio-timing` | GET | CRON_SECRET | `src/app/api/internal/link-in-bio-timing/route.ts` |
 | `/api/internal/render-banner` | POST | CRON_SECRET | `src/app/api/internal/render-banner/route.ts` |
 | `/manifest.json` | GET | None | `src/app/manifest.json/route.ts` |
 
@@ -122,9 +143,8 @@ middleware manifest for it (`"middleware": {}`), so it never ran.
 - The apex-to-`www` redirect it claimed to perform is in fact a **Vercel
   domain-level redirect**, which returns 307 with `content-type: text/plain`,
   not the 308 the old file would have produced.
-- `src/app/proxy.ts` exports a Next 16 proxy auth guard, but `src/app/` is not a
-  location Next loads it from, so it does not run at the edge either. Its
-  `isPublicPath` helper is still unit-tested and used as a reference.
+- There is no `proxy.ts` either: the unused `src/app/proxy.ts` guard was deleted
+  in #81.
 - **Auth is enforced in layouts**, not at the edge. `src/app/(app)/layout.tsx`
   calls `getCurrentUser()`; an unauthenticated request to `/planner` is answered
   with a 307 to `/auth/login` by the app itself.
