@@ -140,8 +140,8 @@ beforeEach(() => {
       { id: 'v3', social_connection_id: 'conn-other' },
     ],
     meta_ad_accounts: [
-      { id: 'ads-1', account_id: 'brand-1', meta_user_id: PERSON, access_token: 'ads-plain', conversions_api_access_token: 'capi', setup_complete: true },
-      { id: 'ads-2', account_id: 'brand-2', meta_user_id: 'someone-else', access_token: 'keep', setup_complete: true },
+      { id: 'ads-1', account_id: 'brand-1', meta_user_id: PERSON, setup_complete: true },
+      { id: 'ads-2', account_id: 'brand-2', meta_user_id: 'someone-else', setup_complete: true },
     ],
     meta_ad_account_tokens: [
       { id: 'tok-access', account_id: 'brand-1', token_type: 'access' },
@@ -173,11 +173,10 @@ describe('data deletion callback', () => {
     }
     expect(db.social_connections.find((r) => r.id === 'conn-other')).toMatchObject({ status: 'active', access_token: 'keep' });
     expect(db.token_vault.map((r) => r.id)).toEqual(['v3']);
-    expect(db.meta_ad_accounts[0]).toMatchObject({ access_token: '', setup_complete: false, meta_user_id: null });
+    expect(db.meta_ad_accounts[0]).toMatchObject({ setup_complete: false, meta_user_id: null });
     // The person's encrypted ads token is deleted; the brand's CAPI token and other brands' tokens stay.
     expect(db.meta_ad_account_tokens.map((r) => r.id)).toEqual(['tok-capi', 'tok-other']);
-    expect(db.meta_ad_accounts[0].conversions_api_access_token).toBe('capi');
-    expect(db.meta_ad_accounts[1]).toMatchObject({ access_token: 'keep', setup_complete: true });
+    expect(db.meta_ad_accounts[1]).toMatchObject({ setup_complete: true, meta_user_id: 'someone-else' });
     expect(db.meta_data_requests[0]).toMatchObject({ kind: 'deletion', status: 'completed', connections_revoked: 2, ad_accounts_revoked: 1 });
     // The Meta user id is never stored in the request log.
     expect(JSON.stringify(db.meta_data_requests)).not.toContain(PERSON);

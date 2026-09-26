@@ -43,7 +43,7 @@ async function main() {
 
   const query = supabase
     .from('meta_ad_accounts')
-    .select('account_id, meta_account_id, access_token')
+    .select('account_id, meta_account_id')
     .eq('setup_complete', true);
 
   const { data, error } = args.accountId
@@ -61,7 +61,7 @@ async function main() {
 
   // Read only: never write a token from a local machine, whose TOKEN_VAULT_KEY may
   // not match production's.
-  const accessToken = await loadAccessToken(supabase, data.account_id, data.access_token);
+  const accessToken = await loadAccessToken(supabase, data.account_id);
   if (!accessToken) {
     console.error('No Meta Ads access token found for the selected account.');
     process.exit(1);
@@ -76,12 +76,10 @@ async function main() {
   }, null, 2));
 }
 
-// The encrypted token (meta_ad_account_tokens) wins; the plaintext column is the
-// phase 1 fallback for brands not yet migrated.
+// Tokens live only in meta_ad_account_tokens, encrypted with TOKEN_VAULT_KEY.
 async function loadAccessToken(
   supabase: SupabaseClient,
   accountId: string,
-  plaintextToken: string | null,
 ): Promise<string | null> {
   const { data, error } = await supabase
     .from('meta_ad_account_tokens')
@@ -93,10 +91,8 @@ async function loadAccessToken(
     console.error('Failed to load the encrypted Meta Ads token:', error.message);
     process.exit(1);
   }
-  if (data) {
-    return decrypt({ ciphertext: data.ciphertext, iv: data.iv, tag: data.tag, keyVersion: data.key_version });
-  }
-  return plaintextToken?.trim() || null;
+  if (!data) return null;
+  return decrypt({ ciphertext: data.ciphertext, iv: data.iv, tag: data.tag, keyVersion: data.key_version }).trim() || null;
 }
 
 function parseArgs(argv: string[]): Args {
