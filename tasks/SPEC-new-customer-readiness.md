@@ -30,7 +30,7 @@ Verified 2026-09-24:
 | D3 | Lapse and suspension behaviour as proposed in §4.1: a lapsed or suspended brand keeps read access, the billing page (owner) and export, but cannot create, edit, generate or upload, and new publishing is held. On restore, future posts resume; overdue posts wait for the owner to review (§4.2). Past-due grace: 7 days after the paid period ends. | 2026-09-24 |
 | D4 | Roles as proposed in §4.5: owners handle billing, inviting and removing people, Facebook and Instagram connections, export and deletion requests; members create, edit and schedule content. Every existing membership becomes owner. | 2026-09-24 |
 | D5 | Offboarding is handled by the operator on request (runbook plus admin action), not a customer button. Data is kept for 30 days after offboarding, then deleted. | 2026-09-24 |
-| D7 | Meta production access, checked separately for organic posting and ads | pending (Meta App Dashboard) |
+| D7 | Meta production access, checked separately for organic posting and ads. Checked on the App Dashboard, 26 September 2026: Live mode since 15 August 2025; Business Verification complete for Orange Jelly Limited (16 August 2025); every permission is Standard access only, so only people with a role on the app can grant them. The one App Review (17 October 2025, the unused Instagram-login permissions) was rejected. Peter approved preparing the App Review for the organic permissions and dropping the two unused ones (`pages_manage_metadata`, `instagram_manage_comments`); pack in `docs/runbooks/meta-app-review.md`. Until approval, a new venue's staff can connect only if added as app testers. | 2026-09-26 (review not yet submitted) |
 
 ### 2.1 Plans
 
@@ -74,7 +74,7 @@ Severity: **B** blocks any new customer, **H** high, **M** medium, **L** low. Co
 | A5 | M | `src/app/proxy.ts` is dormant (wrong folder for Next 16). Moving it would put cron, QStash and OAuth endpoints behind a login redirect. | `src/app/proxy.ts` |
 | P1 | B | No billing: no provider, plans, trial or subscription state. | `package.json` |
 | P2 | H | No usage caps. AI entry points: `src/app/actions/ai-generate.ts`, `src/lib/campaigns/generate.ts:471`, `src/lib/ai/media-tagging.ts:84`, library auto-tagging. | as listed |
-| M1 | B (unverified) | Posting and ads permissions need Meta Advanced Access and Business Verification before a non-tester can connect. No record in the repo. | `src/lib/connections/oauth.ts:4-12,63-68` |
+| M1 | B (verified 26 September 2026, see D7) | Posting and ads permissions need Meta Advanced Access and Business Verification before a non-tester can connect. Business Verification is done; every permission is still Standard access. | `src/lib/connections/oauth.ts:4-12,63-68` |
 | M2 | H | Data-deletion callback deletes nothing and its status endpoint reports `completed: true` for any code. No deauthorise callback. Ads OAuth writes `meta_ad_accounts`, which the callback also ignores. | `src/app/api/social/delete-data/route.ts`, `src/app/api/oauth/facebook-ads/callback/route.ts:120-130` |
 | T1 | B* | Paid ads only accept Anchor hosts. *Not a launch blocker under D1b; must be fixed before ads are offered. | `src/app/(app)/campaigns/actions.ts:172-173`, `[id]/actions.ts:123-124` |
 | T2 | H* | Tournament copy, links and overlay are Anchor-specific; hours come only from the Anchor management app. *Hidden for new customers under D1b. | `src/lib/tournament/generate.ts:25,94,138-139,161-162`, `overlay.ts:287`, `screening-service.ts:7-35` |
