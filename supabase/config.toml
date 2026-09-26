@@ -1,14 +1,17 @@
 project_id = "cheersai"
 
 # B1: JWT verification enabled -- service-role key satisfies this check.
-# publish-queue is only referenced in comments (no active callers).
-# media-derivatives is called by scripts/ops/regenerate-story-derivatives.ts via
-# service-role client, which passes the service-role key as Authorization header.
+# publish-queue is invoked by tournament publishing (src/app/actions/tournament.ts)
+# and by the publish-scheduler legacy bridge (src/app/api/cron/publish-scheduler/route.ts),
+# both through the service-role client and only while publish_jobs lacks a platform column.
+# media-derivatives runs only on demand, from scripts/ops/regenerate-story-derivatives.ts
+# (service-role client) and scripts/ops/invoke-function.ts (npm run ops:invoke), both of
+# which pass the service-role key as the Authorization header. Library uploads build
+# their derivatives in the browser and do not call it.
 [functions."publish-queue"]
   verify_jwt = true
 
 [functions."media-derivatives"]
   verify_jwt = true
 
-# NOTE: Scheduler cron definitions live in runbook; apply via `supabase functions schedule create` until CLI adds config support.
-
+# NOTE: There are no Supabase-side schedules (no pg_cron or pg_net); scheduling is Vercel Cron, see vercel.json.

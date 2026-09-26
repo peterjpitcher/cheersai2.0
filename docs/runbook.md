@@ -10,7 +10,7 @@ Provide procedures for monitoring, incident response, and routine maintenance of
 
 ## 3. Routine Checks
 - Daily: Review publish job failures, confirm queue backlog < threshold (e.g. <20 jobs pending).
-- Daily: Confirm the Vercel cron invocation (`/api/cron/publish`) completes with 200 status and that the Supabase Scheduler is **disabled** for the same job to avoid duplicate triggers.
+- Daily: Confirm the Vercel cron `/api/cron/publish-scheduler` (every minute) returns 200 in the Vercel cron logs, and that QStash deliveries to `/api/webhooks/qstash-publish` are not piling up on `/api/webhooks/qstash-publish/failure`. See section 11.
 - Weekly: Verify token expiry notifications cleared; run end-to-end test post in staging.
 - Monthly: Rotate API keys/secrets if required by providers; review storage usage.
 
@@ -69,17 +69,20 @@ Provide procedures for monitoring, incident response, and routine maintenance of
 - Add runbooks for new features as they ship.
 
 ## 11. Scheduled Jobs
-- **Primary bridge**: Vercel Cron calls `/api/cron/publish` every minute (see `vercel.json`). The endpoint validates `CRON_SECRET` and forwards the request to the Supabase `publish-queue` function using the service role key.
-- **Supabase Scheduler**: Keep the native scheduler **disabled** for `publish-queue` during normal ops so the queue is processed exactly once per minute. Re-enable only for emergencies by creating a schedule in the Supabase dashboard and remember to remove it afterwards.
-- `media-derivatives` runs every 15 minutes as a safety net; uploads also invoke it directly after finalisation.
+- **All scheduled work runs on Vercel Cron**, defined in `vercel.json` (region `lhr1`, schedules evaluated in UTC). Every route checks `CRON_SECRET` through `verifyCronAuth()`. The full route table is in `docs/agent-reference.md` section 5.
+- **Publishing**: `/api/cron/publish-scheduler` runs every minute. It promotes due `publish_jobs` to `queued` and dispatches them to QStash, which delivers each job to `/api/webhooks/qstash-publish`. It calls the Supabase `publish-queue` edge function instead only while `publish_jobs` lacks a `platform` column (the legacy bridge).
+- `/api/cron/publish` is a 410 tombstone and is not in `vercel.json`. Do not schedule it.
+- **There are no Supabase-side schedules.** The live project (`nbkjciurhvkfpcpatbnt`) has neither `pg_cron` nor `pg_net` installed (checked 2026-09-26), so nothing calls the edge functions on a timer:
+  - `publish-queue` runs only when the legacy bridge above or tournament publishing (`src/app/actions/tournament.ts`) invokes it, and tournament publishing also does so only while `publish_jobs` lacks a `platform` column.
+  - `media-derivatives` runs only on demand, through `npm run ops:regenerate-story-derivatives` or `npm run ops:invoke -- media-derivatives '{"assetId":"<uuid>"}'`. Library uploads create their derivatives in the browser and do not call it.
 
-> **Deploy notes:** Scheduler cadences are currently managed via the Supabase dashboard / CLI commands (`supabase functions schedule create`). `supabase/config.toml` retains `verify_jwt` flags only.
+> **Deploy notes:** To change a schedule, edit `vercel.json` and deploy, then update the table in `docs/agent-reference.md` section 5 to match. `supabase/config.toml` holds only the `verify_jwt` flags for the two edge functions.
 
 ## 12. Media Processing Pipeline
-- Upload flow triggers `media-derivatives` edge function with the asset ID.
-- FFmpeg wasm generates square (1080×1350), story (1080×1920), and landscape (1920×1080) JPEG derivatives.
-- Status transitions: `pending` → `processing` → `ready` (or `failed`/`skipped` when videos are uploaded).
-- Troubleshooting: inspect function logs for FFmpeg errors; trigger a retry via `npm run ops:invoke -- media-derivatives '{"assetId":"..."}'`. Videos currently skip processing and raise a Planner alert so operators can fall back to manual publishing.
+- **Library uploads generate image derivatives in the browser.** `generateImageDerivatives()` in `src/lib/library/client-derivatives.ts` draws square (1080×1350), story (1080×1920) and landscape (1920×1080) JPEGs on a canvas. The upload components (`src/features/library/media-asset-grid-client.tsx`, `media-upload-panel.tsx`, `upload-panel.tsx` and `media-replace-button.tsx`) upload them to signed URLs and pass their paths to `finaliseMediaUpload()`. No upload calls the `media-derivatives` edge function.
+- `finaliseMediaUpload()` (`src/app/(app)/library/actions.ts`) sets `processed_status` to `ready` when an image has a story derivative and `failed` when it does not. Videos are saved as `ready` with no derivatives.
+- **The `media-derivatives` edge function runs only on demand**, through the ops scripts: `npm run ops:regenerate-story-derivatives` invokes it for every image that has no story derivative, and `npm run ops:invoke -- media-derivatives '{"assetId":"<uuid>"}'` invokes it for one asset. It renders the same three sizes with FFmpeg WASM and moves the asset `processing` → `ready` (or `failed`); for a video it sets `skipped` and writes a `media_derivative_skipped` notification.
+- Troubleshooting: an image left on `failed` usually means the browser could not render or upload its derivatives (the uploader's browser console logs "derivative generation failed"). Re-run it through the edge function with one of the ops commands above, then check the function logs for FFmpeg errors.
 
 ## 13. Email Alerts
 - Publish failures and metadata issues send alerts via Resend to `ALERT_EMAIL`/`RESEND_FROM`.
