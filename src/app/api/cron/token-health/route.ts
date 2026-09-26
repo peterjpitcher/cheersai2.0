@@ -1,6 +1,6 @@
 /**
  * Nightly token health cron endpoint (PLAT-10, NOTIF-03).
- * Called by QStash on a nightly schedule.
+ * Called by Vercel Cron nightly (vercel.json: 02:00 UTC).
  * Checks all social_connections, derives health, updates expired statuses,
  * and sends urgent email for expired/disconnected tokens.
  */
