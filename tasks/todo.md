@@ -11,7 +11,7 @@ Spec: `tasks/SPEC-local-rebuild-matches-production.md`.
 - [x] Verify script passes on the rebuild and fails without the migration; the app's
       `releaseHeldPublishJobs` released a held job through the local API
 - [x] `ci:verify` green (2869 tests, both time zones; build clean with CI's placeholder env)
-- [ ] CI migration-check (CLI 2.67.1) green on the PR
+- [x] CI green on PR #121, including migration-check (CLI 2.67.1: both migrations applied, "No schema errors found")
 - [ ] Owner approval, then apply the migration to production as a history-only no-op
       (re-run the dry run first; it must still read all false and 0)
 
