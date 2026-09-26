@@ -9,7 +9,7 @@ import { z } from 'zod';
 import { env } from '@/env';
 import { OwnerRequiredError, requireOwnerContext } from '@/lib/auth/roles';
 import type { AuthContext } from '@/lib/auth/types';
-import type { EntitlementState } from '@/lib/billing/entitlement';
+import type { EntitlementState, StripeSubscriptionStatus } from '@/lib/billing/entitlement';
 import {
   BILLING_INTERVALS,
   SELF_SERVE_PLAN_IDS,
@@ -18,7 +18,7 @@ import {
   type BillingInterval,
   type SelfServePlanId,
 } from '@/lib/billing/plans';
-import { listCheersSubscriptions, reconcileBrandFromStripe } from '@/lib/billing/reconcile';
+import { LIVE_SUBSCRIPTION_STATUSES, listCheersSubscriptions, reconcileBrandFromStripe } from '@/lib/billing/reconcile';
 import {
   BILLING_NOT_CONFIGURED_MESSAGE,
   BillingNotConfiguredError,
@@ -48,9 +48,6 @@ const checkoutSchema = z
     interval: z.enum(BILLING_INTERVALS),
   })
   .strict();
-
-/** Subscriptions that are still running (or waiting on a payment) in Stripe. */
-const LIVE_SUBSCRIPTION_STATUSES: ReadonlySet<string> = new Set(['trialing', 'active', 'past_due', 'unpaid', 'paused', 'incomplete']);
 
 const TRY_AGAIN = 'Please try again, or contact Cheers support if it keeps happening.';
 
@@ -166,7 +163,7 @@ export async function startCheckout(input: { plan: SelfServePlanId; interval: Bi
     const customerId = await getOrCreateCustomer(ctx, stripe, brand);
 
     const previous = await listCheersSubscriptions(stripe, customerId);
-    if (previous.some((subscription) => LIVE_SUBSCRIPTION_STATUSES.has(subscription.status))) {
+    if (previous.some((subscription) => LIVE_SUBSCRIPTION_STATUSES.has(subscription.status as StripeSubscriptionStatus))) {
       return { error: 'This brand already has a subscription. Use Manage billing to change or restart it.' };
     }
     await expireOpenCheckouts(stripe, customerId);

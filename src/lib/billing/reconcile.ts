@@ -5,8 +5,9 @@ import { can, type EntitlementState, type StripeSubscriptionStatus } from '@/lib
 import { getBrandEntitlement } from '@/lib/billing/entitlement-server';
 import { planForStripePrice, type BillingInterval, type SelfServePlanId } from '@/lib/billing/plans';
 import { releaseHeldPublishJobs } from '@/lib/billing/publish-hold';
-import { assertBillingConfigured, CHEERSAI_APP_TAG, getStripe, stripeId } from '@/lib/billing/stripe';
+import { assertBillingConfigured, CHEERSAI_APP_TAG, getStripe, missingBillingEnv, stripeId } from '@/lib/billing/stripe';
 import { createLogger } from '@/lib/logging';
+import { alertPossibleDoubleBilling } from '@/lib/notifications/operator-alerts';
 import { createServiceSupabaseClient } from '@/lib/supabase/service';
 
 /**
@@ -79,6 +80,19 @@ const KNOWN_STATUSES: ReadonlySet<string> = new Set<StripeSubscriptionStatus>([
   'incomplete',
   'incomplete_expired',
   'paused',
+]);
+
+/**
+ * Stripe statuses where a subscription still runs, or still waits on a
+ * payment, and so can still bill the customer.
+ */
+export const LIVE_SUBSCRIPTION_STATUSES: ReadonlySet<StripeSubscriptionStatus> = new Set<StripeSubscriptionStatus>([
+  'trialing',
+  'active',
+  'past_due',
+  'unpaid',
+  'paused',
+  'incomplete',
 ]);
 
 /**
@@ -215,10 +229,109 @@ async function loadCustomerId(service: SupabaseClient, accountId: string): Promi
   return data?.stripe_customer_id ?? null;
 }
 
-/** List every CheersAI subscription on a Stripe customer (all statuses). */
+/**
+ * List every CheersAI subscription on a Stripe customer (all statuses). Throws
+ * rather than work from a partial list: reconcile marks stored subscriptions
+ * Stripe does not list as cancelled, so a truncated list must never be used.
+ */
 export async function listCheersSubscriptions(stripe: Stripe, customerId: string): Promise<Stripe.Subscription[]> {
   const page = await stripe.subscriptions.list({ customer: customerId, status: 'all', limit: 100 });
+  if (page.has_more) {
+    throw new ReconcileError(`Stripe customer ${customerId} has more than 100 subscriptions; reconcile it by hand`);
+  }
   return page.data.filter(isCheersSubscription);
+}
+
+/**
+ * Whether the brand may still be billed by a CheersAI subscription: a stored
+ * row in a live status, or (when Stripe is configured and the brand has a
+ * customer) a live one Stripe lists now. Every lookup is scoped to the brand
+ * and throws on failure, so callers can fail closed.
+ */
+export async function hasLiveCheersSubscription(
+  service: SupabaseClient,
+  accountId: string,
+  deps: { stripe?: Stripe } = {},
+): Promise<boolean> {
+  const { data, error } = await service
+    .from('subscriptions')
+    .select('stripe_subscription_id')
+    .eq('account_id', accountId)
+    .in('status', [...LIVE_SUBSCRIPTION_STATUSES])
+    .limit(1);
+  if (error) throw new Error(`subscriptions lookup failed: ${error.message}`);
+  if ((data?.length ?? 0) > 0) return true;
+
+  if (missingBillingEnv('reconcile').length) return false;
+  const customerId = await loadCustomerId(service, accountId);
+  if (!customerId) return false;
+  const subscriptions = await listCheersSubscriptions(deps.stripe ?? getStripe(), customerId);
+  return subscriptions.some((subscription) => LIVE_SUBSCRIPTION_STATUSES.has(subscription.status as StripeSubscriptionStatus));
+}
+
+/**
+ * Stored live rows for this brand that Stripe no longer lists (deleted in
+ * Stripe, or no longer on the brand's customer) would otherwise keep the
+ * brand's access and seats forever. Mark them cancelled at `stateAt`, only
+ * where the stored state is older, and log a warning.
+ */
+async function cancelRowsStripeNoLongerLists(
+  service: SupabaseClient,
+  accountId: string,
+  listedIds: ReadonlySet<string>,
+  stateAt: Date,
+  now: Date,
+): Promise<string[]> {
+  const { data, error } = await service
+    .from('subscriptions')
+    .select('stripe_subscription_id')
+    .eq('account_id', accountId)
+    .in('status', [...LIVE_SUBSCRIPTION_STATUSES]);
+  if (error) throw new Error(`subscriptions lookup failed: ${error.message}`);
+
+  const cancelled: string[] = [];
+  for (const { stripe_subscription_id: id } of (data ?? []) as Array<{ stripe_subscription_id: string }>) {
+    if (listedIds.has(id)) continue;
+    const { data: updated, error: updateError } = await service
+      .from('subscriptions')
+      .update({ status: 'canceled', stripe_state_at: stateAt.toISOString(), updated_at: now.toISOString() })
+      .eq('stripe_subscription_id', id)
+      .eq('account_id', accountId)
+      .lt('stripe_state_at', stateAt.toISOString())
+      .select('stripe_subscription_id');
+    if (updateError) throw new Error(`subscriptions update failed: ${updateError.message}`);
+    if ((updated?.length ?? 0) > 0) cancelled.push(id);
+  }
+  if (cancelled.length) {
+    logger.warn('Stripe no longer lists these CheersAI subscriptions; stored rows marked canceled', { accountId, subscriptionIds: cancelled });
+  }
+  return cancelled;
+}
+
+/**
+ * More than one live CheersAI subscription on one customer may mean the brand
+ * is billed twice: tell the operator. The alert never blocks the reconcile; a
+ * failure to send it is logged as an error.
+ */
+async function warnIfBilledTwice(
+  service: SupabaseClient,
+  accountId: string,
+  customerId: string,
+  subscriptions: Stripe.Subscription[],
+): Promise<void> {
+  const live = subscriptions.filter((subscription) => LIVE_SUBSCRIPTION_STATUSES.has(subscription.status as StripeSubscriptionStatus));
+  if (live.length < 2) return;
+  const subscriptionIds = live.map((subscription) => subscription.id);
+  logger.error('brand has more than one live CheersAI subscription (possible double billing)', undefined, {
+    accountId,
+    customerId,
+    subscriptionIds,
+  });
+  try {
+    await alertPossibleDoubleBilling(service, { accountId, customerId, subscriptionIds });
+  } catch (error) {
+    logger.error('operator alert for possible double billing could not be sent', error instanceof Error ? error : undefined, { accountId });
+  }
 }
 
 async function finish(
@@ -250,8 +363,12 @@ export async function reconcileBrandFromStripe(accountId: string, deps: Reconcil
   // The state read below is at least as new as this moment.
   const stateAt = clock();
   const subscriptions = await listCheersSubscriptions(stripe, customerId);
+  const listedIds = new Set(subscriptions.map((subscription) => subscription.id));
+  await warnIfBilledTwice(service, accountId, customerId, subscriptions);
   const current = pickCurrentSubscription(subscriptions);
   if (!current) {
+    // Nothing in Stripe any more: stored live rows must stop granting access.
+    await cancelRowsStripeNoLongerLists(service, accountId, listedIds, stateAt, clock());
     return finish(service, accountId, clock(), { outcome: 'no_subscription', subscriptionId: null, status: null });
   }
 
@@ -277,6 +394,7 @@ export async function reconcileBrandFromStripe(accountId: string, deps: Reconcil
     }
     await writeSubscriptionRow(service, otherRow, false);
   }
+  await cancelRowsStripeNoLongerLists(service, accountId, listedIds, olderStateAt, now);
 
   logger.info('reconciled brand from Stripe', { accountId, subscriptionId: current.id, status: row.status, outcome });
   return finish(service, accountId, now, {

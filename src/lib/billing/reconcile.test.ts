@@ -5,9 +5,12 @@ import { billingServerEnv, createFakeStripe, fakeSubscription, TEST_PRICES, type
 
 const serverEnv = vi.hoisted(() => ({}) as Record<string, string>);
 vi.mock('@/env', () => ({ env: { server: serverEnv, client: { NEXT_PUBLIC_SITE_URL: 'https://cheers.orangejelly.co.uk' } } }));
-vi.mock('@/lib/logging', () => ({ createLogger: () => ({ debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }) }));
+const logger = vi.hoisted(() => ({ debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }));
+vi.mock('@/lib/logging', () => ({ createLogger: () => logger }));
+const mockDoubleBillingAlert = vi.fn();
+vi.mock('@/lib/notifications/operator-alerts', () => ({ alertPossibleDoubleBilling: (...args: unknown[]) => mockDoubleBillingAlert(...args) }));
 
-const { reconcileBrandFromStripe, ReconcileError } = await import('./reconcile');
+const { hasLiveCheersSubscription, reconcileBrandFromStripe, ReconcileError } = await import('./reconcile');
 const { BillingNotConfiguredError } = await import('./stripe');
 
 const BRAND = '6f1d2c3b-4a59-4e68-8d7c-9b0a1f2e3d4c';
@@ -27,6 +30,8 @@ function storedSubscription(id: string) {
 }
 
 beforeEach(() => {
+  vi.clearAllMocks();
+  mockDoubleBillingAlert.mockResolvedValue('sent');
   for (const key of Object.keys(serverEnv)) delete serverEnv[key];
   Object.assign(serverEnv, billingServerEnv());
   db = new InMemoryBillingDb();
@@ -309,5 +314,145 @@ describe('reconcileBrandFromStripe: held posts', () => {
     const result = await reconcile();
     expect(result).toMatchObject({ state: 'lapsed', released: 0 });
     expect(db.rows('publish_jobs')[0].status).toBe('held');
+  });
+});
+
+function storedRow(values: Record<string, unknown>) {
+  return {
+    stripe_subscription_id: 'sub_stored',
+    account_id: BRAND,
+    stripe_customer_id: CUSTOMER,
+    status: 'active',
+    plan: 'starter',
+    billing_interval: 'month',
+    stripe_price_id: TEST_PRICES.starterMonthly,
+    current_period_start: '2026-09-10T09:00:00.000Z',
+    current_period_end: '2026-10-10T09:00:00.000Z',
+    stripe_state_at: '2026-09-10T09:00:00.000Z',
+    ...values,
+  };
+}
+
+describe('reconcileBrandFromStripe: stored rows Stripe no longer lists', () => {
+  it('marks a stored live row cancelled, with a fresh stripe_state_at, when Stripe lists no CheersAI subscription', async () => {
+    db.seed('subscriptions', [storedRow({ stripe_subscription_id: 'sub_deleted_in_stripe' })]);
+
+    const result = await reconcile();
+
+    expect(result).toMatchObject({ outcome: 'no_subscription', state: 'lapsed' });
+    expect(storedSubscription('sub_deleted_in_stripe')).toMatchObject({ status: 'canceled', stripe_state_at: FETCHED_AT.toISOString() });
+    expect(logger.warn).toHaveBeenCalledWith(expect.stringMatching(/no longer lists/), expect.objectContaining({ subscriptionIds: ['sub_deleted_in_stripe'] }));
+  });
+
+  it('also cancels a stale live row when Stripe lists a different current subscription', async () => {
+    db.seed('subscriptions', [storedRow({ stripe_subscription_id: 'sub_vanished' })]);
+    fake.subscriptions.push(fakeSubscription({ id: 'sub_now', customer: CUSTOMER, status: 'active' }));
+
+    const result = await reconcile();
+
+    expect(result).toMatchObject({ subscriptionId: 'sub_now', state: 'active' });
+    expect(storedSubscription('sub_vanished')?.status).toBe('canceled');
+    expect(Date.parse(String(storedSubscription('sub_vanished')?.stripe_state_at))).toBeLessThan(
+      Date.parse(String(storedSubscription('sub_now')?.stripe_state_at)),
+    );
+  });
+
+  it('never touches another brand\'s rows or a row with a newer stored state', async () => {
+    db.seed('subscriptions', [
+      storedRow({ stripe_subscription_id: 'sub_other_brand', account_id: OTHER_BRAND, stripe_customer_id: 'cus_other' }),
+      storedRow({ stripe_subscription_id: 'sub_newer', stripe_state_at: '2026-09-26T10:05:00.000Z' }),
+    ]);
+
+    await reconcile();
+
+    expect(storedSubscription('sub_other_brand')).toMatchObject({ status: 'active', stripe_state_at: '2026-09-10T09:00:00.000Z' });
+    expect(storedSubscription('sub_newer')?.status).toBe('active');
+  });
+
+  it('refuses to work from a truncated Stripe list (more than 100 subscriptions)', async () => {
+    db.seed('subscriptions', [storedRow({})]);
+    fake.subscriptionsList.mockResolvedValueOnce({ object: 'list', data: [], has_more: true });
+    await expect(reconcile()).rejects.toBeInstanceOf(ReconcileError);
+    expect(storedSubscription('sub_stored')?.status).toBe('active');
+  });
+});
+
+describe('reconcileBrandFromStripe: possible double billing', () => {
+  it('alerts the operator when the customer has more than one live CheersAI subscription', async () => {
+    fake.subscriptions.push(
+      fakeSubscription({ id: 'sub_a', customer: CUSTOMER, status: 'active', created: '2026-09-01T09:00:00Z' }),
+      fakeSubscription({ id: 'sub_b', customer: CUSTOMER, status: 'trialing', created: '2026-09-20T09:00:00Z' }),
+      fakeSubscription({ id: 'sub_old', customer: CUSTOMER, status: 'canceled', created: '2026-07-01T09:00:00Z' }),
+    );
+
+    const result = await reconcile();
+
+    expect(result.outcome).toBe('synced');
+    expect(mockDoubleBillingAlert).toHaveBeenCalledWith(expect.anything(), {
+      accountId: BRAND,
+      customerId: CUSTOMER,
+      subscriptionIds: ['sub_a', 'sub_b'],
+    });
+    expect(logger.error).toHaveBeenCalledWith(expect.stringMatching(/double billing/), undefined, expect.objectContaining({ accountId: BRAND }));
+  });
+
+  it('does not alert for one live subscription plus ended ones', async () => {
+    fake.subscriptions.push(
+      fakeSubscription({ id: 'sub_a', customer: CUSTOMER, status: 'active' }),
+      fakeSubscription({ id: 'sub_old', customer: CUSTOMER, status: 'canceled' }),
+    );
+    await reconcile();
+    expect(mockDoubleBillingAlert).not.toHaveBeenCalled();
+  });
+
+  it('still reconciles when the alert cannot be sent, and logs that', async () => {
+    mockDoubleBillingAlert.mockRejectedValueOnce(new Error('Resend down'));
+    fake.subscriptions.push(
+      fakeSubscription({ id: 'sub_a', customer: CUSTOMER, status: 'active' }),
+      fakeSubscription({ id: 'sub_b', customer: CUSTOMER, status: 'past_due' }),
+    );
+    expect((await reconcile()).outcome).toBe('synced');
+    expect(logger.error).toHaveBeenCalledWith(expect.stringMatching(/could not be sent/), expect.any(Error), expect.anything());
+  });
+});
+
+describe('hasLiveCheersSubscription', () => {
+  const check = () => hasLiveCheersSubscription(db.client(), BRAND, { stripe: fake.stripe });
+
+  it('is true for a stored live row of this brand', async () => {
+    db.seed('subscriptions', [storedRow({ status: 'past_due' })]);
+    expect(await check()).toBe(true);
+    expect(fake.subscriptionsList).not.toHaveBeenCalled();
+  });
+
+  it('is true when Stripe lists a live CheersAI subscription the database has not seen yet', async () => {
+    fake.subscriptions.push(fakeSubscription({ customer: CUSTOMER, status: 'trialing' }));
+    expect(await check()).toBe(true);
+  });
+
+  it('is false for ended subscriptions, and ignores another brand\'s live rows', async () => {
+    db.seed('subscriptions', [
+      storedRow({ status: 'canceled' }),
+      storedRow({ stripe_subscription_id: 'sub_other', account_id: OTHER_BRAND, stripe_customer_id: 'cus_other', status: 'active' }),
+    ]);
+    fake.subscriptions.push(fakeSubscription({ customer: CUSTOMER, status: 'canceled' }), fakeSubscription({ customer: 'cus_other', status: 'active' }));
+    expect(await check()).toBe(false);
+  });
+
+  it('uses the stored rows only when Stripe is not configured', async () => {
+    delete serverEnv.STRIPE_SECRET_KEY;
+    fake.subscriptions.push(fakeSubscription({ customer: CUSTOMER, status: 'active' }));
+    expect(await check()).toBe(false);
+    expect(fake.subscriptionsList).not.toHaveBeenCalled();
+  });
+
+  it('throws when a lookup fails, so callers fail closed', async () => {
+    db.fail('subscriptions', 'select');
+    await expect(check()).rejects.toThrow(/subscriptions lookup failed/);
+    db = new InMemoryBillingDb();
+    db.seed('accounts', [{ id: BRAND, business_name: 'New Venue' }]);
+    db.seed('billing_customers', [{ account_id: BRAND, stripe_customer_id: CUSTOMER }]);
+    fake.subscriptionsList.mockRejectedValueOnce(new Error('Stripe API unavailable'));
+    await expect(check()).rejects.toThrow('Stripe API unavailable');
   });
 });
