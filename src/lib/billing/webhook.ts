@@ -45,6 +45,8 @@ export interface WebhookDeps {
 }
 
 interface EventObjectShape {
+  id?: string;
+  object?: string;
   customer?: string | { id: string } | null;
   metadata?: Record<string, string> | null;
   client_reference_id?: string | null;
@@ -105,7 +107,8 @@ export async function processStripeEvent(
   if (recorded === 'done') return { status: 200, body: { received: true, duplicate: true } };
 
   const object = (event.data?.object ?? {}) as EventObjectShape;
-  const customerId = stripeId(object.customer ?? null);
+  // Customer events carry the customer itself; everything else points at one.
+  const customerId = object.object === 'customer' ? (object.id ?? null) : stripeId(object.customer ?? null);
 
   let accountId: string | null = null;
   try {

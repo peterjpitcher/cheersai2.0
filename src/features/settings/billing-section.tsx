@@ -95,6 +95,11 @@ export function BillingSection({ overview, plans, canManage, checkoutReturn, tri
         toast.error("Billing", { description: message });
         return;
       }
+      if (result.state === "incomplete") {
+        toast.info("Not confirmed yet", {
+          description: "Stripe has not confirmed a subscription yet. If you finished checkout, wait a minute and check again.",
+        });
+      }
       router.refresh();
     });
   }

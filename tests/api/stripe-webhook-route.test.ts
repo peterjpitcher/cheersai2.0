@@ -148,11 +148,16 @@ describe('POST /api/stripe/webhook: processing', () => {
     expect(mockReconcile).not.toHaveBeenCalled();
   });
 
-  it('records other event types for a CheersAI customer without reconciling', async () => {
-    const response = await POST(signedRequest(event('evt_other', 'customer.updated', { id: CHEERS_CUSTOMER, customer: CHEERS_CUSTOMER })));
+  it('records other event types for a CheersAI customer without reconciling or raising an error', async () => {
+    const response = await POST(
+      signedRequest(event('evt_other', 'customer.updated', { id: CHEERS_CUSTOMER, object: 'customer', metadata: { app: 'cheersai', account_id: BRAND } })),
+    );
     expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ handled: false });
     expect(mockReconcile).not.toHaveBeenCalled();
+    expect(storedEvent('evt_other')).toMatchObject({ error: null });
     expect(storedEvent('evt_other')?.processed_at).toBeTruthy();
+    expect(logger.error).not.toHaveBeenCalled();
   });
 
   it('answers 500 when processing fails, keeps the error, logs it and alerts the operator', async () => {
