@@ -103,6 +103,55 @@ export async function alertRepeatedPublishFailures(
   return result;
 }
 
+const STRIPE_ALERT_ACTION = 'operator_stripe_webhook_alert';
+
+/**
+ * Tell the operator a Stripe webhook event failed to process (Stripe retries
+ * it for up to three days). At most one email per rolling 24 hours, so a
+ * failing event retried many times does not flood the inbox; every failure is
+ * still logged and kept on its stripe_events row.
+ */
+export async function alertStripeWebhookFailure(
+  service: SupabaseClient,
+  details: { eventId: string; eventType: string; message: string; accountId: string | null },
+  now: Date = new Date(),
+): Promise<'sent' | 'skipped'> {
+  const cutoff = new Date(now.getTime() - WINDOW_MS).toISOString();
+  const { data: recentAlert, error: auditError } = await service
+    .from('admin_audit')
+    .select('id')
+    .eq('action', STRIPE_ALERT_ACTION)
+    .gt('created_at', cutoff)
+    .limit(1)
+    .maybeSingle();
+  if (auditError) throw new Error(`admin_audit lookup failed: ${auditError.message}`);
+  if (recentAlert) return 'skipped';
+
+  const to = env.server.OPERATOR_ALERT_EMAIL;
+  if (!to) throw new Error('OPERATOR_ALERT_EMAIL is not set; cannot send operator alert.');
+
+  await sendEmail({
+    to,
+    subject: `[Cheers operator] Stripe webhook failing: ${details.eventType}`,
+    html: `
+<p>A Stripe event could not be processed. Stripe will keep retrying it.</p>
+<p>Event: ${escapeHtml(details.eventId)} (${escapeHtml(details.eventType)})</p>
+<p>Brand id: ${escapeHtml(details.accountId ?? 'unknown')}</p>
+<p>Error: ${escapeHtml(details.message.slice(0, 500))}</p>
+<p>Check stripe_events rows with an error, then use "Re-sync from Stripe" on the admin page for the brand. You will not get another alert like this for 24 hours.</p>
+`.trim(),
+    required: true,
+  });
+
+  await logAdminEvent({
+    actorUserId: null,
+    action: STRIPE_ALERT_ACTION,
+    targetAccountId: details.accountId,
+    detail: { eventId: details.eventId, eventType: details.eventType },
+  });
+  return 'sent';
+}
+
 function escapeHtml(text: string): string {
   return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }

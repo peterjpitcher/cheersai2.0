@@ -14,6 +14,8 @@ export type AdminAction =
   | 'send_password_link'
   | 'set_brand_feature'
   | 'set_billing_override'
+  | 'stripe_resync'
+  | 'operator_stripe_webhook_alert'
   | 'offboard_brand'
   | 'export_brand_data'
   | 'purge_brand'
