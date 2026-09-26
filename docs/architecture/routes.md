@@ -90,7 +90,6 @@ project: cheersai-2.0
 | `/api/cron/purge-trash` | GET, POST | `src/app/api/cron/purge-trash/route.ts` |
 | `/api/cron/retry-capi-conversions` | GET, POST | `src/app/api/cron/retry-capi-conversions/route.ts` |
 | `/api/cron/sync-meta-campaigns` | GET, POST | `src/app/api/cron/sync-meta-campaigns/route.ts` |
-| `/api/cron/token-health` | GET | `src/app/api/cron/token-health/route.ts` |
 
 `/api/cron/publish` is a tombstone: both methods return 410 with no auth check,
 and it is not scheduled in `vercel.json`. Every other route above is scheduled
