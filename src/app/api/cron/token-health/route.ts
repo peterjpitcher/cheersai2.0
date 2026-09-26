@@ -81,7 +81,7 @@ async function checkTokenHealth(): Promise<{
   if (!connections || connections.length === 0) {
     return {
       status: 200,
-      body: { checked: 0, healthy: 0, warning: 0, expired: 0, emailsSent: 0 },
+      body: { checked: 0, healthy: 0, warning: 0, expired: 0, emailsSent: 0, errors: 0 },
     };
   }
 
@@ -89,6 +89,7 @@ async function checkTokenHealth(): Promise<{
   let warning = 0;
   let expired = 0;
   let emailsSent = 0;
+  let errors = 0;
 
   for (const conn of connections) {
     const provider = conn.provider as ProviderPlatform;
@@ -150,7 +151,7 @@ async function checkTokenHealth(): Promise<{
         const statusLabel = conn.status === 'disconnected' ? 'disconnected' : 'token expired';
 
         // Insert in-app notification
-        const { inserted } = await insertNotification({
+        const notification = await insertNotification({
           supabase: service,
           accountId: conn.account_id,
           category,
@@ -160,8 +161,18 @@ async function checkTokenHealth(): Promise<{
           resourceId: conn.id,
         });
 
-        // Only send email if notification was new (not a duplicate)
-        if (inserted && shouldSendEmail(category)) {
+        if (notification.status === 'failed') {
+          // Nothing was recorded, so this is a failure, not "already notified".
+          errors++;
+          console.error(
+            `[token-health] Failed to record notification for connection ${conn.id}:`,
+            notification.error,
+          );
+        }
+
+        // Email unless the owner was already told in the last 24h. A failed
+        // record still emails, so the owner hears either way.
+        if (notification.status !== 'duplicate' && shouldSendEmail(category)) {
           try {
             // Check account notification preferences
             const { data: postingDefaults } = await service
@@ -203,6 +214,7 @@ async function checkTokenHealth(): Promise<{
               }
             }
           } catch (emailErr) {
+            errors++;
             console.error(
               `[token-health] Failed to send email for connection ${conn.id}:`,
               emailErr instanceof Error ? emailErr.message : String(emailErr),
@@ -220,11 +232,13 @@ async function checkTokenHealth(): Promise<{
     warning,
     expired,
     emailsSent,
+    errors,
   };
 
   console.log('[token-health] Nightly check complete:', JSON.stringify(summary));
 
-  return { status: 200, body: summary };
+  // Any error fails the run so it shows up in the logs instead of passing quietly.
+  return { status: errors > 0 ? 500 : 200, body: summary };
 }
 
 /**

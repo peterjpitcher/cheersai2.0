@@ -86,7 +86,7 @@ async function notifyExpiringConnections(): Promise<{
   if (!expiringConnections || expiringConnections.length === 0) {
     return {
       status: 200,
-      body: { processed: 0, notified: 0, emailed: 0, skipped: 0 },
+      body: { processed: 0, notified: 0, emailed: 0, skipped: 0, errors: 0 },
     };
   }
 
@@ -103,6 +103,7 @@ async function notifyExpiringConnections(): Promise<{
   let notified = 0;
   let emailed = 0;
   let skipped = 0;
+  let errors = 0;
 
   for (const connection of connectionsInWindow) {
     try {
@@ -113,7 +114,7 @@ async function notifyExpiringConnections(): Promise<{
       const dayWord = days === 1 ? "day" : "days";
 
       // ── Insert in-app notification via shared helper (idempotency built in) ──
-      const { inserted } = await insertNotification({
+      const notification = await insertNotification({
         supabase: service,
         accountId: connection.account_id,
         category: "connection_expiring",
@@ -123,13 +124,21 @@ async function notifyExpiringConnections(): Promise<{
         resourceId: connection.id,
       });
 
-      if (!inserted) {
+      if (notification.status === "failed") {
+        // Nothing was recorded, so this is a failure, not "already notified".
+        // Report it, and still send the email below so the owner hears.
+        errors++;
+        console.error(
+          `[notify-expiring-connections] Failed to record notification for connection ${connection.id}:`,
+          notification.error,
+        );
+      } else if (notification.status === "duplicate") {
         // Already notified within 24h — skip
         skipped++;
         continue;
+      } else {
+        notified++;
       }
-
-      notified++;
 
       // ── Email only when <= 4 days (NOTIF-04) ─────────────────────────────
       if (days > EMAIL_THRESHOLD_DAYS) {
@@ -197,17 +206,19 @@ async function notifyExpiringConnections(): Promise<{
         `[notify-expiring-connections] Unexpected error processing connection ${connection.id}:`,
         err instanceof Error ? err.message : String(err),
       );
-      skipped++;
+      errors++;
     }
   }
 
+  // Any error fails the run so it shows up in Vercel instead of passing quietly.
   return {
-    status: 200,
+    status: errors > 0 ? 500 : 200,
     body: {
       processed: connectionsInWindow.length,
       notified,
       emailed,
       skipped,
+      errors,
     },
   };
 }
