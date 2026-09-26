@@ -16,6 +16,8 @@ export type AdminAction =
   | 'set_billing_override'
   | 'stripe_resync'
   | 'operator_stripe_webhook_alert'
+  | 'operator_stripe_invoice_alert'
+  | 'operator_stripe_double_billing_alert'
   | 'offboard_brand'
   | 'export_brand_data'
   | 'purge_brand'
