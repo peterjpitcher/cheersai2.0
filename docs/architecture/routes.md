@@ -13,6 +13,7 @@ project: cheersai-2.0
 
 | URL | File | Purpose |
 |-----|------|---------|
+| `/admin` | `src/app/(app)/admin/page.tsx` | Brands and user access (super-admin only; gated in the layout and again in the page) |
 | `/analytics` | `src/app/(app)/analytics/page.tsx` | Analytics dashboard |
 | `/campaigns` | `src/app/(app)/campaigns/page.tsx` | Campaign list |
 | `/campaigns/new` | `src/app/(app)/campaigns/new/page.tsx` | Create new campaign |
@@ -36,6 +37,7 @@ project: cheersai-2.0
 | URL | File | Purpose |
 |-----|------|---------|
 | `/login` | `src/app/(auth)/login/page.tsx` | Sign in |
+| `/forgot-password` | `src/app/(auth)/forgot-password/page.tsx` | Request a password reset email |
 
 ### Public `(public)` -- no auth
 
@@ -51,9 +53,11 @@ project: cheersai-2.0
 | `/` | `src/app/page.tsx` | Landing/home page |
 | `/terms` | `src/app/terms/page.tsx` | Terms of service |
 | `/help/[...slug]` | `src/app/help/[[...slug]]/page.tsx` | Help centre |
-| `/auth/login` | `src/app/auth/login/page.tsx` | Alternate login |
-| `/auth/signup` | `src/app/auth/signup/page.tsx` | Sign up |
-| `/auth/forgot-password` | `src/app/auth/forgot-password/page.tsx` | Password reset |
+| `/auth/login` | `src/app/auth/login/page.tsx` | Permanent redirect to `/login` |
+| `/auth/signup` | `src/app/auth/signup/page.tsx` | Permanent redirect to `/login` |
+| `/auth/forgot-password` | `src/app/auth/forgot-password/page.tsx` | Permanent redirect to `/forgot-password` |
+| `/auth/set-password` | `src/app/auth/set-password/page.tsx` | Choose a password after an invite or reset link (needs the session `/auth/confirm` sets) |
+| `/no-access` | `src/app/no-access/page.tsx` | Signed-in user with no brand assigned (outside `(app)`, so no active brand is needed) |
 
 ## API Routes
 
@@ -99,12 +103,22 @@ section 5 of `docs/agent-reference.md`.
 |------|--------|------|------|
 | `/api/webhooks/qstash-publish` | POST | QStash signature | `src/app/api/webhooks/qstash-publish/route.ts` |
 | `/api/webhooks/qstash-publish/failure` | POST | QStash signature | `src/app/api/webhooks/qstash-publish/failure/route.ts` |
+| `/api/webhooks/qstash-food-materialise` | POST | QStash signature | `src/app/api/webhooks/qstash-food-materialise/route.ts` |
+
+### Meta data callbacks
+
+| Path | Method | Auth | File |
+|------|--------|------|------|
+| `/api/social/deauthorize` | POST | Meta `signed_request` (`FACEBOOK_APP_SECRET`) | `src/app/api/social/deauthorize/route.ts` |
+| `/api/social/delete-data` | POST, GET | POST: Meta `signed_request`; GET: public status lookup by confirmation code | `src/app/api/social/delete-data/route.ts` |
 
 ### Content & Data
 
 | Path | Method | Auth | File |
 |------|--------|------|------|
 | `/api/content/[id]` | GET | Session (getUser) | `src/app/api/content/[id]/route.ts` |
+| `/api/create/event-artwork` | POST | Session (getCurrentUser, active brand), rate limited per brand | `src/app/api/create/event-artwork/route.ts` |
+| `/api/tournaments/base-image` | POST | Same-origin check, then session (`requireFeatureContext`) | `src/app/api/tournaments/base-image/route.ts` |
 | `/api/planner/activity` | GET | Session | `src/app/api/planner/activity/route.ts` |
 | `/api/feed/[tournamentId]` | GET | API key (public feed) | `src/app/api/feed/[tournamentId]/route.ts` |
 | `/api/booking-conversions` | POST | BOOKING_CONVERSION_INGEST_SECRET | `src/app/api/booking-conversions/route.ts` |
@@ -113,6 +127,7 @@ section 5 of `docs/agent-reference.md`.
 
 | Path | Method | Auth | File |
 |------|--------|------|------|
+| `/api/internal/link-in-bio-timing` | GET | CRON_SECRET | `src/app/api/internal/link-in-bio-timing/route.ts` |
 | `/api/internal/render-banner` | POST | CRON_SECRET | `src/app/api/internal/render-banner/route.ts` |
 | `/manifest.json` | GET | None | `src/app/manifest.json/route.ts` |
 
