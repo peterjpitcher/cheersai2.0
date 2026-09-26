@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { orPredicate } from "../../helpers/postgrest-or";
+
 // ---------------------------------------------------------------------------
 // In-memory store for disconnectAdAccount. It runs the real
 // deleteMetaAdAccountTokens and enforces the live NOT NULL rules on
@@ -50,18 +52,6 @@ vi.mock("@/lib/meta/graph", () => ({
 vi.mock("@/lib/connections/oauth", () => ({
   buildFacebookAdsOAuthUrl: () => "https://facebook.test/oauth",
 }));
-
-/** Supports the `col.is.null` and `col.gte.value` terms used by the action. */
-function orPredicate(filter: string): (r: Row) => boolean {
-  const terms = filter.split(",").map((term) => {
-    const [column, op, ...rest] = term.split(".");
-    const value = rest.join(".");
-    if (op === "is" && value === "null") return (r: Row) => r[column] === null || r[column] === undefined;
-    if (op === "gte") return (r: Row) => typeof r[column] === "string" && (r[column] as string) >= value;
-    throw new Error(`unsupported or() term ${term}`);
-  });
-  return (r) => terms.some((test) => test(r));
-}
 
 function query(table: string) {
   fromCalls.push(table);
@@ -116,6 +106,7 @@ function query(table: string) {
       preds.push((r) => vs.includes(r[c]));
       return q;
     },
+    // Each or() is its own predicate, so two or() calls are ANDed as PostgREST does.
     or: (filter: string) => {
       preds.push(orPredicate(filter));
       return q;
@@ -150,8 +141,14 @@ function adAccount(accountId: string, overrides: Row = {}): Row {
   };
 }
 
-function campaign(id: string, accountId: string, status: string, endDate: string | null): Row {
-  return { id, account_id: accountId, status, end_date: endDate };
+function campaign(
+  id: string,
+  accountId: string,
+  status: string,
+  endDate: string | null,
+  metaStatus: string | null = status,
+): Row {
+  return { id, account_id: accountId, status, meta_status: metaStatus, end_date: endDate };
 }
 
 function ownerContext(overrides: Row = {}) {
@@ -224,6 +221,29 @@ describe("disconnectAdAccount", () => {
     expect(result.error).toMatch(/^Pause your running campaigns in Campaigns first/);
     expect(tokenIds()).toHaveLength(3);
     expect(adRow(BRAND)?.setup_complete).toBe(true);
+  });
+
+  it("refuses when Meta reports a campaign live that the app shows as paused", async () => {
+    // Switched back on in Ads Manager: the app says PAUSED, Meta last reported ACTIVE.
+    db.meta_campaigns.push(campaign("reactivated", BRAND, "PAUSED", "2026-10-16", "ACTIVE"));
+
+    const result = await disconnectAdAccount();
+
+    expect(result.error).toMatch(/^Pause your running campaigns in Campaigns first/);
+    expect(tokenIds()).toHaveLength(3);
+    expect(adRow(BRAND)?.setup_complete).toBe(true);
+  });
+
+  it("is not blocked by an ACTIVE campaign whose end date has passed, whatever Meta last reported", async () => {
+    db.meta_campaigns = [
+      campaign("ended-yesterday", BRAND, "ACTIVE", "2026-09-25"),
+      campaign("ended-meta-active", BRAND, "PAUSED", "2026-09-01", "ACTIVE"),
+    ];
+
+    const result = await disconnectAdAccount();
+
+    expect(result).toEqual({ success: true });
+    expect(tokenIds()).toEqual(["tok-other"]);
   });
 
   it("uses the London date: at 00:30 BST a campaign that ended the day before does not block", async () => {

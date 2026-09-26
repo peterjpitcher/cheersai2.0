@@ -1,7 +1,6 @@
 "use server";
 
 import { randomUUID } from "crypto";
-import { DateTime } from "luxon";
 import { revalidatePath } from "next/cache";
 
 import { requireFeatureContext } from "@/lib/auth/features";
@@ -11,7 +10,7 @@ import {
   BOOKING_CONVERSION_EVENT_NAME,
   buildConversionReadiness,
 } from "@/lib/campaigns/conversion-readiness";
-import { DEFAULT_TIMEZONE } from "@/lib/constants";
+import { countCampaignsThatCanSpend } from "@/lib/campaigns/live-spend";
 import {
   deleteMetaAdAccountTokens,
   getMetaAdAccountTokens,
@@ -310,9 +309,8 @@ export async function getAdAccountSetupStatus(): Promise<AdAccountSetupStatus> {
  * marks setup incomplete, so CheersAI holds no Meta ads credentials afterwards.
  * The ad account id, pixel id and conversion settings stay for a reconnect.
  *
- * Refused while a campaign can still spend, because without the token the app
- * could no longer pause it. Campaigns stay ACTIVE in meta_campaigns after their
- * end date, so only those with no end date or one on or after today count.
+ * Refused while a campaign can still spend (see countCampaignsThatCanSpend),
+ * because without the token the app could no longer pause it.
  */
 export async function disconnectAdAccount(): Promise<{ success?: boolean; error?: string }> {
   const adsCtx = await requireFeatureContext('paidAds');
@@ -320,24 +318,18 @@ export async function disconnectAdAccount(): Promise<{ success?: boolean; error?
   const { accountId } = adsCtx;
   const supabase = createServiceSupabaseClient();
 
-  // London calendar day: a campaign ending today still spends today.
-  const today = DateTime.now().setZone(DEFAULT_TIMEZONE).toISODate();
-  const { count: runningCampaigns, error: campaignError } = await supabase
-    .from("meta_campaigns")
-    .select("id", { count: "exact", head: true })
-    .eq("account_id", accountId)
-    .eq("status", "ACTIVE")
-    .or(`end_date.is.null,end_date.gte.${today}`);
-
-  if (campaignError) {
+  let runningCampaigns: number;
+  try {
+    runningCampaigns = await countCampaignsThatCanSpend(supabase, accountId);
+  } catch (campaignError) {
     console.error("[ads] failed to check running campaigns before disconnect", {
       accountId,
-      error: campaignError,
+      error: campaignError instanceof Error ? campaignError.message : campaignError,
     });
     return { error: "Could not check your campaigns, so Meta Ads is still connected. Please try again." };
   }
 
-  if ((runningCampaigns ?? 0) > 0) {
+  if (runningCampaigns > 0) {
     return {
       error: "Pause your running campaigns in Campaigns first, so spend cannot carry on after CheersAI loses access.",
     };

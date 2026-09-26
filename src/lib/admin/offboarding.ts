@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
+import { countCampaignsThatCanSpend } from '@/lib/campaigns/live-spend';
 import { MEDIA_BUCKET } from '@/lib/constants';
 import { deleteMetaAdAccountTokens } from '@/lib/meta/ad-account-tokens';
 
@@ -8,8 +9,10 @@ import { deleteMetaAdAccountTokens } from '@/lib/meta/ad-account-tokens';
  * button. Three separate steps, each refusing when unsafe:
  *
  * 1. offboardBrand: stop everything now. Refused while a Stripe subscription
- *    is still running (cancel it first) or a paid Meta campaign is live
- *    (revoking the token would leave spend running with no way to pause it).
+ *    is still running (cancel it first) or a paid Meta campaign can still
+ *    spend (countCampaignsThatCanSpend: ACTIVE in the app or at Meta and not
+ *    past its end date), since revoking the token would leave spend running
+ *    with no way to pause it.
  *    Scheduled posts become drafts and their jobs are held, every credential
  *    we hold for the brand is deleted (Facebook, Instagram and ads tokens, the
  *    Conversions API token, the booking-ingest key, tournament feed keys and
@@ -86,15 +89,10 @@ export async function offboardBrand(
     return { error: 'Cancel the brand\'s Stripe subscription first, then offboard.' };
   }
 
-  // status is the app's view; meta_status is what Meta last reported, which
-  // differs when a campaign was switched back on in Ads Manager.
-  const { count: liveCampaigns, error: campaignError } = await service
-    .from('meta_campaigns')
-    .select('id', { count: 'exact', head: true })
-    .eq('account_id', accountId)
-    .or('status.eq.ACTIVE,meta_status.eq.ACTIVE');
-  if (campaignError) throw new Error(`meta_campaigns lookup failed: ${campaignError.message}`);
-  if ((liveCampaigns ?? 0) > 0) {
+  // ACTIVE in the app or at Meta, with no end date or one today or later. A
+  // campaign that ended months ago stays ACTIVE in the table but cannot spend.
+  const liveCampaigns = await countCampaignsThatCanSpend(service, accountId, now);
+  if (liveCampaigns > 0) {
     return { error: 'Pause the brand\'s live Meta ad campaigns first, so spend cannot run on after the token is deleted.' };
   }
 
