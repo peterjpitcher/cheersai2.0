@@ -102,6 +102,10 @@ const serverEnv = {
   // CheersAI's own customer portal configuration. Always passed explicitly:
   // the Stripe account is shared and its default portal belongs to another app.
   STRIPE_PORTAL_CONFIGURATION_ID: readOptionalEnv("STRIPE_PORTAL_CONFIGURATION_ID"),
+  // Set by Vercel: "production", "preview" or "development". In production
+  // billing only accepts a live-mode STRIPE_SECRET_KEY (src/lib/billing/stripe.ts),
+  // so a test key can never write test customers into the production database.
+  VERCEL_ENV: readOptionalEnv("VERCEL_ENV"),
   // Token vault (AES-256-GCM encryption key -- 64 hex chars = 32 bytes)
   TOKEN_VAULT_KEY: readOptionalEnv("TOKEN_VAULT_KEY"),
   TOKEN_VAULT_KEY_VERSION: readOptionalEnv("TOKEN_VAULT_KEY_VERSION", "1"),

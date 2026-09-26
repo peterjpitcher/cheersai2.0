@@ -4,6 +4,7 @@ import Stripe from 'stripe';
 
 import { env } from '@/env';
 import { ALL_STRIPE_PRICE_ENV_KEYS } from '@/lib/billing/plans';
+import { createLogger } from '@/lib/logging';
 
 /**
  * The one Stripe client for CheersAI (spec §4.3). Server-only.
@@ -36,9 +37,40 @@ const REQUIRED_ENV: Record<BillingPurpose, readonly ServerEnvKey[]> = {
   webhook: ['STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET', ...ALL_STRIPE_PRICE_ENV_KEYS],
 };
 
+const logger = createLogger('billing');
+
+/** Secret and restricted keys of Stripe live mode. */
+const LIVE_KEY_PREFIXES = ['sk_live_', 'rk_live_'] as const;
+
+let reportedTestKeyInProduction: string | null = null;
+
+/**
+ * The Stripe secret key billing may use, or null. In production
+ * (VERCEL_ENV=production) only a live-mode key counts: a test-mode key there
+ * would write test customers and subscriptions into the production database,
+ * so it is treated as "billing not set up" and logged as an error (once per
+ * key value, without any of the key itself).
+ */
+function usableSecretKey(): string | null {
+  const key = env.server.STRIPE_SECRET_KEY;
+  if (!key) return null;
+  if (env.server.VERCEL_ENV === 'production' && !LIVE_KEY_PREFIXES.some((prefix) => key.startsWith(prefix))) {
+    if (reportedTestKeyInProduction !== key) {
+      reportedTestKeyInProduction = key;
+      logger.error(
+        'STRIPE_SECRET_KEY is not a live-mode key in production; billing is treated as not set up',
+        new Error('stripe_key_not_live'),
+        { vercelEnv: env.server.VERCEL_ENV },
+      );
+    }
+    return null;
+  }
+  return key;
+}
+
 /** Names of the env vars a billing path needs but does not have (empty when ready). */
 export function missingBillingEnv(purpose: BillingPurpose): string[] {
-  return REQUIRED_ENV[purpose].filter((key) => !env.server[key]);
+  return REQUIRED_ENV[purpose].filter((key) => (key === 'STRIPE_SECRET_KEY' ? !usableSecretKey() : !env.server[key]));
 }
 
 export class BillingNotConfiguredError extends Error {
@@ -56,9 +88,9 @@ export function assertBillingConfigured(purpose: BillingPurpose): void {
 
 let cached: { key: string; client: Stripe } | null = null;
 
-/** The shared Stripe client. Throws BillingNotConfiguredError without a secret key. */
+/** The shared Stripe client. Throws BillingNotConfiguredError without a usable secret key. */
 export function getStripe(): Stripe {
-  const key = env.server.STRIPE_SECRET_KEY;
+  const key = usableSecretKey();
   if (!key) throw new BillingNotConfiguredError(['STRIPE_SECRET_KEY']);
   if (cached?.key === key) return cached.client;
   const client = new Stripe(key, {
