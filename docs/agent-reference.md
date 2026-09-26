@@ -73,7 +73,7 @@ Data flow: auth context is server-initialised and exposed read-only through `src
 
 ## 4. API route surface (`src/app/api/`)
 
-`auth/login`, `auth/magic-link`, `booking-conversions`, `content/[id]`, `create/event-artwork`, `create/generate-stream`, `cron/*` (see section 5), `feed/[tournamentId]`, `internal/link-in-bio-timing`, `internal/render-banner`, `oauth/[provider]` and `oauth/[provider]/callback`, `oauth/facebook-ads` and its callback, `planner/activity`, `social/delete-data`, `webhooks/qstash-publish` and `webhooks/qstash-publish/failure`, `webhooks/qstash-food-materialise`.
+`auth/login`, `auth/magic-link`, `booking-conversions`, `content/[id]`, `create/event-artwork`, `cron/*` (see section 5), `feed/[tournamentId]`, `internal/link-in-bio-timing`, `internal/render-banner`, `oauth/[provider]/callback`, `oauth/facebook-ads/callback`, `planner/activity`, `social/deauthorize`, `social/delete-data`, `tournaments/base-image`, `webhooks/qstash-publish` and `webhooks/qstash-publish/failure`, `webhooks/qstash-food-materialise`.
 
 ## 5. Scheduled jobs
 
