@@ -114,9 +114,10 @@ Route that exists but is not in `vercel.json`: `/api/cron/publish` (a 410 tombst
 | `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN` | Auth rate limiting (skipped when unset) |
 | `AXIOM_TOKEN`, `AXIOM_DATASET` | Structured logging (silent when unset) |
 | `BOOKING_CONVERSION_INGEST_SECRET`, `BOOKING_CONVERSION_ACCOUNT_ID` | Booking-conversion ingest defaults |
-| `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | Stripe billing, server only and optional at build time (billing says "not set up yet" and the webhook answers 503 without them); test and live mode each have their own |
+| `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | Stripe billing, server only and optional at build time (billing says "not set up yet" and the webhook answers 503 without them); test and live mode each have their own. In production only a live key (`sk_live_`, `rk_live_`) counts. Setup and rotation: `docs/runbooks/stripe-billing.md` |
 | `STRIPE_PRICE_STARTER_MONTHLY`, `STRIPE_PRICE_STARTER_ANNUAL`, `STRIPE_PRICE_PROFESSIONAL_MONTHLY`, `STRIPE_PRICE_PROFESSIONAL_ANNUAL` | Stripe price ids; mapped to plans only in `src/lib/billing/plans.ts` |
 | `STRIPE_PORTAL_CONFIGURATION_ID` | CheersAI's own customer portal configuration (the Stripe account is shared with the management app, whose portal is the account default) |
+| `VERCEL_ENV` | Set by Vercel (`production`, `preview`, `development`); billing refuses a test-mode Stripe key when it is `production` |
 | `MANAGEMENT_ARTWORK_ORIGINS` | Allowed hosts for management-app artwork fetches |
 | `ENABLE_CONNECTION_DIAGNOSTICS` | Verbose integration logging |
 | `FOOD_OPTIMISATION_ENABLED`, `FOOD_AUTO_MATERIALISE_ENABLED`, `NEXT_PUBLIC_ENABLE_FOOD_BOOKING` | Feature flags, default off |
