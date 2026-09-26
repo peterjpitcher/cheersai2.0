@@ -25,7 +25,6 @@ project: cheersai-2.0
 | Email client | `src/lib/email/resend.ts` | Shared `sendEmail()` function |
 | Failure notifications | `src/app/api/cron/notify-failures/route.ts` | Alert on publish failures |
 | Expiring connections | `src/app/api/cron/notify-expiring-connections/route.ts` | Token expiry warnings |
-| Token health alerts | `src/app/api/cron/token-health/route.ts` | Unhealthy token alerts |
 | QStash failure webhook | `src/app/api/webhooks/qstash-publish/failure/route.ts` | Publish failure alerts |
 
 ### QStash (Background Jobs)

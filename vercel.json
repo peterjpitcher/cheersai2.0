@@ -35,10 +35,6 @@
     {
       "path": "/api/cron/notify-expiring-connections",
       "schedule": "0 8 * * *"
-    },
-    {
-      "path": "/api/cron/token-health",
-      "schedule": "0 2 * * *"
     }
   ]
 }

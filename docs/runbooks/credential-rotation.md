@@ -59,7 +59,7 @@ This is the most sensitive credential. Uses lazy re-encrypt strategy:
 3. Copy the new key
 4. Update in Vercel: `SUPABASE_SERVICE_ROLE_KEY=<new_key>`
 5. Redeploy
-6. Test: trigger any cron job (e.g., token-health) and verify it succeeds
+6. Test: trigger any cron job (e.g., notify-expiring-connections) and verify it succeeds
 
 ### CRON_SECRET / ALERTS_SECRET
 

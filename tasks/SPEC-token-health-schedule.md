@@ -1,5 +1,7 @@
 # SPEC: schedule the token-health cron
 
+**Superseded on 2026-09-26** by `tasks/SPEC-remove-token-health-cron.md`: the route and this nightly schedule were removed. Scheduling it would have emailed offboarded brands, and venues that disconnected or removed the app on purpose, a reconnect notice every night. Expiry warnings still come from `notify-expiring-connections`, and failed posts from `notify-failures`.
+
 ## Problem
 
 `/api/cron/token-health` is the only alert for a connection that has already expired or needs
