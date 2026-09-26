@@ -88,6 +88,20 @@ const serverEnv = {
     "MANAGEMENT_ARTWORK_ORIGINS",
     "https://tfcasgxopxegwrabvwat.supabase.co",
   ),
+  // Stripe billing (spec §4.3). Server-only and optional at build time so a
+  // deploy without them still builds; billing actions then answer "Billing is
+  // not set up yet" and the webhook returns 503 (never a silent success).
+  // Price ids map to plans only in src/lib/billing/plans.ts. Test and live
+  // mode use different keys and price ids: keep each environment consistent.
+  STRIPE_SECRET_KEY: readOptionalEnv("STRIPE_SECRET_KEY"),
+  STRIPE_WEBHOOK_SECRET: readOptionalEnv("STRIPE_WEBHOOK_SECRET"),
+  STRIPE_PRICE_STARTER_MONTHLY: readOptionalEnv("STRIPE_PRICE_STARTER_MONTHLY"),
+  STRIPE_PRICE_STARTER_ANNUAL: readOptionalEnv("STRIPE_PRICE_STARTER_ANNUAL"),
+  STRIPE_PRICE_PROFESSIONAL_MONTHLY: readOptionalEnv("STRIPE_PRICE_PROFESSIONAL_MONTHLY"),
+  STRIPE_PRICE_PROFESSIONAL_ANNUAL: readOptionalEnv("STRIPE_PRICE_PROFESSIONAL_ANNUAL"),
+  // CheersAI's own customer portal configuration. Always passed explicitly:
+  // the Stripe account is shared and its default portal belongs to another app.
+  STRIPE_PORTAL_CONFIGURATION_ID: readOptionalEnv("STRIPE_PORTAL_CONFIGURATION_ID"),
   // Token vault (AES-256-GCM encryption key -- 64 hex chars = 32 bytes)
   TOKEN_VAULT_KEY: readOptionalEnv("TOKEN_VAULT_KEY"),
   TOKEN_VAULT_KEY_VERSION: readOptionalEnv("TOKEN_VAULT_KEY_VERSION", "1"),
