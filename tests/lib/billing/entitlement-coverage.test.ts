@@ -28,6 +28,7 @@ const GUARDED: Record<string, Record<string, 'create' | 'publish'>> = {
     restorePlannerContent: 'create',
     updatePlannerContentBody: 'create',
     updatePlannerContentSchedule: 'publish',
+    publishPlannerContentNow: 'publish',
     createPlannerContent: 'create',
     updatePlannerBannerConfig: 'create',
   },

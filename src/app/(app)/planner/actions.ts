@@ -8,6 +8,7 @@ import { DateTime } from "luxon";
 
 import { enqueueAndDispatch } from "@/lib/publishing/queue";
 import { getPublishReadinessIssues } from "@/lib/publishing/preflight";
+import { canTransition } from "@/lib/publishing/state-machine";
 import { evaluateTemporalDrift, type TemporalDriftResult } from "@/lib/publishing/temporal-drift";
 import { requireAuthContext } from "@/lib/auth/server";
 import { DEFAULT_TIMEZONE } from "@/lib/constants";
@@ -17,6 +18,7 @@ import { listMediaAssets } from "@/lib/library/data";
 import { isSchemaMissingError } from "@/lib/supabase/errors";
 import { formatUkDateTime } from "@/lib/utils/date";
 import { requireEntitledContext } from "@/lib/billing/entitlement-server";
+import type { ContentStatus } from "@/types/content";
 
 const approveSchema = z.object({
   contentId: z.string().uuid(),
@@ -76,6 +78,17 @@ const createSchema = z.object({
   platform: z.enum(["facebook", "instagram"]),
   placement: z.enum(["feed", "story"]),
 });
+
+const publishNowSchema = z.object({
+  contentId: z.string().uuid(),
+});
+
+const PUBLISH_NOW_REFUSALS: Partial<Record<string, string>> = {
+  draft: "Approve this draft before publishing it.",
+  queued: "This post is already queued to go out.",
+  publishing: "This post is being published now.",
+  posted: "This post has already been published.",
+};
 
 const SLOT_INCREMENT_MINUTES = 30;
 const MINUTES_PER_DAY = 24 * 60;
@@ -1252,6 +1265,75 @@ export async function updatePlannerContentSchedule(payload: unknown) {
     timezone,
     warning: drift.stale ? drift.message : null,
   };
+}
+
+/**
+ * Send a post out now, from the single post page.
+ *
+ * The state machine decides eligibility: only a post that may move to
+ * `queued` (scheduled or failed) can be sent now, so a draft still needs
+ * approval and a published post is never sent twice. The send reuses
+ * updatePlannerContentSchedule with the next whole minute, so it gets the same
+ * preflight, copy drift warning and job reset as "Save schedule", and the live
+ * publish worker picks it up on its next run.
+ */
+export async function publishPlannerContentNow(
+  payload: unknown,
+): Promise<Awaited<ReturnType<typeof updatePlannerContentSchedule>> | { readonly error: string }> {
+  // Delegates to updatePlannerContentSchedule, which checks the entitlement
+  // again: this guard must run before the status read, not only after it.
+  const { contentId } = publishNowSchema.parse(payload);
+  const { supabase, accountId } = await requireEntitledContext('publish');
+
+  const { data: content, error: contentError } = await supabase
+    .from("content_items")
+    .select("id, status")
+    .eq("id", contentId)
+    .eq("account_id", accountId)
+    .is("deleted_at", null)
+    .maybeSingle<{ id: string; status: string }>();
+
+  if (contentError) {
+    throw contentError;
+  }
+
+  if (!content) {
+    throw new Error("Content item not found");
+  }
+
+  // An unrecognised status has no transitions, so it is refused too.
+  if (!canTransition(content.status as ContentStatus, "queued")) {
+    return { error: PUBLISH_NOW_REFUSALS[content.status] ?? "This post cannot be published now." } as const;
+  }
+
+  const { data: accountRow, error: accountError } = await supabase
+    .from("accounts")
+    .select("timezone")
+    .eq("id", accountId)
+    .maybeSingle<{ timezone: string | null }>();
+
+  if (accountError) {
+    throw accountError;
+  }
+
+  const timezone = accountRow?.timezone ?? DEFAULT_TIMEZONE;
+  // The next whole minute, not the current one: the minute could tick over
+  // between here and the "already passed" check in updatePlannerContentSchedule.
+  // The worker takes anything due within its lead window, so a minute ahead
+  // still goes out on its next run.
+  //
+  // GMT/BST: the schedule action reads this wall-clock time back with Luxon,
+  // which resolves the repeated hour after the clocks go back using the offset
+  // in force now, so both passes of 01:00 to 01:59 land on the right instant.
+  // The one exception is 01:59 BST, whose next minute is 01:00 GMT: that reads
+  // back an hour early and is refused as already passed; a second press works.
+  const target = DateTime.now().setZone(timezone).plus({ minutes: 1 }).startOf("minute");
+  const date = target.toISODate();
+  if (!date) {
+    throw new Error(`Unable to work out the current time in ${timezone}.`);
+  }
+
+  return updatePlannerContentSchedule({ contentId, date, time: target.toFormat("HH:mm") });
 }
 
 /**
