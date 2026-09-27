@@ -271,7 +271,8 @@ export default function TermsPage() {
           </li>
           <li>
             After your subscription ends, you can still sign in to see your content and ask for an export. To close
-            your account, an owner can email us.
+            your account, an owner can email us. If no new subscription starts within 90 days after the old one ended,
+            we may close the account, so ask for your export before then if you want to keep your content.
           </li>
           <li>
             Before we close your account, we can send you an export: a file of your posts, schedule, brand profile and

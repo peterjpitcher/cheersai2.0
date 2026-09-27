@@ -78,13 +78,14 @@ const PURPOSE_ROWS = [
 const RETENTION_ROWS = [
   [
     "Account and content",
-    "For the life of your subscription, and while your account stays open after it. Deleted within 30 days after the account closes, and gone from backups within a further 7 days.",
+    "For the life of your subscription. If a subscription ends and the account is not closed, we review it 90 days later and may close it then. Deleted within 30 days after the account closes, and gone from backups within a further 7 days.",
   ],
   ["Posts you delete", "Kept in the trash for 7 days, then permanently deleted."],
   [
     "Invoices and payment records",
     "6 years, as HMRC requires. Stripe keeps card data under its own terms. Closing your account does not delete your customer record at Stripe.",
   ],
+  ["Messages you send us by email or WhatsApp", "24 months after the conversation ends."],
   ["Notifications in Cheers", "12 months."],
   ["Publishing history and audit logs, including sign-in history", "24 months."],
   ["Link-in-bio page views and clicks", "24 months."],

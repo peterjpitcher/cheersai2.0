@@ -26,9 +26,14 @@ The booking identifiers are no loss to Meta reporting: Meta rejects Conversions 
 
 Each rule handles at most 10,000 rows per run, so one run stays short. If a rule has more, its `due` is higher than its `done` and the log shows a warning; the next day's run carries on. Running the function twice is safe: the second run finds nothing left to do.
 
-## Purge reminder for offboarded brands
+## Operator reminder: brands due for deletion or lapsed
 
-Deleting an offboarded brand stays manual (Peter's decision). After the retention rules, the job emails `OPERATOR_ALERT_EMAIL` one message listing every brand with `accounts.offboarded_at` set whose `purge_after` has passed and which still exists, with how many days overdue it is and a link to Admin, Offboarding (`/admin#offboarding`). No email is sent when no brand is due. It repeats every day until each brand is deleted. See `docs/runbooks/customer-offboarding.md`.
+Deleting and closing stay manual (Peter's decisions). After the retention rules, the job emails `OPERATOR_ALERT_EMAIL` one message with up to two lists:
+
+- **Due for deletion:** every brand with `accounts.offboarded_at` set whose `purge_after` has passed and which still exists, with how many days overdue it is.
+- **No subscription for 90 days** (decision L8, 27 September 2026): every brand that is not offboarded, has no billing override, has no subscription in a live status, and whose last subscription ended at least 90 London calendar days ago. The end is the later of `canceled_at` and `current_period_end` (Stripe's `canceled_at` is the time of the cancel request), falling back to `updated_at`.
+
+Both link to Admin, Offboarding (`/admin#offboarding`). No email is sent when both lists are empty. It repeats every day until each brand is dealt with; setting a lapsed brand's billing override to suspended keeps it without reminders. See `docs/runbooks/customer-offboarding.md`.
 
 ## Checking it
 

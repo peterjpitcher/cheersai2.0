@@ -34,7 +34,7 @@ describe.each(PAGES)("the $name page", ({ Page, title }) => {
     const { container, text } = renderPage();
     expect(container.querySelector("h1")?.textContent).toBe(title);
     expect(text).toContain("Last updated 27 September 2026");
-    expect(text).toContain("Version 2026-09-27");
+    expect(text).toContain("Version 2026-09-27.2");
   });
 
   it("shows the company details and contacts", () => {

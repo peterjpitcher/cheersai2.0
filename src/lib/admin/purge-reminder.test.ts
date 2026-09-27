@@ -5,10 +5,20 @@
  */
 import { describe, expect, it, vi } from 'vitest';
 
-vi.mock('@/env', () => ({ env: { client: { NEXT_PUBLIC_SITE_URL: 'https://cheers.test' }, server: {} } }));
+vi.mock('@/env', () => ({ env: { client: { NEXT_PUBLIC_SITE_URL: 'https://cheers.test' }, server: { OPERATOR_ALERT_EMAIL: 'ops@cheers.test' } } }));
 vi.mock('@/lib/email/resend', () => ({ sendEmail: vi.fn() }));
 
-import { findBrandsDueForDeletion, renderPurgeReminderEmail, type BrandDueForDeletion } from './purge-reminder';
+import { sendEmail } from '@/lib/email/resend';
+
+import {
+  findBrandsDueForDeletion,
+  findLapsedBrands,
+  renderPurgeReminderEmail,
+  sendPurgeReminder,
+  subscriptionEndedAt,
+  type BrandDueForDeletion,
+  type LapsedBrand,
+} from './purge-reminder';
 
 const BAD_OUTPUT = ['undefined', 'NaN', 'Invalid Date', 'null', 'Invalid DateTime'];
 
@@ -32,7 +42,7 @@ function brand(overrides: Partial<BrandDueForDeletion> = {}): BrandDueForDeletio
 
 describe('renderPurgeReminderEmail', () => {
   it('renders one brand with its dates, days overdue and the admin link', () => {
-    const { subject, html } = renderPurgeReminderEmail([brand()], 'https://cheers.test/');
+    const { subject, html } = renderPurgeReminderEmail({ dueForDeletion: [brand()], lapsed: [] }, 'https://cheers.test/');
 
     expect(subject).toBe('[Cheers operator] 1 offboarded brand is due for deletion');
     expect(html).toContain('<strong>The Old Bell</strong>: offboarded 1 August 2026, deletion allowed from 31 August 2026, 27 days overdue.');
@@ -45,11 +55,14 @@ describe('renderPurgeReminderEmail', () => {
 
   it('renders several brands, including one due today and one a day overdue', () => {
     const { subject, html } = renderPurgeReminderEmail(
-      [
-        brand(),
-        brand({ accountId: 'b2', name: 'Fish & Chips <Co>', daysOverdue: 1 }),
-        brand({ accountId: 'b3', name: 'The Crown', daysOverdue: 0 }),
-      ],
+      {
+        dueForDeletion: [
+          brand(),
+          brand({ accountId: 'b2', name: 'Fish & Chips <Co>', daysOverdue: 1 }),
+          brand({ accountId: 'b3', name: 'The Crown', daysOverdue: 0 }),
+        ],
+        lapsed: [],
+      },
       'https://cheers.test',
     );
 
@@ -63,8 +76,8 @@ describe('renderPurgeReminderEmail', () => {
   });
 
   it('throws rather than send a broken date', () => {
-    expect(() => renderPurgeReminderEmail([brand({ purgeAfter: 'not a date' })], 'https://cheers.test')).toThrow(/Cannot render date/);
-    expect(() => renderPurgeReminderEmail([brand({ daysOverdue: Number.NaN })], 'https://cheers.test')).toThrow(/days overdue/);
+    expect(() => renderPurgeReminderEmail({ dueForDeletion: [brand({ purgeAfter: 'not a date' })], lapsed: [] }, 'https://cheers.test')).toThrow(/Cannot render date/);
+    expect(() => renderPurgeReminderEmail({ dueForDeletion: [brand({ daysOverdue: Number.NaN })], lapsed: [] }, 'https://cheers.test')).toThrow(/days overdue/);
   });
 });
 
@@ -115,5 +128,146 @@ describe('findBrandsDueForDeletion', () => {
       purgeAfter: '2026-08-31T10:00:00.000Z',
       daysOverdue: 27,
     });
+  });
+});
+
+function lapsedBrand(overrides: Partial<LapsedBrand> = {}): LapsedBrand {
+  return {
+    accountId: '0a0b0c0d-1111-4222-8333-444455556666',
+    name: 'The Plough',
+    endedAt: '2026-06-01T09:00:00.000Z',
+    daysSinceEnded: 118,
+    ...overrides,
+  };
+}
+
+describe('renderPurgeReminderEmail with lapsed brands', () => {
+  it('renders a lapsed brand with its end date, how long ago, and how to offboard or keep it', () => {
+    const { subject, html } = renderPurgeReminderEmail({ dueForDeletion: [], lapsed: [lapsedBrand()] }, 'https://cheers.test');
+
+    expect(subject).toBe('[Cheers operator] 1 brand has had no subscription for 90 days');
+    expect(html).toContain('<strong>The Plough</strong>: subscription ended 1 June 2026, 118 days ago.');
+    expect(html).toContain("This brand's subscription ended at least 90 days ago and it has not been closed.");
+    expect(html).toContain('<strong>Offboard</strong>');
+    expect(html).toContain('set its billing override to suspended');
+    expect(html).not.toContain('Due for deletion');
+    for (const bad of BAD_OUTPUT) expect(html).not.toContain(bad);
+    for (const bad of BAD_OUTPUT) expect(subject).not.toContain(bad);
+  });
+
+  it('renders both lists in one email', () => {
+    const { subject, html } = renderPurgeReminderEmail(
+      { dueForDeletion: [brand()], lapsed: [lapsedBrand(), lapsedBrand({ accountId: 'x', name: 'The Swan', daysSinceEnded: 90 })] },
+      'https://cheers.test',
+    );
+
+    expect(subject).toBe('[Cheers operator] 1 brand due for deletion, 2 lapsed brands to review');
+    expect(html).toContain('<h3>Due for deletion</h3>');
+    expect(html).toContain('<h3>No subscription for 90 days</h3>');
+    expect(html).toContain("These brands' subscriptions ended at least 90 days ago and they have not been closed.");
+    expect((html.match(/<li>/g) ?? []).length).toBe(3);
+    for (const bad of BAD_OUTPUT) expect(html).not.toContain(bad);
+  });
+
+  it('throws rather than send a broken lapsed date or count', () => {
+    expect(() => renderPurgeReminderEmail({ dueForDeletion: [], lapsed: [lapsedBrand({ endedAt: 'nope' })] }, 'https://cheers.test')).toThrow(/Cannot render date/);
+    expect(() => renderPurgeReminderEmail({ dueForDeletion: [], lapsed: [lapsedBrand({ daysSinceEnded: Number.NaN })] }, 'https://cheers.test')).toThrow(/subscription ended/);
+  });
+});
+
+describe('subscriptionEndedAt', () => {
+  it('uses the later of the cancel request and the period end', () => {
+    expect(subscriptionEndedAt({ canceled_at: '2026-05-10T10:00:00Z', current_period_end: '2026-06-01T09:00:00Z', updated_at: '2026-06-01T09:05:00Z' })).toBe('2026-06-01T09:00:00Z');
+    expect(subscriptionEndedAt({ canceled_at: '2026-06-03T10:00:00Z', current_period_end: '2026-06-01T09:00:00Z', updated_at: '2026-06-03T10:05:00Z' })).toBe('2026-06-03T10:00:00Z');
+  });
+
+  it('falls back to the last update when neither date is stored', () => {
+    expect(subscriptionEndedAt({ canceled_at: null, current_period_end: null, updated_at: '2026-06-02T08:00:00Z' })).toBe('2026-06-02T08:00:00Z');
+  });
+});
+
+/** A service whose subscriptions read returns `subscriptions` and whose accounts read returns `accounts`. */
+function lapsedService(subscriptions: Array<Record<string, unknown>>, accounts: Array<Record<string, unknown>>) {
+  const calls: Array<[string, string, ...unknown[]]> = [];
+  const from = vi.fn((table: string) => {
+    const chain: Record<string, unknown> = {};
+    for (const method of ['select', 'order', 'range', 'in', 'is', 'not', 'lte']) {
+      chain[method] = vi.fn((...args: unknown[]) => {
+        calls.push([table, method, ...args]);
+        return chain;
+      });
+    }
+    chain.returns = vi.fn(async () => {
+      if (table === 'subscriptions') return { data: subscriptions, error: null };
+      const isLapsedRead = calls.some(([t, m]) => t === 'accounts' && m === 'in');
+      return { data: isLapsedRead ? accounts : [], error: null };
+    });
+    return chain;
+  });
+  return { service: { from } as never, calls };
+}
+
+const NOW = new Date('2026-09-27T03:45:00.000Z');
+
+describe('findLapsedBrands', () => {
+  it('lists a brand 90 London days after its last subscription ended, not 89', async () => {
+    const { service } = lapsedService(
+      [
+        // 90 London calendar days before 27 September is 29 June.
+        { account_id: 'a90', status: 'canceled', canceled_at: '2026-06-20T10:00:00Z', current_period_end: '2026-06-29T10:00:00Z', updated_at: '2026-06-29T10:01:00Z' },
+        { account_id: 'a89', status: 'canceled', canceled_at: null, current_period_end: '2026-06-30T10:00:00Z', updated_at: '2026-06-30T10:01:00Z' },
+      ],
+      [{ id: 'a90', business_name: 'Ninety' }],
+    );
+
+    const brands = await findLapsedBrands(service, NOW);
+
+    expect(brands).toEqual([{ accountId: 'a90', name: 'Ninety', endedAt: '2026-06-29T10:00:00Z', daysSinceEnded: 90 }]);
+  });
+
+  it('skips a brand with any live subscription, and uses the latest end across old ones', async () => {
+    const { service, calls } = lapsedService(
+      [
+        { account_id: 'live', status: 'canceled', canceled_at: '2026-01-01T00:00:00Z', current_period_end: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z' },
+        { account_id: 'live', status: 'active', canceled_at: null, current_period_end: '2026-10-10T00:00:00Z', updated_at: '2026-09-10T00:00:00Z' },
+        { account_id: 'two', status: 'incomplete_expired', canceled_at: null, current_period_end: null, updated_at: '2026-01-05T00:00:00Z' },
+        { account_id: 'two', status: 'canceled', canceled_at: '2026-05-01T00:00:00Z', current_period_end: '2026-05-01T00:00:00Z', updated_at: '2026-05-01T00:00:00Z' },
+      ],
+      [{ id: 'two', business_name: 'Two Subs' }],
+    );
+
+    const brands = await findLapsedBrands(service, NOW);
+
+    expect(brands.map((b) => [b.accountId, b.endedAt])).toEqual([['two', '2026-05-01T00:00:00Z']]);
+    const inCall = calls.find(([t, m]) => t === 'accounts' && m === 'in');
+    expect(inCall?.[3]).toEqual(['two']);
+    expect(calls).toContainEqual(['accounts', 'is', 'offboarded_at', null]);
+    expect(calls).toContainEqual(['accounts', 'is', 'billing_override', null]);
+  });
+
+  it('reads no accounts when nothing has lapsed', async () => {
+    const { service, calls } = lapsedService([], []);
+    expect(await findLapsedBrands(service, NOW)).toEqual([]);
+    expect(calls.some(([t]) => t === 'accounts')).toBe(false);
+  });
+});
+
+describe('sendPurgeReminder', () => {
+  it('sends nothing when no brand is due or lapsed', async () => {
+    vi.mocked(sendEmail).mockClear();
+    const { service } = lapsedService([], []);
+    expect(await sendPurgeReminder(service, NOW)).toEqual({ due: 0, lapsed: 0, sent: false });
+    expect(sendEmail).not.toHaveBeenCalled();
+  });
+
+  it('emails the operator when only lapsed brands are waiting', async () => {
+    vi.mocked(sendEmail).mockClear();
+    const { service } = lapsedService(
+      [{ account_id: 'old', status: 'canceled', canceled_at: '2026-03-01T00:00:00Z', current_period_end: '2026-03-01T00:00:00Z', updated_at: '2026-03-01T00:00:00Z' }],
+      [{ id: 'old', business_name: 'Old Venue' }],
+    );
+
+    expect(await sendPurgeReminder(service, NOW)).toEqual({ due: 0, lapsed: 1, sent: true });
+    expect(sendEmail).toHaveBeenCalledWith(expect.objectContaining({ to: 'ops@cheers.test', required: true, subject: '[Cheers operator] 1 brand has had no subscription for 90 days' }));
   });
 });
