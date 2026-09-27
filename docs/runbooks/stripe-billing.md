@@ -70,6 +70,14 @@ CheersAI's portal configuration (the id in `STRIPE_PORTAL_CONFIGURATION_ID`) mus
 
 Test mode: `bpc_1UJs0QIMsxxxvzCCRkUnIFH8` has all of this. Live needs its own configuration created the same way.
 
+## Terms acceptance at Checkout
+
+Checkout shows a required tick box (`consent_collection.terms_of_service: 'required'`) with our own text (`custom_text.terms_of_service_acceptance`): the owner accepts the Terms of Service and the Data Processing Agreement, with links to `/terms` and `/data-processing` on `NEXT_PUBLIC_SITE_URL`, and the version from `LEGAL_VERSION` in `src/lib/legal/company.ts`. Stripe records the acceptance on the Checkout Session (`consent.terms_of_service = 'accepted'`).
+
+Stripe refuses the tick box unless a terms of service URL is set in the Dashboard, Settings, Public details, for that mode. Test mode was checked on 2026-09-27. **Before go-live, set `https://cheers.orangejelly.co.uk/terms` in live mode too**, or every live Checkout fails to start.
+
+When the terms, privacy notice or DPA change, bump `LEGAL_VERSION` and `LEGAL_UPDATED` together, so new acceptances name the new version.
+
 ## Testing in test mode (never against production)
 
 `.env.local` points at the **production** Supabase project, and so do Preview deployments. Never run a test Checkout there: it writes test customers and subscriptions into the live billing tables. Test against the local Supabase stack instead:
