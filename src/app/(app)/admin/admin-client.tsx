@@ -308,7 +308,8 @@ function OffboardingCard({ brands }: { brands: AdminBrand[] }) {
   }
 
   return (
-    <div className={CARD} style={CARD_STYLE}>
+    // id: the daily purge reminder email links straight to this card (/admin#offboarding).
+    <div id="offboarding" className={CARD} style={CARD_STYLE}>
       <h2 className="mb-1 text-sm font-semibold" style={{ color: 'var(--c-ink)' }}>Offboarding</h2>
       <p className="mb-3 text-xs" style={{ color: 'var(--c-ink-3)' }}>
         Follow docs/runbooks/customer-offboarding.md. Offboarding stops posts, deletes tokens and hides the brand; its data can be deleted 30 days later.

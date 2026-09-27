@@ -52,6 +52,7 @@ interface Captured {
   updates: Array<{ payload: Record<string, unknown>; filters: Array<[string, unknown]> }>;
   orFilter?: string;
   limits?: number[];
+  gte?: [string, unknown];
 }
 
 function buildSupabaseMock(rows: Record<string, unknown>[], captured: Captured) {
@@ -74,7 +75,10 @@ function buildSupabaseMock(rows: Record<string, unknown>[], captured: Captured) 
             captured.orFilter = filter;
             return query;
           }),
-          gte: vi.fn(() => query),
+          gte: vi.fn((column: string, value: unknown) => {
+            captured.gte = [column, value];
+            return query;
+          }),
           order: vi.fn(() => query),
           limit: vi.fn(async (n: number) => {
             captured.limits = [...(captured.limits ?? []), n];
@@ -166,6 +170,23 @@ describe('retry-capi-conversions cron', () => {
     // stored at the first attempt should re-forward and send once they are populated,
     // instead of being permanently stuck as skipped.
     expect(captured.updates).toHaveLength(0);
+  });
+
+  it('never selects a row old enough for the data-retention job to have cleared its identifiers', async () => {
+    // run_data_retention (20260927120000_data_retention.sql) sets fbp, fbc, IP,
+    // user agent and hashed email and phone to null 7 days after occurred_at.
+    // Only rows inside a shorter window may be retried, so a cleared row is never
+    // re-sent with no match keys (it would sit as missing_match_keys every hour).
+    createServiceSupabaseClientMock.mockReturnValue(buildSupabaseMock([makeRow()], captured));
+    forwardToCapiMock.mockResolvedValue({ status: 'sent', eventId: 'TB-1' });
+
+    const before = Date.now();
+    await GET(makeRequest());
+
+    expect(captured.gte?.[0]).toBe('occurred_at');
+    const windowStart = Date.parse(String(captured.gte?.[1]));
+    const identifierCutoff = before - 7 * 24 * 60 * 60 * 1000;
+    expect(windowStart).toBeGreaterThan(identifierCutoff);
   });
 
   it('records failures with the error message', async () => {

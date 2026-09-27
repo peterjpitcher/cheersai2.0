@@ -85,6 +85,7 @@ Vercel Cron (`vercel.json`; Vercel evaluates schedules in UTC), all authenticate
 | `/api/cron/notify-failures` | hourly at :30 | alert on publish failures |
 | `/api/cron/retry-capi-conversions` | hourly at :20 | retry booking-conversion sends |
 | `/api/cron/purge-trash` | 03:15 daily | purge soft-deleted content |
+| `/api/cron/data-retention` | 03:45 daily | enforce the data retention periods (`public.run_data_retention`), then email the operator any offboarded brand past its purge date (`docs/runbooks/data-retention.md`) |
 | `/api/cron/sync-meta-campaigns` | 06:00 daily | pull Meta campaign performance |
 | `/api/cron/optimise-meta-campaigns` | 06:30 daily | run the campaign optimiser |
 | `/api/cron/notify-expiring-connections` | 08:00 daily | warn about expiring tokens |
