@@ -133,7 +133,11 @@ export async function ConnectionCards({ canDisconnect }: ConnectionCardsProps) {
               />
             </div>
             <div className="mt-6 flex flex-col gap-2">
-              <ConnectionOAuthButton provider={connection.provider} status={connection.status} />
+              <ConnectionOAuthButton
+                provider={connection.provider}
+                status={connection.status}
+                hasAccessToken={connection.hasAccessToken}
+              />
               {canDisconnect && connection.hasAccessToken ? (
                 <ConnectionDisconnectButton provider={connection.provider} />
               ) : null}

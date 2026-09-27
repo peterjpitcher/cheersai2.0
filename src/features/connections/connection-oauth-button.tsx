@@ -8,6 +8,8 @@ import { useToast } from "@/components/providers/toast-provider";
 interface ConnectionOAuthButtonProps {
   provider: "facebook" | "instagram";
   status: "active" | "expiring" | "needs_action";
+  /** False when nothing is stored yet (never connected, or disconnected). */
+  hasAccessToken: boolean;
 }
 
 const ACTION_LABELS = {
@@ -16,7 +18,7 @@ const ACTION_LABELS = {
   needs_action: "Reconnect",
 } as const;
 
-export function ConnectionOAuthButton({ provider, status }: ConnectionOAuthButtonProps) {
+export function ConnectionOAuthButton({ provider, status, hasAccessToken }: ConnectionOAuthButtonProps) {
   const [isPending, startTransition] = useTransition();
   const toast = useToast();
 
@@ -36,7 +38,9 @@ export function ConnectionOAuthButton({ provider, status }: ConnectionOAuthButto
     });
   };
 
-  const label = ACTION_LABELS[status];
+  // "Reconnect" only makes sense for a stored connection that needs fixing; a
+  // venue connecting for the first time (or after disconnecting) sees "Connect".
+  const label = hasAccessToken ? ACTION_LABELS[status] : "Connect";
 
   return (
     <button
