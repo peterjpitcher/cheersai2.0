@@ -81,6 +81,8 @@ type ConnectionStatus = "active" | "expiring" | "needs_action";
 type ContentRow = {
     id: string;
     account_id: string;
+    status: string;
+    deleted_at: string | null;
     platform: ProviderPlatform;
     placement: "feed" | "story";
     scheduled_for: string | null;
@@ -157,6 +159,37 @@ function isSupportedPublishPlatform(platform: ProviderPlatform): platform is "fa
 
 function unsupportedPlatformMessage(platform: ProviderPlatform) {
     return `Unsupported publishing platform: ${platform}`;
+}
+
+/**
+ * Content statuses a job may publish. Approval, the wizard and the tournament
+ * "publish now" move a post to scheduled or queued before its job is armed,
+ * and a post is left as publishing when a stuck job is recovered. Anything else
+ * (a draft nobody approved, a post already posted, a failed post the owner has
+ * not rescheduled) must never reach a provider, whatever armed its job.
+ */
+const PUBLISHABLE_CONTENT_STATUSES = new Set(["scheduled", "queued", "publishing"]);
+
+export const CONTENT_NOT_PUBLISHABLE_CODE = "CONTENT_NOT_PUBLISHABLE";
+
+/** Why this content must not be published, or null when it may be. */
+export function unpublishableContentReason(content: Pick<ContentRow, "status" | "deleted_at">): string | null {
+    if (content.deleted_at) {
+        return "Not published: this post was deleted.";
+    }
+    if (PUBLISHABLE_CONTENT_STATUSES.has(content.status)) {
+        return null;
+    }
+    switch (content.status) {
+        case "draft":
+            return "Not published: this post is still a draft. Approve it in the planner to schedule it.";
+        case "posted":
+            return "Not published again: this post has already been published.";
+        case "failed":
+            return "Not published: this post failed earlier. Reschedule it in the planner to try again.";
+        default:
+            return `Not published: this post is ${content.status}, not scheduled.`;
+    }
 }
 
 function readEnv(name: string): string | undefined {
@@ -717,6 +750,12 @@ export class PublishQueueWorker {
             return;
         }
 
+        const refusal = unpublishableContentReason(content);
+        if (refusal) {
+            await this.refuseJob(job, content, refusal, nowIso);
+            return;
+        }
+
         if (!isSupportedPublishPlatform(content.platform)) {
             await this.resolveUnsupportedPlatformJob(job.id, content, nowIso);
             return;
@@ -1211,7 +1250,7 @@ export class PublishQueueWorker {
     private async loadContent(contentItemId: string): Promise<ContentRow | null> {
         const { data, error } = await this.supabase
             .from("content_items")
-            .select("id, account_id, platform, placement, scheduled_for, prompt_context, campaigns(name, campaign_type, metadata)")
+            .select("id, account_id, status, deleted_at, platform, placement, scheduled_for, prompt_context, campaigns(name, campaign_type, metadata)")
             .eq("id", contentItemId)
             .maybeSingle<ContentRow>();
 
@@ -1967,6 +2006,39 @@ export class PublishQueueWorker {
 
         if (error) {
             console.error("[publish-queue] failed to insert notification", error);
+        }
+    }
+
+    /**
+     * Stop a job whose post may not be published. The job fails without a
+     * provider call and the post keeps its status: a draft stays a draft, and
+     * approving it re-arms this job (approveDraftContent). A job should never
+     * have been armed for such a post, so the refusal is made visible: the
+     * notify-failures cron emails the owner the message below, and the warning
+     * shows in the edge function logs.
+     */
+    private async refuseJob(job: PublishJobRow, content: ContentRow, message: string, nowIso: string) {
+        console.warn(`[publish-queue] refused job ${job.id}: content ${content.id} is not publishable`, {
+            status: content.status,
+            deleted: Boolean(content.deleted_at),
+        });
+
+        const { error } = await this.supabase
+            .from("publish_jobs")
+            .update({
+                status: "failed",
+                // The lock bumped the attempt; a refusal is not an attempt.
+                attempt: job.attempt ?? 0,
+                last_error: message,
+                error_message: message,
+                error_code: CONTENT_NOT_PUBLISHABLE_CODE,
+                next_attempt_at: null,
+                updated_at: nowIso,
+            })
+            .eq("id", job.id);
+
+        if (error) {
+            console.error(`[publish-queue] failed to refuse job ${job.id}`, error);
         }
     }
 

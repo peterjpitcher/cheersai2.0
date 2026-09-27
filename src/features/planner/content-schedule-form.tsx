@@ -79,12 +79,19 @@ export function PlannerContentScheduleForm({
         setBaseline({ date: nextDate, time: nextTime });
         const friendly = scheduled.toFormat("cccc d LLLL yyyy · HH:mm");
         const warning = "warning" in result && typeof result.warning === "string" ? result.warning : null;
-        setFeedback(warning ? `Scheduled for ${friendly}. ${warning}` : `Scheduled for ${friendly}`);
+        // A draft only moves; nothing goes out until it is approved.
+        const awaitingApproval = "awaitingApproval" in result && result.awaitingApproval === true;
+        const saved = awaitingApproval ? `Draft moved to ${friendly}` : `Scheduled for ${friendly}`;
+        setFeedback(warning ? `${saved}. ${warning}` : saved);
         // Warn but do not block: the new time is already saved. Copy is frozen
         // at generation while the image label is recomputed at publish, so a
         // move can leave the caption and the image contradicting each other.
         if (warning) {
           toast.info("Schedule updated, but check the copy", { description: warning, durationMs: 9000 });
+        } else if (awaitingApproval) {
+          toast.success("Draft moved", {
+            description: `It goes out at ${friendly} (${timezoneLabel}) once you approve it.`,
+          });
         } else {
           toast.success("Schedule updated", {
             description: `Post will go out at ${friendly} (${timezoneLabel}).`,

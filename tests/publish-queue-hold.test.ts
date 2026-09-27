@@ -72,7 +72,7 @@ function mockSupabase(tables: Tables) {
         }
         if (table === 'content_items') {
           return {
-            data: { id: 'content-1', account_id: 'brand-1', platform: 'facebook', placement: 'feed', scheduled_for: '2026-10-15T09:00:00Z', prompt_context: null, campaigns: null },
+            data: { id: 'content-1', account_id: 'brand-1', status: 'scheduled', platform: 'facebook', placement: 'feed', scheduled_for: '2026-10-15T09:00:00Z', prompt_context: null, campaigns: null },
             error: null,
           };
         }

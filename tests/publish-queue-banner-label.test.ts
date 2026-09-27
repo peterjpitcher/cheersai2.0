@@ -108,6 +108,7 @@ describe("PublishQueueWorker — F3 label compute throw", () => {
                 data: {
                     id: job.content_item_id,
                     account_id: "acc",
+                    status: "scheduled",
                     platform: "facebook",
                     placement: "feed",
                     scheduled_for: "2026-04-29T08:00:00.000+01:00",
