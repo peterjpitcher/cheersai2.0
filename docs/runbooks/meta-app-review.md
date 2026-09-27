@@ -61,8 +61,8 @@ Meta's requirements (checked 26 September 2026): Page posts and stories need `pa
 
 | Item | Status on 26 September 2026 | Owner |
 |---|---|---|
-| Privacy policy at `https://cheers.orangejelly.co.uk/privacy` | **Blocking.** The live page has the wrong address and says data is hosted in the EU and US. Reviewers check it. Waits for the legal rewrite (plan item 2.10) | Claude, after Peter's answers |
-| Terms at `https://cheers.orangejelly.co.uk/terms` | Set; rewritten with the privacy policy | Claude |
+| Privacy policy at `https://cheers.orangejelly.co.uk/privacy` | **Blocking until deployed.** Rewritten on 27 September 2026 (plan item 2.10, branch `feat/legal-terms-privacy-dpa`) with the correct company details, London hosting and a Facebook and Instagram section including deletion steps. The live page keeps the wrong address until that branch is merged and deployed | Claude |
+| Terms at `https://cheers.orangejelly.co.uk/terms` | Set; rewritten with the privacy policy on the same branch | Claude |
 | Data deletion callback `https://cheers.orangejelly.co.uk/api/social/delete-data` | Set, live; a forged request returns 400 | done |
 | Deauthorise callback | Set by Peter, 26 September 2026 | done |
 | App icon, category, contact email (`peter@orangejelly.co.uk`), app domain | Set | done |
