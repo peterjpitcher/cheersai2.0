@@ -26,10 +26,11 @@ export const CONTACT = {
 
 /**
  * The version and date shown on the terms, the privacy notice and the DPA.
- * Bump both when any of the three changes; the Checkout acceptance text quotes
+ * Bump both when any of the three changes (a same-day change adds a suffix,
+ * such as .2); the Checkout acceptance text quotes
  * the version, so Stripe's record of acceptance names the text accepted.
  */
-export const LEGAL_VERSION = "2026-09-27";
+export const LEGAL_VERSION = "2026-09-27.2";
 export const LEGAL_UPDATED = "27 September 2026";
 
 export type LegalDocumentId = "terms" | "privacy" | "dpa";
