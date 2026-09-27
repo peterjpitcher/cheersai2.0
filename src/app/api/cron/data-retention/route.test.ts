@@ -37,11 +37,13 @@ interface Db {
   accountFilters: Array<[string, ...unknown[]]>;
 }
 
-/** A service client whose RPC and accounts query return what each test needs. */
+/** A service client whose RPC, accounts and subscriptions reads return what each test needs. */
 function useDb(options: {
   rpc?: { data: unknown; error: { message: string } | null };
   rpcThrows?: Error;
   dueAccounts?: Array<Record<string, unknown>>;
+  subscriptions?: Array<Record<string, unknown>>;
+  lapsedAccounts?: Array<Record<string, unknown>>;
   accountsError?: { message: string };
 }): Db {
   const accountFilters: Array<[string, ...unknown[]]> = [];
@@ -50,19 +52,27 @@ function useDb(options: {
     return options.rpc ?? RPC_OK;
   });
   const from = vi.fn((table: string) => {
+    if (table === 'subscriptions') {
+      // The lapsed-brand check reads subscriptions; none unless a test says so.
+      const chain: Record<string, unknown> = {};
+      for (const method of ['select', 'order', 'range']) chain[method] = vi.fn(() => chain);
+      chain.returns = vi.fn(async () => ({ data: options.subscriptions ?? [], error: null }));
+      return chain;
+    }
     if (table !== 'accounts') throw new Error(`unexpected table ${table}`);
     const chain: Record<string, unknown> = {};
-    for (const method of ['select', 'not', 'lte', 'order']) {
+    let lapsedRead = false;
+    for (const method of ['select', 'not', 'lte', 'order', 'in', 'is']) {
       chain[method] = vi.fn((...args: unknown[]) => {
+        if (method === 'in') lapsedRead = true;
         accountFilters.push([method, ...args]);
         return chain;
       });
     }
-    chain.returns = vi.fn(async () =>
-      options.accountsError
-        ? { data: null, error: options.accountsError }
-        : { data: options.dueAccounts ?? [], error: null },
-    );
+    chain.returns = vi.fn(async () => {
+      if (options.accountsError) return { data: null, error: options.accountsError };
+      return { data: lapsedRead ? options.lapsedAccounts ?? [] : options.dueAccounts ?? [], error: null };
+    });
     return chain;
   });
   const db = { rpc, from, accountFilters };
@@ -133,7 +143,7 @@ describe('data-retention cron', () => {
     expect(status).toBe(200);
     expect(db.rpc).toHaveBeenCalledWith('run_data_retention', { p_dry_run: false });
     expect(body.retention).toEqual({ ranAt: '2026-09-27T03:45:00+00:00', rules: RULES });
-    expect(body.purgeReminder).toEqual({ due: 0, sent: false });
+    expect(body.purgeReminder).toEqual({ due: 0, lapsed: 0, sent: false });
     // Every rule's counts reach the logs.
     const logged = consoleLog.mock.calls.map((call) => String(call[0])).join('\n');
     expect(logged).toContain('booking_conversion_identifiers');
@@ -161,7 +171,7 @@ describe('data-retention cron', () => {
 
     expect(status).toBe(500);
     expect(body.retention).toEqual({ error: 'function public.run_data_retention(boolean) does not exist' });
-    expect(body.purgeReminder).toEqual({ due: 1, sent: true });
+    expect(body.purgeReminder).toEqual({ due: 1, lapsed: 0, sent: true });
     expect(sendEmail).toHaveBeenCalledOnce();
     expect(consoleError).toHaveBeenCalled();
   });
@@ -190,7 +200,7 @@ describe('data-retention cron', () => {
     const { status, body } = await run();
 
     expect(status).toBe(200);
-    expect(body.purgeReminder).toEqual({ due: 0, sent: false });
+    expect(body.purgeReminder).toEqual({ due: 0, lapsed: 0, sent: false });
     expect(sendEmail).not.toHaveBeenCalled();
     // Only offboarded brands whose purge date has passed are asked for.
     expect(db.accountFilters).toContainEqual(['not', 'offboarded_at', 'is', null]);
@@ -208,7 +218,7 @@ describe('data-retention cron', () => {
     const { status, body } = await run();
 
     expect(status).toBe(200);
-    expect(body.purgeReminder).toEqual({ due: 2, sent: true });
+    expect(body.purgeReminder).toEqual({ due: 2, lapsed: 0, sent: true });
     expect(sendEmail).toHaveBeenCalledOnce();
     const email = vi.mocked(sendEmail).mock.calls[0][0];
     expect(email.to).toBe('ops@test.example');
@@ -217,6 +227,26 @@ describe('data-retention cron', () => {
     expect(email.html).toContain('https://cheers.test/admin#offboarding');
     expect(email.html).toContain('The Old Bell');
     expect(email.html).toContain('Fish &amp; Chips &lt;Co&gt;');
+  });
+
+  it('also lists brands whose subscription ended 90 or more days ago and that nobody has closed', async () => {
+    const db = useDb({
+      subscriptions: [
+        { account_id: 'lapsed-1', status: 'canceled', canceled_at: '2026-05-20T09:00:00Z', current_period_end: '2026-06-01T09:00:00Z', updated_at: '2026-06-01T09:01:00Z' },
+      ],
+      lapsedAccounts: [{ id: 'lapsed-1', business_name: 'The Plough' }],
+    });
+
+    const { status, body } = await run();
+
+    expect(status).toBe(200);
+    expect(body.purgeReminder).toEqual({ due: 0, lapsed: 1, sent: true });
+    const email = vi.mocked(sendEmail).mock.calls[0][0];
+    expect(email.subject).toBe('[Cheers operator] 1 brand has had no subscription for 90 days');
+    expect(email.html).toContain('<strong>The Plough</strong>: subscription ended 1 June 2026');
+    // Comped, suspended and offboarded brands are never listed as lapsed.
+    expect(db.accountFilters).toContainEqual(['is', 'offboarded_at', null]);
+    expect(db.accountFilters).toContainEqual(['is', 'billing_override', null]);
   });
 
   it('returns 500 when the reminder cannot be sent, even though retention succeeded', async () => {

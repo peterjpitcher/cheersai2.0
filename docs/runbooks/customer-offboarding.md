@@ -4,6 +4,10 @@ Decision D5 (`tasks/SPEC-new-customer-readiness.md`): offboarding is done by the
 
 Everything below is in **Admin → Offboarding**. Each step asks you to type the brand's name.
 
+## When a subscription lapses and nobody asks
+
+Decision L8: a brand whose subscription ended at least 90 days ago (London calendar days, from the later of Stripe's cancel time and the period end) and that is not offboarded appears in the daily operator email under "No subscription for 90 days". If nobody has asked to keep it, offboard it with the steps below; the 30-day hold then starts as usual. To keep a lapsed brand on purpose, set its billing override to **Suspended** in Admin → Billing (it keeps read and export access and stops appearing in the email). Comped brands are never listed.
+
 ## When a customer asks to leave
 
 1. **Confirm who is asking.** Only an owner of the brand (Settings → Team shows owners) can ask. Reply from the support address and keep the email.

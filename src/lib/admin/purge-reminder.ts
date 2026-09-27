@@ -2,17 +2,31 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { DateTime } from 'luxon';
 
 import { env } from '@/env';
+import { isLiveSubscriptionStatus } from '@/lib/billing/entitlement';
 import { DEFAULT_TIMEZONE } from '@/lib/constants';
 import { sendEmail } from '@/lib/email/resend';
 import { formatUkLongDate } from '@/lib/utils/date';
 
 /**
- * Daily operator reminder for offboarded brands whose 30-day hold is over
- * (docs/runbooks/customer-offboarding.md). Deletion stays manual (Peter's
- * decision, 27 September 2026): this only tells the operator which brands are
- * due, so the privacy notice's "deleted after 30 days" stays true. Sends
- * nothing when no brand is due.
+ * Daily operator reminder (docs/runbooks/customer-offboarding.md). Closing and
+ * deleting stay manual (Peter's decisions, 27 September 2026); this only tells
+ * the operator what is waiting, so the privacy notice stays true:
+ *
+ * 1. Offboarded brands whose 30-day hold is over and whose data has not been
+ *    deleted yet.
+ * 2. Brands whose subscription ended at least 90 days ago and that nobody has
+ *    closed (decision L8). Brands with a billing override (comped or
+ *    suspended) are left out: setting one is how the operator keeps a lapsed
+ *    brand on purpose.
+ *
+ * Sends nothing when neither list has a brand.
  */
+
+/** Days after a subscription ends before the brand is listed for review. */
+export const LAPSED_REVIEW_DAYS = 90;
+
+/** Supabase caps a read at 1,000 rows, so reads page through in blocks this size. */
+const PAGE = 1000;
 
 export interface BrandDueForDeletion {
   accountId: string;
@@ -23,8 +37,23 @@ export interface BrandDueForDeletion {
   daysOverdue: number;
 }
 
+export interface LapsedBrand {
+  accountId: string;
+  name: string;
+  /** When its last subscription ended (see subscriptionEndedAt). */
+  endedAt: string;
+  /** Whole London calendar days since endedAt; at least LAPSED_REVIEW_DAYS. */
+  daysSinceEnded: number;
+}
+
+export interface OperatorReminder {
+  dueForDeletion: BrandDueForDeletion[];
+  lapsed: LapsedBrand[];
+}
+
 export interface PurgeReminderResult {
   due: number;
+  lapsed: number;
   sent: boolean;
 }
 
@@ -35,11 +64,28 @@ interface OffboardedAccountRow {
   purge_after: string;
 }
 
+interface SubscriptionRow {
+  account_id: string;
+  status: string;
+  canceled_at: string | null;
+  current_period_end: string | null;
+  updated_at: string;
+}
+
+interface LapsedAccountRow {
+  id: string;
+  business_name: string | null;
+}
+
 /** Calendar days between two instants on the London calendar (DST-safe). */
 function londonDaysBetween(from: string, now: Date): number {
   const start = DateTime.fromISO(from, { zone: DEFAULT_TIMEZONE }).startOf('day');
   const today = DateTime.fromJSDate(now, { zone: DEFAULT_TIMEZONE }).startOf('day');
   return Math.max(0, Math.round(today.diff(start, 'days').days));
+}
+
+function brandName(row: { id: string; business_name: string | null }): string {
+  return row.business_name?.trim() || row.id;
 }
 
 /** Every brand that is offboarded, past its purge date and not yet deleted, most overdue first. */
@@ -60,73 +106,198 @@ export async function findBrandsDueForDeletion(
 
   return (data ?? []).map((row) => ({
     accountId: row.id,
-    name: row.business_name?.trim() || row.id,
+    name: brandName(row),
     offboardedAt: row.offboarded_at,
     purgeAfter: row.purge_after,
     daysOverdue: londonDaysBetween(row.purge_after, now),
   }));
 }
 
+function latest(values: Array<string | null>): string | null {
+  let best: string | null = null;
+  let bestMs = Number.NEGATIVE_INFINITY;
+  for (const value of values) {
+    if (!value) continue;
+    const ms = Date.parse(value);
+    if (Number.isFinite(ms) && ms > bestMs) {
+      best = value;
+      bestMs = ms;
+    }
+  }
+  return best;
+}
+
+/**
+ * Best stored estimate of when an ended subscription stopped. Stripe's
+ * canceled_at is the time of the cancel request, which for a cancel at period
+ * end comes before the period ends, so the later of the two is used; either
+ * way the brand is listed no earlier than it should be. Rows with neither date
+ * fall back to their last update.
+ */
+export function subscriptionEndedAt(row: Pick<SubscriptionRow, 'canceled_at' | 'current_period_end' | 'updated_at'>): string {
+  return latest([row.canceled_at, row.current_period_end]) ?? row.updated_at;
+}
+
+async function fetchAllSubscriptions(service: SupabaseClient): Promise<SubscriptionRow[]> {
+  const rows: SubscriptionRow[] = [];
+  for (let offset = 0; ; offset += PAGE) {
+    // Operator view across every brand, so deliberately not scoped to one account.
+    const { data, error } = await service
+      .from('subscriptions')
+      .select('account_id, status, canceled_at, current_period_end, updated_at')
+      .order('account_id', { ascending: true })
+      .order('stripe_subscription_id', { ascending: true })
+      .range(offset, offset + PAGE - 1)
+      .returns<SubscriptionRow[]>();
+    if (error) throw new Error(`subscriptions lookup failed: ${error.message}`);
+    const page = data ?? [];
+    rows.push(...page);
+    if (page.length < PAGE) return rows;
+  }
+}
+
+/**
+ * Brands whose subscriptions have all ended, the last at least
+ * LAPSED_REVIEW_DAYS London days ago, that are not offboarded and have no
+ * billing override. Longest lapsed first.
+ */
+export async function findLapsedBrands(service: SupabaseClient, now: Date = new Date()): Promise<LapsedBrand[]> {
+  const byAccount = new Map<string, SubscriptionRow[]>();
+  for (const row of await fetchAllSubscriptions(service)) {
+    const list = byAccount.get(row.account_id) ?? [];
+    list.push(row);
+    byAccount.set(row.account_id, list);
+  }
+
+  const endedAtByAccount = new Map<string, string>();
+  for (const [accountId, subscriptions] of byAccount) {
+    if (subscriptions.some((subscription) => isLiveSubscriptionStatus(subscription.status))) continue;
+    const endedAt = latest(subscriptions.map(subscriptionEndedAt));
+    if (endedAt && londonDaysBetween(endedAt, now) >= LAPSED_REVIEW_DAYS) endedAtByAccount.set(accountId, endedAt);
+  }
+  if (endedAtByAccount.size === 0) return [];
+
+  const { data, error } = await service
+    .from('accounts')
+    .select('id, business_name')
+    .in('id', [...endedAtByAccount.keys()])
+    .is('offboarded_at', null)
+    .is('billing_override', null)
+    .returns<LapsedAccountRow[]>();
+  if (error) throw new Error(`accounts lookup failed: ${error.message}`);
+
+  return (data ?? [])
+    .map((row) => {
+      const endedAt = endedAtByAccount.get(row.id) as string;
+      return { accountId: row.id, name: brandName(row), endedAt, daysSinceEnded: londonDaysBetween(endedAt, now) };
+    })
+    .sort((a, b) => b.daysSinceEnded - a.daysSinceEnded || a.name.localeCompare(b.name));
+}
+
 /** "31 August 2026"; throws rather than render a blank or broken date. */
 function longDate(value: string): string {
   const formatted = formatUkLongDate(value);
-  if (!formatted) throw new Error(`Cannot render date "${value}" in the purge reminder.`);
+  if (!formatted) throw new Error(`Cannot render date "${value}" in the operator reminder.`);
   return formatted;
 }
 
 function overdueLabel(days: number): string {
-  if (!Number.isFinite(days)) throw new Error('Cannot render the days overdue in the purge reminder.');
+  if (!Number.isFinite(days)) throw new Error('Cannot render the days overdue in the operator reminder.');
   if (days === 0) return 'due today';
   return days === 1 ? '1 day overdue' : `${days} days overdue`;
 }
 
+function daysAgoLabel(days: number): string {
+  if (!Number.isFinite(days)) throw new Error('Cannot render the days since the subscription ended in the operator reminder.');
+  return `${days} days ago`;
+}
+
+function plural(count: number, one: string, many: string): string {
+  return count === 1 ? `1 ${one}` : `${count} ${many}`;
+}
+
+function subjectFor({ dueForDeletion, lapsed }: OperatorReminder): string {
+  const due = dueForDeletion.length;
+  const lapsedCount = lapsed.length;
+  if (due > 0 && lapsedCount > 0) {
+    return `[Cheers operator] ${plural(due, 'brand', 'brands')} due for deletion, ${plural(lapsedCount, 'lapsed brand', 'lapsed brands')} to review`;
+  }
+  if (due > 0) {
+    return due === 1
+      ? '[Cheers operator] 1 offboarded brand is due for deletion'
+      : `[Cheers operator] ${due} offboarded brands are due for deletion`;
+  }
+  return lapsedCount === 1
+    ? `[Cheers operator] 1 brand has had no subscription for ${LAPSED_REVIEW_DAYS} days`
+    : `[Cheers operator] ${lapsedCount} brands have had no subscription for ${LAPSED_REVIEW_DAYS} days`;
+}
+
 /** Subject and HTML for the reminder. Pure, so tests can render it with fixtures. */
 export function renderPurgeReminderEmail(
-  brands: BrandDueForDeletion[],
+  reminder: OperatorReminder,
   siteUrl: string,
 ): { subject: string; html: string } {
-  const adminUrl = `${siteUrl.replace(/\/+$/, '')}/admin#offboarding`;
-  const count = brands.length;
-  const subject =
-    count === 1
-      ? '[Cheers operator] 1 offboarded brand is due for deletion'
-      : `[Cheers operator] ${count} offboarded brands are due for deletion`;
+  const adminUrl = escapeHtml(`${siteUrl.replace(/\/+$/, '')}/admin#offboarding`);
+  const { dueForDeletion, lapsed } = reminder;
+  const sections: string[] = [];
 
-  const items = brands
-    .map(
-      (brand) =>
-        `<li><strong>${escapeHtml(brand.name)}</strong>: offboarded ${longDate(brand.offboardedAt)}, ` +
-        `deletion allowed from ${longDate(brand.purgeAfter)}, ${overdueLabel(brand.daysOverdue)}.</li>`,
-    )
-    .join('\n');
-
-  const html = `
-<p>${count === 1 ? 'This offboarded brand has' : 'These offboarded brands have'} passed the 30-day hold and ${count === 1 ? 'its' : 'their'} data has not been deleted yet.</p>
+  if (dueForDeletion.length > 0) {
+    const one = dueForDeletion.length === 1;
+    const items = dueForDeletion
+      .map(
+        (brand) =>
+          `<li><strong>${escapeHtml(brand.name)}</strong>: offboarded ${longDate(brand.offboardedAt)}, ` +
+          `deletion allowed from ${longDate(brand.purgeAfter)}, ${overdueLabel(brand.daysOverdue)}.</li>`,
+      )
+      .join('\n');
+    sections.push(`
+<h3>Due for deletion</h3>
+<p>${one ? 'This offboarded brand has' : 'These offboarded brands have'} passed the 30-day hold and ${one ? 'its' : 'their'} data has not been deleted yet.</p>
 <ul>
 ${items}
 </ul>
-<p>Deletion is manual. Open <a href="${escapeHtml(adminUrl)}">Admin, Offboarding</a>, choose the brand and use <strong>Delete data</strong>, following docs/runbooks/customer-offboarding.md.</p>
-<p>You will get this email every day until each brand listed is deleted.</p>
-`.trim();
+<p>Deletion is manual. Open <a href="${adminUrl}">Admin, Offboarding</a>, choose the brand and use <strong>Delete data</strong>, following docs/runbooks/customer-offboarding.md.</p>`);
+  }
 
-  return { subject, html };
+  if (lapsed.length > 0) {
+    const one = lapsed.length === 1;
+    const items = lapsed
+      .map(
+        (brand) =>
+          `<li><strong>${escapeHtml(brand.name)}</strong>: subscription ended ${longDate(brand.endedAt)}, ${daysAgoLabel(brand.daysSinceEnded)}.</li>`,
+      )
+      .join('\n');
+    sections.push(`
+<h3>No subscription for ${LAPSED_REVIEW_DAYS} days</h3>
+<p>${one ? "This brand's subscription" : "These brands' subscriptions"} ended at least ${LAPSED_REVIEW_DAYS} days ago and ${one ? 'it has' : 'they have'} not been closed.</p>
+<ul>
+${items}
+</ul>
+<p>If nobody has asked to keep ${one ? 'it' : 'them'}, open <a href="${adminUrl}">Admin, Offboarding</a>, choose the brand and use <strong>Offboard</strong>; the 30-day hold then starts. To keep a brand without a subscription, set its billing override to suspended and it stops appearing here.</p>`);
+  }
+
+  const html = `${sections.map((section) => section.trim()).join('\n')}
+<p>You will get this email every day until each brand listed is dealt with.</p>`;
+
+  return { subject: subjectFor(reminder), html };
 }
 
-/** Email the operator the list of brands due for deletion, or do nothing when none are due. */
+/** Email the operator what is waiting, or do nothing when nothing is. */
 export async function sendPurgeReminder(
   service: SupabaseClient,
   now: Date = new Date(),
 ): Promise<PurgeReminderResult> {
-  const brands = await findBrandsDueForDeletion(service, now);
-  if (brands.length === 0) return { due: 0, sent: false };
+  const dueForDeletion = await findBrandsDueForDeletion(service, now);
+  const lapsed = await findLapsedBrands(service, now);
+  if (dueForDeletion.length === 0 && lapsed.length === 0) return { due: 0, lapsed: 0, sent: false };
 
   const to = env.server.OPERATOR_ALERT_EMAIL;
-  if (!to) throw new Error('OPERATOR_ALERT_EMAIL is not set; cannot send the purge reminder.');
+  if (!to) throw new Error('OPERATOR_ALERT_EMAIL is not set; cannot send the operator reminder.');
 
-  const { subject, html } = renderPurgeReminderEmail(brands, env.client.NEXT_PUBLIC_SITE_URL);
+  const { subject, html } = renderPurgeReminderEmail({ dueForDeletion, lapsed }, env.client.NEXT_PUBLIC_SITE_URL);
   // required: a missing Resend config throws instead of skipping, so the cron fails visibly.
   await sendEmail({ to, subject, html, required: true });
-  return { due: brands.length, sent: true };
+  return { due: dueForDeletion.length, lapsed: lapsed.length, sent: true };
 }
 
 function escapeHtml(text: string): string {
