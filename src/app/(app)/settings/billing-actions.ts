@@ -26,6 +26,7 @@ import {
   getStripe,
   missingBillingEnv,
 } from '@/lib/billing/stripe';
+import { LEGAL_DOCUMENTS, LEGAL_VERSION } from '@/lib/legal/company';
 import { createLogger } from '@/lib/logging';
 
 /**
@@ -80,6 +81,22 @@ function settingsUrl(query?: string): string {
   const url = new URL('/settings', env.client.NEXT_PUBLIC_SITE_URL);
   if (query) url.search = query;
   return url.toString();
+}
+
+/**
+ * The required tick box at Checkout (decision L4): the owner accepts the terms
+ * and the DPA, which forms part of them, and confirms a business purchase
+ * (terms section 2). Stripe records the acceptance on the Checkout Session as
+ * consent.terms_of_service. Stripe refuses the tick box unless a terms of
+ * service URL is set in the Dashboard's Public details for that mode.
+ */
+function termsAcceptanceMessage(): string {
+  const link = (path: string) => new URL(path, env.client.NEXT_PUBLIC_SITE_URL).toString();
+  const { terms, dpa } = LEGAL_DOCUMENTS;
+  return (
+    `I agree to the [${terms.title}](${link(terms.path)}) and the [${dpa.title}](${link(dpa.path)}) ` +
+    `(version ${LEGAL_VERSION}), and I am buying for my business.`
+  );
 }
 
 interface BrandBillingRow {
@@ -243,6 +260,8 @@ export async function startCheckout(
         tax_id_collection: { enabled: true },
         billing_address_collection: 'required',
         customer_update: { name: 'auto', address: 'auto' },
+        consent_collection: { terms_of_service: 'required' },
+        custom_text: { terms_of_service_acceptance: { message: termsAcceptanceMessage() } },
         metadata,
         success_url: settingsUrl('checkout=success'),
         cancel_url: settingsUrl('checkout=cancelled'),

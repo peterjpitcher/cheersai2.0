@@ -36,6 +36,10 @@ const OTHER_BRAND = '3d4e5f60-7182-4c9d-8ebf-2a3b4c5d6e7f';
 const OTHER_OWNER = '60718293-a4b5-4f2a-8b3c-5d6e7f8091a2';
 const NOT_SET_UP = 'Billing is not set up yet. Please contact Cheers support.';
 const BRAND_SWITCHED = 'You switched brand in another tab. Refresh the page and try again.';
+const TERMS_ACCEPTANCE =
+  'I agree to the [Terms of Service](https://cheers.orangejelly.co.uk/terms) and the ' +
+  '[Data Processing Agreement](https://cheers.orangejelly.co.uk/data-processing) (version 2026-09-27), ' +
+  'and I am buying for my business.';
 
 let db: InMemoryBillingDb;
 let fake: FakeStripe;
@@ -161,11 +165,28 @@ describe('startCheckout: the Checkout Session', () => {
       tax_id_collection: { enabled: true },
       billing_address_collection: 'required',
       customer_update: { name: 'auto', address: 'auto' },
+      consent_collection: { terms_of_service: 'required' },
+      custom_text: { terms_of_service_acceptance: { message: TERMS_ACCEPTANCE } },
       metadata,
       success_url: 'https://cheers.orangejelly.co.uk/settings?checkout=success',
       cancel_url: 'https://cheers.orangejelly.co.uk/settings?checkout=cancelled',
     });
     expect(options.idempotencyKey).toMatch(new RegExp(`^cheersai-checkout-${BRAND}-`));
+  });
+
+  it('requires the owner to tick acceptance of the terms and the DPA, linked on the live site', async () => {
+    await startCheckout({ plan: 'professional', interval: 'year', accountId: BRAND });
+    await startCheckout({ plan: 'starter', interval: 'month', accountId: BRAND });
+    for (const [params] of fake.sessionsCreate.mock.calls as [Record<string, unknown>][]) {
+      expect(params.consent_collection).toEqual({ terms_of_service: 'required' });
+      const { message } = (params.custom_text as { terms_of_service_acceptance: { message: string } })
+        .terms_of_service_acceptance;
+      expect(message).toContain('(https://cheers.orangejelly.co.uk/terms)');
+      expect(message).toContain('(https://cheers.orangejelly.co.uk/data-processing)');
+      expect(message).toContain('version 2026-09-27');
+      // Stripe's limit for this text.
+      expect(message.length).toBeLessThanOrEqual(1200);
+    }
   });
 
   it('uses a fresh idempotency key for each attempt and reuses the stored customer', async () => {
