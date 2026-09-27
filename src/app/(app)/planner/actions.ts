@@ -159,6 +159,20 @@ async function syncTournamentFixtureGeneratedState({
   return context.tournamentId;
 }
 
+/**
+ * First free feed slot at or after the time asked for, on the same day.
+ *
+ * occupiedMinutes holds wall-clock minutes of the day, so the search walks the
+ * wall clock and each candidate is built with set({ hour, minute }). Adding the
+ * minutes to midnight instead counts elapsed time, which is an hour out on the
+ * 23-hour and 25-hour days when the clocks change.
+ *
+ * Spring forward: a wall-clock time that does not exist that day (01:00 to
+ * 01:59 in London) comes back from set() an hour on, where it could land on a
+ * taken slot, so it is skipped. Fall back: set() starts from the requested
+ * slot's offset, so in the repeated hour a moved slot stays on the same side of
+ * the change as the time asked for and never lands before it.
+ */
 function reservePlannerSlotOnSameDay({
   desiredSlot,
   timezone,
@@ -168,17 +182,23 @@ function reservePlannerSlotOnSameDay({
   timezone: string;
   occupiedMinutes: Set<number>;
 }) {
-  const startOfDay = desiredSlot.setZone(timezone).startOf("day");
-  let minuteOfDay = desiredSlot.hour * 60 + desiredSlot.minute;
+  const desired = desiredSlot.setZone(timezone).startOf("minute");
 
-  while (occupiedMinutes.has(minuteOfDay)) {
-    minuteOfDay += SLOT_INCREMENT_MINUTES;
-    if (minuteOfDay >= MINUTES_PER_DAY) {
-      throw new Error("No open 30-minute slots remain on that day for this channel.");
+  for (
+    let minuteOfDay = desired.hour * 60 + desired.minute;
+    minuteOfDay < MINUTES_PER_DAY;
+    minuteOfDay += SLOT_INCREMENT_MINUTES
+  ) {
+    const hour = Math.floor(minuteOfDay / 60);
+    const minute = minuteOfDay % 60;
+    const candidate = desired.set({ hour, minute });
+    const existsThatDay = candidate.hour === hour && candidate.minute === minute;
+    if (existsThatDay && !occupiedMinutes.has(minuteOfDay)) {
+      return candidate;
     }
   }
 
-  return startOfDay.plus({ minutes: minuteOfDay }).startOf("minute");
+  throw new Error("No open 30-minute slots remain on that day for this channel.");
 }
 
 
