@@ -10,8 +10,11 @@ Spec: `tasks/SPEC-planner-post-page-actions.md`.
 - [x] Component tests (10) and a page render test per status (6)
 - [x] Re-run the page locally: each button does its job (running the page caught an icon prop that
       cannot cross the server/client boundary; fixed)
-- [ ] `npm run ci:verify`
-- [ ] PR with the dead-button sweep; no merge or deploy without Peter's yes
+- [x] `npm run ci:verify`: lint, typecheck, 2,940 tests in London and UTC; build clean with CI's env
+- [x] PR #128 with the dead-button sweep (one more found: `AdPreview.tsx:69`)
+- [ ] Peter's yes, then merge and deploy
+- [ ] Separate tasks raised: clock-change slot maths (before 25 October), rescheduled drafts
+      publishing unapproved, the unusable `retryPublishJob`
 
 # Local rebuild matches production (2026-09-26)
 
