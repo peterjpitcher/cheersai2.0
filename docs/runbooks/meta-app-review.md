@@ -1,6 +1,6 @@
 # Runbook: Meta App Review for organic publishing
 
-**Last updated:** 2026-09-26
+**Last updated:** 2026-09-27
 **Applies to:** the CheersAI Meta app (`1001401138674450`, business portfolio Orange Jelly `1042710779156582`)
 **Decision:** spec `tasks/SPEC-new-customer-readiness.md` D7 and finding M1.
 
@@ -82,15 +82,14 @@ voice-over reliably). Record it as Peter, who has a role on the app, using the t
 1. **Sign in.** Open `https://cheers.orangejelly.co.uk/login`, enter the reviewer email and
    password, click **Sign in**. Caption: "Venue owner signs in to CheersAI."
 2. **Connect Facebook.** Go to **Connections**. The **Facebook Page** card says "Connect Facebook
-   before publishing." Click its button (it reads **Reconnect** on a brand that has never
-   connected; see section 8). Caption: "Owner connects their Facebook Page."
+   before publishing." Click **Connect**. Caption: "Owner connects their Facebook Page."
 3. **Meta's dialog.** Show the dialog listing the permissions. Choose the test Page (and its
    business portfolio if asked) and continue. Caption: "CheersAI asks only for the permissions it
    needs to publish."
 4. **Back in CheersAI.** The toast "Connected facebook successfully" appears and the card shows the
    Page name, with Publishing "Ready" and Access token "Stored". Caption: "pages_show_list and
    pages_read_engagement: CheersAI lists the Pages and reads the Page name."
-5. **Connect Instagram.** On the **Instagram Business** card, click its button and complete Meta's
+5. **Connect Instagram.** On the **Instagram Business** card, click **Connect** and complete Meta's
    dialog the same way. The card then shows the Instagram username. Caption: "instagram_basic:
    CheersAI reads the linked Instagram account's username."
 6. **Create a post.** Go to **Create** ("Create Content"). On **Brief**, choose **Instant Post**,
@@ -158,7 +157,7 @@ Paste one block into each permission's "How will your app use this permission?" 
 
 **App verification details (test instructions)**
 > 1. Go to https://cheers.orangejelly.co.uk/login and sign in with the email and password below.
-> 2. Open Connections from the menu. Click the button on the Facebook Page card and complete
+> 2. Open Connections from the menu. Click Connect on the Facebook Page card and complete
 >    Meta's dialog with a Page you manage. Repeat on the Instagram Business card (the Page must
 >    have an Instagram professional account linked).
 > 3. Open Create. Choose Instant Post, enter a title and brief, tick Facebook and Instagram, click
@@ -189,9 +188,9 @@ and resubmit that permission only.
 
 ## 8. Open items found while preparing this
 
-- On a brand that has never connected, the connect button reads **Reconnect**
-  (`src/features/connections/connection-oauth-button.tsx`). "Connect" would be clearer for new
-  venues and for Meta's reviewers.
+- Fixed 27 September 2026: the connect button used to read **Reconnect** on a brand that had
+  never connected. It now reads **Connect** whenever no connection is stored, and **Reconnect**
+  only when a stored connection needs fixing.
 - The **Publish now**, **Save changes** and **Cancel this post** buttons on the single post page
   (`src/app/(app)/planner/[contentId]/page.tsx`) have no action.
 - CheersAI stores only the Meta post id, not a link to the live post, so the recording shows the
