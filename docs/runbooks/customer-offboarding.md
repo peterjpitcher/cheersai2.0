@@ -19,6 +19,8 @@ Everything below is in **Admin → Offboarding**. Each step asks you to type the
 
 ## After 30 days
 
+Deletion is manual. From the day a brand's deletion date passes, the daily data-retention job (`/api/cron/data-retention`, 03:45 UTC) emails `OPERATOR_ALERT_EMAIL` a list of every offboarded brand that is due and not yet deleted, with how many days overdue each is and a link to Admin → Offboarding. It repeats every day until the brand is deleted, and sends nothing when none are due (see `docs/runbooks/data-retention.md`).
+
 7. **Delete.** Admin → Offboarding → *Delete data* (only enabled once the date has passed). It deletes:
    - the brand's files (uploads, derived images, tournament images, rendered banners);
    - the brand's paid-campaign records, its link-in-bio clicks and page views, then every other database row for the brand (all other tables cascade from `accounts`);
