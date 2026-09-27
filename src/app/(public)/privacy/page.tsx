@@ -1,193 +1,322 @@
-import Link from "next/link";
 import type { Metadata } from "next";
 
-const UPDATED_AT = "8 February 2025";
+import {
+  ContactEmail,
+  ContactWhatsApp,
+  LegalLink,
+  LegalList,
+  LegalPage,
+  LegalSection,
+  LegalTable,
+} from "@/features/legal/legal-page";
+import { COMPANY, LEGAL_DOCUMENTS } from "@/lib/legal/company";
+import { SUB_PROCESSOR_ROWS } from "@/lib/legal/sub-processors";
+
+const DESCRIPTION =
+  "How Orange Jelly Limited, trading as Cheers, uses personal data: what we collect, why, who we share it with, how long we keep it and your rights.";
 
 export const metadata: Metadata = {
-  title: "Privacy Policy | Cheers",
-  description:
-    "Learn how Cheers collects, uses, and safeguards your personal information across our website and product.",
+  title: "Privacy Notice | Cheers",
+  description: DESCRIPTION,
   openGraph: {
-    title: "Privacy Policy | Cheers",
-    description:
-      "Learn how Cheers collects, uses, and safeguards your personal information across our website and product.",
+    title: "Privacy Notice | Cheers",
+    description: DESCRIPTION,
     type: "article",
   },
 };
 
+const { terms, dpa } = LEGAL_DOCUMENTS;
+
+const PURPOSE_ROWS = [
+  [
+    "Account and sign-in details: name, email address, role and the brands you belong to. Your password is handled by our sign-in provider; we never store it ourselves.",
+    "To create your account, sign you in and manage your team.",
+    "Contract with the business that signs up. For team members a venue adds: our legitimate interest in letting the venue give its team access.",
+  ],
+  [
+    "Sign-in history: sign-ins, sign-outs and password changes, with your email address.",
+    "To keep accounts secure and look into problems.",
+    "Legitimate interests (security).",
+  ],
+  [
+    "Billing details: business name, billing address, VAT number, billing email, plan, subscription status and invoices.",
+    "To take payment and keep tax records. Stripe collects and holds card details; we never see your full card number.",
+    "Contract. Legal obligation (tax records).",
+  ],
+  [
+    "Your venue's details and content: brand profile, posts, briefs, photos and videos.",
+    "To provide Cheers.",
+    "Contract. Where your content includes other people's personal data, we handle it for the venue under our Data Processing Agreement.",
+  ],
+  [
+    "Facebook and Instagram connection details (section 7).",
+    "To publish your posts and handle Meta deletion requests.",
+    "Contract. Legitimate interests (keeping proof that deletion requests were handled).",
+  ],
+  [
+    "Messages you send us by email or WhatsApp.",
+    "To give support and handle complaints.",
+    "Contract. Legitimate interests.",
+  ],
+  [
+    "Service emails we send you: team invitations, password resets and alerts about failed posts or connection problems.",
+    "To run your account and tell you when something needs your attention.",
+    "Contract. Legitimate interests.",
+  ],
+  [
+    "Technical data: IP address, browser and device details and the pages requested.",
+    "To run Cheers, keep it secure and fix faults.",
+    "Legitimate interests.",
+  ],
+  [
+    "Records of actions: publishing history, who did what in Cheers, and our own admin actions.",
+    "To show what happened, keep Cheers secure and resolve disputes.",
+    "Legitimate interests.",
+  ],
+] as const;
+
+const RETENTION_ROWS = [
+  [
+    "Account and content",
+    "For the life of your subscription, and while your account stays open after it. Deleted within 30 days after the account closes, and gone from backups within a further 7 days.",
+  ],
+  ["Posts you delete", "Kept in the trash for 7 days, then permanently deleted."],
+  [
+    "Invoices and payment records",
+    "6 years, as HMRC requires. Stripe keeps card data under its own terms. Closing your account does not delete your customer record at Stripe.",
+  ],
+  ["Notifications in Cheers", "12 months."],
+  ["Publishing history and audit logs, including sign-in history", "24 months."],
+  ["Link-in-bio page views and clicks", "24 months."],
+  [
+    "Booking-tracking identifiers (IP address, browser details, hashed email and phone, Meta click and browser ids)",
+    "Cleared 7 days after the booking. The booking facts (event, value, date and campaign tags) are kept for 24 months.",
+  ],
+  ["Meta data-deletion records and our admin actions", "6 years."],
+  [
+    "Expired temporary security records, such as sign-in rate limits and expired sign-in states",
+    "Deleted within a day of expiring.",
+  ],
+  ["Hosting logs", "1 day."],
+  ["Database logs", "7 days."],
+  ["Database backups", "7 days."],
+] as const;
+
+const COOKIE_ROWS = [
+  [
+    "Supabase sign-in cookies (names start with sb-)",
+    "Keep you signed in. Strictly necessary.",
+    "Up to 400 days, or until you sign out.",
+  ],
+  [
+    "cheersai_active_account",
+    "Remembers which brand you are working in. Set only when you switch brand.",
+    "1 year, or until you sign out.",
+  ],
+] as const;
+
 export default function PrivacyPolicyPage() {
   return (
-    <main
-      className="mx-auto max-w-[720px] px-4 py-16"
-      style={{ color: "var(--c-ink)" }}
-    >
-      <header className="space-y-4 text-center">
-        <p className="eyebrow" style={{ color: "var(--c-ink-3)" }}>Cheers by Orange Jelly</p>
-        <h1
-          className="text-3xl font-semibold"
-          style={{ color: "var(--c-ink)" }}
-        >
-          Privacy Policy
-        </h1>
-        <p className="text-sm" style={{ color: "var(--c-ink-3)" }}>
-          Last updated: {UPDATED_AT}
-        </p>
-      </header>
+    <LegalPage current="privacy">
+      <p>
+        This notice explains how {COMPANY.legalName}, trading as Cheers, uses personal data. For the data described
+        here, we are the controller.
+      </p>
 
-      <section className="mt-12 space-y-6 text-base" style={{ lineHeight: "1.55" }}>
+      <LegalSection id="who-we-are" title="1. Who we are">
         <p>
-          Cheers (&ldquo;we&rdquo;, &ldquo;us&rdquo;, or &ldquo;our&rdquo;) builds tools that help hospitality operators plan and publish their social
-          media. Cheers is wholly owned and operated by Orange Jelly Limited. We are committed to protecting the
-          privacy of our customers, prospects, and website visitors. This policy explains what data we collect, how we
-          use it, and the rights available to you. Learn more about our parent company at{" "}
-          <a
-            className="hover:underline"
-            style={{ color: "var(--c-orange)" }}
-            href="https://www.orangejelly.co.uk"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            orangejelly.co.uk
-          </a>
-          .
+          {COMPANY.legalName} is registered in {COMPANY.registeredIn}, company number {COMPANY.companyNumber}.
+          Registered office: {COMPANY.registeredOffice}. Trading address: {COMPANY.tradingAddress}.
         </p>
+        <p>
+          For anything about your personal data, including requests and complaints, email <ContactEmail /> or message
+          us on WhatsApp at <ContactWhatsApp />.
+        </p>
+      </LegalSection>
 
-        <h2 className="text-xl font-semibold" style={{ color: "var(--c-ink)" }}>1. Information We Collect</h2>
-        <p>We collect information in three ways:</p>
-        <ul className="list-disc space-y-2 pl-6">
+      <LegalSection id="who-this-covers" title="2. Who this notice covers">
+        <LegalList>
+          <li>People who use Cheers: venue owners and their team members.</li>
+          <li>People who contact us.</li>
           <li>
-            <strong>Information you provide</strong> such as contact details when you request a demo, register for an
-            account, or communicate with our team.
+            People who visit a venue&apos;s link-in-bio page. We count page views and link clicks (the page, the link,
+            the time and the referring site) for the venue. We do not store your IP address, but our hosting provider
+            processes it to deliver the page.
           </li>
           <li>
-            <strong>Product data</strong> including content, media assets, scheduling information, and account metadata
-            created or uploaded while using the Cheers platform.
+            People who book with a venue that uses our booking tracking. We handle that data for the venue, which is
+            the controller; see the venue&apos;s own privacy notice.
+          </li>
+        </LegalList>
+        <p>
+          When we handle personal data for a venue, such as the content it adds or data about its customers, we act
+          as the venue&apos;s processor under our <LegalLink href={dpa.path}>{dpa.title}</LegalLink>.
+        </p>
+      </LegalSection>
+
+      <LegalSection id="what-and-why" title="3. What we collect, why, and our lawful basis">
+        <LegalTable
+          caption="What we collect, why and our lawful basis"
+          head={["Data", "Why we use it", "Lawful basis"]}
+          rows={PURPOSE_ROWS}
+        />
+        <p>
+          Our legitimate interests are keeping Cheers secure and working, preventing misuse, letting venues give their
+          team access, telling customers about problems with their posts, and keeping proof of what happened, such as
+          deletions and admin actions. You can object to this use (section 10).
+        </p>
+      </LegalSection>
+
+      <LegalSection id="sharing" title="4. Who we share it with">
+        <p>We use these providers to run Cheers. They process data only on our instructions:</p>
+        <LegalTable
+          caption="Our processors"
+          head={["Provider", "What they do", "Where", "Transfer safeguard"]}
+          rows={SUB_PROCESSOR_ROWS}
+        />
+        <LegalList>
+          <li>
+            <strong>Stripe</strong> takes payments. Stripe is an independent controller for card and payment data,
+            under its own privacy policy.
           </li>
           <li>
-            <strong>Usage data</strong> such as device information, IP address, pages visited, and actions taken within
-            the product collected through cookies or similar technologies.
+            <strong>Meta.</strong> When you connect Facebook or Instagram, we send the posts you schedule to your Page
+            and account. Meta handles them under its own terms and privacy policy.
           </li>
-        </ul>
-
-        <h2 className="text-xl font-semibold" style={{ color: "var(--c-ink)" }}>2. How We Use Information</h2>
-        <p>We process personal information to:</p>
-        <ul className="list-disc space-y-2 pl-6">
-          <li>Provide, maintain, and improve the Cheers platform and related services.</li>
-          <li>Authenticate users, secure the product, and prevent abuse.</li>
-          <li>Respond to enquiries, provide customer support, and send transactional communications.</li>
-          <li>Comply with legal obligations and enforce our agreements.</li>
           <li>
-            Send product updates or marketing messages where permitted. You may opt out at any time via the unsubscribe
-            link or by contacting us.
+            <strong>Public authorities</strong>, such as HMRC, where the law requires it, and professional advisers,
+            such as our accountants, where they need it.
           </li>
-        </ul>
+        </LegalList>
+        <p>We do not sell personal data.</p>
+      </LegalSection>
 
-        <h2 className="text-xl font-semibold" style={{ color: "var(--c-ink)" }}>3. Cookies &amp; Tracking</h2>
+      <LegalSection id="transfers" title="5. Transfers outside the UK">
         <p>
-          We use necessary cookies to keep you signed in and optional analytics cookies to understand how the product is
-          used. You can control analytics cookies via your browser settings. Disabling cookies may impact certain
-          features.
+          Our database is in London and Cheers runs in London. Some of our providers are in the United States or can
+          access data from outside the UK. We only allow this with the safeguard shown for each provider above: the
+          UK International Data Transfer Agreement, or the UK Addendum to the EU Standard Contractual Clauses. Email
+          us for more detail.
         </p>
+      </LegalSection>
 
-        <h2 className="text-xl font-semibold" style={{ color: "var(--c-ink)" }}>4. Data Sharing &amp; Processors</h2>
+      <LegalSection id="retention" title="6. How long we keep it">
+        <LegalTable caption="How long we keep personal data" head={["Data", "How long"]} rows={RETENTION_ROWS} />
         <p>
-          We do not sell personal data. We share information only with trusted service providers who assist with hosting,
-          analytics, payment processing, customer support, or authentication. These processors only use data on our
-          behalf and under contract. We may disclose information if required to comply with law or protect our rights.
+          Photos and videos stay until you delete them or your account closes. Posts already published on Facebook
+          and Instagram stay there until you delete them on Meta.
         </p>
+      </LegalSection>
 
-        <h2 className="text-xl font-semibold" style={{ color: "var(--c-ink)" }}>5. International Transfers</h2>
+      <LegalSection id="facebook-and-instagram" title="7. Facebook and Instagram">
+        <LegalList>
+          <li>
+            When an owner connects a Facebook Page or Instagram account, we receive the Page and account ids and
+            names, access tokens, and your app-scoped Meta user id. We ask Meta for these permissions:
+            pages_show_list, pages_read_engagement, pages_manage_posts, instagram_basic, instagram_content_publish
+            and business_management.
+          </li>
+          <li>
+            We use this only to publish the posts you schedule, show whether they published, and handle deletion
+            requests. We do not sell it or use it for advertising.
+          </li>
+          <li>Access tokens are stored encrypted at rest (AES-256-GCM).</li>
+          <li>
+            An owner can disconnect Facebook or Instagram at any time in Connections. Disconnecting deletes the access
+            tokens we hold for it.
+          </li>
+          <li>
+            You can also remove Cheers in your Facebook settings, under Apps and websites, and ask for your data to be
+            deleted there. Meta sends the request to us at https://{COMPANY.siteHost}/api/social/delete-data. We
+            delete the access tokens we hold for you and give you a confirmation code and a link to check the status.
+            You can also email us to ask.
+          </li>
+          <li>Posts already published stay on Facebook and Instagram until you delete them there.</li>
+        </LegalList>
+      </LegalSection>
+
+      <LegalSection id="ai" title="8. AI">
+        <LegalList>
+          <li>
+            We use OpenAI to write post suggestions. We send it your venue details and settings (such as name, tone,
+            key phrases, hashtags and signatures) and the briefs you type. We also send photos you upload so it can
+            suggest names and tags for them.
+          </li>
+          <li>We do not send OpenAI any data about a venue&apos;s customers or bookings.</li>
+          <li>
+            OpenAI does not use this data to train its models. It keeps abuse-monitoring logs for up to 30 days. It
+            processes data in the United States, under the UK Addendum to the EU Standard Contractual Clauses.
+          </li>
+          <li>AI suggestions are drafts. A person decides what is published.</li>
+        </LegalList>
+      </LegalSection>
+
+      <LegalSection id="cookies" title="9. Cookies">
+        <p>Cheers sets only these cookies:</p>
+        <LegalTable caption="Cookies" head={["Cookie", "What it does", "How long"]} rows={COOKIE_ROWS} />
         <p>
-          Cheers operates in the United Kingdom and uses infrastructure hosted in the European Union and United
-          States. Where data leaves the UK/EEA we rely on appropriate safeguards such as Standard Contractual Clauses.
+          We also keep one short-lived item in your browser&apos;s session storage to show a message after you
+          connect Facebook or Instagram. It is cleared when you close the tab. We do not use analytics or advertising
+          cookies.
         </p>
+      </LegalSection>
 
-        <h2 className="text-xl font-semibold" style={{ color: "var(--c-ink)" }}>6. Data Retention</h2>
+      <LegalSection id="your-rights" title="10. Your rights">
+        <p>You have the right to:</p>
+        <LegalList>
+          <li>ask for a copy of the personal data we hold about you;</li>
+          <li>ask us to correct it;</li>
+          <li>ask us to delete it, or to restrict how we use it;</li>
+          <li>object to how we use it, including where we rely on legitimate interests;</li>
+          <li>ask for your data in a portable format.</li>
+        </LegalList>
         <p>
-          We retain personal data for as long as you have an active relationship with Cheers and for a reasonable
-          period thereafter to comply with legal obligations, resolve disputes, and enforce agreements. You may request
-          deletion at any time — see &ldquo;Your Rights&rdquo; below.
+          To use any of these rights, email <ContactEmail />. We reply within one month. If we hold the data for a
+          venue, we pass your request to the venue.
         </p>
+      </LegalSection>
 
-        <h2 className="text-xl font-semibold" style={{ color: "var(--c-ink)" }}>7. Your Rights</h2>
-        <p>If you reside in the UK or EU, you have the right to:</p>
-        <ul className="list-disc space-y-2 pl-6">
-          <li>Request access to the personal data we hold about you.</li>
-          <li>Ask us to correct inaccurate or incomplete data.</li>
-          <li>Request deletion or restriction of your data, subject to legal exceptions.</li>
-          <li>Object to certain processing, including direct marketing.</li>
-          <li>Request a copy of your data in a portable format.</li>
-          <li>Lodge a complaint with the Information Commissioner&apos;s Office (ICO) if you believe we have not complied with data protection law.</li>
-        </ul>
+      <LegalSection id="complaints" title="11. Complaints">
         <p>
-          To exercise any of these rights, email{" "}
-          <a
-            className="hover:underline"
-            style={{ color: "var(--c-orange)" }}
-            href="mailto:peter@orangejelly.co.uk"
-          >
-            peter@orangejelly.co.uk
-          </a>
-          .
+          If you are unhappy with how we use your personal data, please tell us first: email <ContactEmail />, message
+          us on WhatsApp at <ContactWhatsApp />, or write to us at our trading address. We acknowledge complaints
+          within 30 days and tell you the outcome without undue delay.
         </p>
-
-        <h2 className="text-xl font-semibold" style={{ color: "var(--c-ink)" }}>8. Children&apos;s Privacy</h2>
         <p>
-          Cheers is designed for hospitality professionals and is not directed at individuals under the age of 18. We
-          do not knowingly collect personal information from children.
+          You can also complain to the Information Commissioner&apos;s Office (ICO) at{" "}
+          <LegalLink href="https://ico.org.uk/make-a-complaint/">ico.org.uk/make-a-complaint</LegalLink> or on 0303
+          123 1113.
         </p>
+      </LegalSection>
 
-        <h2 className="text-xl font-semibold" style={{ color: "var(--c-ink)" }}>9. Changes to this Policy</h2>
+      <LegalSection id="required" title="12. Do you have to give us your data?">
         <p>
-          We may update this Privacy Policy from time to time. Any changes will be posted on this page with an updated
-          revision date. Significant updates may also be communicated via email or in-app notification.
+          We need your account details and, for a paid plan, your billing details to provide Cheers under our{" "}
+          <LegalLink href={terms.path}>{terms.title}</LegalLink>. Without them we cannot provide the service.
+          Connecting Facebook or Instagram is your choice, but Cheers cannot publish for you without it.
         </p>
+      </LegalSection>
 
-        <h2 className="text-xl font-semibold" style={{ color: "var(--c-ink)" }}>10. Contact Us</h2>
-        <address className="not-italic leading-relaxed">
-          Cheers (Orange Jelly Limited)<br />
-          71-75 Shelton Street<br />
-          London WC2H 9JQ<br />
-          United Kingdom
-          <br />
-          <br />
-          Email:{" "}
-          <a
-            className="hover:underline"
-            style={{ color: "var(--c-orange)" }}
-            href="mailto:peter@orangejelly.co.uk"
-          >
-            peter@orangejelly.co.uk
-          </a>
-          <br />
-          Phone:{" "}
-          <a
-            className="hover:underline"
-            style={{ color: "var(--c-orange)" }}
-            href="tel:+442045771230"
-          >
-            +44 20 4577 1230
-          </a>
-          <br />
-          Website:{" "}
-          <a
-            className="hover:underline"
-            style={{ color: "var(--c-orange)" }}
-            href="https://www.orangejelly.co.uk"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            www.orangejelly.co.uk
-          </a>
-        </address>
+      <LegalSection id="automated-decisions" title="13. Automated decisions">
+        <p>We do not make decisions about you by automated means that have legal or similarly significant effects.</p>
+      </LegalSection>
 
-        <p className="text-sm" style={{ color: "var(--c-ink-3)" }}>
-          See also:{" "}
-          <Link href="/terms" className="hover:underline" style={{ color: "var(--c-orange)" }}>
-            Terms of Use
-          </Link>
+      <LegalSection id="children" title="14. Children">
+        <p>Cheers is for hospitality businesses and is not meant for anyone under 18.</p>
+      </LegalSection>
+
+      <LegalSection id="changes" title="15. Changes to this notice">
+        <p>
+          We will update this page and its date when this notice changes. We will email customers about significant
+          changes.
         </p>
-      </section>
-    </main>
+      </LegalSection>
+
+      <LegalSection id="contact" title="16. Contact">
+        <p>
+          Email <ContactEmail /> or message us on WhatsApp at <ContactWhatsApp />.
+        </p>
+      </LegalSection>
+    </LegalPage>
   );
 }
