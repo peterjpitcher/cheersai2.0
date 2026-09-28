@@ -141,9 +141,10 @@ export default async function FirstPostHelpPage(): Promise<React.JSX.Element> {
             After you approve it
           </h2>
           <p>
-            Cheers takes you back to the planner. The post shows as <Label>Scheduled</Label> or{' '}
-            <Label>Publishing</Label>, then <Label>Posted</Label> once Facebook or Instagram confirms it went out. The
-            &ldquo;Publish your first post&rdquo; step in <Label>Get set up</Label> then ticks off.
+            Cheers takes you back to the planner. The post&rsquo;s badge shows <Label>Scheduled</Label> or{' '}
+            <Label>Publishing</Label>, then <Label>Posted</Label> once Facebook or Instagram confirms it went out (the
+            planner&rsquo;s filter lists these posts under <Label>Published</Label>). The &ldquo;Publish your first
+            post&rdquo; step in <Label>Get set up</Label> then ticks off.
           </p>
         </section>
 

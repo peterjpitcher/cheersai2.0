@@ -49,15 +49,16 @@ export default async function PlannerPage({ searchParams }: PlannerPageProps) {
   const dayLine = now.toFormat("cccc d LLLL");
 
   // Fetch attention banner count and initial feed events in parallel
-  const [failedCount, notifications, activeFailedPosts, setupProgress] = await Promise.all([
+  const [failedCount, notifications, activeFailedPosts, setupProgress, helpHref] = await Promise.all([
     getFailedPublishCount().catch(() => 0),
     listPlannerNotifications(20).catch(() => []),
     failedFilterActive ? listActiveFailedPosts(100).catch(() => []) : Promise.resolve([]),
     // A lookup failure just hides the checklist; it is guidance, not a gate.
     getSetupProgress(createServiceSupabaseClient(), accountId).catch(() => null),
+    // The first-post article link follows the sign-up switch (null while it is off or unreadable).
+    getFirstPostHelpHref().catch(() => null),
   ]);
-  // The first-post article link follows the sign-up switch; read it only while the checklist shows.
-  const firstPostHelpHref = setupProgress?.show ? await getFirstPostHelpHref() : null;
+  const firstPostHelpHref = setupProgress?.show ? helpHref : null;
 
   // Map server notifications to PlannerActivityItem[] for the feed
   const initialEvents: PlannerActivityItem[] = notifications.map((n) => ({
