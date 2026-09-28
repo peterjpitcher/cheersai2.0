@@ -1,4 +1,5 @@
--- Verification for 20260926130000_local_rebuild_matches_production.
+-- Verification for 20260926130000_local_rebuild_matches_production and
+-- 20260928180000_auth_users_snapshot_triggers (section 4).
 -- Run AFTER a local rebuild (`npm run db:rebuild`). Each block raises an exception if
 -- the expectation is not met; a clean run = pass. Writes nothing lasting: the write
 -- probe runs as service_role inside a sub-transaction that is always rolled back.
@@ -93,5 +94,64 @@ begin
   if exists (select 1 from public.accounts where email = 'probe@example.invalid') then
     raise exception 'probe rows were not rolled back';
   end if;
+end;
+$$;
+
+-- 4. auth.users keeps public.user_auth_snapshot in step, as on production: both
+--    triggers exist with production's definitions, the functions are SECURITY DEFINER
+--    with production's search_path and run for service_role only, and a login that is
+--    created, changed and deleted is mirrored. The probe login is always rolled back.
+do $$
+declare
+  v_user uuid := gen_random_uuid();
+  v_row public.user_auth_snapshot;
+begin
+  -- pg_get_triggerdef leaves names on the search_path unqualified; production's
+  -- definitions below were read with public on it.
+  perform set_config('search_path', 'public, pg_temp', true);
+  if (select pg_get_triggerdef(oid) from pg_trigger
+       where tgrelid = 'auth.users'::regclass and tgname = 'trg_sync_user_auth_snapshot' and tgenabled = 'O')
+     is distinct from 'CREATE TRIGGER trg_sync_user_auth_snapshot AFTER INSERT OR UPDATE ON auth.users FOR EACH ROW EXECUTE FUNCTION sync_user_auth_snapshot()' then
+    raise exception 'trg_sync_user_auth_snapshot is missing, disabled or differs from production';
+  end if;
+  if (select pg_get_triggerdef(oid) from pg_trigger
+       where tgrelid = 'auth.users'::regclass and tgname = 'trg_purge_user_auth_snapshot' and tgenabled = 'O')
+     is distinct from 'CREATE TRIGGER trg_purge_user_auth_snapshot AFTER DELETE ON auth.users FOR EACH ROW EXECUTE FUNCTION purge_user_auth_snapshot()' then
+    raise exception 'trg_purge_user_auth_snapshot is missing, disabled or differs from production';
+  end if;
+
+  if (select count(*) from pg_proc
+       where oid in ('public.sync_user_auth_snapshot()'::regprocedure, 'public.purge_user_auth_snapshot()'::regprocedure)
+         and prosecdef and proconfig = array['search_path=public, pg_temp']
+         and not has_function_privilege('anon', oid, 'execute')
+         and not has_function_privilege('authenticated', oid, 'execute')
+         and has_function_privilege('service_role', oid, 'execute')) <> 2 then
+    raise exception 'the snapshot functions differ from production (security definer, search_path or EXECUTE grants)';
+  end if;
+
+  begin
+    insert into auth.users (id, email, created_at)
+      values (v_user, 'snapshot-probe@example.invalid', now());
+    select * into v_row from public.user_auth_snapshot where user_id = v_user;
+    if not found or v_row.email <> 'snapshot-probe@example.invalid' or v_row.status <> 'active' then
+      raise exception 'a new login did not get its snapshot row';
+    end if;
+
+    update auth.users set email = 'snapshot-probe-2@example.invalid', last_sign_in_at = now()
+     where id = v_user;
+    select * into v_row from public.user_auth_snapshot where user_id = v_user;
+    if v_row.email <> 'snapshot-probe-2@example.invalid' or v_row.last_sign_in_at is null then
+      raise exception 'a changed login did not update its snapshot row';
+    end if;
+
+    delete from auth.users where id = v_user;
+    if exists (select 1 from public.user_auth_snapshot where user_id = v_user) then
+      raise exception 'a deleted login kept its snapshot row';
+    end if;
+
+    -- always undo the probe login
+    raise exception using errcode = 'P0099', message = 'rollback probe';
+  exception when sqlstate 'P0099' then null;
+  end;
 end;
 $$;
