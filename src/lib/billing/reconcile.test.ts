@@ -288,10 +288,15 @@ describe('reconcileBrandFromStripe: ordering and safety', () => {
 
 describe('reconcileBrandFromStripe: held posts', () => {
   it('releases future held posts once the brand may publish, leaving overdue ones for review', async () => {
+    db.seed('content_items', [
+      { id: 'c1c1c1c1-1111-4111-8111-111111111111', account_id: BRAND, status: 'scheduled' },
+      { id: 'c2c2c2c2-2222-4222-8222-222222222222', account_id: BRAND, status: 'scheduled' },
+      { id: 'c3c3c3c3-3333-4333-8333-333333333333', account_id: OTHER_BRAND, status: 'scheduled' },
+    ]);
     db.seed('publish_jobs', [
-      { id: '1a1a1a1a-1111-4111-8111-111111111111', account_id: BRAND, status: 'held', hold_reason: 'entitlement', next_attempt_at: '2026-09-27T09:00:00Z' },
-      { id: '2b2b2b2b-2222-4222-8222-222222222222', account_id: BRAND, status: 'held', hold_reason: 'entitlement', next_attempt_at: '2026-09-25T09:00:00Z' },
-      { id: '3c3c3c3c-3333-4333-8333-333333333333', account_id: OTHER_BRAND, status: 'held', hold_reason: 'entitlement', next_attempt_at: '2026-09-27T09:00:00Z' },
+      { id: '1a1a1a1a-1111-4111-8111-111111111111', account_id: BRAND, content_item_id: 'c1c1c1c1-1111-4111-8111-111111111111', status: 'held', hold_reason: 'entitlement', next_attempt_at: '2026-09-27T09:00:00Z' },
+      { id: '2b2b2b2b-2222-4222-8222-222222222222', account_id: BRAND, content_item_id: 'c2c2c2c2-2222-4222-8222-222222222222', status: 'held', hold_reason: 'entitlement', next_attempt_at: '2026-09-25T09:00:00Z' },
+      { id: '3c3c3c3c-3333-4333-8333-333333333333', account_id: OTHER_BRAND, content_item_id: 'c3c3c3c3-3333-4333-8333-333333333333', status: 'held', hold_reason: 'entitlement', next_attempt_at: '2026-09-27T09:00:00Z' },
     ]);
     fake.subscriptions.push(fakeSubscription({ id: 'sub_trial', customer: CUSTOMER, status: 'trialing' }));
 

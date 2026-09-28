@@ -307,5 +307,49 @@ describe("approveDraftContent", () => {
     const { approveDraftContent } = await loadActions();
     await expect(approveDraftContent({ contentId: CONTENT_ID })).rejects.toMatchObject({ message: "db down" });
     expect(enqueueMock).not.toHaveBeenCalled();
+    // The jobs are read before anything is written, so the draft is untouched
+    // and pressing approve again retries.
+    expect(mock.writes).toEqual([]);
+  });
+
+  it("puts the post back to draft when arming its job fails, so approving again works", async () => {
+    const mock = createSupabaseMock({
+      ...approvalPlan([{ id: "job-1", status: "held" }]),
+      content_items: [
+        { data: contentRow("draft"), error: null },
+        { data: null, error: null }, // status -> scheduled
+        { data: null, error: null }, // status -> draft again
+      ],
+      publish_jobs: [
+        { data: [{ id: "job-1", status: "held" }], error: null },
+        { data: null, error: { message: "re-arm failed" } },
+      ],
+    });
+    requireAuthContextMock.mockResolvedValue({ supabase: mock.client, accountId: "account-1" });
+
+    const { approveDraftContent } = await loadActions();
+    await expect(approveDraftContent({ contentId: CONTENT_ID })).rejects.toMatchObject({ message: "re-arm failed" });
+
+    const contentWrites = mock.writes.filter((write) => write.table === "content_items").map((write) => write.payload?.status);
+    expect(contentWrites).toEqual(["scheduled", "draft"]);
+  });
+
+  it("puts the post back to draft when creating its job fails", async () => {
+    enqueueMock.mockRejectedValueOnce(new Error("enqueue failed"));
+    const mock = createSupabaseMock({
+      ...approvalPlan([]),
+      content_items: [
+        { data: contentRow("draft"), error: null },
+        { data: null, error: null }, // status -> scheduled
+        { data: null, error: null }, // status -> draft again
+      ],
+    });
+    requireAuthContextMock.mockResolvedValue({ supabase: mock.client, accountId: "account-1" });
+
+    const { approveDraftContent } = await loadActions();
+    await expect(approveDraftContent({ contentId: CONTENT_ID })).rejects.toMatchObject({ message: "enqueue failed" });
+
+    const contentWrites = mock.writes.filter((write) => write.table === "content_items").map((write) => write.payload?.status);
+    expect(contentWrites).toEqual(["scheduled", "draft"]);
   });
 });

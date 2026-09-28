@@ -306,18 +306,11 @@ export async function approveDraftContent(payload: unknown) {
   const scheduledFor = content.scheduled_for ? new Date(content.scheduled_for) : null;
   const nowIso = new Date().toISOString();
 
-  const { error: updateError } = await supabase
-    .from("content_items")
-    .update({ status: "scheduled", updated_at: nowIso })
-    .eq("id", contentId);
-
-  if (updateError) {
-    throw updateError;
-  }
-
   // Approval is where a draft's publish job is armed; rescheduling a draft
   // never arms one. A job stopped while the post was a draft goes back in the
   // queue at the approved time, or the post would sit "scheduled" and never go.
+  // The jobs are read before anything is written, so a failed lookup leaves
+  // the draft as it was and pressing approve again simply retries.
   const { data: existingJobs, error: existingJobsError } = await supabase
     .from("publish_jobs")
     .select("id, status")
@@ -331,38 +324,64 @@ export async function approveDraftContent(payload: unknown) {
   const jobs = existingJobs ?? [];
   const allRearmable = jobs.every((job) => (REARMABLE_JOB_STATUSES as readonly string[]).includes(job.status));
 
-  if (jobs.length && allRearmable) {
-    const { error: rearmError } = await supabase
-      .from("publish_jobs")
-      .update(rearmedPublishJobFields((scheduledFor ?? new Date()).toISOString(), nowIso))
-      .in("id", jobs.map((job) => job.id));
+  // The post becomes "scheduled" before its job is armed: the publish worker
+  // refuses a job whose post is not scheduled (CONTENT_NOT_PUBLISHABLE).
+  const { error: updateError } = await supabase
+    .from("content_items")
+    .update({ status: "scheduled", updated_at: nowIso })
+    .eq("id", contentId);
 
-    if (rearmError) {
-      throw rearmError;
+  if (updateError) {
+    throw updateError;
+  }
+
+  try {
+    if (jobs.length && allRearmable) {
+      const { error: rearmError } = await supabase
+        .from("publish_jobs")
+        .update(rearmedPublishJobFields((scheduledFor ?? new Date()).toISOString(), nowIso))
+        .in("id", jobs.map((job) => job.id));
+
+      if (rearmError) {
+        throw rearmError;
+      }
+    } else if (!jobs.length) {
+      const { data: variantRow, error: variantError } = await supabase
+        .from("content_variants")
+        .select("id")
+        .eq("content_item_id", contentId)
+        .order("updated_at", { ascending: false })
+        .limit(1)
+        .maybeSingle<{ id: string }>();
+
+      if (variantError) {
+        throw variantError;
+      }
+
+      if (!variantRow) {
+        throw new Error("Variant missing for content item");
+      }
+
+      await enqueueAndDispatch({
+        contentItemId: contentId,
+        accountId,
+        platform: content.platform,
+        scheduledAt: scheduledFor ?? new Date(),
+      });
     }
-  } else if (!jobs.length) {
-    const { data: variantRow, error: variantError } = await supabase
-      .from("content_variants")
-      .select("id")
-      .eq("content_item_id", contentId)
-      .order("updated_at", { ascending: false })
-      .limit(1)
-      .maybeSingle<{ id: string }>();
-
-    if (variantError) {
-      throw variantError;
+  } catch (armError) {
+    // Put the post back to draft so it is not left "scheduled" with no job
+    // (a later approve skips anything that is no longer a draft). Best
+    // effort: the original error is what the owner is shown.
+    const { error: revertError } = await supabase
+      .from("content_items")
+      .update({ status: "draft", updated_at: new Date().toISOString() })
+      .eq("id", contentId)
+      .eq("account_id", accountId);
+    if (revertError) {
+      console.error("[planner] could not put a post back to draft after a failed approval", revertError);
     }
-
-    if (!variantRow) {
-      throw new Error("Variant missing for content item");
-    }
-
-    await enqueueAndDispatch({
-      contentItemId: contentId,
-      accountId,
-      platform: content.platform,
-      scheduledAt: scheduledFor ?? new Date(),
-    });
+    throw armError;
   }
 
   const scheduledIso = scheduledFor ? scheduledFor.toISOString() : null;

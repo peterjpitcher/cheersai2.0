@@ -591,14 +591,12 @@ export async function generateFixtureContent(
 
       // Enqueue if preflight passes and not past due
       if (!issues.length && !isPastDue) {
-        await enqueueAndDispatch({
-          contentItemId: contentItem.id,
-          accountId: tournament.accountId,
-          platform: spec.platform,
-          scheduledAt: scheduledFor,
-          placement: spec.placement,
-          variantId: variant.id,
-        });
+        // The post becomes "scheduled" before its job exists: the publish
+        // worker refuses a job whose post is still a draft
+        // (CONTENT_NOT_PUBLISHABLE), and a fixture due within the worker's
+        // lead window could otherwise be picked up in between and never
+        // retried. If the enqueue then fails, the worker recreates missing
+        // jobs for scheduled posts on its next run.
         const scheduledNowIso = new Date().toISOString();
         const { error: statusError } = await supabase
           .from('content_items')
@@ -611,6 +609,14 @@ export async function generateFixtureContent(
           });
           throw statusError;
         }
+        await enqueueAndDispatch({
+          contentItemId: contentItem.id,
+          accountId: tournament.accountId,
+          platform: spec.platform,
+          scheduledAt: scheduledFor,
+          placement: spec.placement,
+          variantId: variant.id,
+        });
         tournamentDebug('generate.fixture.publish-job-enqueued', {
           ...placementDebug,
           contentItemId: redactId(contentItem.id),
