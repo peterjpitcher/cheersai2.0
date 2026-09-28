@@ -1,5 +1,12 @@
 const isServerRuntime = typeof window === "undefined";
 const TOKEN_VAULT_KEY_PATTERN = /^[0-9a-f]{64}$/i;
+/**
+ * Cloudflare's published Turnstile test keys (a digit, "x", zeros, two letters),
+ * e.g. site key 1x00000000000000000000AA and secret 1x0000000000000000000000000000000AA.
+ * They pass or fail every check on purpose, so they belong in Preview and local
+ * development only, never in Production.
+ */
+export const TURNSTILE_TEST_KEY_PATTERN = /^\dx0{20,}[A-Z]{2}$/;
 
 function readOptionalEnv(key: string, fallback = ""): string {
   return process.env[key] ?? fallback;
@@ -106,6 +113,12 @@ const serverEnv = {
   // billing only accepts a live-mode STRIPE_SECRET_KEY (src/lib/billing/stripe.ts),
   // so a test key can never write test customers into the production database.
   VERCEL_ENV: readOptionalEnv("VERCEL_ENV"),
+  // Cloudflare Turnstile secret for the /signup form (spec §4.2 step 3, P9).
+  // Required in production builds, Preview included: Production uses the real
+  // secret for cheers.orangejelly.co.uk, Preview Cloudflare's always-pass test
+  // secret (sign-up always refuses on Preview anyway). A Production build with a
+  // test key fails below.
+  TURNSTILE_SECRET_KEY: readOptionalEnv("TURNSTILE_SECRET_KEY"),
   // Token vault (AES-256-GCM encryption key -- 64 hex chars = 32 bytes)
   TOKEN_VAULT_KEY: readOptionalEnv("TOKEN_VAULT_KEY"),
   TOKEN_VAULT_KEY_VERSION: readOptionalEnv("TOKEN_VAULT_KEY_VERSION", "1"),
@@ -127,6 +140,8 @@ const clientEnv = {
   NEXT_PUBLIC_SUPABASE_URL: resolveSupabaseUrl(),
   NEXT_PUBLIC_META_GRAPH_VERSION: process.env.NEXT_PUBLIC_META_GRAPH_VERSION ?? DEFAULT_META_GRAPH_VERSION,
   NEXT_PUBLIC_ENABLE_FOOD_BOOKING: process.env.NEXT_PUBLIC_ENABLE_FOOD_BOOKING ?? "",
+  // The public half of the Turnstile widget on /signup; pairs with TURNSTILE_SECRET_KEY.
+  NEXT_PUBLIC_TURNSTILE_SITE_KEY: process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY ?? "",
 } as const;
 
 export const env = {
@@ -152,15 +167,29 @@ function validateProductionEnv() {
     "RESEND_FROM",
     "OPERATOR_ALERT_EMAIL",
     "OPENAI_API_KEY",
+    "TURNSTILE_SECRET_KEY",
   ];
 
-  const missing = requiredServerKeys.filter((key) => !serverEnv[key]);
+  const missing: string[] = requiredServerKeys.filter((key) => !serverEnv[key]);
+  if (!clientEnv.NEXT_PUBLIC_TURNSTILE_SITE_KEY) {
+    missing.push("NEXT_PUBLIC_TURNSTILE_SITE_KEY");
+  }
   if (missing.length) {
     throw new Error(`Missing required production environment variables: ${missing.join(", ")}`);
   }
 
   if (!TOKEN_VAULT_KEY_PATTERN.test(serverEnv.TOKEN_VAULT_KEY)) {
     throw new Error("TOKEN_VAULT_KEY must be exactly 64 hex characters in production");
+  }
+
+  // A test key in Production would let every sign-up past the bot check.
+  // VERCEL_ENV is set by Vercel at build and run time; Preview keeps test keys.
+  if (
+    process.env.VERCEL_ENV === "production" &&
+    (TURNSTILE_TEST_KEY_PATTERN.test(serverEnv.TURNSTILE_SECRET_KEY) ||
+      TURNSTILE_TEST_KEY_PATTERN.test(clientEnv.NEXT_PUBLIC_TURNSTILE_SITE_KEY))
+  ) {
+    throw new Error("Cloudflare's Turnstile test keys cannot be used in Production: set the real site key and secret");
   }
 
   const siteUrl = clientEnv.NEXT_PUBLIC_SITE_URL;

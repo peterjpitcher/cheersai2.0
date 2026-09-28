@@ -1,14 +1,24 @@
 /**
- * Helpers for the links we put in auth emails (invites and password resets).
+ * Helpers for the links we put in auth emails (invites, password resets and
+ * self-serve sign-up confirmations).
  *
  * We send these emails ourselves through Resend rather than relying on the
  * Supabase email templates, so the link format is owned here and does not
  * depend on dashboard configuration. `/auth/confirm` verifies the token hash.
  */
 
-export type AuthEmailLinkType = 'invite' | 'recovery';
+/**
+ * `signup` is our own name for a self-serve sign-up confirmation. Supabase
+ * made its token with generateLink type 'invite' (the login has no password
+ * yet), so /auth/confirm verifies it as an invite; the name only picks the
+ * page's wording and where the person goes next.
+ */
+export type AuthEmailLinkType = 'invite' | 'recovery' | 'signup';
 
 export const SET_PASSWORD_PATH = '/auth/set-password';
+
+/** Where a confirmed self-serve sign-up goes next: naming the venue (spec §4.4). */
+export const SIGNUP_VENUE_PATH = '/signup/venue';
 
 /**
  * Accept only same-origin relative paths for post-auth redirects.
@@ -48,7 +58,7 @@ export function buildAuthConfirmUrl(options: {
   const url = new URL('/auth/confirm', options.siteUrl);
   url.searchParams.set('token_hash', options.tokenHash);
   url.searchParams.set('type', options.type);
-  url.searchParams.set('next', options.next ?? SET_PASSWORD_PATH);
+  url.searchParams.set('next', options.next ?? (options.type === 'signup' ? SIGNUP_VENUE_PATH : SET_PASSWORD_PATH));
   return url.toString();
 }
 

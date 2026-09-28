@@ -17,9 +17,15 @@ import { createServiceSupabaseClient } from '@/lib/supabase/service';
 // applied before this code deploys.
 // ---------------------------------------------------------------------------
 
-export type AuthRateLimitAction = 'password_sign_in' | 'magic_link' | 'password_reset';
+export type AuthRateLimitAction =
+  | 'password_sign_in'
+  | 'magic_link'
+  | 'password_reset'
+  | 'signup_request'
+  | 'signup_email_site'
+  | 'signup_widget_report';
 
-type LimitScope = 'email_ip' | 'email' | 'ip';
+type LimitScope = 'email_ip' | 'email' | 'ip' | 'site';
 
 interface LimitRule {
   scope: LimitScope;
@@ -46,6 +52,18 @@ export const AUTH_RATE_LIMIT_RULES: Record<AuthRateLimitAction, readonly LimitRu
     { scope: 'email', limit: 3, windowSeconds: 60 * 60 },
     { scope: 'ip', limit: 10, windowSeconds: 60 * 60 },
   ],
+  // Self-serve sign-up requests (spec §4.2 step 4): each one can send an email.
+  signup_request: [
+    { scope: 'email', limit: 3, windowSeconds: 60 * 60 },
+    { scope: 'ip', limit: 10, windowSeconds: 60 * 60 },
+  ],
+  // Every sign-up email the site sends, whoever asked for it: a ceiling that
+  // protects the shared Resend sender (auth.orangejelly.co.uk). Counted only
+  // after a request has passed the per-email and per-IP limits.
+  signup_email_site: [{ scope: 'site', limit: 60, windowSeconds: 60 * 60 }],
+  // Browser reports that the Turnstile widget failed: a few per IP, so the
+  // report cannot be used to flood operator alerts.
+  signup_widget_report: [{ scope: 'ip', limit: 3, windowSeconds: 60 * 60 }],
 };
 
 export type AuthRateLimitDecision =
@@ -92,7 +110,13 @@ export function rateLimitKey(
   subject: { email: string; ip: string },
 ): string {
   const input =
-    scope === 'email_ip' ? `email_ip\n${subject.email}\n${subject.ip}` : scope === 'email' ? `email\n${subject.email}` : `ip\n${subject.ip}`;
+    scope === 'email_ip'
+      ? `email_ip\n${subject.email}\n${subject.ip}`
+      : scope === 'email'
+        ? `email\n${subject.email}`
+        : scope === 'ip'
+          ? `ip\n${subject.ip}`
+          : 'site';
   const digest = crypto.createHmac('sha256', hmacKey).update(input).digest('hex');
   return `${action}:${scope}:${digest}`;
 }
@@ -165,43 +189,86 @@ function parseConsumeRow(data: unknown): ConsumeRow | null {
   return { allowed, resetsAt };
 }
 
+export type AuthRateLimitAnswer = Exclude<AuthRateLimitDecision, { status: 'unavailable' }>;
+
 /**
  * Count one attempt at an auth action and say whether it may go ahead.
- * Every rule for the action is counted, and all must allow it. Any error
- * (no key, no database, no function, a malformed answer) returns
+ * Every rule for the action is counted, and all must allow it. Throws on any
+ * error (no key, no database, no function, a malformed answer): the caller
+ * must refuse the action and report the failure. The sign-up request uses this
+ * directly so that it reports through its own operator alert.
+ */
+export async function consumeAuthRateLimit(
+  action: AuthRateLimitAction,
+  subject: { email: string; ip: string },
+): Promise<AuthRateLimitAnswer> {
+  const rules = AUTH_RATE_LIMIT_RULES[action];
+  const hmacKey = rateLimitHmacKey();
+  const service = createServiceSupabaseClient();
+  const results = await Promise.all(
+    rules.map(async (rule) => {
+      const { data, error } = await service.rpc('consume_rate_limit', {
+        p_key: rateLimitKey(hmacKey, action, rule.scope, subject),
+        p_limit: rule.limit,
+        p_window_seconds: rule.windowSeconds,
+      });
+      if (error) throw new Error(`consume_rate_limit failed: ${error.message}`);
+      const row = parseConsumeRow(data);
+      if (!row) throw new Error('consume_rate_limit returned no usable row');
+      return { rule, row };
+    }),
+  );
+
+  const blocked = results.filter(({ row }) => !row.allowed);
+  if (blocked.length === 0) return { status: 'allowed' };
+
+  const now = Date.now();
+  const waits = blocked.map(({ rule, row }) => {
+    const seconds = Math.ceil((Date.parse(row.resetsAt) - now) / 1000);
+    return Number.isFinite(seconds) ? Math.min(Math.max(seconds, 1), rule.windowSeconds) : rule.windowSeconds;
+  });
+  return { status: 'limited', retryAfterSeconds: Math.max(...waits) };
+}
+
+/**
+ * Whether consumeAuthRateLimit would refuse right now, without counting
+ * anything: a plain read of the counters. The sign-up uses it for the
+ * site-wide email ceiling, which it checks before creating anything and
+ * counts only once the address is known to be one Supabase accepts. Throws on
+ * any error, like consumeAuthRateLimit.
+ */
+export async function peekAuthRateLimit(
+  action: AuthRateLimitAction,
+  subject: { email: string; ip: string },
+): Promise<AuthRateLimitAnswer> {
+  const rules = AUTH_RATE_LIMIT_RULES[action];
+  const hmacKey = rateLimitHmacKey();
+  const service = createServiceSupabaseClient();
+  const keys = rules.map((rule) => rateLimitKey(hmacKey, action, rule.scope, subject));
+  const { data, error } = await service.from('auth_rate_limits').select('key, count, reset_at').in('key', keys);
+  if (error) throw new Error(`auth_rate_limits read failed: ${error.message}`);
+
+  const now = Date.now();
+  const rows = (data ?? []) as Array<{ key: string; count: number; reset_at: string }>;
+  const waits = rules.flatMap((rule, index) => {
+    const row = rows.find((candidate) => candidate.key === keys[index]);
+    const resetsAt = row ? Date.parse(row.reset_at) : Number.NaN;
+    if (!row || !Number.isFinite(resetsAt) || resetsAt <= now || row.count < rule.limit) return [];
+    return [Math.min(Math.max(Math.ceil((resetsAt - now) / 1000), 1), rule.windowSeconds)];
+  });
+  return waits.length === 0 ? { status: 'allowed' } : { status: 'limited', retryAfterSeconds: Math.max(...waits) };
+}
+
+/**
+ * consumeAuthRateLimit for sign-in, magic links and resets: any error returns
  * `unavailable` after telling the operator; callers must then refuse.
  */
 export async function checkAuthRateLimit(
   action: AuthRateLimitAction,
   subject: { email: string; ip: string },
 ): Promise<AuthRateLimitDecision> {
-  const rules = AUTH_RATE_LIMIT_RULES[action];
   try {
-    const hmacKey = rateLimitHmacKey();
-    const service = createServiceSupabaseClient();
-    const results = await Promise.all(
-      rules.map(async (rule) => {
-        const { data, error } = await service.rpc('consume_rate_limit', {
-          p_key: rateLimitKey(hmacKey, action, rule.scope, subject),
-          p_limit: rule.limit,
-          p_window_seconds: rule.windowSeconds,
-        });
-        if (error) throw new Error(`consume_rate_limit failed: ${error.message}`);
-        const row = parseConsumeRow(data);
-        if (!row) throw new Error('consume_rate_limit returned no usable row');
-        return { rule, row };
-      }),
-    );
-
-    const blocked = results.filter(({ row }) => !row.allowed);
-    if (blocked.length === 0) return { status: 'allowed' };
-
-    const now = Date.now();
-    const waits = blocked.map(({ rule, row }) => {
-      const seconds = Math.ceil((Date.parse(row.resetsAt) - now) / 1000);
-      return Number.isFinite(seconds) ? Math.min(Math.max(seconds, 1), rule.windowSeconds) : rule.windowSeconds;
-    });
-    return { status: 'limited', retryAfterSeconds: Math.max(...waits) };
+    return await consumeAuthRateLimit(action, subject);
   } catch (error) {
     await reportAuthFailure('rate_limiter', error);
     return { status: 'unavailable' };

@@ -1,6 +1,6 @@
 # Runbook: data retention
 
-Peter approved these retention periods on 27 September 2026 for the privacy notice and the DPA. A daily job makes them true: `/api/cron/data-retention` at 03:45 UTC (`vercel.json`) calls `public.run_data_retention(false)` (migration `20260927120000_data_retention.sql`, restated with the team invitations rule, approved on 28 September 2026 as P6, by `20260928161500_team_invitations.sql`), then sends the operator the purge reminder below.
+Peter approved these retention periods on 27 September 2026 for the privacy notice and the DPA. A daily job makes them true: `/api/cron/data-retention` at 03:45 UTC (`vercel.json`) calls `public.run_data_retention(false)` (migration `20260927120000_data_retention.sql`, restated with the team invitations rule, approved on 28 September 2026 as P6, by `20260928161500_team_invitations.sql`, and with the self-serve sign-up rules, also P6, by `20260928170000_self_serve_signups.sql`), deletes the self-serve logins it lists (below), then sends the operator the purge reminder below.
 
 ## What each rule does
 
@@ -20,12 +20,21 @@ Every cutoff is measured back from the moment the job runs.
 | `auth_rate_limits` | sign-in rate limit windows | until 24 hours after `reset_at` | deleted |
 | `oauth_states` | Facebook and Instagram connection handshakes | until 24 hours after `expires_at` (or `created_at` if it has none) | deleted |
 | `team_invitations` | team invitations (who was invited to which brand, by whom) | until 24 hours after the invitation was accepted, declined, cancelled or expired (7 days after it was sent), whichever came first | deleted |
+| `self_serve_signups` | sign-up records (when someone asked, confirmed and created a venue; no email, name or IP) | 24 months from `requested_at` | deleted |
 
 Kept on purpose: `publish_jobs`, posts and all other content. They belong to the content, which is kept for the life of the subscription. Offboarded brands are deleted by hand (below).
 
 The booking identifiers are no loss to Meta reporting: Meta rejects Conversions API events older than 7 days, and the hourly `retry-capi-conversions` cron only re-sends rows from the last 6.5 days, so it never picks up a cleared row (a test in `tests/api/retry-capi-conversions-route.test.ts` guards this). Paid-campaign attribution uses the UTM fields and short codes, which are kept.
 
 Each rule handles at most 10,000 rows per run, so one run stays short. If a rule has more, its `due` is higher than its `done` and the log shows a warning; the next day's run carries on. Running the function twice is safe: the second run finds nothing left to do.
+
+## Self-serve logins that never became a venue
+
+Decision P6 (28 September 2026): a login made by `/signup` is deleted when it was never confirmed 7 days after its last sign-up request, or was confirmed more than 30 days ago and still has no venue. Only logins with a sign-up row, no venue, no brand membership, no admin role and no open team invitation qualify, so Peter's logins, invited members and every venue owner are never touched.
+
+The rule lives in one database function, `self_serve_login_is_stale`. `run_data_retention` uses it to list the logins (oldest request first, at most 100 a run) under `self_serve_logins` in its result, outside `rules`: it never deletes a login itself. For each one the cron calls `delete_stale_self_serve_login(user_id)`, which in a single transaction locks the login's sign-up row, applies the whole rule again and, only if it still holds, deletes the row in `auth.users`. A sign-up request takes the same row lock, so it either finishes first (and the login is kept) or waits until the delete is over. Deleting the login also removes its identities and sessions (cascade) and its `user_auth_snapshot` row (trigger), and sets the sign-up row's `user_id` to null, so the row stays for the funnel until its own 24 months are up. Because the delete is done in SQL rather than through the Auth admin API, Supabase writes no `user_deleted` entry in `auth.audit_log_entries` for it (offboarding still deletes through the API).
+
+The response shows `selfServeLogins` with `due`, `deleted`, `skipped` (asked again, was invited, joined a brand or created a venue since the list was made) and `failed`. A failure never fails the run: the login is logged with its user id and the reason, skipped, and tried again the next day, and the operator gets one "Sign-up problem: login_cleanup" email with the count (at most one an hour). A login with rows in `audit_log` cannot be deleted (that foreign key has no delete action), so it fails every day until someone looks at it.
 
 ## Operator reminder: brands due for deletion or lapsed
 
@@ -53,4 +62,4 @@ Both link to Admin, Offboarding (`/admin#offboarding`). No email is sent when bo
 - **Apply the migration before the cron is deployed.** Until `public.run_data_retention` exists the cron fails every night with a 500 (visible, but noisy).
 - `OPERATOR_ALERT_EMAIL`, `RESEND_API_KEY` and `RESEND_FROM` must be set in production; the reminder fails the run rather than skip quietly when brands are due and email cannot be sent.
 - To stop the job: remove the `/api/cron/data-retention` entry from `vercel.json` and deploy. To remove the function: `drop function if exists public.run_data_retention(boolean);`. Rows already deleted or cleared cannot be brought back.
-- Local test: `supabase/tests/data_retention_verify.sql` inserts rows either side of every cutoff on a local rebuild, runs a dry run, a real run and a second run, and checks exactly the old rows went. Never run it against production.
+- Local test: `supabase/tests/data_retention_verify.sql` inserts rows either side of every cutoff on a local rebuild, runs a dry run, a real run and a second run, and checks exactly the old rows went; `supabase/tests/self_serve_signups_verify.sql` checks which self-serve logins are listed and what the delete does (kept, failed, deleted with its cascades), and `supabase/tests/self_serve_login_delete_lock_verify.sh` checks that a sign-up request holding the row lock makes the delete wait and keep the login. Never run them against production.

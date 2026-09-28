@@ -37,7 +37,7 @@ describe.each(PAGES)("the $name page", ({ Page, title }) => {
     const { container, text } = renderPage();
     expect(container.querySelector("h1")?.textContent).toBe(title);
     expect(text).toContain("Last updated 28 September 2026");
-    expect(text).toContain("Version 2026-09-28.2");
+    expect(text).toContain("Version 2026-09-28.3");
   });
 
   it("shows the company details and contacts", () => {
@@ -94,6 +94,10 @@ describe("the self-serve wording (spec §4.13), true while sign-up is closed", (
   it("the privacy notice describes sign-up records, Turnstile and trial card codes only conditionally", () => {
     const text = textOf(PrivacyPolicyPage);
     expect(text).toContain("Sign-up records, if you sign up on our website");
+    // Supabase's security log writes user_invited (each sign-up link) with the typed email.
+    expect(text).toContain(
+      "Our sign-in provider's security log also records the email address you typed and the time of each sign-up link we send you",
+    );
     expect(text).toContain("If you use the sign-up form on our website, Cloudflare Turnstile checks your IP address and browser details");
     expect(text).toContain("as an independent controller to improve Turnstile");
     expect(text).toContain("If you start a free trial, we may also keep a one-way code");

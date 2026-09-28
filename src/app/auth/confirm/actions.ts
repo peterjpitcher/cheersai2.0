@@ -3,7 +3,7 @@
 import { redirect } from 'next/navigation';
 
 import { reportAuthFailure } from '@/lib/auth/alerts';
-import { parseConfirmLinkParams } from '@/lib/auth/confirm-link';
+import { parseConfirmLinkParams, SUPABASE_OTP_TYPE } from '@/lib/auth/confirm-link';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 
 /**
@@ -32,7 +32,7 @@ export async function confirmEmailLink(formData: FormData): Promise<void> {
   let outcome: 'ok' | 'link_problem' | 'unavailable' = 'ok';
   try {
     const supabase = await createServerSupabaseClient();
-    const { error } = await supabase.auth.verifyOtp({ token_hash: params.tokenHash, type: params.type });
+    const { error } = await supabase.auth.verifyOtp({ token_hash: params.tokenHash, type: SUPABASE_OTP_TYPE[params.type] });
     if (error && isLinkProblem(error)) {
       console.error('[auth] confirm link refused:', error.status, error.message);
       outcome = 'link_problem';

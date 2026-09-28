@@ -54,6 +54,20 @@ describe('security headers', () => {
     }
   });
 
+  it('let the Cloudflare Turnstile script and iframe load on the sign-up form, and nothing else from Cloudflare', () => {
+    const csp = headersFor('/signup')['Content-Security-Policy'] ?? '';
+    const directive = (name: string) =>
+      csp
+        .split(';')
+        .map((part) => part.trim())
+        .find((part) => part.startsWith(`${name} `)) ?? '';
+    expect(directive('script-src').split(' ')).toContain('https://challenges.cloudflare.com');
+    expect(directive('frame-src').split(' ')).toContain('https://challenges.cloudflare.com');
+    expect(directive('connect-src')).not.toContain('cloudflare');
+    expect(directive('default-src')).toBe("default-src 'self'");
+    expect(csp.match(/cloudflare/g)).toHaveLength(2);
+  });
+
   it('keep X-Robots-Tag noindex on every other path', () => {
     for (const path of NOT_INDEXABLE) {
       expect(headersFor(path)['X-Robots-Tag'], path).toBe('noindex, nofollow');

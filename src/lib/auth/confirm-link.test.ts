@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { parseConfirmLinkParams } from '@/lib/auth/confirm-link';
+import { parseConfirmLinkParams, SUPABASE_OTP_TYPE } from '@/lib/auth/confirm-link';
 import { buildAuthConfirmUrl } from '@/lib/auth/email-links';
 
 const SITE = 'https://cheers.orangejelly.co.uk';
@@ -26,8 +26,18 @@ describe('parseConfirmLinkParams', () => {
     expect(parseConfirmLinkParams(paramsOf(link))).toEqual({ tokenHash: TOKEN, type: 'recovery', next: '/auth/set-password' });
   });
 
-  it('accepts only invite and recovery links (magic links go through Supabase and /auth/callback)', () => {
-    for (const type of ['magiclink', 'email', 'signup', 'email_change']) {
+  it('reads self-serve sign-up links, which go on to naming the venue', () => {
+    const link = buildAuthConfirmUrl({ siteUrl: SITE, tokenHash: TOKEN, type: 'signup' });
+    expect(new URL(link).pathname).toBe('/auth/confirm');
+    expect(parseConfirmLinkParams(paramsOf(link))).toEqual({ tokenHash: TOKEN, type: 'signup', next: '/signup/venue' });
+  });
+
+  it('verifies a sign-up link as a Supabase invite, because generateLink made it as one', () => {
+    expect(SUPABASE_OTP_TYPE).toEqual({ invite: 'invite', recovery: 'recovery', signup: 'invite' });
+  });
+
+  it('accepts only invite, recovery and signup links (magic links go through Supabase and /auth/callback)', () => {
+    for (const type of ['magiclink', 'email', 'email_change', 'Signup', 'sign_up']) {
       expect(parseConfirmLinkParams({ token_hash: TOKEN, type })).toBeNull();
     }
   });
@@ -51,5 +61,10 @@ describe('parseConfirmLinkParams', () => {
     expect(parseConfirmLinkParams({ token_hash: TOKEN, type: 'recovery', next: '/\t/evil.example' })?.next).toBe('/dashboard');
     expect(parseConfirmLinkParams({ token_hash: TOKEN, type: 'recovery' })?.next).toBe('/dashboard');
     expect(parseConfirmLinkParams({ token_hash: TOKEN, type: 'recovery', next: '/planner' })?.next).toBe('/planner');
+  });
+
+  it('sends a sign-up link with a missing or unsafe next to naming the venue', () => {
+    expect(parseConfirmLinkParams({ token_hash: TOKEN, type: 'signup' })?.next).toBe('/signup/venue');
+    expect(parseConfirmLinkParams({ token_hash: TOKEN, type: 'signup', next: 'https://evil.example' })?.next).toBe('/signup/venue');
   });
 });
