@@ -5,6 +5,7 @@ import { z } from 'zod';
 
 import { env } from '@/env';
 import { logAdminEvent } from '@/lib/admin/audit';
+import { reportAuthFailure } from '@/lib/auth/alerts';
 import { buildAuthConfirmUrl, renderInviteEmail } from '@/lib/auth/email-links';
 import { OwnerRequiredError, requireOwnerContext } from '@/lib/auth/roles';
 import { requireAuthContext } from '@/lib/auth/server';
@@ -130,6 +131,44 @@ async function audit(params: Parameters<typeof logAdminEvent>[0]): Promise<void>
 }
 
 /**
+ * Delete a login this invite created but did not use (the database refused
+ * the invite at the last moment, or the write failed), so a race or an outage
+ * never leaves a stray login behind. Only while it is still bare: never
+ * signed in or confirmed, no brand and no invitation. That also covers the
+ * case where the write did commit but its answer was lost, and the rare one
+ * where Supabase handed back an existing unconfirmed login. Anything else is
+ * left alone. A failed check or delete is logged and alerted, never thrown:
+ * the owner still gets the invite's own error.
+ */
+async function removeUnusedLogin(
+  supabase: AuthContext['supabase'],
+  user: { id: string; email_confirmed_at?: string | null; last_sign_in_at?: string | null },
+  accountId: string,
+): Promise<void> {
+  if (user.email_confirmed_at || user.last_sign_in_at) {
+    logger.warn('team invite login left in place: already used', { accountId, userId: user.id });
+    return;
+  }
+  try {
+    const [memberships, invitations] = await Promise.all([
+      supabase.from('account_members').select('user_id', { count: 'exact', head: true }).eq('user_id', user.id),
+      supabase.from('team_invitations').select('id', { count: 'exact', head: true }).eq('user_id', user.id),
+    ]);
+    if (memberships.error || invitations.error) {
+      throw new Error(`could not check the login before deleting it: ${(memberships.error ?? invitations.error)?.message}`);
+    }
+    if ((memberships.count ?? 0) > 0 || (invitations.count ?? 0) > 0) {
+      logger.warn('team invite login left in place: it has access or an invitation', { accountId, userId: user.id });
+      return;
+    }
+    const { error } = await supabase.auth.admin.deleteUser(user.id);
+    if (error) throw new Error(`deleteUser failed: ${error.message}`);
+  } catch (error) {
+    await reportAuthFailure('invite_login_cleanup', new Error(`${error instanceof Error ? error.message : String(error)} (user ${user.id})`));
+  }
+}
+
+/**
  * Invite someone to the owner's active brand (SPEC-self-serve-signup §4.6, P4).
  *
  * Refused unless the brand is trialing, paying, in past-due grace or comped,
@@ -211,7 +250,10 @@ export async function inviteTeamMember(input: { email: string; role: BrandRole }
   // invite record in one step, then email our link.
   const { data, error } = await supabase.auth.admin.generateLink({ type: 'invite', email });
   const tokenHash = data?.properties?.hashed_token;
-  if (error || !data?.user || !tokenHash) return { error: 'Could not create the invite. Please try again.' };
+  if (error || !data?.user || !tokenHash) {
+    if (data?.user) await removeUnusedLogin(supabase, data.user, accountId);
+    return { error: 'Could not create the invite. Please try again.' };
+  }
   const userId = data.user.id;
 
   let outcome: RecordInvitationOutcome;
@@ -219,10 +261,16 @@ export async function inviteTeamMember(input: { email: string; role: BrandRole }
     outcome = await recordTeamInvitation(supabase, { accountId, userId, role, invitedBy: ctx.user.id, seatLimit, grantAccess: true });
   } catch (recordError) {
     logger.error('team invite membership write failed', recordError instanceof Error ? recordError : undefined, { accountId });
+    await removeUnusedLogin(supabase, data.user, accountId);
     return { error: 'Could not add them to the brand, so no email was sent. Please try again.' };
   }
   const refusal = refusalMessage(outcome, seatLimit);
-  if (refusal) return { error: refusal };
+  if (refusal) {
+    // Another invite took the last seat or daily slot between the early check
+    // and the locked one: the login made for this invite is not needed.
+    await removeUnusedLogin(supabase, data.user, accountId);
+    return { error: refusal };
+  }
 
   const message = renderInviteEmail({ link: buildAuthConfirmUrl({ siteUrl, tokenHash, type: 'invite' }), brandNames: [brandName] });
   try {
@@ -294,9 +342,12 @@ async function inviteExistingLogin(options: {
   return { success: true };
 }
 
-/** Open invitations the active brand has sent (anyone in the brand can see them, as with the team list). */
+/**
+ * Open invitations the active brand has sent. Owners only: the invited email
+ * addresses are not shown to members until those people accept.
+ */
 export async function listTeamInvitations(): Promise<SentInvitation[]> {
-  const ctx = await requireAuthContext();
+  const ctx = await requireOwnerContext();
   return listSentInvitations(ctx.supabase, ctx.accountId);
 }
 

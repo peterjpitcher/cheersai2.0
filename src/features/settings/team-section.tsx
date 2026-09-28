@@ -20,7 +20,10 @@ import { formatUkLongDate } from "@/lib/utils/date";
 
 interface TeamSectionProps {
   members: TeamMember[];
-  /** Open invitations waiting to be accepted (each holds a seat); null when they could not be loaded. */
+  /**
+   * Open invitations waiting to be accepted (each holds a seat); null when they
+   * could not be loaded. Owners only: members are never sent them.
+   */
   invitations: SentInvitation[] | null;
   canManage: boolean;
 }
@@ -103,7 +106,7 @@ export function TeamSection({ members, invitations, canManage }: TeamSectionProp
         ) : null}
       </ul>
 
-      {invitations === null ? (
+      {!canManage ? null : invitations === null ? (
         <p className="text-sm" role="alert" style={{ color: "var(--c-claret)" }}>
           Invitations waiting to be accepted could not be loaded. Reload the page to try again.
         </p>

@@ -31,11 +31,13 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
     getLinkInBioProfileWithTiles(),
     listMediaAssets({ excludeTags: ["Tournament"], includeSystemAssets: true }),
     listTeam(),
-    // A failed read shows a note in the Team section, not a broken page.
-    listTeamInvitations().catch((error: unknown) => {
-      console.error("[settings] team invitations lookup failed", error);
-      return null;
-    }),
+    // Owners only. A failed read shows a note in the Team section, not a broken page.
+    role === "owner"
+      ? listTeamInvitations().catch((error: unknown) => {
+          console.error("[settings] team invitations lookup failed", error);
+          return null;
+        })
+      : Promise.resolve([]),
     // A billing lookup failure shows an error in the Billing section, not a broken page.
     getBillingOverview(supabase, accountId).catch((error: unknown) => {
       console.error("[settings] billing overview failed", error);

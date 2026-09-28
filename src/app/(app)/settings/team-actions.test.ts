@@ -8,6 +8,10 @@ const INVITATION_ID = '4e5f6071-8293-4dae-9fc0-3b4c5d6e7f80';
 // --- Supabase mock: per-table results plus captured writes ---------------------
 const state = {
   memberCount: 1,
+  // Rows held by the login a new-address invite just created (checked before it is deleted).
+  userMemberships: 0,
+  userInvitations: 0,
+  userCheckError: null as unknown,
   sentLastDay: 0,
   openInvitations: 0,
   invitationCountError: null as unknown,
@@ -58,6 +62,9 @@ function chain(table: string) {
     return { data: null, error: null };
   });
   c.then = (resolve: (v: unknown) => unknown) => {
+    const byUser = filters.some(([method, column]) => method === 'eq' && column === 'user_id');
+    if (table === 'account_members' && head && byUser) return resolve({ count: state.userMemberships, error: state.userCheckError });
+    if (table === 'team_invitations' && head && byUser) return resolve({ count: state.userInvitations, error: null });
     if (table === 'account_members' && head) return resolve({ count: state.memberCount, error: null });
     if (table === 'team_invitations' && head) {
       if (state.invitationCountError) return resolve({ count: null, error: state.invitationCountError });
@@ -81,11 +88,12 @@ function chain(table: string) {
 }
 
 const mockGenerateLink = vi.fn();
+const mockDeleteUser = vi.fn();
 const mockRpc = vi.fn();
 const supabase = {
   from: vi.fn((t: string) => chain(t)),
   rpc: (...args: unknown[]) => mockRpc(...args),
-  auth: { admin: { generateLink: mockGenerateLink } },
+  auth: { admin: { generateLink: mockGenerateLink, deleteUser: (...a: unknown[]) => mockDeleteUser(...a) } },
 };
 
 const mockRequireAuthContext = vi.fn();
@@ -103,11 +111,14 @@ vi.mock('@/lib/email/resend', () => ({ sendEmail: (...a: unknown[]) => mockSendE
 const mockAudit = vi.fn();
 vi.mock('@/lib/admin/audit', () => ({ logAdminEvent: (...a: unknown[]) => mockAudit(...a) }));
 
+const mockReportAuthFailure = vi.fn();
+vi.mock('@/lib/auth/alerts', () => ({ reportAuthFailure: (...a: unknown[]) => mockReportAuthFailure(...a) }));
+
 vi.mock('@/lib/logging', () => ({ createLogger: () => ({ error: vi.fn(), warn: vi.fn(), info: vi.fn() }) }));
 vi.mock('@/env', () => ({ env: { client: { NEXT_PUBLIC_SITE_URL: 'https://cheers.orangejelly.co.uk' }, server: {} } }));
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
 
-const { cancelTeamInvitation, inviteTeamMember, removeTeamMember, setTeamMemberRole } = await import('./team-actions');
+const { cancelTeamInvitation, inviteTeamMember, listTeamInvitations, removeTeamMember, setTeamMemberRole } = await import('./team-actions');
 
 function ctx(role: 'owner' | 'member' = 'owner') {
   return { user: { id: OWNER_ID }, accountId: BRAND_ID, supabase, role };
@@ -128,6 +139,9 @@ beforeEach(() => {
   updates.length = 0;
   Object.assign(state, {
     memberCount: 1,
+    userMemberships: 0,
+    userInvitations: 0,
+    userCheckError: null,
     sentLastDay: 0,
     openInvitations: 0,
     invitationCountError: null,
@@ -146,6 +160,8 @@ beforeEach(() => {
   mockAudit.mockResolvedValue(undefined);
   mockRpc.mockImplementation(async () => state.rpcResult);
   mockGenerateLink.mockResolvedValue({ data: { user: { id: NEW_USER_ID }, properties: { hashed_token: 'tok' } }, error: null });
+  mockDeleteUser.mockResolvedValue({ data: {}, error: null });
+  mockReportAuthFailure.mockResolvedValue(undefined);
 });
 
 describe('inviteTeamMember: who may invite (P4)', () => {
@@ -362,6 +378,91 @@ describe('inviteTeamMember: a new address', () => {
     state.rpcResult = { data: 'something_else', error: null };
     expect((await inviteTeamMember({ email: 'a@b.test', role: 'member' })).error).toMatch(/no email was sent/);
     expect(mockSendEmail).not.toHaveBeenCalled();
+  });
+});
+
+describe('inviteTeamMember: a login made for a refused or failed invite is removed', () => {
+  it('deletes the new login when the database refuses at the last moment (a simultaneous invite won)', async () => {
+    state.rpcResult = { data: 'daily_limit', error: null };
+    expect((await inviteTeamMember({ email: 'late@venue.test', role: 'member' })).error).toMatch(/up to 5 invites/);
+    expect(mockDeleteUser).toHaveBeenCalledWith(NEW_USER_ID);
+    expect(mockSendEmail).not.toHaveBeenCalled();
+    expect(mockReportAuthFailure).not.toHaveBeenCalled();
+  });
+
+  it('deletes the new login when the database write fails', async () => {
+    state.rpcResult = { data: null, error: { message: 'db down' } };
+    expect((await inviteTeamMember({ email: 'a@b.test', role: 'member' })).error).toBe(
+      'Could not add them to the brand, so no email was sent. Please try again.',
+    );
+    expect(mockDeleteUser).toHaveBeenCalledWith(NEW_USER_ID);
+  });
+
+  it('deletes a login Supabase created without a usable link', async () => {
+    mockGenerateLink.mockResolvedValue({ data: { user: { id: NEW_USER_ID }, properties: {} }, error: null });
+    expect((await inviteTeamMember({ email: 'a@b.test', role: 'member' })).error).toBe('Could not create the invite. Please try again.');
+    expect(mockDeleteUser).toHaveBeenCalledWith(NEW_USER_ID);
+    expect(mockRpc).not.toHaveBeenCalled();
+  });
+
+  it('alerts the operator, and still shows the owner the invite error, when the delete fails', async () => {
+    state.rpcResult = { data: 'seat_limit', error: null };
+    mockDeleteUser.mockResolvedValue({ data: null, error: { message: 'auth down' } });
+    expect((await inviteTeamMember({ email: 'a@b.test', role: 'member' })).error).toMatch(/^Your plan includes 2 people/);
+    expect(mockReportAuthFailure).toHaveBeenCalledWith('invite_login_cleanup', expect.any(Error));
+    expect(String(mockReportAuthFailure.mock.calls[0][1])).toContain(NEW_USER_ID);
+  });
+
+  it('alerts when the delete throws', async () => {
+    state.rpcResult = { data: null, error: { message: 'db down' } };
+    mockDeleteUser.mockRejectedValue(new Error('network'));
+    expect((await inviteTeamMember({ email: 'a@b.test', role: 'member' })).error).toMatch(/no email was sent/);
+    expect(mockReportAuthFailure).toHaveBeenCalledWith('invite_login_cleanup', expect.any(Error));
+  });
+
+  it('alerts, and deletes nothing, when it cannot check the login first', async () => {
+    state.rpcResult = { data: null, error: { message: 'db down' } };
+    state.userCheckError = { message: 'db down' };
+    expect((await inviteTeamMember({ email: 'a@b.test', role: 'member' })).error).toMatch(/no email was sent/);
+    expect(mockDeleteUser).not.toHaveBeenCalled();
+    expect(mockReportAuthFailure).toHaveBeenCalledWith('invite_login_cleanup', expect.any(Error));
+  });
+
+  it('never deletes a login that already has access or an invitation (the write committed after all)', async () => {
+    state.rpcResult = { data: null, error: { message: 'timeout after commit' } };
+    state.userMemberships = 1;
+    await inviteTeamMember({ email: 'a@b.test', role: 'member' });
+    expect(mockDeleteUser).not.toHaveBeenCalled();
+    state.userMemberships = 0;
+    state.userInvitations = 1;
+    await inviteTeamMember({ email: 'a@b.test', role: 'member' });
+    expect(mockDeleteUser).not.toHaveBeenCalled();
+  });
+
+  it('never deletes a login that has been confirmed or used', async () => {
+    state.rpcResult = { data: 'daily_limit', error: null };
+    mockGenerateLink.mockResolvedValue({
+      data: { user: { id: NEW_USER_ID, email_confirmed_at: '2026-09-01T10:00:00Z' }, properties: { hashed_token: 'tok' } },
+      error: null,
+    });
+    await inviteTeamMember({ email: 'a@b.test', role: 'member' });
+    expect(mockDeleteUser).not.toHaveBeenCalled();
+  });
+
+  it('never deletes anything on the existing-login path', async () => {
+    state.existingUser = { user_id: NEW_USER_ID };
+    state.rpcResult = { data: 'daily_limit', error: null };
+    await inviteTeamMember({ email: 'known@venue.test', role: 'member' });
+    state.rpcResult = { data: null, error: { message: 'db down' } };
+    await inviteTeamMember({ email: 'known@venue.test', role: 'member' });
+    expect(mockDeleteUser).not.toHaveBeenCalled();
+  });
+});
+
+describe('listTeamInvitations', () => {
+  it('is for owners only, so members never see invited email addresses', async () => {
+    mockRequireAuthContext.mockResolvedValue(ctx('member'));
+    await expect(listTeamInvitations()).rejects.toThrow('Only an owner of this brand can do that.');
   });
 });
 
