@@ -63,6 +63,8 @@ from self_serve_signups x where x.requested_at >= now() - interval '30 days';
 
 A login that starts from `/no-access` gets its sign-up row when it creates its venue, so its `requested_at` is the venue's creation time.
 
+The admin page's **Sign-ups** card (`/admin#signups`, super admins only) shows the same funnel for the last 7, 30 and 90 London calendar days (today included, so it can differ from the rolling 30 days above by a few hours' sign-ups), and the same lists as this email, read when the page loads (`src/lib/signup/funnel.ts`, `src/lib/signup/digest.ts`). It also says whether the switch is open, so zeros while it is off read as "closed". If its reads fail or take longer than 8 seconds, the card shows the error, the reason is logged (`[signup] admin sign-ups card could not be read`) and the rest of the page still works.
+
 Both brand lists link to Admin, Offboarding (`/admin#offboarding`). No email is sent when every list is empty. It repeats every day until each brand is dealt with; setting a lapsed brand's billing override to suspended keeps it without reminders. See `docs/runbooks/customer-offboarding.md`.
 
 ## Checking it

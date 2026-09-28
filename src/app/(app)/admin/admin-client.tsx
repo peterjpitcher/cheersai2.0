@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useState, useTransition } from 'react';
+import { useState, useTransition, type ReactNode } from 'react';
 
 import type { AdminBrand, AdminUser } from '@/lib/admin/data';
 import {
@@ -658,10 +658,13 @@ export function AdminClient({
   brands,
   users,
   ingestEndpoint,
+  signupsCard,
 }: {
   brands: AdminBrand[];
   users: AdminUser[];
   ingestEndpoint: string;
+  /** The server-rendered Sign-ups card (src/features/admin/signups-card.tsx). */
+  signupsCard?: ReactNode;
 }) {
   return (
     <div className="space-y-6">
@@ -671,6 +674,7 @@ export function AdminClient({
       </div>
 
       <BillingCard brands={brands} />
+      {signupsCard}
       <BrandFeaturesCard brands={brands} />
       <OffboardingCard brands={brands} />
       <BookingKeysCard brands={brands} ingestEndpoint={ingestEndpoint} />

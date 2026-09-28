@@ -46,7 +46,8 @@ export const VENUE_WINDOW_DAYS = 90;
 export const DIGEST_LIST_LIMIT = 50;
 
 const PAGE = 1000;
-const ID_CHUNK = 100;
+/** Ids per .in() lookup, so a request URL stays short. Shared with the funnel (./funnel.ts). */
+export const ID_CHUNK = 100;
 
 export interface SignupAlertSummary {
   kind: string;
@@ -108,15 +109,16 @@ export function londonDaysCutoff(now: Date, days: number): string {
     .toISO() as string;
 }
 
-function chunk<T>(items: T[], size: number): T[][] {
+export function chunk<T>(items: T[], size: number): T[][] {
   const chunks: T[][] = [];
   for (let index = 0; index < items.length; index += size) chunks.push(items.slice(index, index + size));
   return chunks;
 }
 
-type PagedQuery<T> = (from: number, to: number) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>;
+export type PagedQuery<T> = (from: number, to: number) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>;
 
-async function readAll<T>(label: string, query: PagedQuery<T>): Promise<T[]> {
+/** Reads every page of a query (PostgREST caps a response at 1,000 rows); the query must have a stable order. */
+export async function readAll<T>(label: string, query: PagedQuery<T>): Promise<T[]> {
   const rows: T[] = [];
   for (let offset = 0; ; offset += PAGE) {
     const { data, error } = await query(offset, offset + PAGE - 1);
