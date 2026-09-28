@@ -12,6 +12,8 @@ import { listTeam, listTeamInvitations } from "@/app/(app)/settings/team-actions
 import { TeamSection } from "@/features/settings/team-section";
 import { BillingSection, type CheckoutReturn } from "@/features/settings/billing-section";
 import { BILLING_TRIAL_DAYS, billingPlanOptions, getBillingOverview } from "@/lib/billing/overview";
+import { CONTACT } from "@/lib/legal/company";
+import { getSelfServeSignupSwitch } from "@/lib/signup/switch";
 
 interface SettingsPageProps {
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
@@ -25,7 +27,7 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
   // The management-app import is a per-brand switch, off by default.
   const { features, role, supabase, accountId } = await requireAuthContext();
   const params = searchParams ? await searchParams : {};
-  const [settings, managementConnection, linkInBioData, mediaAssets, team, invitations, billing] = await Promise.all([
+  const [settings, managementConnection, linkInBioData, mediaAssets, team, invitations, billing, signupSwitch] = await Promise.all([
     getOwnerSettings(),
     features.managementImport ? getManagementConnectionSummary() : Promise.resolve(null),
     getLinkInBioProfileWithTiles(),
@@ -43,7 +45,14 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
       console.error("[settings] billing overview failed", error);
       return null;
     }),
+    // Never throws: unreadable counts as off.
+    getSelfServeSignupSwitch(),
   ]);
+
+  // Decision P10 (28 September 2026): until owners get their own export and
+  // close buttons, Settings tells them how to ask. Shown only while self-serve
+  // sign-up is on, so nothing changes for existing brands before opening.
+  const showDataRequestLine = role === "owner" && signupSwitch === "open";
 
   // Comped brands (our own venues) only ever see "Included, no
   // billing", so their Billing section sits at the bottom; for everyone else it
@@ -172,6 +181,16 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
       </div>
 
       {billingFirst ? null : billingSection}
+
+      {showDataRequestLine ? (
+        <p className="text-sm" style={{ color: "var(--c-ink-3)" }}>
+          To close this venue or get a copy of your data, email{" "}
+          <a href={`mailto:${CONTACT.email}`} className="font-semibold underline" style={{ color: "var(--c-orange)" }}>
+            {CONTACT.email}
+          </a>
+          .
+        </p>
+      ) : null}
     </div>
   );
 }

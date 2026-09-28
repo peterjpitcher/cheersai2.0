@@ -19,6 +19,11 @@ vi.mock('@/lib/signup/alerts', () => ({
   reportSignupFailure: (kind: string, error: unknown) => mockReportSignup(kind, error),
 }));
 vi.mock('@/lib/email/resend', () => ({ sendEmail: vi.fn() }));
+// The sign-up lists are tested in src/lib/signup/digest.test.ts and purge-reminder.test.ts; empty here.
+vi.mock('@/lib/signup/digest', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/signup/digest')>()),
+  findSignupDigest: async () => ({ alerts: [], verifiedWithoutVenue: [], noCheckout: [], trialWithoutConnection: [], neverStarted: [] }),
+}));
 vi.mock('@/env', () => ({
   env: {
     client: { NEXT_PUBLIC_SITE_URL: 'https://cheers.test' },

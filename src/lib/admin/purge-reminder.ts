@@ -5,6 +5,8 @@ import { env } from '@/env';
 import { isLiveSubscriptionStatus } from '@/lib/billing/entitlement';
 import { DEFAULT_TIMEZONE } from '@/lib/constants';
 import { sendEmail } from '@/lib/email/resend';
+import { createLogger } from '@/lib/logging';
+import { findSignupDigest, renderSignupDigestSections, signupDigestSize, type SignupDigest } from '@/lib/signup/digest';
 import { formatUkLongDate } from '@/lib/utils/date';
 
 /**
@@ -18,8 +20,12 @@ import { formatUkLongDate } from '@/lib/utils/date';
  *    closed (decision L8). Brands with a billing override (comped or
  *    suspended) are left out: setting one is how the operator keeps a lapsed
  *    brand on purpose.
+ * 3. The self-serve sign-up lists (src/lib/signup/digest.ts, spec §4.9, P7):
+ *    sign-up problems in the last 24 hours, stuck sign-ups and venues that
+ *    never started a plan. If they cannot be read, the email says so instead
+ *    (and still carries lists 1 and 2); that never stops the reminder.
  *
- * Sends nothing when neither list has a brand.
+ * Sends nothing when no list has anything in it.
  */
 
 /** Days after a subscription ends before the brand is listed for review. */
@@ -49,13 +55,23 @@ export interface LapsedBrand {
 export interface OperatorReminder {
   dueForDeletion: BrandDueForDeletion[];
   lapsed: LapsedBrand[];
+  /** The sign-up lists; absent or null when there is nothing to add. */
+  signup?: SignupDigest | null;
+  /** Set when the sign-up lists could not be read. */
+  signupError?: string | null;
 }
 
 export interface PurgeReminderResult {
   due: number;
   lapsed: number;
   sent: boolean;
+  /** Items in the sign-up lists (only when there were any). */
+  signup?: number;
+  /** Why the sign-up lists could not be read (only when they could not). */
+  signupError?: string;
 }
+
+const logger = createLogger('data-retention');
 
 interface OffboardedAccountRow {
   id: string;
@@ -216,7 +232,29 @@ function plural(count: number, one: string, many: string): string {
   return count === 1 ? `1 ${one}` : `${count} ${many}`;
 }
 
-function subjectFor({ dueForDeletion, lapsed }: OperatorReminder): string {
+function signupSubjectParts({ signup, signupError }: OperatorReminder): string[] {
+  const parts: string[] = [];
+  if (signup) {
+    const stuck = signup.verifiedWithoutVenue.length + signup.noCheckout.length + signup.trialWithoutConnection.length;
+    if (signup.alerts.length > 0) parts.push(plural(signup.alerts.length, 'kind of sign-up problem', 'kinds of sign-up problem'));
+    if (stuck > 0) parts.push(plural(stuck, 'stuck sign-up', 'stuck sign-ups'));
+    if (signup.neverStarted.length > 0) parts.push(plural(signup.neverStarted.length, 'venue never started', 'venues never started'));
+  }
+  if (signupError) parts.push('sign-up lists unavailable');
+  return parts;
+}
+
+function subjectFor(reminder: OperatorReminder): string {
+  const { dueForDeletion, lapsed } = reminder;
+  const signupParts = signupSubjectParts(reminder);
+  if (signupParts.length > 0) {
+    const parts = [
+      ...(dueForDeletion.length > 0 ? [plural(dueForDeletion.length, 'brand due for deletion', 'brands due for deletion')] : []),
+      ...(lapsed.length > 0 ? [plural(lapsed.length, 'lapsed brand to review', 'lapsed brands to review')] : []),
+      ...signupParts,
+    ];
+    return `[Cheers operator] ${parts.join(', ')}`;
+  }
   const due = dueForDeletion.length;
   const lapsedCount = lapsed.length;
   if (due > 0 && lapsedCount > 0) {
@@ -276,6 +314,13 @@ ${items}
 <p>If nobody has asked to keep ${one ? 'it' : 'them'}, open <a href="${adminUrl}">Admin, Offboarding</a>, choose the brand and use <strong>Offboard</strong>; the 30-day hold then starts. To keep a brand without a subscription, set its billing override to suspended and it stops appearing here.</p>`);
   }
 
+  if (reminder.signup) sections.push(...renderSignupDigestSections(reminder.signup, siteUrl));
+  if (reminder.signupError) {
+    sections.push(`
+<h3>Sign-up lists unavailable</h3>
+<p>The self-serve sign-up lists (problems in the last 24 hours, stuck sign-ups, venues that never started) could not be read today: ${escapeHtml(reminder.signupError.slice(0, 300))}. Check admin_audit and self_serve_signups by hand, and the Vercel logs.</p>`);
+  }
+
   const html = `${sections.map((section) => section.trim()).join('\n')}
 <p>You will get this email every day until each brand listed is dealt with.</p>`;
 
@@ -289,15 +334,36 @@ export async function sendPurgeReminder(
 ): Promise<PurgeReminderResult> {
   const dueForDeletion = await findBrandsDueForDeletion(service, now);
   const lapsed = await findLapsedBrands(service, now);
-  if (dueForDeletion.length === 0 && lapsed.length === 0) return { due: 0, lapsed: 0, sent: false };
+
+  let signup: SignupDigest | null = null;
+  let signupError: string | null = null;
+  try {
+    const digest = await findSignupDigest(service, now);
+    signup = signupDigestSize(digest) > 0 ? digest : null;
+  } catch (error) {
+    signupError = error instanceof Error ? error.message : String(error);
+    logger.error('sign-up lists for the operator reminder could not be read', error instanceof Error ? error : undefined);
+  }
+  const signupCount = signup ? signupDigestSize(signup) : 0;
+
+  const signupResult = {
+    ...(signupCount > 0 ? { signup: signupCount } : {}),
+    ...(signupError ? { signupError } : {}),
+  };
+  if (dueForDeletion.length === 0 && lapsed.length === 0 && signupCount === 0 && !signupError) {
+    return { due: 0, lapsed: 0, sent: false };
+  }
 
   const to = env.server.OPERATOR_ALERT_EMAIL;
   if (!to) throw new Error('OPERATOR_ALERT_EMAIL is not set; cannot send the operator reminder.');
 
-  const { subject, html } = renderPurgeReminderEmail({ dueForDeletion, lapsed }, env.client.NEXT_PUBLIC_SITE_URL);
+  const { subject, html } = renderPurgeReminderEmail(
+    { dueForDeletion, lapsed, signup, signupError },
+    env.client.NEXT_PUBLIC_SITE_URL,
+  );
   // required: a missing Resend config throws instead of skipping, so the cron fails visibly.
   await sendEmail({ to, subject, html, required: true });
-  return { due: dueForDeletion.length, lapsed: lapsed.length, sent: true };
+  return { due: dueForDeletion.length, lapsed: lapsed.length, sent: true, ...signupResult };
 }
 
 function escapeHtml(text: string): string {
