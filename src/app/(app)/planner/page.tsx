@@ -12,6 +12,7 @@ import { AttentionNeededBanner } from '@/features/planner/attention-needed-banne
 import { PlannerShell } from '@/features/planner/planner-shell';
 import { SetupChecklist } from '@/features/planner/setup-checklist';
 import { getSetupProgress } from '@/lib/onboarding/setup-progress';
+import { getFirstPostHelpHref } from '@/lib/help/first-post';
 import { createServiceSupabaseClient } from '@/lib/supabase/service';
 import { STATUS_QUERY_ALIASES } from '@/features/planner/status-filter-options';
 import type { PlannerActivityItem } from '@/features/planner/activity-feed';
@@ -55,6 +56,8 @@ export default async function PlannerPage({ searchParams }: PlannerPageProps) {
     // A lookup failure just hides the checklist; it is guidance, not a gate.
     getSetupProgress(createServiceSupabaseClient(), accountId).catch(() => null),
   ]);
+  // The first-post article link follows the sign-up switch; read it only while the checklist shows.
+  const firstPostHelpHref = setupProgress?.show ? await getFirstPostHelpHref() : null;
 
   // Map server notifications to PlannerActivityItem[] for the feed
   const initialEvents: PlannerActivityItem[] = notifications.map((n) => ({
@@ -72,7 +75,9 @@ export default async function PlannerPage({ searchParams }: PlannerPageProps) {
       {/* Attention Needed banner — shows failed publish count with realtime updates */}
       <AttentionNeededBanner accountId={accountId} initialCount={failedCount} />
 
-      {setupProgress ? <SetupChecklist progress={setupProgress} isOwner={role === 'owner'} /> : null}
+      {setupProgress ? (
+        <SetupChecklist progress={setupProgress} isOwner={role === 'owner'} firstPostHelpHref={firstPostHelpHref} />
+      ) : null}
 
       {failedFilterActive ? (
         <FailedPostsList posts={activeFailedPosts} />

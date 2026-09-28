@@ -2,9 +2,15 @@ import Link from "next/link";
 import type { Metadata } from "next";
 import { permanentRedirect } from "next/navigation";
 
+import { getFirstPostHelpHref } from "@/lib/help/first-post";
+
 interface LegacyHelpPageProps {
   params: Promise<{ slug?: string[] }>;
 }
+
+// Rendered per request: the first-post link follows the sign-up switch, which
+// must never be baked in at build time.
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "Help | Cheers",
@@ -15,12 +21,15 @@ export const metadata: Metadata = {
   },
 };
 
-export default async function LegacyHelpPage({ params }: LegacyHelpPageProps) {
+export default async function LegacyHelpPage({ params }: LegacyHelpPageProps): Promise<React.JSX.Element> {
   const { slug = [] } = await params;
 
   if (slug.length > 0) {
     permanentRedirect("/help");
   }
+
+  // Listed only while the self-serve sign-up switch is open (src/lib/help/first-post.ts).
+  const firstPostHelpHref = await getFirstPostHelpHref();
 
   return (
     <main
@@ -97,7 +106,16 @@ export default async function LegacyHelpPage({ params }: LegacyHelpPageProps) {
               settings. If you need help getting started, the Orange Jelly team
               can walk you through your first post.
             </p>
-            <div className="mt-4">
+            <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2">
+              {firstPostHelpHref ? (
+                <Link
+                  href={firstPostHelpHref}
+                  className="inline-flex items-center gap-1 text-sm font-semibold hover:underline"
+                  style={{ color: "var(--c-orange)" }}
+                >
+                  How to publish your first post
+                </Link>
+              ) : null}
               <Link
                 href="/login"
                 className="inline-flex items-center gap-1 text-sm font-semibold hover:underline"
