@@ -18,6 +18,10 @@
 -- 3. public.accept_team_invitation: the invited person accepts; refuses an
 --    invitation that is someone else's, closed or expired, or whose brand is
 --    closed. Inserts the membership and marks the row accepted in one step.
+--    Whether the brand's plan still lets it add people (not lapsed, suspended
+--    or unstarted) is checked by its only caller, the accept action
+--    (src/app/invitations/actions.ts), with the same entitlement helper as
+--    sending an invite, so the grace-period rules live in one place.
 -- 4. public.run_data_retention restated IN FULL with one new rule: a team
 --    invitation is deleted a day after it was accepted, declined, cancelled or
 --    expired, whichever came first (P6: "deleted a day after they expire or

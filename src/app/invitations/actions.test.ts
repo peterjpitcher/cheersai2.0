@@ -12,7 +12,9 @@ vi.mock('@/lib/supabase/server', () => ({
 
 const state = {
   declineResult: { data: [{ account_id: BRAND_ID }], error: null } as { data: unknown; error: unknown },
+  lookup: { data: { account_id: BRAND_ID }, error: null } as { data: unknown; error: unknown },
 };
+const lookups: Array<Array<[string, string, unknown]>> = [];
 const updates: Array<{ values: unknown; filters: Array<[string, string, unknown]> }> = [];
 const mockRpc = vi.fn();
 
@@ -33,7 +35,10 @@ function chain() {
       return c;
     });
   }
-  c.maybeSingle = vi.fn(async () => ({ data: { account_id: BRAND_ID }, error: null }));
+  c.maybeSingle = vi.fn(async () => {
+    lookups.push([...filters]);
+    return state.lookup;
+  });
   c.then = (resolve: (v: unknown) => unknown) => {
     if (op === 'update') {
       updates.push({ values, filters: [...filters] });
@@ -48,6 +53,9 @@ vi.mock('@/lib/supabase/service', () => ({
   createServiceSupabaseClient: () => ({ from: vi.fn(() => chain()), rpc: (...a: unknown[]) => mockRpc(...a) }),
 }));
 
+const mockEntitlement = vi.fn();
+vi.mock('@/lib/billing/entitlement-server', () => ({ getBrandEntitlement: (...a: unknown[]) => mockEntitlement(...a) }));
+
 const mockAudit = vi.fn();
 vi.mock('@/lib/admin/audit', () => ({ logAdminEvent: (...a: unknown[]) => mockAudit(...a) }));
 vi.mock('@/lib/logging', () => ({ createLogger: () => ({ error: vi.fn(), warn: vi.fn(), info: vi.fn() }) }));
@@ -59,7 +67,10 @@ const { acceptInvitation, declineInvitation } = await import('./actions');
 beforeEach(() => {
   vi.clearAllMocks();
   updates.length = 0;
+  lookups.length = 0;
   state.declineResult = { data: [{ account_id: BRAND_ID }], error: null };
+  state.lookup = { data: { account_id: BRAND_ID }, error: null };
+  mockEntitlement.mockResolvedValue('comped');
   mockGetUser.mockResolvedValue({ data: { user: { id: USER_ID } }, error: null });
   mockRpc.mockResolvedValue({ data: 'accepted', error: null });
   mockAudit.mockResolvedValue(undefined);
@@ -90,9 +101,45 @@ describe('acceptInvitation', () => {
 
   it('treats someone else\'s invitation as not found', async () => {
     mockGetUser.mockResolvedValue({ data: { user: { id: OTHER_USER_ID } }, error: null });
+    state.lookup = { data: null, error: null };
+    expect(await acceptInvitation(INVITATION_ID)).toEqual({ error: 'We could not find that invitation.' });
+    expect(lookups[0]).toEqual(expect.arrayContaining([['eq', 'id', INVITATION_ID], ['eq', 'user_id', OTHER_USER_ID]]));
+    expect(mockRpc).not.toHaveBeenCalled();
+  });
+
+  it('still refuses in the database if the invitation turns out not to be theirs', async () => {
     mockRpc.mockResolvedValue({ data: 'not_found', error: null });
     expect(await acceptInvitation(INVITATION_ID)).toEqual({ error: 'We could not find that invitation.' });
-    expect(mockRpc).toHaveBeenCalledWith('accept_team_invitation', { p_invitation_id: INVITATION_ID, p_user_id: OTHER_USER_ID });
+  });
+
+  it.each([
+    ['lapsed', /plan has lapsed, so it cannot add people/],
+    ['suspended', /on hold, so it cannot add people/],
+    ['incomplete', /has not started its plan, so it cannot add people/],
+    ['archived', /no longer open/],
+  ])('refuses while the brand is %s, so it cannot gain members', async (entitlement, message) => {
+    mockEntitlement.mockResolvedValue(entitlement);
+    expect((await acceptInvitation(INVITATION_ID)).error).toMatch(message);
+    expect(mockEntitlement).toHaveBeenCalledWith(expect.anything(), BRAND_ID);
+    expect(mockRpc).not.toHaveBeenCalled();
+    expect(mockAudit).not.toHaveBeenCalled();
+  });
+
+  it.each(['trialing', 'active', 'past_due_grace', 'comped'])('accepts while the brand is %s', async (entitlement) => {
+    mockEntitlement.mockResolvedValue(entitlement);
+    expect(await acceptInvitation(INVITATION_ID)).toEqual({ success: true });
+  });
+
+  it('fails closed when the brand state cannot be read', async () => {
+    mockEntitlement.mockRejectedValue(new Error('db down'));
+    expect(await acceptInvitation(INVITATION_ID)).toEqual({ error: 'We could not finish this. Please try again.' });
+    expect(mockRpc).not.toHaveBeenCalled();
+  });
+
+  it('fails closed when the invitation cannot be looked up', async () => {
+    state.lookup = { data: null, error: { message: 'db down' } };
+    expect(await acceptInvitation(INVITATION_ID)).toEqual({ error: 'We could not finish this. Please try again.' });
+    expect(mockRpc).not.toHaveBeenCalled();
   });
 
   it('is fine to press twice', async () => {

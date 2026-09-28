@@ -4,6 +4,8 @@ import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 
 import { logAdminEvent } from '@/lib/admin/audit';
+import { can, type EntitlementState } from '@/lib/billing/entitlement';
+import { getBrandEntitlement } from '@/lib/billing/entitlement-server';
 import { createLogger } from '@/lib/logging';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { createServiceSupabaseClient } from '@/lib/supabase/service';
@@ -15,6 +17,12 @@ import { acceptTeamInvitationForUser, type AcceptInvitationOutcome } from '@/lib
  * token with Supabase Auth), never from the browser; an invitation id from the
  * browser only ever matches that person's own rows. Neither action changes
  * the active brand: the default stays the brand the person joined first.
+ *
+ * Accepting also needs the brand to still be one that may invite (trialing,
+ * paying, past-due grace or comped: the same entitlement check as sending an
+ * invite), so a brand that lapsed or was put on hold after inviting cannot
+ * gain members. The invitation stays open, so it can still be accepted if the
+ * brand's plan restarts before it expires.
  */
 
 type ActionResult = { success?: boolean; error?: string };
@@ -28,6 +36,17 @@ const ACCEPT_ERRORS: Record<Exclude<AcceptInvitationOutcome, 'accepted' | 'alrea
   expired: 'This invitation has expired. Ask the brand owner to send a new one.',
   closed: 'This invitation is no longer open.',
   not_found: 'We could not find that invitation.',
+};
+
+/** Why an invitation cannot be accepted while its brand may not add people. */
+const BRAND_HELD: Partial<Record<EntitlementState, string>> = {
+  incomplete:
+    'This brand has not started its plan, so it cannot add people yet. Ask the brand owner, then try again before the invitation expires.',
+  lapsed:
+    "This brand's plan has lapsed, so it cannot add people right now. Ask the brand owner to restart it, then try again before the invitation expires.",
+  suspended:
+    'This brand is on hold, so it cannot add people right now. Ask the brand owner, then try again before the invitation expires.',
+  archived: ACCEPT_ERRORS.closed,
 };
 
 async function sessionUserId(): Promise<string | null> {
@@ -58,6 +77,30 @@ export async function acceptInvitation(invitationId: string): Promise<ActionResu
   if (!userId) return { error: 'Please sign in again to accept this invitation.' };
 
   const service = createServiceSupabaseClient();
+
+  // Which brand, scoped to this person: someone else's invitation looks missing.
+  const { data: invitation, error: lookupError } = await service
+    .from('team_invitations')
+    .select('account_id')
+    .eq('id', invitationId)
+    .eq('user_id', userId)
+    .maybeSingle<{ account_id: string }>();
+  if (lookupError) {
+    logger.error('invitation accept: lookup failed', undefined, { reason: lookupError.message });
+    return { error: FAILED };
+  }
+  if (!invitation) return { error: ACCEPT_ERRORS.not_found };
+
+  // The brand must still be allowed to add people; fail closed if unreadable.
+  let state: EntitlementState;
+  try {
+    state = await getBrandEntitlement(service, invitation.account_id);
+  } catch (error) {
+    logger.error('invitation accept: entitlement lookup failed', error instanceof Error ? error : undefined);
+    return { error: FAILED };
+  }
+  if (!can(state, 'invite')) return { error: BRAND_HELD[state] ?? ACCEPT_ERRORS.closed };
+
   let outcome: AcceptInvitationOutcome;
   try {
     outcome = await acceptTeamInvitationForUser(service, invitationId, userId);
@@ -67,14 +110,7 @@ export async function acceptInvitation(invitationId: string): Promise<ActionResu
   }
 
   if (outcome === 'accepted') {
-    // Best effort, for the audit trail only (the invitation row itself is deleted a day later).
-    const { data: row } = await service
-      .from('team_invitations')
-      .select('account_id')
-      .eq('id', invitationId)
-      .eq('user_id', userId)
-      .maybeSingle<{ account_id: string }>();
-    await audit({ actorUserId: userId, action: 'team_invitation_accept', targetUserId: userId, targetAccountId: row?.account_id ?? null, detail: { invitationId } });
+    await audit({ actorUserId: userId, action: 'team_invitation_accept', targetUserId: userId, targetAccountId: invitation.account_id, detail: { invitationId } });
     revalidatePath('/', 'layout');
     return { success: true };
   }
