@@ -194,6 +194,8 @@ The tool browser could not open the hosted Checkout page, so the app's "Start 14
 | Five reconciles of one new trial at once, plus its webhooks | one `repeat_refused`, one cancel request, one audit row, one email |
 | Two brands, one new card, at once (plus webhooks) | one `first_trial`, one `repeat_refused`, one cancel request |
 | Comped brand whose only subscription is cancelled | only `subscriptions.list` called; nothing written |
+| After the review fixes: a paid subscription (card 4242, which had a first trial) moved into a 30-day trial 85 seconds after creation | `trial_start` later than `created`; both events 200; nothing recorded, no card lookup, no cancel |
+| After the review fixes: refusal left unfinished (email failed), owner pays on a new subscription inside the window, its two events redelivered together after 10 minutes | Inside the window the events answer 500 (they wait for the unfinished refusal) but the paid row is already stored, so Billing shows "Starter, billed monthly. Renews on 28 October 2026."; after the window both answer 200, one takes over (one email, one audit row, no second cancel) and the old cancelled row is stored 1 ms older than the paid one, so the brand stays active |
 
 ## Re-syncing a brand
 
