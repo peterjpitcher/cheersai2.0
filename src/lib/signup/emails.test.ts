@@ -22,6 +22,12 @@ describe('renderSignupConfirmEmail', () => {
     expect(email.html).not.toMatch(BAD_OUTPUT);
   });
 
+  it('promises no link lifetime: Supabase sets it (one hour or less in production)', () => {
+    const email = renderSignupConfirmEmail(fixture);
+    expect(email.html).toContain('This link works once and only for a short time. If it has expired, ask for a new one at');
+    expect(email.html).not.toMatch(/expires in|\bhours?\b|\bminutes?\b/i);
+  });
+
   it('refuses to render without a link', () => {
     expect(() => renderSignupConfirmEmail({ ...fixture, link: '' })).toThrow();
     expect(() => renderSignupConfirmEmail({ ...fixture, signupUrl: '' })).toThrow();

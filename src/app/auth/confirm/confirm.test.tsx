@@ -45,8 +45,8 @@ async function redirectOf(promise: Promise<unknown>): Promise<string> {
   throw new Error('expected a redirect');
 }
 
-function linkSearchParams(type: 'invite' | 'recovery' | 'signup'): Record<string, string> {
-  const url = new URL(buildAuthConfirmUrl({ siteUrl: 'https://cheers.orangejelly.co.uk', tokenHash: TOKEN, type }));
+function linkSearchParams(type: 'invite' | 'recovery' | 'signup' | 'magiclink', next?: string): Record<string, string> {
+  const url = new URL(buildAuthConfirmUrl({ siteUrl: 'https://cheers.orangejelly.co.uk', tokenHash: TOKEN, type, next }));
   return Object.fromEntries(url.searchParams.entries());
 }
 
@@ -96,6 +96,18 @@ describe('GET /auth/confirm (the page)', () => {
     expect(html).toContain('Confirm and continue');
     expect(html).toContain('name="type" value="signup"');
     expect(html).toContain('name="next" value="/signup/venue"');
+    expect(mockCreateServerClient).not.toHaveBeenCalled();
+    expect(mockVerifyOtp).not.toHaveBeenCalled();
+  });
+
+  it('shows the sign-in wording for a magic link, and never uses the token', async () => {
+    const html = renderToStaticMarkup(
+      await ConfirmPage({ searchParams: Promise.resolve(linkSearchParams('magiclink', '/planner')) }),
+    );
+    expect(html).toContain('Sign in to Cheers');
+    expect(html).toContain('Confirm and continue');
+    expect(html).toContain('name="type" value="magiclink"');
+    expect(html).toContain('name="next" value="/planner"');
     expect(mockCreateServerClient).not.toHaveBeenCalled();
     expect(mockVerifyOtp).not.toHaveBeenCalled();
   });
@@ -173,10 +185,30 @@ describe('POST /auth/confirm (the button)', () => {
     expect(mockVerifyOtp).not.toHaveBeenCalled();
   });
 
-  it('refuses a magic-link token: only invite, recovery and signup links come here', async () => {
-    expect(await redirectOf(confirmEmailLink(form({ token_hash: TOKEN, type: 'magiclink' })))).toBe(
+  it('refuses the generic "email" type, which would also accept an invite or sign-up token', async () => {
+    expect(await redirectOf(confirmEmailLink(form({ token_hash: TOKEN, type: 'email' })))).toBe(
       '/login?error=invalid_confirmation',
     );
     expect(mockVerifyOtp).not.toHaveBeenCalled();
+  });
+
+  it('signs in with a magic link, verified as a magic link, and goes to the safe next path', async () => {
+    mockVerifyOtp.mockResolvedValue({ error: null });
+    expect(await redirectOf(confirmEmailLink(form(linkSearchParams('magiclink', '/planner'))))).toBe('/planner');
+    expect(mockVerifyOtp).toHaveBeenCalledWith({ token_hash: TOKEN, type: 'magiclink' });
+  });
+
+  it('sends a magic link with no next to the dashboard, and never off-site', async () => {
+    mockVerifyOtp.mockResolvedValue({ error: null });
+    expect(await redirectOf(confirmEmailLink(form(linkSearchParams('magiclink'))))).toBe('/dashboard');
+    expect(await redirectOf(confirmEmailLink(form({ token_hash: TOKEN, type: 'magiclink', next: '//evil.example' })))).toBe(
+      '/dashboard',
+    );
+  });
+
+  it('sends a used or expired magic link to the login page link error', async () => {
+    mockVerifyOtp.mockResolvedValue({ error: { status: 403, code: 'otp_expired', message: 'Email link is invalid or has expired' } });
+    expect(await redirectOf(confirmEmailLink(form(linkSearchParams('magiclink'))))).toBe('/login?error=confirmation_failed');
+    expect(mockReport).not.toHaveBeenCalled();
   });
 });
