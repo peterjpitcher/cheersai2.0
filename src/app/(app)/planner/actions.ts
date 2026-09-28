@@ -101,6 +101,35 @@ const FAILURE_NOTIFICATION_CATEGORIES = [
   "publish_failed_immediate",
 ] as const;
 
+/**
+ * Job statuses approval may put back in the queue. A draft can carry a job
+ * that was stopped when it went back to draft (screening changed, brand
+ * offboarded, or refused by the publish worker). A succeeded or in-progress
+ * job is left alone so a post is never sent twice.
+ */
+const REARMABLE_JOB_STATUSES = ["queued", "failed", "held"] as const;
+
+/**
+ * The fields that put a publish job back in the queue for a new time. The old
+ * error_message and error_code go too: the failure email quotes them, so a
+ * later failure would otherwise be reported with the earlier reason.
+ */
+function rearmedPublishJobFields(nextAttemptIso: string, nowIso: string) {
+  return {
+    status: "queued",
+    next_attempt_at: nextAttemptIso,
+    last_error: null,
+    error_message: null,
+    error_code: null,
+    attempt: 0,
+    hold_reason: null,
+    resolved_at: null,
+    resolution_kind: null,
+    resolution_note: null,
+    updated_at: nowIso,
+  };
+}
+
 type PlannerMediaAssetRow = {
   id: string;
   media_type: "image" | "video";
@@ -172,6 +201,20 @@ async function syncTournamentFixtureGeneratedState({
   return context.tournamentId;
 }
 
+/**
+ * First free feed slot at or after the time asked for, on the same day.
+ *
+ * occupiedMinutes holds wall-clock minutes of the day, so the search walks the
+ * wall clock and each candidate is built with set({ hour, minute }). Adding the
+ * minutes to midnight instead counts elapsed time, which is an hour out on the
+ * 23-hour and 25-hour days when the clocks change.
+ *
+ * Spring forward: a wall-clock time that does not exist that day (01:00 to
+ * 01:59 in London) comes back from set() an hour on, where it could land on a
+ * taken slot, so it is skipped. Fall back: set() starts from the requested
+ * slot's offset, so in the repeated hour a moved slot stays on the same side of
+ * the change as the time asked for and never lands before it.
+ */
 function reservePlannerSlotOnSameDay({
   desiredSlot,
   timezone,
@@ -181,17 +224,23 @@ function reservePlannerSlotOnSameDay({
   timezone: string;
   occupiedMinutes: Set<number>;
 }) {
-  const startOfDay = desiredSlot.setZone(timezone).startOf("day");
-  let minuteOfDay = desiredSlot.hour * 60 + desiredSlot.minute;
+  const desired = desiredSlot.setZone(timezone).startOf("minute");
 
-  while (occupiedMinutes.has(minuteOfDay)) {
-    minuteOfDay += SLOT_INCREMENT_MINUTES;
-    if (minuteOfDay >= MINUTES_PER_DAY) {
-      throw new Error("No open 30-minute slots remain on that day for this channel.");
+  for (
+    let minuteOfDay = desired.hour * 60 + desired.minute;
+    minuteOfDay < MINUTES_PER_DAY;
+    minuteOfDay += SLOT_INCREMENT_MINUTES
+  ) {
+    const hour = Math.floor(minuteOfDay / 60);
+    const minute = minuteOfDay % 60;
+    const candidate = desired.set({ hour, minute });
+    const existsThatDay = candidate.hour === hour && candidate.minute === minute;
+    if (existsThatDay && !occupiedMinutes.has(minuteOfDay)) {
+      return candidate;
     }
   }
 
-  return startOfDay.plus({ minutes: minuteOfDay }).startOf("minute");
+  throw new Error("No open 30-minute slots remain on that day for this channel.");
 }
 
 
@@ -251,14 +300,32 @@ export async function approveDraftContent(payload: unknown) {
     throw updateError;
   }
 
-  const { data: existingJob } = await supabase
+  // Approval is where a draft's publish job is armed; rescheduling a draft
+  // never arms one. A job stopped while the post was a draft goes back in the
+  // queue at the approved time, or the post would sit "scheduled" and never go.
+  const { data: existingJobs, error: existingJobsError } = await supabase
     .from("publish_jobs")
-    .select("id")
+    .select("id, status")
     .eq("content_item_id", contentId)
-    .limit(1)
-    .maybeSingle();
+    .returns<Array<{ id: string; status: string }>>();
 
-  if (!existingJob) {
+  if (existingJobsError) {
+    throw existingJobsError;
+  }
+
+  const jobs = existingJobs ?? [];
+  const allRearmable = jobs.every((job) => (REARMABLE_JOB_STATUSES as readonly string[]).includes(job.status));
+
+  if (jobs.length && allRearmable) {
+    const { error: rearmError } = await supabase
+      .from("publish_jobs")
+      .update(rearmedPublishJobFields((scheduledFor ?? new Date()).toISOString(), nowIso))
+      .in("id", jobs.map((job) => job.id));
+
+    if (rearmError) {
+      throw rearmError;
+    }
+  } else if (!jobs.length) {
     const { data: variantRow, error: variantError } = await supabase
       .from("content_variants")
       .select("id")
@@ -1192,13 +1259,14 @@ export async function updatePlannerContentSchedule(payload: unknown) {
   });
 
   const nowIso = new Date().toISOString();
+  const isDraft = content.status === "draft";
 
   const contentUpdate: Record<string, unknown> = {
     scheduled_for: scheduledIso,
     updated_at: nowIso,
   };
 
-  if (content.status !== "draft") {
+  if (!isDraft) {
     contentUpdate.status = "scheduled";
   }
 
@@ -1211,19 +1279,25 @@ export async function updatePlannerContentSchedule(payload: unknown) {
     throw updateError;
   }
 
+  // A draft only moves. Its publish job is armed when it is approved
+  // (approveDraftContent), at whatever time it then has. Arming one here
+  // would let the publish worker send a post nobody approved.
+  if (isDraft) {
+    revalidatePath(`/planner/${contentId}`);
+    revalidatePath("/planner");
+
+    return {
+      ok: true as const,
+      scheduledFor: scheduledIso,
+      timezone,
+      warning: drift.stale ? drift.message : null,
+      awaitingApproval: true,
+    };
+  }
+
   const { data: jobRows, error: jobUpdateError } = await supabase
     .from("publish_jobs")
-    .update({
-      status: "queued",
-      next_attempt_at: scheduledIso,
-      last_error: null,
-      attempt: 0,
-      hold_reason: null,
-      resolved_at: null,
-      resolution_kind: null,
-      resolution_note: null,
-      updated_at: nowIso,
-    })
+    .update(rearmedPublishJobFields(scheduledIso, nowIso))
     .eq("content_item_id", contentId)
     .select("id");
 
@@ -1264,6 +1338,7 @@ export async function updatePlannerContentSchedule(payload: unknown) {
     scheduledFor: scheduledIso,
     timezone,
     warning: drift.stale ? drift.message : null,
+    awaitingApproval: false,
   };
 }
 

@@ -68,7 +68,34 @@ CheersAI's portal configuration (the id in `STRIPE_PORTAL_CONFIGURATION_ID`) mus
 - **`trial_update_behavior=continue_trial`**. Without it, changing plan during the free trial ends the trial and charges the full price that day, which contradicts the Billing page ("nothing is charged until the 14-day trial ends"). Found in the end-to-end test on 2026-09-26;
 - cancel at period end, payment method update, invoice history, and name, address, email and tax id updates.
 
-Test mode: `bpc_1UJs0QIMsxxxvzCCRkUnIFH8` has all of this. Live needs its own configuration created the same way.
+Test mode: `bpc_1UJs0QIMsxxxvzCCRkUnIFH8` has all of this. Live: `bpc_1UKYyQIMsxxxvzCC8JoU8Fpd`, created the same way on 2026-09-28.
+
+## Live setup (done 2026-09-28)
+
+Approved by Peter (question 20). Everything below was read back from Stripe after it was created.
+
+| Item | Live value |
+|---|---|
+| Products | Starter `prod_SsuS7eXhpSaezB`, Professional `prod_SsuTnQek82Vi6e`: metadata `app=cheersai` and `plan`, tax code `txcd_10103001`, statement descriptor `CHEERS ORANGE JELLY` |
+| Prices (GBP, ex VAT, `tax_behavior=exclusive`, lookup keys `cheers_{plan}_{monthly,annual}`) | Starter monthly `price_1UKYyGIMsxxxvzCCgmOtcvMB` (2999), Starter annual `price_1UKYyHIMsxxxvzCCn9CDAIwp` (32389), Professional monthly `price_1UKYyIIMsxxxvzCCqq0PkMaX` (5999), Professional annual `price_1UKYyJIMsxxxvzCCdQVuE17z` (64789) |
+| Old prices | The four VAT-inclusive and four image-generation prices archived (no subscriptions on them) |
+| Portal | `bpc_1UKYyQIMsxxxvzCC8JoU8Fpd`, `continue_trial`, upgrades `always_invoice`, downgrades at period end, cancel at period end |
+| Stripe Tax | GB standard registration `taxreg_1UKYyRIMsxxxvzCCdBieKRyk`, active; account tax ID `txi_1UKYySIMsxxxvzCCANqfHTTU` (GB315203647); invoices display tax IDs by taxable location |
+| Webhook | `we_1UKYyUIMsxxxvzCCyBApA6gk` to `https://cheers.orangejelly.co.uk/api/stripe/webhook`, API version `2026-08-26.dahlia`, the nine events listed above |
+| Vercel production | the four `STRIPE_PRICE_*`, `STRIPE_PORTAL_CONFIGURATION_ID`, `STRIPE_SECRET_KEY` (restricted `rk_live_` key "CheersAI production": Checkout Sessions, Customers and Customer Portal write; Subscriptions, Prices and Products read) and `STRIPE_WEBHOOK_SECRET` |
+| Emails | Stripe sends upcoming-renewal, trial-ending (7 days) and expiring-card emails |
+
+Checks after the production redeploy (`dpl_9YTot6wLnzgnZQU59rnNqkLZ5WQv`): the webhook answers 400 to a missing or wrong signature (503 before the secrets were set), and a correctly signed self-test event for an unknown customer was accepted and ignored (its `stripe_events` row was then deleted). The restricted key's permissions were checked with requests against ids that do not exist, so nothing was created. No real live Checkout has been run yet.
+
+The Stripe CLI's own live key was given write access to Products, Prices, Customer Portal, Tax IDs, Tax registrations and Webhook Endpoints for the setup; it expires on its own after 90 days.
+
+## Terms acceptance at Checkout
+
+Checkout shows a required tick box (`consent_collection.terms_of_service: 'required'`) with our own text (`custom_text.terms_of_service_acceptance`): the owner accepts the Terms of Service and the Data Processing Agreement, with links to `/terms` and `/data-processing` on `NEXT_PUBLIC_SITE_URL`, and the version from `LEGAL_VERSION` in `src/lib/legal/company.ts`. Stripe records the acceptance on the Checkout Session (`consent.terms_of_service = 'accepted'`).
+
+Stripe refuses the tick box unless a terms of service URL is set in the Dashboard (Settings, Business, Public details). Both modes already have one: test mode accepted a session with the tick box on 2026-09-27, and live mode's Public details list a terms of service URL (checked in the Dashboard the same day). That URL is account-wide and the account is shared with the management app, so leave it as it is: the tick box's own text links to the Cheers terms and DPA. Keep a URL set, or every Checkout with the tick box fails to start.
+
+When the terms, privacy notice or DPA change, bump `LEGAL_VERSION` and `LEGAL_UPDATED` together, so new acceptances name the new version.
 
 ## Testing in test mode (never against production)
 

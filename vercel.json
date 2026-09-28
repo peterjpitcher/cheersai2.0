@@ -13,6 +13,10 @@
       "schedule": "15 3 * * *"
     },
     {
+      "path": "/api/cron/data-retention",
+      "schedule": "45 3 * * *"
+    },
+    {
       "path": "/api/cron/sync-meta-campaigns",
       "schedule": "0 6 * * *"
     },

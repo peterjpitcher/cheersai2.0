@@ -408,6 +408,9 @@ function InlineScheduleEditor({
         // publish, so a move can leave the two contradicting each other.
         if ('warning' in result && typeof result.warning === 'string' && result.warning) {
           toast.info('Schedule updated, but check the copy', { description: result.warning, durationMs: 9000 });
+        } else if ('awaitingApproval' in result && result.awaitingApproval) {
+          // A draft only moves; nothing goes out until it is approved.
+          toast.success('Draft moved', { description: 'It goes out at the new time once you approve it.' });
         } else {
           toast.success('Schedule updated');
         }
