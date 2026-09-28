@@ -83,7 +83,7 @@ psql "$DATABASE_URL" -qAt -v ON_ERROR_STOP=1 >"$OUT" <<SQL
 begin;
 update public.app_flags set enabled = true where name = 'self_serve_signup';
 set local role service_role;
-select public.provision_self_serve_brand('$USER_1', 'Race One Inn', 'pub', '$TAG-1@example.invalid', '2026-09-28.3') ->> 'status';
+select public.provision_self_serve_brand('$USER_1', 'Race One Inn', 'pub', '$TAG-1@example.invalid', '$TAG') ->> 'status';
 rollback;
 SQL
 end="$(date +%s)"
@@ -111,7 +111,8 @@ psql "$DATABASE_URL" -qAt -v ON_ERROR_STOP=1 >/dev/null <<SQL &
 begin;
 update public.app_flags set enabled = true where name = 'self_serve_signup';
 set local role service_role;
-select public.provision_self_serve_brand('$USER_2', 'Race Two Tavern', 'bar', '$TAG-2@example.invalid', '2026-09-28.3');
+-- The tag as the legal version keeps the row findable for the clean-up at the end.
+select public.provision_self_serve_brand('$USER_2', 'Race Two Tavern', 'bar', '$TAG-2@example.invalid', '$TAG');
 reset role;
 update public.app_flags set enabled = $( [ "$SWITCH" = t ] && echo true || echo false ) where name = 'self_serve_signup';
 select pg_sleep(3);
