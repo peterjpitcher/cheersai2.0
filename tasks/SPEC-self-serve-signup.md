@@ -1,6 +1,6 @@
 # SPEC: Self-serve sign-up (new customer readiness, Stage 3)
 
-Status: v2, 28 September 2026, revised after an independent review (approve with changes; findings 1 to 13 folded in, map in §11). Nothing in this spec is built. Peter approved writing it on 28 September 2026; nothing is built until he approves it.
+Status: v2.1, 28 September 2026. Revised after an independent review (approve with changes; findings 1 to 13 folded in, map in §11); Peter answered the choices the same day (§3.1: ten decided, P2 open). Nothing in this spec is built. Stage 1 may be built now (P1); the Stage 3 build waits for Peter's approval of this spec.
 Owner: Peter Pitcher. Author: Claude.
 Parent: `tasks/SPEC-new-customer-readiness.md` (decisions D1 to D7, L1 to L8; §4.4 provisioning; §5 Stage 3), review `tasks/REVIEW-SPEC-new-customer-readiness.md` (R06, R19), live state in `tasks/PLAN-new-customer-stage2.md`.
 
@@ -56,21 +56,23 @@ What shapes Stage 3:
 | S1 | Supabase public sign-up off and email confirmation on. Done by Peter; verified live. | 2026-09-28 |
 | S2 | Login `next` validation and removal of `/api/auth/magic-link` (#137, merged and live). | 2026-09-28 |
 
-### 3.1 Proposed choices (not yet decided by Peter)
+### 3.1 Choices put to Peter, answered 28 September 2026 (his questions 40 to 50)
 
-| ID | Proposed | Why |
-|---|---|---|
-| P1 | Ship Stage 1 (§5, PRs 1 and 2) now, separately from sign-up. | It closes today's gaps (no rate limits in production; one-use links burnt by email scanners) and does not depend on Meta. |
-| P2 | Keep sign-up closed (`app_flags.self_serve_signup` off) until App Review is approved and the D7 gate passes. Until then `/` shows prices with "Talk to us". | A venue that cannot connect would pay for a trial it cannot use. |
-| P3 | Switch `billing_enforcement` on before sign-up opens. | Otherwise a venue that skips Checkout uses Cheers free. |
-| P4 | Team invites only while the brand is trialing, paid, in past-due grace or comped; at most 5 a day per brand; an existing user must accept; the default brand is the one a person joined first. | §4.6: stops strangers using our emails and adding people to their venues. |
-| P5 | A card that has had a Cheers trial before: cancel the new trial at once with no charge and offer "Start your plan today". | No surprise charge; the customer consents to paying now. |
-| P6 | Retention: card-check codes 24 months from the trial start; sign-up records 24 months; sign-ups never confirmed deleted after 7 days; confirmed sign-ups that never create a venue deleted after 30 days; pending team invitations deleted a day after they expire or are accepted (under L3's temporary-records line). | Matches the 24-month audit periods; unused logins are temporary records. |
-| P7 | A venue that never starts a subscription is listed in the daily operator email 30 days after sign-up; closing stays manual; the terms gain one sentence allowing it. | Same shape as L8. |
-| P8 | Rate limits in our own database (`auth_rate_limits`), not Upstash. | No new sub-processor, no DPA change, no customer notice. |
-| P9 | Cloudflare Turnstile on `/signup` only, checked by our server; not Supabase's built-in CAPTCHA. | §4.2. Kept off the login form so Cloudflare handles only our own sign-up data. |
-| P10 | Defer the admin Sign-ups card, the first-post help article and owner export and close buttons until after sign-up opens; meanwhile Settings shows "To close this venue or get a copy of your data, email peter@orangejelly.co.uk". | A smaller launch; the daily email and the runbook query cover the same need. |
-| P11 | Let search engines index `/` and the three legal pages; everything else stays disallowed. | A front door that cannot be found does little. |
+The P numbers stay so the design can refer to them. Ten are decided; P2 is open.
+
+| ID | Choice | Peter | Status |
+|---|---|---|---|
+| P1 | Ship Stage 1 (§5, PRs 1 and 2) now, separately from sign-up. It closes today's gaps (no rate limits in production; one-use links burnt by email scanners) and does not depend on Meta. | Q40 | Decided, yes, 2026-09-28 |
+| P2 | Keep sign-up closed (`app_flags.self_serve_signup` off) until App Review is approved and the D7 gate passes; until then `/` shows prices with "Talk to us". | Q41 | **Open.** Peter asked how to close the gap and believes the Meta app is already approved, because he uses it daily for The Anchor. The facts (App Dashboard, 26 September 2026): the app is in Live mode and Business Verification is done, but every permission is Standard access, so only people with a role on the app can grant them. The Anchor works because Peter, an app administrator, connects it. Closing the gap means submitting the App Review in `docs/runbooks/meta-app-review.md` and passing the D7 gate. The sign-up switch design (§4.8) is unchanged. |
+| P3 | Switch `billing_enforcement` on before sign-up opens, so a venue that skips Checkout cannot use Cheers free. | Q42 | Decided, yes, 2026-09-28 |
+| P4 | Team invites only while the brand is trialing, paid, in past-due grace or comped; at most 5 a day per brand; an existing user must accept. The default-brand fix in §4.6 (the brand a person joined first) is a safety fix that ships with it. | Q43 | Decided, yes, 2026-09-28 |
+| P5 | A card that has had a Cheers trial before: cancel the new trial at once with no charge and offer "Start your plan today". | Q44 | Decided, yes, 2026-09-28 |
+| P6 | Retention: card-check codes 24 months from the trial start; sign-up records 24 months; sign-ups never confirmed deleted after 7 days; confirmed sign-ups that never create a venue deleted after 30 days; pending team invitations deleted a day after they expire or are accepted. | Q45 | Decided, yes, 2026-09-28 |
+| P7 | A venue that never starts a subscription is listed in the daily operator email 30 days after sign-up; the operator decides whether to close it; the terms gain one sentence allowing it. | Q46 | Decided, yes, 2026-09-28 |
+| P8 | Rate limits in our own database (`auth_rate_limits`), not Upstash: no new sub-processor, no DPA change, no customer notice. | Q47 | Decided, yes, 2026-09-28 |
+| P9 | Cloudflare Turnstile on `/signup` only, checked by our server and named in the privacy notice; not Supabase's built-in CAPTCHA. | Q48 | Decided, yes, 2026-09-28 |
+| P10 | Defer the admin Sign-ups card, the first-post help article and owner export and close buttons until after sign-up opens; meanwhile Settings shows "To close this venue or get a copy of your data, email peter@orangejelly.co.uk". | Q49 | Decided, yes, 2026-09-28 |
+| P11 | Search engines may index `/` and the three legal pages; everything else stays disallowed. | Q50 | Decided, yes, 2026-09-28 |
 
 ## 4. Design
 
@@ -293,7 +295,7 @@ Self-serve Group plan and second venues for existing members; paid ads, tourname
 
 ## 10. Pending decisions
 
-P1 to P11 in §3.1. Answers are recorded there and moved into §3 once made.
+Only P2 (when sign-up may open, tied to Meta App Review) is open; see §3.1. P1 and P3 to P11 were decided on 2026-09-28.
 
 ## 11. Review findings (28 September 2026) and where they are handled
 
