@@ -90,6 +90,28 @@ describe('reportAuthFailure', () => {
     expect(sent.html).toContain('could not deliver to [email address] (mailbox full)');
   });
 
+  it('redacts a URL-encoded address too', async () => {
+    mockSendEmail.mockResolvedValue(undefined);
+    await reportAuthFailure('magic_link', new Error('GET /auth/v1/admin/users?filter=owner%40venue.test failed: 500'));
+    const [, loggedError, metadata] = mockLogError.mock.calls[0] as [string, Error, { message: string }];
+    expect(metadata.message).toBe('GET /auth/v1/admin/users?filter=[email address] failed: 500');
+    expect(loggedError.message).not.toContain('venue.test');
+    expect((mockSendEmail.mock.calls[0]?.[0] as { html: string }).html).not.toContain('venue.test');
+  });
+
+  it('keeps stack-trace paths that contain "@" (package scopes and versions) intact', async () => {
+    const error = new Error('fetch failed');
+    error.stack = [
+      'Error: fetch failed',
+      '    at fetchWithRetry (/var/task/node_modules/@supabase/auth-js/dist/main/lib/fetch.js:42:11)',
+      '    at run (/var/task/node_modules/.pnpm/@supabase+auth-js@2.89.0/node_modules/@supabase/auth-js/dist/main/GoTrueAdminApi.js:7:3)',
+    ].join('\n');
+    await reportAuthFailure('magic_link', error);
+    const [, loggedError] = mockLogError.mock.calls[0] as [string, Error];
+    expect(loggedError.stack).toBe(error.stack);
+    expect(loggedError.stack).not.toContain('[email address]');
+  });
+
   it('still logs when no operator address is configured', async () => {
     mockEnv.server.OPERATOR_ALERT_EMAIL = '';
     await reportAuthFailure('rate_limiter', 'no database');

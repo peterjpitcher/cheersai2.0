@@ -41,11 +41,14 @@ function escapeHtml(text: string): string {
 }
 
 /**
- * Anything shaped like an email address. A dependency's error text (Resend's,
- * say) could quote the visitor's address, so it is replaced before the failure
- * is logged or emailed.
+ * Anything shaped like an email address, written plainly or URL-encoded
+ * (`owner%40venue.test`). A dependency's error text (Resend's, say) could
+ * quote the visitor's address, so it is replaced before the failure is logged
+ * or emailed. Neither half may contain "/", and the domain must end in a
+ * dotted label that starts with a letter, so stack-trace paths such as
+ * `node_modules/@supabase/auth-js` or `@supabase+auth-js@2.89.0` are kept.
  */
-const EMAIL_ADDRESS_PATTERN = /[^\s@<>()[\]"',;:]+@[^\s@<>()[\]"',;:]+/g;
+const EMAIL_ADDRESS_PATTERN = /[a-z0-9._%+-]+(?:@|%40)(?:[a-z0-9-]+\.)+[a-z][a-z0-9-]*/gi;
 
 function withoutEmailAddresses(text: string): string {
   return text.replace(EMAIL_ADDRESS_PATTERN, '[email address]');
