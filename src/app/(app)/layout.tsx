@@ -1,4 +1,5 @@
 import { ReactNode } from 'react';
+import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
 import { AppShell } from '@/components/layout/app-shell';
@@ -12,6 +13,7 @@ import { signOut } from '@/lib/auth/actions';
 import { getCurrentUser } from '@/lib/auth/server';
 import { getConnectionHealthSummaries } from '@/lib/connections/health';
 import { getUnreadNotificationCount } from '@/lib/planner/notifications';
+import { INVITATIONS_PATH, listPendingInvitationsForUser, type PendingInvitation } from '@/lib/team/invitations';
 import type { ConnectionHealthSummary } from '@/types/providers';
 
 interface AppLayoutProps {
@@ -66,6 +68,15 @@ export default async function AppLayout({ children }: AppLayoutProps) {
     // Silent fallback — badge shows 0 if query fails
   }
 
+  // Team invitations waiting for this person (spec §4.6). A convenience
+  // banner only: /invitations shows its own error if the lookup fails.
+  let pendingInvitations: PendingInvitation[] = [];
+  try {
+    pendingInvitations = await listPendingInvitationsForUser(createServiceSupabaseClient(), user.id);
+  } catch (error) {
+    console.error("[layout] team invitations lookup failed", error);
+  }
+
   return (
     <AuthProvider value={user}>
       <AppShell
@@ -80,6 +91,20 @@ export default async function AppLayout({ children }: AppLayoutProps) {
             style={{ backgroundColor: "var(--c-claret-soft)", color: "var(--c-claret)" }}
           >
             {heldMessage}
+          </div>
+        ) : null}
+        {pendingInvitations.length > 0 ? (
+          <div
+            role="status"
+            className="mb-4 rounded-[var(--r-md)] p-3 text-sm"
+            style={{ backgroundColor: "var(--c-orange-soft)", color: "var(--c-ink)" }}
+          >
+            {pendingInvitations.length === 1
+              ? `You have been invited to join ${pendingInvitations[0].brandName}. `
+              : `You have been invited to join ${pendingInvitations.length} brands. `}
+            <Link href={INVITATIONS_PATH} className="font-medium underline">
+              {pendingInvitations.length === 1 ? "View the invitation" : "View the invitations"}
+            </Link>
           </div>
         ) : null}
         {children}

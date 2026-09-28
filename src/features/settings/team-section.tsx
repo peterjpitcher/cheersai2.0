@@ -8,25 +8,34 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
+  cancelTeamInvitation,
   inviteTeamMember,
   removeTeamMember,
   setTeamMemberRole,
   type TeamMember,
 } from "@/app/(app)/settings/team-actions";
 import type { BrandRole } from "@/lib/auth/types";
+import type { SentInvitation } from "@/lib/team/invitations";
+import { formatUkLongDate } from "@/lib/utils/date";
 
 interface TeamSectionProps {
   members: TeamMember[];
+  /**
+   * Open invitations waiting to be accepted (each holds a seat); null when they
+   * could not be loaded. Owners only: members are never sent them.
+   */
+  invitations: SentInvitation[] | null;
   canManage: boolean;
 }
 
 const ROLE_LABELS: Record<BrandRole, string> = { owner: "Owner", member: "Member" };
 
 /**
- * Team list for the active brand. Owners invite, remove and change roles;
- * members see the list only. The server actions re-check ownership.
+ * Team list for the active brand. Owners invite, remove and change roles, and
+ * cancel invitations not yet accepted; members see the lists only. The server
+ * actions re-check ownership.
  */
-export function TeamSection({ members, canManage }: TeamSectionProps) {
+export function TeamSection({ members, invitations, canManage }: TeamSectionProps) {
   const router = useRouter();
   const toast = useToast();
   const [isPending, startTransition] = useTransition();
@@ -96,6 +105,46 @@ export function TeamSection({ members, canManage }: TeamSectionProps) {
           </li>
         ) : null}
       </ul>
+
+      {!canManage ? null : invitations === null ? (
+        <p className="text-sm" role="alert" style={{ color: "var(--c-claret)" }}>
+          Invitations waiting to be accepted could not be loaded. Reload the page to try again.
+        </p>
+      ) : invitations.length > 0 ? (
+        <div className="space-y-2">
+          <p className="text-sm font-medium" style={{ color: "var(--c-ink)" }}>
+            Waiting to accept
+          </p>
+          <ul className="divide-y rounded-[var(--r-xl)] border" style={{ borderColor: "var(--c-line)" }}>
+            {invitations.map((invitation) => (
+              <li key={invitation.id} className="flex flex-col gap-2 p-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium" style={{ color: "var(--c-ink)" }}>
+                    {invitation.email ?? "Unknown email"}
+                  </p>
+                  <p className="text-xs" style={{ color: "var(--c-ink-3)" }}>
+                    Invited as {ROLE_LABELS[invitation.role].toLowerCase()}. Expires {formatUkLongDate(invitation.expiresAt)}.
+                  </p>
+                </div>
+                {canManage ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    disabled={isPending}
+                    onClick={() => {
+                      if (!window.confirm(`Cancel the invitation for ${invitation.email ?? "this person"}?`)) return;
+                      run(() => cancelTeamInvitation(invitation.id), "Invitation cancelled");
+                    }}
+                  >
+                    Cancel invitation
+                  </Button>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
 
       {canManage ? (
         <form

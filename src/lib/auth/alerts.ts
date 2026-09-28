@@ -7,7 +7,13 @@ import { createLogger } from '@/lib/logging';
 const logger = createLogger('auth');
 
 /** The public auth paths whose dependencies can fail. */
-export type AuthFailureKind = 'rate_limiter' | 'sign_in' | 'magic_link' | 'password_reset' | 'email_link';
+export type AuthFailureKind =
+  | 'rate_limiter'
+  | 'sign_in'
+  | 'magic_link'
+  | 'password_reset'
+  | 'email_link'
+  | 'invite_login_cleanup';
 
 const WHAT_BROKE: Record<AuthFailureKind, string> = {
   rate_limiter:
@@ -17,6 +23,8 @@ const WHAT_BROKE: Record<AuthFailureKind, string> = {
   password_reset: 'Cheers could not create or send a password reset link (Supabase Auth or Resend failed).',
   email_link:
     'Cheers could not check an invite, reset or sign-in link after the visitor pressed "Confirm and continue" (Supabase Auth error or outage). The link is probably still unused.',
+  invite_login_cleanup:
+    'A team invite to a new address created a login, then the invite was refused or failed, and Cheers could not delete that unused login. It has no brand and was never emailed a link. Delete it in Supabase Auth (the user id is below and in the Vercel logs).',
 };
 
 const ALERT_INTERVAL_MS = 60 * 60 * 1000;

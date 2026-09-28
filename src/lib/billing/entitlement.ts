@@ -23,7 +23,8 @@ export type Capability =
   | 'publish'
   | 'billing'
   | 'export'
-  | 'switch_brand';
+  | 'switch_brand'
+  | 'invite';
 
 /** Days after the unpaid period starts that a past-due brand keeps working. */
 export const PAST_DUE_GRACE_DAYS = 7;
@@ -125,7 +126,7 @@ export function resolveEntitlement(input: EntitlementInput): EntitlementState {
   }
 }
 
-const FULL: ReadonlySet<Capability> = new Set(['read', 'create', 'publish', 'billing', 'export', 'switch_brand']);
+const FULL: ReadonlySet<Capability> = new Set(['read', 'create', 'publish', 'billing', 'export', 'switch_brand', 'invite']);
 const HELD: ReadonlySet<Capability> = new Set(['read', 'billing', 'export', 'switch_brand']);
 
 /**
@@ -133,6 +134,11 @@ const HELD: ReadonlySet<Capability> = new Set(['read', 'billing', 'export', 'swi
  * the caller's role check), export and brand switching, but may not create,
  * generate, upload or start new publishing. Archived brands are not listed to
  * users at all, so they get nothing.
+ *
+ * `invite` (team invites, spec §4.6 and P4): only trialing, paying, past-due
+ * grace and comped brands. Unlike the others it is checked whether or not
+ * billing enforcement is on (see team-actions.ts), because an invite emails
+ * any address.
  */
 const CAPABILITIES: Record<EntitlementState, ReadonlySet<Capability>> = {
   comped: FULL,
