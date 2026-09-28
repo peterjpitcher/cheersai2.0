@@ -24,6 +24,12 @@ export interface BrandSummary {
   features: BrandFeatures;
   /** The user's role in this brand. Super-admins act as owner everywhere. */
   role: BrandRole;
+  /**
+   * When the user joined this brand (account_members.created_at). Null for a
+   * brand a super-admin sees only as super-admin. The default brand is the one
+   * joined first, so a new membership never changes it.
+   */
+  joinedAt: string | null;
 }
 
 /**

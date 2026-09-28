@@ -86,7 +86,7 @@ function renderManager() {
         activeAccountId: "account-1",
         businessName: "The Anchor",
         timezone: "Europe/London",
-        brands: [{ accountId: "account-1", name: "The Anchor", timezone: "Europe/London", features: { paidAds: false, tournaments: false, managementImport: false }, role: "owner" }],
+        brands: [{ accountId: "account-1", name: "The Anchor", timezone: "Europe/London", features: { paidAds: false, tournaments: false, managementImport: false }, role: "owner", joinedAt: null }],
         isSuperAdmin: false,
         features: { paidAds: false, tournaments: false, managementImport: false },
         role: "owner",
