@@ -65,7 +65,6 @@ project: cheersai-2.0
 
 | Path | Method | Auth | File |
 |------|--------|------|------|
-| `/api/auth/login` | POST | Supabase session | `src/app/api/auth/login/route.ts` |
 | `/auth/callback` | GET | Supabase OAuth | `src/app/auth/callback/route.ts` |
 | `/auth/confirm` | GET | Supabase token | `src/app/auth/confirm/route.ts` |
 
