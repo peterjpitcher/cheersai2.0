@@ -1,4 +1,5 @@
 import { escapeHtml, type RenderedEmail } from '@/lib/auth/email-links';
+import { formatUkDateTime } from '@/lib/utils/date';
 
 /**
  * Emails for the self-serve sign-up request (tasks/SPEC-self-serve-signup.md
@@ -43,6 +44,44 @@ export function renderExistingLoginEmail(options: { loginUrl: string; resetUrl: 
 <p>To add another venue, email <a href="mailto:${contact}">${contact}</a>. Replies to this email are not read.</p>
 <p>If you did not ask to sign up, you can ignore this email. Nothing has changed.</p>
 <p>Cheers by Orange Jelly</p>
+`.trim(),
+  };
+}
+
+/**
+ * The operator's "new venue" email (spec §4.9): venue name, type, sign-up
+ * email and time, to OPERATOR_ALERT_EMAIL only. The venue name is the one
+ * thing a stranger typed; it has passed the venue-name rule (no links, no
+ * email addresses, no control characters) and is escaped here. It stays out
+ * of the subject line.
+ */
+export function renderNewVenueOperatorEmail(options: {
+  venueName: string;
+  venueTypeLabel: string;
+  signupEmail: string;
+  createdAt: Date;
+  accountId: string;
+  adminUrl: string;
+}): RenderedEmail {
+  if (!options.venueName.trim()) throw new Error('New-venue email needs the venue name.');
+  if (!options.venueTypeLabel.trim()) throw new Error('New-venue email needs the venue type.');
+  if (!options.signupEmail.trim()) throw new Error('New-venue email needs the sign-up email.');
+  if (!options.accountId.trim()) throw new Error('New-venue email needs the brand id.');
+  if (!options.adminUrl) throw new Error('New-venue email needs the admin link.');
+  const createdAt = formatUkDateTime(options.createdAt);
+  if (!createdAt) throw new Error('New-venue email needs a valid time.');
+  return {
+    subject: '[Cheers operator] New self-serve venue',
+    html: `
+<p>A new venue signed up to Cheers on its own.</p>
+<ul>
+<li>Venue: <strong>${escapeHtml(options.venueName)}</strong></li>
+<li>Type: ${escapeHtml(options.venueTypeLabel)}</li>
+<li>Sign-up email: ${escapeHtml(options.signupEmail)}</li>
+<li>Created: ${escapeHtml(createdAt)} (UK time)</li>
+<li>Brand id: ${escapeHtml(options.accountId)}</li>
+</ul>
+<p>The owner is on the Billing page next, to start the free trial through Stripe Checkout. Until the trial starts the brand is not paid for. See it in <a href="${escapeHtml(options.adminUrl)}">Admin</a>.</p>
 `.trim(),
   };
 }

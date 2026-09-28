@@ -7,9 +7,11 @@ import { createLogger } from '@/lib/logging';
 import { createServiceSupabaseClient } from '@/lib/supabase/service';
 
 // ---------------------------------------------------------------------------
-// Operator alerts for the self-serve sign-up request (tasks/SPEC-self-serve-
-// signup.md §4.9). Sign-up is a public write path, so every failure caused by
-// a dependency is refused with a visible error AND made visible on our side.
+// Operator alerts for self-serve sign-up (tasks/SPEC-self-serve-signup.md
+// §4.9): the sign-up request (/signup), venue creation (/signup/venue) and the
+// nightly login clean-up. Sign-up is a public write path, so every failure
+// caused by a dependency is refused with a visible error AND made visible on
+// our side.
 //
 // For each failure:
 //   1. log it (Vercel logs);
@@ -36,6 +38,11 @@ export type SignupFailureKind =
   | 'database'
   | 'email'
   | 'login_cleanup'
+  | 'session'
+  | 'venue_lookup'
+  | 'account_update'
+  | 'provisioning'
+  | 'venue_notice'
   | 'unexpected';
 
 const WHAT_BROKE: Record<SignupFailureKind, string> = {
@@ -54,6 +61,16 @@ const WHAT_BROKE: Record<SignupFailureKind, string> = {
   email: 'Resend could not send a sign-up email (confirmation, member invite or "you already have a login").',
   login_cleanup:
     'The daily data-retention run could not delete some self-serve logins that never became a venue (public.delete_stale_self_serve_login answered failed or errored; a login with rows in audit_log cannot be deleted). The other retention rules ran. The next daily run tries again; the Vercel logs name each user id and the reason.',
+  session:
+    'Cheers could not read the signed-in login on the venue set-up page (/signup/venue) (Supabase Auth getUser failed for a reason other than being signed out), so the person could not create their venue.',
+  venue_lookup:
+    "Cheers could not read a signed-in login's sign-up record or brands on the venue set-up page (reading self_serve_signups or account_members, or recording when the email was confirmed, failed), so it could not tell whether they may create a venue.",
+  account_update:
+    "Supabase Auth could not save a new owner's password and name on the venue set-up page (auth.updateUser failed), so their venue was not created.",
+  provisioning:
+    'Cheers could not create a self-serve venue (public.provision_self_serve_brand failed or gave an answer the app does not expect). Nothing was created: the function undoes its own writes.',
+  venue_notice:
+    'A self-serve venue was created, but its new-venue email to you or its admin_audit record (self_serve_venue_created) could not be written. The customer carried on to Billing; the Vercel logs have the venue id.',
   unexpected: 'Something unexpected failed while handling a sign-up request (for example the service-role client could not be created). The error below says what.',
 };
 

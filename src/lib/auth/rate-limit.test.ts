@@ -144,7 +144,39 @@ describe('checkAuthRateLimit: allow, block, reset', () => {
       ],
       signup_email_site: [{ scope: 'site', limit: 60, windowSeconds: 3600 }],
       signup_widget_report: [{ scope: 'ip', limit: 3, windowSeconds: 3600 }],
+      signup_venue: [{ scope: 'user', limit: 10, windowSeconds: 3600 }],
     });
+  });
+});
+
+describe('venue creation limit (spec §4.4)', () => {
+  const LOGIN = '33333333-3333-4333-8333-333333333333';
+
+  it('allows ten venue attempts an hour per login, whatever the IP', async () => {
+    fakeLimiter();
+    for (let i = 0; i < 10; i += 1) {
+      expect((await consumeAuthRateLimit('signup_venue', { email: '', ip: `198.51.100.${i}`, userId: LOGIN })).status).toBe(
+        'allowed',
+      );
+    }
+    expect((await consumeAuthRateLimit('signup_venue', { email: '', ip: '192.0.2.99', userId: LOGIN })).status).toBe('limited');
+    expect(
+      (await consumeAuthRateLimit('signup_venue', { email: '', ip: '192.0.2.99', userId: '44444444-4444-4444-8444-444444444444' }))
+        .status,
+    ).toBe('allowed');
+  });
+
+  it('keys it on the login id only as an HMAC', async () => {
+    fakeLimiter();
+    await consumeAuthRateLimit('signup_venue', { email: '', ip: PETER.ip, userId: LOGIN });
+    const key = (mockRpc.mock.calls[0]?.[1] as RpcArgs).p_key;
+    expect(key).toMatch(/^signup_venue:user:[0-9a-f]{64}$/);
+    expect(key).not.toContain(LOGIN);
+  });
+
+  it('refuses to count a per-login limit without a login id (the caller fails closed)', async () => {
+    fakeLimiter();
+    await expect(consumeAuthRateLimit('signup_venue', { email: '', ip: PETER.ip })).rejects.toThrow(/no login id/);
   });
 });
 

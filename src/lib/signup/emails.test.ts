@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { renderExistingLoginEmail, renderSignupConfirmEmail } from '@/lib/signup/emails';
+import { renderExistingLoginEmail, renderNewVenueOperatorEmail, renderSignupConfirmEmail } from '@/lib/signup/emails';
 
 // Rendered from fixtures (workspace rule): fail on undefined, NaN, Invalid Date or an empty link.
 const BAD_OUTPUT = /undefined|NaN|Invalid Date|href=""|null/;
@@ -49,5 +49,42 @@ describe('renderExistingLoginEmail', () => {
     expect(() => renderExistingLoginEmail({ ...fixture, loginUrl: '' })).toThrow();
     expect(() => renderExistingLoginEmail({ ...fixture, resetUrl: '' })).toThrow();
     expect(() => renderExistingLoginEmail({ ...fixture, contactEmail: '' })).toThrow();
+  });
+});
+
+describe('renderNewVenueOperatorEmail', () => {
+  const fixture = {
+    venueName: 'Fish & Chips <Co>',
+    venueTypeLabel: 'Other hospitality venue',
+    signupEmail: 'owner@venue.test',
+    // 13:05 UTC on the clock-change Sunday is 13:05 GMT; the day before it was BST.
+    createdAt: new Date('2026-10-25T13:05:00Z'),
+    accountId: '22222222-2222-4222-8222-222222222222',
+    adminUrl: 'https://cheers.orangejelly.co.uk/admin',
+  };
+
+  it('renders the venue, type, sign-up email, UK time and brand id, escaped, with the name kept out of the subject', () => {
+    const email = renderNewVenueOperatorEmail(fixture);
+    expect(email.subject).toBe('[Cheers operator] New self-serve venue');
+    expect(email.html).toContain('Venue: <strong>Fish &amp; Chips &lt;Co&gt;</strong>');
+    expect(email.html).toContain('Type: Other hospitality venue');
+    expect(email.html).toContain('Sign-up email: owner@venue.test');
+    expect(email.html).toContain('Created: 25/10/2026, 13:05:00 (UK time)');
+    expect(email.html).toContain('Brand id: 22222222-2222-4222-8222-222222222222');
+    expect(email.html).toContain('href="https://cheers.orangejelly.co.uk/admin"');
+    expect(email.html).not.toMatch(BAD_OUTPUT);
+  });
+
+  it('shows British Summer Time in the summer', () => {
+    const email = renderNewVenueOperatorEmail({ ...fixture, createdAt: new Date('2026-09-28T13:05:00Z') });
+    expect(email.html).toContain('Created: 28/09/2026, 14:05:00 (UK time)');
+  });
+
+  it('refuses to render with anything missing or an invalid time', () => {
+    expect(() => renderNewVenueOperatorEmail({ ...fixture, venueName: ' ' })).toThrow(/venue name/);
+    expect(() => renderNewVenueOperatorEmail({ ...fixture, signupEmail: '' })).toThrow(/sign-up email/);
+    expect(() => renderNewVenueOperatorEmail({ ...fixture, accountId: '' })).toThrow(/brand id/);
+    expect(() => renderNewVenueOperatorEmail({ ...fixture, adminUrl: '' })).toThrow(/admin link/);
+    expect(() => renderNewVenueOperatorEmail({ ...fixture, createdAt: new Date('nope') })).toThrow(/valid time/);
   });
 });
