@@ -10,8 +10,13 @@ import { ACTIVE_BRAND_COOKIE, activeBrandCookieOptions } from '@/lib/auth/active
 import { reportAuthFailure } from '@/lib/auth/alerts';
 import { checkAuthRateLimit, clientIpFromHeaders, type AuthRateLimitAction } from '@/lib/auth/rate-limit';
 import { getCurrentUser } from '@/lib/auth/server';
-import { isUnknownUserOtpError } from '@/lib/auth/otp-errors';
-import { buildAuthConfirmUrl, renderPasswordResetEmail } from '@/lib/auth/email-links';
+import {
+  buildAuthConfirmUrl,
+  DEFAULT_SIGNED_IN_PATH,
+  renderMagicLinkEmail,
+  renderPasswordResetEmail,
+  safeNextPath,
+} from '@/lib/auth/email-links';
 import { destinationAfterPasswordSet } from '@/lib/billing/setup-redirect';
 import { sendEmail } from '@/lib/email/resend';
 import { CONTACT } from '@/lib/legal/company';
@@ -49,55 +54,100 @@ function isWrongCredentials(error: { status?: number; code?: string }): boolean 
   return error.status === 400 || error.code === 'invalid_credentials' || error.code === 'email_not_confirmed';
 }
 
-/** generateLink for an email with no login: Supabase answers 404 user_not_found. Anything else is a failure. */
-function isUnknownUserLinkError(error: { status?: number; code?: string }): boolean {
+/**
+ * Supabase Auth's answer for a login that does not exist (generateLink
+ * recovery or getUserById): 404 user_not_found. Anything else is a failure.
+ */
+function isUnknownUserError(error: { status?: number; code?: string }): boolean {
   return error.status === 404 || error.code === 'user_not_found';
 }
 
+function describeAuthError(error: { status?: number; code?: string; message: string }): string {
+  return `${error.code ?? error.status ?? ''} ${error.message}`;
+}
+
+type ServiceClient = ReturnType<typeof createServiceSupabaseClient>;
+
 /**
- * Send a magic link to the given email address.
+ * The login a magic link may go to: one whose email is exactly this address
+ * and confirmed. Null for an unknown address and for an unconfirmed login (a
+ * pending invite or sign-up, which must go through its own link). Asked first
+ * because generateLink type 'magiclink' creates a login for an unknown
+ * address. The address is looked up in public.user_auth_snapshot, the
+ * trigger-kept mirror of auth.users that team invites use, and the login's
+ * confirmation comes from the Auth admin API (service role cannot read
+ * auth.users). Throws when either lookup fails.
+ */
+async function magicLinkLoginId(service: ServiceClient, email: string): Promise<string | null> {
+  const { data: snapshot, error: snapshotError } = await service
+    .from('user_auth_snapshot')
+    .select('user_id')
+    .eq('email', email)
+    .maybeSingle<{ user_id: string }>();
+  if (snapshotError) throw new Error(`user_auth_snapshot lookup failed: ${snapshotError.message}`);
+  if (!snapshot) return null;
+
+  const { data, error } = await service.auth.admin.getUserById(snapshot.user_id);
+  // A snapshot row that outlived its login: nobody to send to.
+  if (error && isUnknownUserError(error)) return null;
+  if (error || !data?.user) throw new Error(`getUserById: ${error ? describeAuthError(error) : 'no user returned'}`);
+
+  const user = data.user;
+  if (user.email?.toLowerCase() !== email || !user.email_confirmed_at) return null;
+  return user.id;
+}
+
+/**
+ * Email a magic link. The link is generated server-side and sent through
+ * Resend (not Supabase's mailer or template), like resets and invites, and
+ * lands on /auth/confirm, whose button signs the person in.
+ *
+ * A magic link never creates a login: an unknown address or an unconfirmed
+ * login gets nothing, and the same answer as a known one, so the form does
+ * not reveal who has an account. As with resets, a known address takes longer
+ * to answer because an email is sent; the rate limits bound what that shows.
  * Rate-limited in the database: 3 an hour per email, 10 an hour per IP.
  */
 export async function sendMagicLink(
   formData: FormData,
 ): Promise<{ success?: boolean; error?: string }> {
-  const rawEmail = formData.get('email');
-  const emailResult = emailSchema.safeParse(rawEmail);
-
+  const emailResult = emailSchema.safeParse(formData.get('email'));
   if (!emailResult.success) {
     return { error: emailResult.error.issues[0]?.message ?? 'Invalid email address' };
   }
-
   const email = emailResult.data.trim().toLowerCase();
+  const rawNext = formData.get('next');
+  const next = safeNextPath(typeof rawNext === 'string' ? rawNext : null, DEFAULT_SIGNED_IN_PATH);
 
   const refusal = await rateLimitRefusal('magic_link', email);
   if (refusal) return { error: refusal };
 
+  const siteUrl = env.client.NEXT_PUBLIC_SITE_URL;
+  if (!siteUrl) {
+    await reportAuthFailure('magic_link', new Error('NEXT_PUBLIC_SITE_URL is not set'));
+    return { error: COULD_NOT_FINISH };
+  }
+
   try {
-    const supabase = await createServerSupabaseClient();
-    const siteUrl = env.client.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
+    const service = createServiceSupabaseClient();
+    const loginId = await magicLinkLoginId(service, email);
+    // Unknown address or unconfirmed login: send nothing, say nothing different.
+    if (!loginId) return { success: true };
 
-    // shouldCreateUser: false -- logins are only created by invite (and, later,
-    // by the sign-up flow). Without it any email address would get a login with
-    // no brand. An unknown email gets the same response as a known one so the
-    // form does not reveal who has an account.
-    const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: {
-        emailRedirectTo: `${siteUrl}/auth/callback`,
-        shouldCreateUser: false,
-      },
-    });
-
-    if (error && isUnknownUserOtpError(error)) {
-      return { success: true };
+    const { data, error } = await service.auth.admin.generateLink({ type: 'magiclink', email });
+    const tokenHash = data?.properties?.hashed_token;
+    if (error || !tokenHash) {
+      throw new Error(`generateLink: ${error ? describeAuthError(error) : 'no token returned'}`);
+    }
+    // Only the login checked above; a new one appears only if that login was
+    // deleted in the moment between the two calls. Never email that link.
+    if (data.user?.id !== loginId || data.properties.verification_type !== 'magiclink') {
+      throw new Error(`generateLink answered for another login (verification type ${data.properties.verification_type})`);
     }
 
-    if (error) {
-      await reportAuthFailure('magic_link', new Error(`signInWithOtp: ${error.code ?? error.status ?? ''} ${error.message}`));
-      return { error: COULD_NOT_FINISH };
-    }
-
+    const link = buildAuthConfirmUrl({ siteUrl, tokenHash, type: 'magiclink', next });
+    const message = renderMagicLinkEmail({ link });
+    await sendEmail({ to: email, subject: message.subject, html: message.html, required: true });
     return { success: true };
   } catch (error) {
     await reportAuthFailure('magic_link', error);
@@ -229,7 +279,7 @@ export async function requestPasswordReset(
   try {
     const service = createServiceSupabaseClient();
     const { data, error } = await service.auth.admin.generateLink({ type: 'recovery', email });
-    if (error && isUnknownUserLinkError(error)) {
+    if (error && isUnknownUserError(error)) {
       // No login for this email: say nothing different.
       return { success: true };
     }

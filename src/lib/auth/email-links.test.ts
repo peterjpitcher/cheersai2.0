@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildAuthConfirmUrl,
   renderInviteEmail,
+  renderMagicLinkEmail,
   renderPasswordResetEmail,
   safeNextPath,
 } from '@/lib/auth/email-links';
@@ -87,6 +88,13 @@ describe('buildAuthConfirmUrl', () => {
   it('refuses to build a link without a token', () => {
     expect(() => buildAuthConfirmUrl({ siteUrl: SITE, tokenHash: '', type: 'recovery' })).toThrow();
   });
+
+  it('sends a magic link to the dashboard by default, never to set-password', () => {
+    const url = new URL(buildAuthConfirmUrl({ siteUrl: SITE, tokenHash: 'abc123', type: 'magiclink' }));
+    expect(url.pathname).toBe('/auth/confirm');
+    expect(url.searchParams.get('type')).toBe('magiclink');
+    expect(url.searchParams.get('next')).toBe('/dashboard');
+  });
 });
 
 describe('auth email templates (fixture render)', () => {
@@ -112,8 +120,27 @@ describe('auth email templates (fixture render)', () => {
     expect(email.html).toContain('type=recovery');
   });
 
+  it('renders the magic link with the link, escaped, and the sign-in wording', () => {
+    const magicLink = buildAuthConfirmUrl({ siteUrl: SITE, tokenHash: 'fixture-token', type: 'magiclink', next: '/planner?view=week' });
+    const email = renderMagicLinkEmail({ link: magicLink });
+    assertRenderedCleanly(email.html, email.subject);
+    expect(email.subject).toBe('Your Cheers sign-in link');
+    expect(email.html).toContain(`href="${magicLink.replace(/&/g, '&amp;')}"`);
+    expect(email.html).toContain('type=magiclink');
+    expect(email.html).toContain('next=%2Fplanner%3Fview%3Dweek');
+    expect(email.html).toContain('Sign in to Cheers');
+    expect(email.html).toContain('expires in 24 hours');
+  });
+
+  it('escapes anything odd in a magic link rather than breaking out of the href', () => {
+    const email = renderMagicLinkEmail({ link: 'https://cheers.orangejelly.co.uk/auth/confirm?x="><script>' });
+    expect(email.html).not.toContain('<script>');
+    expect(email.html).toContain('&quot;&gt;&lt;script&gt;');
+  });
+
   it('refuses to render without a link', () => {
     expect(() => renderInviteEmail({ link: '', brandNames: [] })).toThrow();
     expect(() => renderPasswordResetEmail({ link: '' })).toThrow();
+    expect(() => renderMagicLinkEmail({ link: '' })).toThrow();
   });
 });

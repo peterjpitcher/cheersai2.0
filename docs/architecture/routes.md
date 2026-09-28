@@ -65,7 +65,7 @@ project: cheersai-2.0
 
 | Path | Method | Auth | File |
 |------|--------|------|------|
-| `/auth/callback` | GET | Supabase OAuth | `src/app/auth/callback/route.ts` |
+| `/auth/callback` | GET | Supabase OAuth (and magic links sent by Supabase's own mailer before it was retired; nothing sends there now) | `src/app/auth/callback/route.ts` |
 | `/auth/confirm` | GET page, POST server action | Supabase token (verified only on the button POST) | `src/app/auth/confirm/page.tsx`, `actions.ts` |
 
 ### OAuth Callbacks

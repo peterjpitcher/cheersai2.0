@@ -71,6 +71,25 @@ describe('reportAuthFailure', () => {
     await expect(pending).resolves.toBeUndefined();
   });
 
+  it('never puts an email address from the error into the log or the alert', async () => {
+    mockSendEmail.mockResolvedValue(undefined);
+    await reportAuthFailure(
+      'magic_link',
+      new Error('Resend API error: could not deliver to Owner.Name+tag@venue.test (mailbox full)'),
+    );
+
+    const [, loggedError, metadata] = mockLogError.mock.calls[0] as [string, Error, { message: string }];
+    for (const text of [loggedError.message, loggedError.stack ?? '', metadata.message]) {
+      expect(text).not.toContain('venue.test');
+      expect(text).not.toContain('Owner.Name');
+    }
+    expect(loggedError.message).toBe('Resend API error: could not deliver to [email address] (mailbox full)');
+    const sent = mockSendEmail.mock.calls[0]?.[0] as { to: string; html: string };
+    expect(sent.to).toBe('ops@orangejelly.test');
+    expect(sent.html).not.toContain('venue.test');
+    expect(sent.html).toContain('could not deliver to [email address] (mailbox full)');
+  });
+
   it('still logs when no operator address is configured', async () => {
     mockEnv.server.OPERATOR_ALERT_EMAIL = '';
     await reportAuthFailure('rate_limiter', 'no database');

@@ -1,10 +1,11 @@
 /**
- * Helpers for the links we put in auth emails (invites, password resets and
- * self-serve sign-up confirmations).
+ * Helpers for the links we put in auth emails (invites, password resets,
+ * magic links and self-serve sign-up confirmations).
  *
- * We send these emails ourselves through Resend rather than relying on the
- * Supabase email templates, so the link format is owned here and does not
- * depend on dashboard configuration. `/auth/confirm` verifies the token hash.
+ * We send every auth email ourselves through Resend rather than relying on the
+ * Supabase email templates or its built-in mailer, so the link format is owned
+ * here and does not depend on dashboard configuration. `/auth/confirm`
+ * verifies the token hash.
  */
 
 /**
@@ -13,9 +14,12 @@
  * yet), so /auth/confirm verifies it as an invite; the name only picks the
  * page's wording and where the person goes next.
  */
-export type AuthEmailLinkType = 'invite' | 'recovery' | 'signup';
+export type AuthEmailLinkType = 'invite' | 'recovery' | 'signup' | 'magiclink';
 
 export const SET_PASSWORD_PATH = '/auth/set-password';
+
+/** Where a signed-in person goes when a link names nowhere safe (a magic link's default). */
+export const DEFAULT_SIGNED_IN_PATH = '/dashboard';
 
 /** Where a confirmed self-serve sign-up goes next: naming the venue (spec §4.4). */
 export const SIGNUP_VENUE_PATH = '/signup/venue';
@@ -58,8 +62,15 @@ export function buildAuthConfirmUrl(options: {
   const url = new URL('/auth/confirm', options.siteUrl);
   url.searchParams.set('token_hash', options.tokenHash);
   url.searchParams.set('type', options.type);
-  url.searchParams.set('next', options.next ?? (options.type === 'signup' ? SIGNUP_VENUE_PATH : SET_PASSWORD_PATH));
+  url.searchParams.set('next', options.next ?? defaultNextPath(options.type));
   return url.toString();
+}
+
+/** Where each kind of link goes after the button when the email names no `next`. */
+function defaultNextPath(type: AuthEmailLinkType): string {
+  if (type === 'signup') return SIGNUP_VENUE_PATH;
+  if (type === 'magiclink') return DEFAULT_SIGNED_IN_PATH;
+  return SET_PASSWORD_PATH;
 }
 
 export function escapeHtml(value: string): string {
@@ -103,6 +114,25 @@ export function renderPasswordResetEmail(options: { link: string }): RenderedEma
 <p>We received a request to reset your Cheers password.</p>
 <p><a href="${escapeHtml(options.link)}">Choose a new password</a></p>
 <p>This link works once and expires in 24 hours. If you did not ask for this, you can ignore this email and your password will not change.</p>
+<p>Cheers by Orange Jelly</p>
+`.trim(),
+  };
+}
+
+/**
+ * The magic-link email. Its expiry wording matches the reset email's because
+ * Supabase checks both tokens against the same setting (the email OTP expiry):
+ * a magic link is stored as a recovery token.
+ */
+export function renderMagicLinkEmail(options: { link: string }): RenderedEmail {
+  if (!options.link) throw new Error('Magic link email needs a link.');
+  return {
+    subject: 'Your Cheers sign-in link',
+    html: `
+<p>Hi,</p>
+<p>We received a request to sign in to Cheers with this email address.</p>
+<p><a href="${escapeHtml(options.link)}">Sign in to Cheers</a></p>
+<p>This link works once and expires in 24 hours. If you did not ask for this, you can ignore this email and nobody will be signed in.</p>
 <p>Cheers by Orange Jelly</p>
 `.trim(),
   };

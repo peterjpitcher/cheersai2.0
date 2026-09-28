@@ -160,7 +160,7 @@ Comments: explain date and timezone logic (GMT/BST transitions), non-obvious bus
 
 Function and module design: 20 to 50 lines, one job per function, at most 3 or 4 parameters (use an options object beyond that), optional parameters last. Feature code in `src/features/<feature>/`, shared logic in `src/lib/<domain>/`, types in `src/types/<domain>.ts`, server actions in `src/app/actions/<domain>.ts` or next to the route.
 
-Framer Motion: page transitions and micro-interactions only; prefer `transform` and `opacity`; animations are stubbed in unit tests. Resend: all transactional email goes through it; `RESEND_FROM` uses the `Name <address>` form.
+Framer Motion: page transitions and micro-interactions only; prefer `transform` and `opacity`; animations are stubbed in unit tests. Resend: all transactional email goes through it; `RESEND_FROM` uses the `Name <address>` form. That includes every auth email (magic links, password resets, invites, sign-up confirmations), rendered by `src/lib/auth/email-links.ts`, `src/lib/team/invitation-email.ts` or `src/lib/signup/emails.ts`. Each one-time sign-in link in them is made with the service-role `auth.admin.generateLink` and lands on `/auth/confirm`, whose button verifies it. Nothing in the app calls `signInWithOtp`, `resetPasswordForEmail` or `inviteUserByEmail`, so Supabase's built-in mailer and its dashboard templates send nothing and are not used.
 
 ## 9. Related documents
 

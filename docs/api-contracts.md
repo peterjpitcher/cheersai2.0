@@ -6,16 +6,17 @@ Draft definitions of primary server actions/endpoints. Adjust naming and payload
 Sign-in runs through server actions in `src/lib/auth/actions.ts`; there are no `/api/auth/*` routes.
 
 ### `signInWithPassword` / `sendMagicLink` / `requestPasswordReset` (Server Actions)
-- Input: `FormData` with `email` (and `password` for sign-in)
+- Input: `FormData` with `email` (and `password` for sign-in; `sendMagicLink` also reads `next`, checked by `safeNextPath`)
 - Output: `{ success?: boolean; error?: string }`
-- Notes: rate-limited in the database (`public.consume_rate_limit`); a limiter or Supabase failure refuses the request with a visible error (fail closed).
+- Notes: rate-limited in the database (`public.consume_rate_limit`); a limiter, lookup, Supabase or Resend failure refuses the request with a visible error (fail closed) and alerts the operator. Magic links and resets are generated with `auth.admin.generateLink` and sent through Resend, never Supabase's mailer. `sendMagicLink` sends only to a confirmed login (looked up in `user_auth_snapshot`, then the Auth admin API), because `generateLink` type `magiclink` would create a login for an unknown address; unknown and unconfirmed addresses get the same answer and nothing is sent.
 
 ### `signOut` (Server Action)
 - Input: none
 - Output: signs out, clears the active-brand cookie, redirects to `/login`
 
 ### `/auth/confirm` (page and `confirmEmailLink` Server Action)
-- GET shows "Confirm and continue" for invite and password-reset links; nothing is verified.
+- GET shows "Confirm and continue" for invite, password-reset, magic-link and sign-up links; nothing is verified.
+- A magic link is verified as Supabase type `magiclink` (not the generic `email`, which would also accept an invite or sign-up token).
 - The button POST verifies the one-time token and redirects to the safe `next` path.
 
 ## 2. Settings
