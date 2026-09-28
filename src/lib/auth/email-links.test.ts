@@ -28,6 +28,14 @@ describe('safeNextPath', () => {
     ['planner', '/dashboard'],
     ['/\t/evil.example', '/dashboard'],
     ['/\n/evil.example', '/dashboard'],
+    ['/\r/evil.example', '/dashboard'],
+    ['/\u007f', '/dashboard'],
+    ['javascript:alert(1)', '/dashboard'],
+    ['http:evil.example', '/dashboard'],
+    ['/planner?x=//evil.example', '/planner?x=//evil.example'],
+    ['/planner#//evil.example', '/planner#//evil.example'],
+    ['/' + 'a'.repeat(2048), '/dashboard'],
+    ['/' + 'a'.repeat(2046), '/' + 'a'.repeat(2046)],
   ])('%s -> %s', (input, expected) => {
     expect(safeNextPath(input, '/dashboard')).toBe(expected);
   });

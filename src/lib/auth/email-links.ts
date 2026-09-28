@@ -17,10 +17,22 @@ export const SET_PASSWORD_PATH = '/auth/set-password';
  * `/\t/evil.example` would otherwise resolve to `//evil.example`.
  * Safe to call from client components (no server imports).
  */
+/** Longer paths are refused: nothing we link to comes close, and it keeps redirect headers small. */
+const MAX_NEXT_PATH_LENGTH = 2048;
+
 export function safeNextPath(next: string | null | undefined, fallback: string): string {
   if (!next) return fallback;
+  if (next.length > MAX_NEXT_PATH_LENGTH) return fallback;
   if (!next.startsWith('/') || next.startsWith('//') || next.includes('\\')) return fallback;
   if (/[\u0000-\u001f\u007f]/.test(next)) return fallback;
+  // Belt and braces: resolve it the way a browser would and require that it
+  // stays on the same origin, whatever the string checks above missed.
+  try {
+    const base = 'https://same-origin.invalid';
+    if (new URL(next, base).origin !== base) return fallback;
+  } catch {
+    return fallback;
+  }
   return next;
 }
 
