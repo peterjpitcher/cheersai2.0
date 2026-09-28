@@ -30,8 +30,8 @@ export const CONTACT = {
  * such as .2); the Checkout acceptance text quotes
  * the version, so Stripe's record of acceptance names the text accepted.
  */
-export const LEGAL_VERSION = "2026-09-27.2";
-export const LEGAL_UPDATED = "27 September 2026";
+export const LEGAL_VERSION = "2026-09-28";
+export const LEGAL_UPDATED = "28 September 2026";
 
 export type LegalDocumentId = "terms" | "privacy" | "dpa";
 

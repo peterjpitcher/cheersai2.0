@@ -10,12 +10,14 @@ import {
   LegalTable,
 } from "@/features/legal/legal-page";
 import { COMPANY, LEGAL_DOCUMENTS } from "@/lib/legal/company";
+import { indexableWhenOpen } from "@/lib/signup/front-door";
+import { getSelfServeSignupSwitch } from "@/lib/signup/switch";
 import { SUB_PROCESSOR_ROWS } from "@/lib/legal/sub-processors";
 
 const DESCRIPTION =
   "How Orange Jelly Limited, trading as Cheers, uses personal data: what we collect, why, who we share it with, how long we keep it and your rights.";
 
-export const metadata: Metadata = {
+const METADATA: Metadata = {
   title: "Privacy Notice | Cheers",
   description: DESCRIPTION,
   openGraph: {
@@ -24,6 +26,17 @@ export const metadata: Metadata = {
     type: "article",
   },
 };
+
+/**
+ * Indexable only once the self-serve sign-up switch is on (P11); until then it
+ * keeps the site-wide noindex. Rendered per request (one small read) so a flip
+ * in either direction shows at once, never a stale cached copy.
+ */
+export const dynamic = "force-dynamic";
+
+export async function generateMetadata(): Promise<Metadata> {
+  return indexableWhenOpen(METADATA, await getSelfServeSignupSwitch());
+}
 
 const { terms, dpa } = LEGAL_DOCUMENTS;
 
@@ -39,9 +52,19 @@ const PURPOSE_ROWS = [
     "Legitimate interests (security).",
   ],
   [
-    "Billing details: business name, billing address, VAT number, billing email, plan, subscription status and invoices.",
-    "To take payment and keep tax records. Stripe collects and holds card details; we never see your full card number.",
-    "Contract. Legal obligation (tax records).",
+    "Sign-up records, if you sign up on our website: when you asked to sign up, confirmed your email address, confirmed you are signing up for a business and created your venue, and the version of our terms shown to you.",
+    "To run sign-up and see where people stop before finishing it.",
+    "Legitimate interests.",
+  ],
+  [
+    "Sign-up form checks, if you use the sign-up form on our website: your IP address and browser details, which Cloudflare Turnstile checks to tell people from automated programs (section 4).",
+    "To stop automated sign-ups and protect the emails we send.",
+    "Legitimate interests (security).",
+  ],
+  [
+    "Billing details: business name, billing address, VAT number, billing email, plan, subscription status and invoices. If you start a free trial, we may also keep a one-way code made from the identifier Stripe gives your card; it cannot be turned back into your card number.",
+    "To take payment and keep tax records, and to keep to one free trial per business. Stripe collects and holds card details; we never see your full card number.",
+    "Contract. Legal obligation (tax records). Legitimate interests (one free trial per business).",
   ],
   [
     "Your venue's details and content: brand profile, posts, briefs, photos and videos.",
@@ -78,8 +101,14 @@ const PURPOSE_ROWS = [
 const RETENTION_ROWS = [
   [
     "Account and content",
-    "For the life of your subscription. If a subscription ends and the account is not closed, we review it 90 days later and may close it then. Deleted within 30 days after the account closes, and gone from backups within a further 7 days.",
+    "For the life of your subscription. If a subscription ends and the account is not closed, we review it 90 days later and may close it then. If you signed up on our website and no subscription starts within 30 days, we may close the account then. Deleted within 30 days after the account closes, and gone from backups within a further 7 days.",
   ],
+  ["Sign-up records", "24 months after you asked to sign up."],
+  [
+    "An account from a sign-up that was not finished",
+    "Deleted if the email address is not confirmed within 7 days, or if no venue is created within 30 days of confirming it.",
+  ],
+  ["Free trial card codes", "24 months from the start of the trial."],
   ["Posts you delete", "Kept in the trash for 7 days, then permanently deleted."],
   [
     "Invoices and payment records",
@@ -138,6 +167,7 @@ export default function PrivacyPolicyPage() {
       <LegalSection id="who-this-covers" title="2. Who this notice covers">
         <LegalList>
           <li>People who use Cheers: venue owners and their team members.</li>
+          <li>People who ask to sign up on our website.</li>
           <li>People who contact us.</li>
           <li>
             People who visit a venue&apos;s link-in-bio page. We count page views and link clicks (the page, the link,
@@ -162,8 +192,9 @@ export default function PrivacyPolicyPage() {
           rows={PURPOSE_ROWS}
         />
         <p>
-          Our legitimate interests are keeping Cheers secure and working, preventing misuse, letting venues give their
-          team access, telling customers about problems with their posts, and keeping proof of what happened, such as
+          Our legitimate interests are keeping Cheers secure and working, preventing misuse (including more than one
+          free trial per business), running sign-up and seeing where people stop, letting venues give their team
+          access, telling customers about problems with their posts, and keeping proof of what happened, such as
           deletions and admin actions. You can object to this use (section 10).
         </p>
       </LegalSection>
@@ -179,6 +210,16 @@ export default function PrivacyPolicyPage() {
           <li>
             <strong>Stripe</strong> takes payments. Stripe is an independent controller for card and payment data,
             under its own privacy policy.
+          </li>
+          {/* Cloudflare's roles are from its Turnstile Privacy Addendum (updated 18 June 2025) and the transfer
+              basis from section 6 of its Data Processing Addendum, both read 28 September 2026. */}
+          <li>
+            <strong>Cloudflare</strong> (Cloudflare, Inc., USA). If you use the sign-up form on our website, Cloudflare
+            Turnstile checks your IP address and browser details to tell people from automated programs. Cloudflare
+            does this for us, on our instructions. It also uses the same details as an independent controller to
+            improve Turnstile, under its own Turnstile privacy terms. Transfers to Cloudflare rely on the UK Extension
+            to the EU-US Data Privacy Framework, with the UK Addendum to the EU Standard Contractual Clauses as a
+            fallback.
           </li>
           <li>
             <strong>Meta.</strong> When you connect Facebook or Instagram, we send the posts you schedule to your Page
@@ -196,8 +237,8 @@ export default function PrivacyPolicyPage() {
         <p>
           Our database is in London and Cheers runs in London. Some of our providers are in the United States or can
           access data from outside the UK. We only allow this with the safeguard shown for each provider above: the
-          UK International Data Transfer Agreement, or the UK Addendum to the EU Standard Contractual Clauses. Email
-          us for more detail.
+          UK International Data Transfer Agreement, the UK Addendum to the EU Standard Contractual Clauses, or the UK
+          Extension to the EU-US Data Privacy Framework. Email us for more detail.
         </p>
       </LegalSection>
 
