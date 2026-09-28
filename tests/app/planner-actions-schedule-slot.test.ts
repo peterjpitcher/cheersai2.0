@@ -70,7 +70,7 @@ async function saveFeedSchedule(date: string, time: string, takenUtc: string[] =
       { data: null, error: null }, // the update
     ],
     accounts: [{ data: { timezone: "Europe/London" }, error: null }],
-    publish_jobs: [{ data: [{ id: "job-1" }], error: null }],
+    publish_jobs: [{ data: [{ id: "job-1", status: "queued" }], error: null }, { data: [{ id: "job-1" }], error: null }], // the job check, then the re-arm
   });
   requireAuthContextMock.mockResolvedValue({ supabase, accountId: "account-1" });
   readinessMock.mockResolvedValue([]);

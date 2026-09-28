@@ -30,6 +30,9 @@ const dismissSchema = z.object({
 
 const deleteSchema = z.object({
   contentId: z.string().uuid(),
+  // The post page's "Cancel this post" promises the post will not go out, so it
+  // refuses a post that is already being sent or has been sent.
+  onlyIfUnpublished: z.boolean().optional(),
 });
 
 const archiveFailureSchema = z.object({
@@ -85,10 +88,22 @@ const publishNowSchema = z.object({
 
 const PUBLISH_NOW_REFUSALS: Partial<Record<string, string>> = {
   draft: "Approve this draft before publishing it.",
+  review: "Approve this post before publishing it.",
+  approved: "This post is already set to go out at its scheduled time.",
   queued: "This post is already queued to go out.",
   publishing: "This post is being published now.",
+  published: "This post has already been published.",
   posted: "This post has already been published.",
 };
+
+/** Messages thrown by updatePlannerContentSchedule that are safe to show as they are. */
+const SCHEDULE_USER_MESSAGES = new Set([
+  "No open 30-minute slots remain on that day for this channel.",
+  "This post has already been processed and can no longer be rescheduled.",
+  "That time has already passed. Choose a future time.",
+]);
+
+const JOB_BEING_SENT_MESSAGE = "This post is being sent right now. Wait a minute, then check the planner.";
 
 const SLOT_INCREMENT_MINUTES = 30;
 const MINUTES_PER_DAY = 24 * 60;
@@ -403,7 +418,7 @@ export async function dismissPlannerNotification(payload: unknown) {
 }
 
 export async function deletePlannerContent(payload: unknown) {
-  const { contentId } = deleteSchema.parse(payload);
+  const { contentId, onlyIfUnpublished } = deleteSchema.parse(payload);
   const { supabase, accountId } = await requireAuthContext();
 
   const { data: content, error: contentFetchError } = await supabase
@@ -436,6 +451,27 @@ export async function deletePlannerContent(payload: unknown) {
       contentId,
       deletedAt: content.deleted_at,
     };
+  }
+
+  if (onlyIfUnpublished) {
+    // A page opened earlier can still show the button after the worker has
+    // started, so check the post and its jobs now, not what the page showed.
+    if (["publishing", "posted"].includes(content.status)) {
+      return { error: "This post is being published or has already gone out, so it can no longer be cancelled." } as const;
+    }
+    const { data: activeJobs, error: activeJobsError } = await supabase
+      .from("publish_jobs")
+      .select("id")
+      .eq("content_item_id", contentId)
+      .in("status", ["in_progress", "succeeded"])
+      .limit(1)
+      .returns<Array<{ id: string }>>();
+    if (activeJobsError) {
+      throw activeJobsError;
+    }
+    if (activeJobs?.length) {
+      return { error: "This post is being sent right now, so it can no longer be cancelled." } as const;
+    }
   }
 
   const deletedAtIso = new Date().toISOString();
@@ -1261,6 +1297,32 @@ export async function updatePlannerContentSchedule(payload: unknown) {
   const nowIso = new Date().toISOString();
   const isDraft = content.status === "draft";
 
+  // A job the worker has already taken (in_progress) or sent (succeeded) must
+  // never be re-armed: the worker marks the post "publishing" only after it
+  // has locked the job, so the post's status alone can miss a send under way,
+  // and re-arming it would publish the post a second time. Checked before
+  // anything is written, so a refusal changes nothing.
+  let existingJobs: Array<{ id: string; status: string }> = [];
+  if (!isDraft) {
+    const { data: jobRowsBefore, error: jobReadError } = await supabase
+      .from("publish_jobs")
+      .select("id, status")
+      .eq("content_item_id", contentId)
+      .returns<Array<{ id: string; status: string }>>();
+
+    if (jobReadError) {
+      throw jobReadError;
+    }
+
+    existingJobs = jobRowsBefore ?? [];
+    if (existingJobs.some((job) => job.status === "in_progress")) {
+      return { error: JOB_BEING_SENT_MESSAGE } as const;
+    }
+    if (existingJobs.some((job) => job.status === "succeeded")) {
+      return { error: "This post has already been published." } as const;
+    }
+  }
+
   const contentUpdate: Record<string, unknown> = {
     scheduled_for: scheduledIso,
     updated_at: nowIso,
@@ -1299,10 +1361,17 @@ export async function updatePlannerContentSchedule(payload: unknown) {
     .from("publish_jobs")
     .update(rearmedPublishJobFields(scheduledIso, nowIso))
     .eq("content_item_id", contentId)
+    .in("status", [...REARMABLE_JOB_STATUSES])
     .select("id");
 
   if (jobUpdateError) {
     throw jobUpdateError;
+  }
+
+  if (existingJobs.length > 0 && !jobRows?.length) {
+    // The job changed state between the read above and this update: the
+    // worker has just taken it. Never create a second job for the post.
+    return { error: JOB_BEING_SENT_MESSAGE } as const;
   }
 
   if (!jobRows?.length) {
@@ -1408,7 +1477,16 @@ export async function publishPlannerContentNow(
     throw new Error(`Unable to work out the current time in ${timezone}.`);
   }
 
-  return updatePlannerContentSchedule({ contentId, date, time: target.toFormat("HH:mm") });
+  try {
+    return await updatePlannerContentSchedule({ contentId, date, time: target.toFormat("HH:mm") });
+  } catch (error) {
+    // Production hides a thrown server action message behind a generic one,
+    // so the known, user-facing reasons are returned instead.
+    if (error instanceof Error && SCHEDULE_USER_MESSAGES.has(error.message)) {
+      return { error: error.message } as const;
+    }
+    throw error;
+  }
 }
 
 /**

@@ -58,8 +58,8 @@ export function PublishNowButton({
         const minutesAway = sendAt.diffNow("minutes").minutes;
 
         if (minutesAway > SEND_NOW_WINDOW_MINUTES) {
-          // A feed post keeps a 30 minute gap from others on the same channel
-          // that day, so the schedule action moved it to the next free slot.
+          // Another feed post on this channel already has this minute, so the
+          // schedule action moved this one to the next free half-hour slot.
           const slotNote = "Another post already goes out on this channel at this time, so this one takes the next free slot.";
           toast.info(`Scheduled for ${sendAt.toFormat("HH:mm")}`, {
             description: result.warning ? `${slotNote} ${result.warning}` : slotNote,
@@ -124,7 +124,12 @@ export function CancelPostButton({ contentId }: CancelPostButtonProps): React.JS
 
     startTransition(async () => {
       try {
-        await deletePlannerContent({ contentId });
+        const result = await deletePlannerContent({ contentId, onlyIfUnpublished: true });
+        if (result && "error" in result && typeof result.error === "string") {
+          toast.error("Could not cancel post", { description: result.error });
+          router.refresh();
+          return;
+        }
         toast.success("Post cancelled", {
           description: "It will not be published. Undo within 10 seconds or restore it later from the Trash section.",
           durationMs: 10_000,

@@ -77,3 +77,12 @@ Revert the PR. No schema, data or environment change.
   not check the content status, so rescheduling an unapproved draft would publish it at that time.
 - `src/features/campaigns/AdPreview.tsx:69`: the ad preview's call-to-action is a native button
   with no handler.
+
+## Review fixes (28 September 2026)
+
+An independent review before merge (Peter's go-ahead, question 37) found and these changes fix:
+
+- **A send already under way could be re-armed and published twice.** The worker marks the post `publishing` only after it has locked the job, so the post's status alone can miss a send in progress. `updatePlannerContentSchedule` (used by Publish now and Save schedule) now reads the post's jobs before writing anything: an `in_progress` job refuses with "This post is being sent right now", a `succeeded` job refuses as already published. The re-arm only touches `queued`, `failed` and `held` jobs, and if the job changed state between the check and the update, no second job is created.
+- **Cancel on an out-of-date page.** The post page's Cancel now passes `onlyIfUnpublished`, so the server refuses a post that is `publishing` or `posted`, or has a job in progress or sent. Other callers of `deletePlannerContent` are unchanged.
+- **Hidden error messages in production.** Publish now returns the known, user-facing schedule messages (time already passed, no free slot, already processed) instead of throwing them, so the owner sees the real reason.
+- Refusal messages now cover `review`, `approved` and `published`; the slot comment is corrected; the clock-change tests run for feed posts as well as stories (feed posts depend on #129, merged first).

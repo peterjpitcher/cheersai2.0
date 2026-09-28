@@ -102,7 +102,7 @@ function planFor(status: string, { timezone = "Europe/London", placement = "feed
       { data: { timezone }, error: null },
     ],
     content_variants: [{ data: null, error: null }], // drift check: no copy to judge
-    publish_jobs: [{ data: [{ id: "job-1" }], error: null }],
+    publish_jobs: [{ data: [{ id: "job-1", status: "queued" }], error: null }, { data: [{ id: "job-1" }], error: null }], // the job check, then the re-arm
   };
 }
 
@@ -178,7 +178,7 @@ describe("publishPlannerContentNow", () => {
     ["queued", "This post is already queued to go out."],
     ["publishing", "This post is being published now."],
     ["posted", "This post has already been published."],
-    ["review", "This post cannot be published now."],
+    ["review", "Approve this post before publishing it."],
   ])("refuses a %s post, as the state machine does not allow it to move to queued", async (status, message) => {
     const { result, supabase } = await publishNow(planFor(status));
 
@@ -205,7 +205,7 @@ describe("publishPlannerContentNow", () => {
   it("surfaces a database failure instead of reporting success", async () => {
     const plan: Record<string, QueryResult[]> = {
       ...planFor("scheduled"),
-      publish_jobs: [{ data: null, error: { message: "connection reset" } }],
+      publish_jobs: [{ data: [{ id: "job-1", status: "queued" }], error: null }, { data: null, error: { message: "connection reset" } }],
     };
 
     await expect(publishNow(plan)).rejects.toMatchObject({ message: "connection reset" });
@@ -214,8 +214,12 @@ describe("publishPlannerContentNow", () => {
   // Stories, because a feed post's same-day slot search has its own clock-change
   // problem in updatePlannerContentSchedule, tracked separately. These pin how
   // the next-minute wall-clock time survives the round trip.
-  describe("clock changes (Europe/London)", () => {
-    const story = { placement: "story" };
+  // Feed posts go through the same-day slot search (fixed for clock changes in
+  // #129); stories skip it. Both must send at the right instant.
+  describe.each([
+    ["story", { placement: "story" }],
+    ["feed", { placement: "feed" }],
+  ])("clock changes (Europe/London), %s post", (_label, story) => {
 
     it("sends in the repeated hour after the clocks go back (second pass, GMT)", async () => {
       // 01:30:20 GMT on 25 October 2026: the second time 01:30 happens.
@@ -241,7 +245,10 @@ describe("publishPlannerContentNow", () => {
       requireEntitledContextMock.mockResolvedValue({ supabase: supabase.client, accountId: ACCOUNT_ID });
       const { publishPlannerContentNow } = await import("@/app/(app)/planner/actions");
 
-      await expect(publishPlannerContentNow({ contentId: CONTENT_ID })).rejects.toThrow("already passed");
+      // Returned, not thrown: production hides a thrown server action message.
+      await expect(publishPlannerContentNow({ contentId: CONTENT_ID })).resolves.toEqual({
+        error: "That time has already passed. Choose a future time.",
+      });
       expect(writes(supabase.calls)).toHaveLength(0);
     });
 
@@ -259,5 +266,65 @@ describe("publishPlannerContentNow", () => {
     const { result } = await publishNow(planFor("scheduled", { timezone: "America/New_York" }));
 
     expect(result).toMatchObject({ ok: true, scheduledFor: "2026-09-27T08:01:00.000Z", timezone: "America/New_York" });
+  });
+});
+
+describe("publishPlannerContentNow never sends a post twice", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-27T08:00:20.000Z"));
+    readinessMock.mockResolvedValue([]);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it.each([
+    ["in_progress", "This post is being sent right now. Wait a minute, then check the planner."],
+    ["succeeded", "This post has already been published."],
+  ])("refuses a scheduled post whose job is %s, and writes nothing", async (jobStatus, message) => {
+    const plan: Record<string, QueryResult[]> = planFor("scheduled");
+    plan.publish_jobs = [{ data: [{ id: "job-1", status: jobStatus }], error: null }];
+    const { result, supabase } = await publishNow(plan);
+
+    expect(result).toEqual({ error: message });
+    expect(writes(supabase.calls)).toHaveLength(0);
+    expect(enqueueMock).not.toHaveBeenCalled();
+  });
+
+  it("re-arms only queued, failed or held jobs", async () => {
+    const { supabase } = await publishNow(planFor("failed"));
+
+    const jobUpdate = writes(supabase.calls).find((call) => call.table === "publish_jobs");
+    expect(jobUpdate?.filters).toContainEqual(["in", "status", ["queued", "failed", "held"]]);
+  });
+
+  it("creates no second job when the worker takes the job between the check and the update", async () => {
+    const plan: Record<string, QueryResult[]> = planFor("scheduled");
+    // The check sees a queued job; by the update the worker has taken it, so
+    // the status-limited update matches nothing.
+    plan.publish_jobs = [
+      { data: [{ id: "job-1", status: "queued" }], error: null },
+      { data: [], error: null },
+    ];
+    const { result } = await publishNow(plan);
+
+    expect(result).toEqual({ error: "This post is being sent right now. Wait a minute, then check the planner." });
+    expect(enqueueMock).not.toHaveBeenCalled();
+  });
+
+  it("still creates the job when the post has none", async () => {
+    const plan: Record<string, QueryResult[]> = planFor("scheduled");
+    plan.publish_jobs = [
+      { data: [], error: null },
+      { data: [], error: null },
+    ];
+    plan.content_variants = [{ data: null, error: null }, { data: { id: "variant-1" }, error: null }];
+    const { result } = await publishNow(plan);
+
+    expect(result).toMatchObject({ ok: true });
+    expect(enqueueMock).toHaveBeenCalledOnce();
   });
 });

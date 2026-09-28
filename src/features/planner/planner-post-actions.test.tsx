@@ -151,7 +151,7 @@ describe("<CancelPostButton />", () => {
     fireEvent.click(screen.getByRole("button", { name: "Cancel this post" }));
 
     await waitFor(() => expect(mocks.push).toHaveBeenCalledWith("/planner"));
-    expect(mocks.deletePlannerContent).toHaveBeenCalledWith({ contentId: CONTENT_ID });
+    expect(mocks.deletePlannerContent).toHaveBeenCalledWith({ contentId: CONTENT_ID, onlyIfUnpublished: true });
 
     const [title, options] = mocks.toast.success.mock.calls[0];
     expect(title).toBe("Post cancelled");
@@ -161,6 +161,21 @@ describe("<CancelPostButton />", () => {
 
     expect(mocks.restorePlannerContent).toHaveBeenCalledWith({ contentId: CONTENT_ID });
     expect(mocks.toast.success).toHaveBeenLastCalledWith("Post restored", { description: "The post is back in your planner." });
+    expect(mocks.refresh).toHaveBeenCalled();
+  });
+
+  it("stays on the page when the server refuses because the post is already going out", async () => {
+    vi.stubGlobal("confirm", vi.fn(() => true));
+    mocks.deletePlannerContent.mockResolvedValue({ error: "This post is being sent right now, so it can no longer be cancelled." });
+
+    render(<CancelPostButton contentId={CONTENT_ID} />);
+    fireEvent.click(screen.getByRole("button", { name: "Cancel this post" }));
+
+    await waitFor(() => expect(mocks.toast.error).toHaveBeenCalledWith("Could not cancel post", {
+      description: "This post is being sent right now, so it can no longer be cancelled.",
+    }));
+    expect(mocks.toast.success).not.toHaveBeenCalled();
+    expect(mocks.push).not.toHaveBeenCalled();
     expect(mocks.refresh).toHaveBeenCalled();
   });
 

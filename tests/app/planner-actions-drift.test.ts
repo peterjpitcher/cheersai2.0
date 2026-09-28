@@ -78,7 +78,7 @@ function planFor(body: string) {
     ],
     accounts: [{ data: { timezone: "Europe/London" }, error: null }],
     content_variants: [{ data: { body }, error: null }],
-    publish_jobs: [{ data: [{ id: "job-1" }], error: null }],
+    publish_jobs: [{ data: [{ id: "job-1", status: "queued" }], error: null }, { data: [{ id: "job-1" }], error: null }], // the job check, then the re-arm
   };
 }
 
