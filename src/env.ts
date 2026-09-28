@@ -192,8 +192,10 @@ function validateProductionEnv() {
     throw new Error("Cloudflare's Turnstile test keys cannot be used in Production: set the real site key and secret");
   }
 
+  // One backslash per dot: in a regex literal `\\.` means a literal backslash
+  // then any character, which let http://127.0.0.1 through.
   const siteUrl = clientEnv.NEXT_PUBLIC_SITE_URL;
-  if (!siteUrl || /localhost|127\\.0\\.0\\.1/.test(siteUrl)) {
+  if (!siteUrl || /localhost|127\.0\.0\.1/.test(siteUrl)) {
     throw new Error("NEXT_PUBLIC_SITE_URL must be set to the deployed domain in production");
   }
 }
