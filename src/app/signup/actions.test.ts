@@ -60,7 +60,7 @@ function table(name: string) {
   tablesRead.push(name);
   const answer = () => db[name] ?? { data: [], error: null };
   const chain: Record<string, unknown> = {};
-  for (const method of ['select', 'eq', 'in']) chain[method] = () => chain;
+  for (const method of ['select', 'eq', 'in', 'is', 'gt']) chain[method] = () => chain;
   chain.maybeSingle = async () => answer();
   chain.then = (resolve: (value: Answer) => unknown, reject: (reason: unknown) => unknown) =>
     Promise.resolve(answer()).then(resolve, reject);
@@ -86,10 +86,11 @@ const NEW_USER_ID = '11111111-1111-4111-8111-111111111111';
 const EXISTING_USER_ID = '22222222-2222-4222-8222-222222222222';
 
 /** No login, or an unconfirmed one: generateLink returns the login and a token. */
-function linkFor(userId: string, brands: string[] = []) {
+function linkFor(userId: string, brands: string[] = [], invitedTo: string[] = []) {
   mockGenerateLink.mockResolvedValue({ data: { user: { id: userId }, properties: { hashed_token: TOKEN_HASH } }, error: null });
   db.account_members = { data: brands.map((_, index) => ({ account_id: `acc-${index}` })), error: null };
-  db.accounts = { data: brands.map((name) => ({ business_name: name })), error: null };
+  db.team_invitations = { data: invitedTo.map((_, index) => ({ account_id: `inv-${index}` })), error: null };
+  db.accounts = { data: [...brands, ...invitedTo].map((name) => ({ business_name: name })), error: null };
 }
 
 /** A confirmed login: Supabase refuses the invite and changes nothing (checked on the local stack). */
@@ -191,6 +192,22 @@ describe('requestSignup: the same screen for every email (spec §4.2)', () => {
     expect(link.searchParams.get('next')).toBe('/auth/set-password');
   });
 
+  it('a login whose only link to a brand is a pending team invitation: that invite again, naming the brand, no sign-up row', async () => {
+    linkFor(EXISTING_USER_ID, [], ['The Old Bell']);
+    expect(await requestSignup(REQUEST())).toEqual({ success: true });
+
+    expect(recordCalls()).toEqual([]);
+    expect(tablesRead).toContain('team_invitations');
+    const email = sentEmail();
+    expect(email.subject).toBe("You're invited to Cheers by Orange Jelly");
+    expect(email.html).toContain('The Old Bell');
+    const link = linkIn(email.html);
+    expect(link.searchParams.get('type')).toBe('invite');
+    expect(link.searchParams.get('next')).toBe('/auth/set-password');
+    expect(email.html).not.toContain('/signup/venue');
+    expect(email.html).not.toContain('Confirm your email to start');
+  });
+
   it('confirmed login: Supabase refuses the invite, nothing is created, "You already have a Cheers login" is sent', async () => {
     confirmedLogin();
     expect(await requestSignup(REQUEST())).toEqual({ success: true });
@@ -267,10 +284,32 @@ describe('requestSignup: an address Supabase will not accept (review of #144)', 
     expect(mockGetUserById).not.toHaveBeenCalled();
   });
 
-  it('keeps a real outage (5xx) a generate_link failure with an alert', async () => {
+  it('keeps a real outage (a 5xx twice) a generate_link failure with an alert', async () => {
     mockGenerateLink.mockResolvedValue({ data: { user: null, properties: null }, error: { status: 500, code: 'unexpected_failure', message: 'Database error' } });
     expect((await requestSignup(REQUEST())).error).toMatch(/could not finish this/i);
+    expect(mockGenerateLink).toHaveBeenCalledTimes(2);
     expect(mockReport).toHaveBeenCalledWith('generate_link', expect.any(Error));
+  });
+
+  it('tries generateLink once more after a 5xx (two requests racing for a new address), then carries on with no alert', async () => {
+    mockGenerateLink
+      .mockResolvedValueOnce({
+        data: { user: null, properties: null },
+        error: { status: 500, code: 'unexpected_failure', message: 'Database error saving new user' },
+      })
+      .mockResolvedValueOnce({ data: { user: { id: NEW_USER_ID }, properties: { hashed_token: TOKEN_HASH } }, error: null });
+    expect(await requestSignup(REQUEST())).toEqual({ success: true });
+    expect(mockGenerateLink).toHaveBeenCalledTimes(2);
+    expect(mockReport).not.toHaveBeenCalled();
+    expect(recordCalls()).toEqual([['record_self_serve_signup_request', { p_user_id: NEW_USER_ID }]]);
+  });
+
+  it('does not retry a refused address or a confirmed login', async () => {
+    refusedAddress();
+    await requestSignup(REQUEST());
+    confirmedLogin();
+    await requestSignup(REQUEST());
+    expect(mockGenerateLink).toHaveBeenCalledTimes(2);
   });
 
   it('keeps a network failure or timeout a generate_link failure with an alert', async () => {
@@ -369,6 +408,14 @@ describe('requestSignup: every failing dependency shows the error and alerts (sp
     expect(mockSendEmail).not.toHaveBeenCalled();
   });
 
+  it('team invitation lookup error', async () => {
+    db.team_invitations = { data: null, error: { message: 'connection terminated' } };
+    expect((await requestSignup(REQUEST())).error).toMatch(COULD_NOT_FINISH);
+    expect(mockReport).toHaveBeenCalledWith('lookup', expect.any(Error));
+    expect(recordCalls()).toEqual([]);
+    expect(mockSendEmail).not.toHaveBeenCalled();
+  });
+
   it('membership lookup error', async () => {
     db.account_members = { data: null, error: { message: 'connection terminated' } };
     const result = await requestSignup(REQUEST());
@@ -378,7 +425,7 @@ describe('requestSignup: every failing dependency shows the error and alerts (sp
   });
 
   it('generateLink error', async () => {
-    mockGenerateLink.mockResolvedValue({ data: { user: null, properties: null }, error: { status: 500, message: 'Database error' } });
+    mockGenerateLink.mockResolvedValue({ data: { user: null, properties: null }, error: { status: 503, message: 'Service Unavailable' } });
     const result = await requestSignup(REQUEST());
     expect(result.error).toMatch(COULD_NOT_FINISH);
     expect(mockReport).toHaveBeenCalledWith('generate_link', expect.any(Error));
@@ -433,10 +480,27 @@ describe('reportTurnstileWidgetFailure: a broken widget is never silent on our s
     expect(error.message).not.toContain('203.0.113.7');
   });
 
-  it('reports a script that never loaded', async () => {
+  it('reports a script that never loaded or a widget that refused our parameters', async () => {
     await reportTurnstileWidgetFailure({ reason: 'script_timeout' });
     await reportTurnstileWidgetFailure({ reason: 'script_load_failed' });
-    expect(mockReport).toHaveBeenCalledTimes(2);
+    await reportTurnstileWidgetFailure({ reason: 'render_failed' });
+    expect(mockReport).toHaveBeenCalledTimes(3);
+  });
+
+  it('reports every Cloudflare site key, domain or configuration code', async () => {
+    for (const code of ['110100', '110110', '110200', '400020', '400021', '400070']) {
+      await reportTurnstileWidgetFailure({ reason: 'widget_error', code });
+    }
+    expect(mockReport).toHaveBeenCalledTimes(6);
+  });
+
+  it("never reports the visitor's own failures: timeouts, clock, blocked iframe, failed challenges, or no code", async () => {
+    for (const code of ['110600', '110620', '200100', '200500', '300010', '300030', '600010', '600020']) {
+      await reportTurnstileWidgetFailure({ reason: 'widget_error', code });
+    }
+    await reportTurnstileWidgetFailure({ reason: 'widget_error' });
+    expect(mockReport).not.toHaveBeenCalled();
+    expect(mockConsume).not.toHaveBeenCalled();
   });
 
   it('does nothing while the switch is off, or on Vercel Preview', async () => {

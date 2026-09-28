@@ -9,8 +9,10 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { CONTACT } from '@/lib/legal/company';
 
+import { isTurnstileSetupFailure, type TurnstileWidgetFailure } from '@/lib/signup/turnstile-errors';
+
 import { reportTurnstileWidgetFailure, requestSignup, type SignupRequestResult } from './actions';
-import { TurnstileWidget, type TurnstileWidgetFailure } from './turnstile-widget';
+import { TurnstileWidget } from './turnstile-widget';
 
 /** "Send it again" waits this long after each send (spec §4.2 step 6). */
 const RESEND_WAIT_SECONDS = 60;
@@ -77,7 +79,9 @@ export function SignupForm({ siteKey, preview }: SignupFormProps): React.JSX.Ele
   const reported = useRef(false);
   const onWidgetError = useCallback((reason: TurnstileWidgetFailure, code?: string) => {
     setWidgetFailed(true);
-    // Tell us once per page, so a broken widget is never silent on our side.
+    // Tell us once per page when our set-up is broken, so it is never silent on
+    // our side. The visitor's own browser, network or behaviour is not reported.
+    if (!isTurnstileSetupFailure(reason, code)) return;
     if (reported.current) return;
     reported.current = true;
     reportTurnstileWidgetFailure({ reason, code }).catch(() => {});

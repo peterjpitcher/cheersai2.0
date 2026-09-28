@@ -2,6 +2,8 @@
 
 import { useEffect, useRef } from 'react';
 
+import type { TurnstileWidgetFailure } from '@/lib/signup/turnstile-errors';
+
 // Cloudflare Turnstile, rendered explicitly so it works after client-side
 // navigation too. The widget adds a hidden `cf-turnstile-response` field to the
 // enclosing form; the server checks it with siteverify (src/lib/signup/turnstile.ts).
@@ -39,9 +41,6 @@ function loadTurnstile(): Promise<TurnstileApi> {
   });
   return scriptPromise;
 }
-
-/** Why the widget could not be used; reported to us (see reportTurnstileWidgetFailure). */
-export type TurnstileWidgetFailure = 'script_load_failed' | 'script_timeout' | 'widget_error';
 
 /** How long Cloudflare's script may take to load and show the widget before we give up. */
 export const TURNSTILE_LOAD_TIMEOUT_MS = 15_000;
@@ -94,8 +93,9 @@ export function TurnstileWidget({ siteKey, action, onReadyChange, onError }: Tur
           rendered = true;
           window.clearTimeout(timer);
         } catch {
+          // Turnstile refused our parameters (for example a missing site key).
           window.clearTimeout(timer);
-          fail('widget_error');
+          fail('render_failed');
         }
       })
       .catch(() => {

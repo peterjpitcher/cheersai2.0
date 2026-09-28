@@ -14,6 +14,7 @@ import { renderExistingLoginEmail, renderSignupConfirmEmail } from '@/lib/signup
 import { SIGNUP_MESSAGES } from '@/lib/signup/messages';
 import { getSelfServeSignupSwitch } from '@/lib/signup/switch';
 import { TURNSTILE_RESPONSE_FIELD, turnstileRemoteIp, verifyTurnstileToken } from '@/lib/signup/turnstile';
+import { isTurnstileSetupFailure } from '@/lib/signup/turnstile-errors';
 import { createServiceSupabaseClient } from '@/lib/supabase/service';
 
 // ---------------------------------------------------------------------------
@@ -31,10 +32,10 @@ import { createServiceSupabaseClient } from '@/lib/supabase/service';
 // who has a login. Whatever the email, a request that gets past the checks
 // answers { success: true } and the page shows the same "Check your email"
 // screen:
-//   no login, or unconfirmed with no brand  -> sign-up link, one sign-up row
-//   unconfirmed, has a brand                 -> their member invite again, no sign-up row
-//   confirmed (Supabase: email_exists)       -> "you already have a login" email
-//   over the per-email or per-IP limit       -> nothing sent
+//   no login, or unconfirmed with no brand   -> sign-up link, one sign-up row
+//   unconfirmed, member or invited to a brand -> their invite again, naming the brand, no sign-up row
+//   confirmed (Supabase: email_exists)        -> "you already have a login" email
+//   over the per-email or per-IP limit        -> nothing sent
 // ---------------------------------------------------------------------------
 
 export interface SignupRequestResult {
@@ -96,15 +97,30 @@ type InviteLinkResult =
  * A new login with no password, or a new link for an unconfirmed one (which
  * replaces the earlier link). Refused, with nothing changed, for an address
  * Supabase will not accept or a login that is already confirmed.
+ *
+ * A 5xx is tried once more before it counts as an outage: two requests for
+ * the same brand-new address at the same moment race on Supabase's unique
+ * email index, and the loser's second try finds the new login and simply
+ * makes a fresh link for it (only the newest link then works, the accepted
+ * two-tab case in the spec).
  */
 async function generateInviteLink(email: string): Promise<InviteLinkResult> {
   const service = createServiceSupabaseClient();
-  let answer: Awaited<ReturnType<typeof service.auth.admin.generateLink>>;
-  try {
-    answer = await service.auth.admin.generateLink({ type: 'invite', email });
-  } catch (error) {
-    throw new SignupDependencyError('generate_link', `generateLink threw: ${error instanceof Error ? error.message : String(error)}`);
+  type Answer = Awaited<ReturnType<typeof service.auth.admin.generateLink>>;
+  const attempt = async (): Promise<Answer> => {
+    try {
+      return await service.auth.admin.generateLink({ type: 'invite', email });
+    } catch (error) {
+      throw new SignupDependencyError('generate_link', `generateLink threw: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  };
+
+  let answer = await attempt();
+  if ((answer.error?.status ?? 0) >= 500) {
+    logger.warn('generateLink answered a server error; trying once more', { status: answer.error?.status });
+    answer = await attempt();
   }
+
   const { data, error } = answer;
   if (error && isAddressRefusal(error)) return { status: 'invalid_address' };
   if (error && isConfirmedLogin(error)) return { status: 'confirmed' };
@@ -114,15 +130,39 @@ async function generateInviteLink(email: string): Promise<InviteLinkResult> {
   return { status: 'link', userId, tokenHash };
 }
 
-/** The brands this login belongs to (service role, scoped by user id). */
-async function brandNamesOf(userId: string): Promise<{ hasBrand: boolean; brandNames: string[] }> {
+/**
+ * The brands this login belongs to or has an open, unexpired team invitation
+ * to (service role, scoped by user id). Either way the person was brought in
+ * by a venue, so they get that venue's invite again, never a create-a-venue
+ * link or a sign-up row.
+ */
+async function brandsOf(userId: string): Promise<{ hasBrand: boolean; brandNames: string[] }> {
   const service = createServiceSupabaseClient();
   const { data: memberships, error: memberError } = await service
     .from('account_members')
     .select('account_id')
     .eq('user_id', userId);
   if (memberError) throw new SignupDependencyError('lookup', `account_members: ${errorText(memberError)}`);
-  const accountIds = ((memberships ?? []) as Array<{ account_id: string }>).map((row) => row.account_id);
+
+  // An instant compared in the database, not a date shown to anyone.
+  const now = new Date().toISOString();
+  const { data: invitations, error: invitationError } = await service
+    .from('team_invitations')
+    .select('account_id')
+    .eq('user_id', userId)
+    .is('accepted_at', null)
+    .is('declined_at', null)
+    .is('cancelled_at', null)
+    .gt('expires_at', now);
+  if (invitationError) throw new SignupDependencyError('lookup', `team_invitations: ${errorText(invitationError)}`);
+
+  const accountIds = [
+    ...new Set(
+      [...((memberships ?? []) as Array<{ account_id: string }>), ...((invitations ?? []) as Array<{ account_id: string }>)].map(
+        (row) => row.account_id,
+      ),
+    ),
+  ];
   if (accountIds.length === 0) return { hasBrand: false, brandNames: [] };
 
   const { data: brands, error: brandError } = await service.from('accounts').select('business_name').in('id', accountIds);
@@ -196,10 +236,10 @@ async function fulfil(email: string, ip: string): Promise<Outcome> {
     return 'existing_login';
   }
 
-  const { hasBrand, brandNames } = await brandNamesOf(link.userId);
+  const { hasBrand, brandNames } = await brandsOf(link.userId);
   if (hasBrand) {
-    // Invited by the operator or an owner and never accepted: send that
-    // invite again. No sign-up row: this person is a member, not a new venue.
+    // A member, or invited to a brand by its owner, who never accepted: send
+    // that invite again. No sign-up row: this person joins a venue, not a new one.
     await countSiteEmail(email, ip);
     await send(email, renderInviteEmail({ link: buildAuthConfirmUrl({ siteUrl, tokenHash: link.tokenHash, type: 'invite' }), brandNames }));
     return 'member_invite';
@@ -270,7 +310,7 @@ export async function requestSignup(formData: FormData): Promise<SignupRequestRe
 // ---------------------------------------------------------------------------
 
 const widgetFailureSchema = z.object({
-  reason: z.enum(['script_load_failed', 'script_timeout', 'widget_error']),
+  reason: z.enum(['script_load_failed', 'script_timeout', 'render_failed', 'widget_error']),
   code: z
     .string()
     .regex(/^\d{1,8}$/)
@@ -281,6 +321,8 @@ export async function reportTurnstileWidgetFailure(input: unknown): Promise<void
   if (env.server.VERCEL_ENV === 'preview') return;
   const parsed = widgetFailureSchema.safeParse(input);
   if (!parsed.success) return;
+  // Only failures that mean our set-up is broken (the form filters the same way).
+  if (!isTurnstileSetupFailure(parsed.data.reason, parsed.data.code)) return;
   if ((await getSelfServeSignupSwitch()) !== 'open') return;
 
   const ip = clientIpFromHeaders(await headers());
