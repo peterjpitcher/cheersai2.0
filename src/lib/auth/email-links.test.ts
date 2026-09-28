@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 
 import {
   buildAuthConfirmUrl,
+  isUsableAuthLinkSiteUrl,
   renderInviteEmail,
+  renderMagicLinkEmail,
   renderPasswordResetEmail,
   safeNextPath,
 } from '@/lib/auth/email-links';
@@ -74,6 +76,36 @@ describe('login ?next= redirect target', () => {
   });
 });
 
+describe('isUsableAuthLinkSiteUrl', () => {
+  it.each([
+    ['https://cheers.orangejelly.co.uk', true],
+    ['https://cheers.orangejelly.co.uk/', true],
+    ['http://localhost:3000', false],
+    ['http://cheers.orangejelly.co.uk', false],
+    ['https://localhost:3000', false],
+    ['https://cheersml.localhost:3400', false],
+    ['https://127.0.0.1', false],
+    ['https://127.1.2.3:8443', false],
+    ['https://2130706433', false],
+    ['https://[::1]:3000', false],
+    ['https://[::ffff:127.0.0.1]', false],
+    ['https://0.0.0.0', false],
+    ['ftp://cheers.orangejelly.co.uk', false],
+    ['not a url', false],
+    ['', false],
+    [undefined, false],
+  ])('in production, %s -> %s', (siteUrl, expected) => {
+    expect(isUsableAuthLinkSiteUrl(siteUrl, true)).toBe(expected);
+  });
+
+  it('accepts local http addresses outside production (the dev server)', () => {
+    expect(isUsableAuthLinkSiteUrl('http://localhost:3000', false)).toBe(true);
+    expect(isUsableAuthLinkSiteUrl('http://cheersml.localhost:3400', false)).toBe(true);
+    expect(isUsableAuthLinkSiteUrl('ftp://localhost', false)).toBe(false);
+    expect(isUsableAuthLinkSiteUrl(undefined, false)).toBe(false);
+  });
+});
+
 describe('buildAuthConfirmUrl', () => {
   it('points at /auth/confirm on the site host with the token, type and set-password next', () => {
     const url = new URL(buildAuthConfirmUrl({ siteUrl: SITE, tokenHash: 'abc123', type: 'invite' }));
@@ -86,6 +118,13 @@ describe('buildAuthConfirmUrl', () => {
 
   it('refuses to build a link without a token', () => {
     expect(() => buildAuthConfirmUrl({ siteUrl: SITE, tokenHash: '', type: 'recovery' })).toThrow();
+  });
+
+  it('sends a magic link to the dashboard by default, never to set-password', () => {
+    const url = new URL(buildAuthConfirmUrl({ siteUrl: SITE, tokenHash: 'abc123', type: 'magiclink' }));
+    expect(url.pathname).toBe('/auth/confirm');
+    expect(url.searchParams.get('type')).toBe('magiclink');
+    expect(url.searchParams.get('next')).toBe('/dashboard');
   });
 });
 
@@ -112,8 +151,45 @@ describe('auth email templates (fixture render)', () => {
     expect(email.html).toContain('type=recovery');
   });
 
+  it('renders the magic link with the link, escaped, and the sign-in wording', () => {
+    const magicLink = buildAuthConfirmUrl({ siteUrl: SITE, tokenHash: 'fixture-token', type: 'magiclink', next: '/planner?view=week' });
+    const email = renderMagicLinkEmail({ link: magicLink });
+    assertRenderedCleanly(email.html, email.subject);
+    expect(email.subject).toBe('Your Cheers sign-in link');
+    expect(email.html).toContain(`href="${magicLink.replace(/&/g, '&amp;')}"`);
+    expect(email.html).toContain('type=magiclink');
+    expect(email.html).toContain('next=%2Fplanner%3Fview%3Dweek');
+    expect(email.html).toContain('Sign in to Cheers');
+    expect(email.html).toContain(
+      'This link works once and only for a short time. If you did not ask for this, you can ignore this email and nobody will be signed in.',
+    );
+  });
+
+  // Supabase sets how long these links last (one hour or less in production),
+  // so no email promises a duration.
+  it.each([
+    ['invite', () => renderInviteEmail({ link, brandNames: ['The Anchor'] }), 'If it has expired, ask the person who invited you to send a new one.'],
+    [
+      'password reset',
+      () => renderPasswordResetEmail({ link }),
+      'If you did not ask for this, you can ignore this email and your password will not change.',
+    ],
+    ['magic link', () => renderMagicLinkEmail({ link }), 'If you did not ask for this, you can ignore this email and nobody will be signed in.'],
+  ])('the %s email promises no link lifetime', (_name, render, followUp) => {
+    const email = render();
+    expect(email.html).toContain(`This link works once and only for a short time. ${followUp}`);
+    expect(email.html).not.toMatch(/expires in|\bhours?\b|\bminutes?\b|\bdays?\b/i);
+  });
+
+  it('escapes anything odd in a magic link rather than breaking out of the href', () => {
+    const email = renderMagicLinkEmail({ link: 'https://cheers.orangejelly.co.uk/auth/confirm?x="><script>' });
+    expect(email.html).not.toContain('<script>');
+    expect(email.html).toContain('&quot;&gt;&lt;script&gt;');
+  });
+
   it('refuses to render without a link', () => {
     expect(() => renderInviteEmail({ link: '', brandNames: [] })).toThrow();
     expect(() => renderPasswordResetEmail({ link: '' })).toThrow();
+    expect(() => renderMagicLinkEmail({ link: '' })).toThrow();
   });
 });

@@ -29,6 +29,10 @@ const COPY: Record<ConfirmLinkType, { title: string; description: string }> = {
     title: 'Confirm your email',
     description: 'Press the button to confirm your email address. You will then set up your venue and your password.',
   },
+  magiclink: {
+    title: 'Sign in to Cheers',
+    description: 'Press the button to sign in.',
+  },
 };
 
 interface ConfirmPageProps {
@@ -36,8 +40,8 @@ interface ConfirmPageProps {
 }
 
 /**
- * Landing page for the links in our invite, password reset and sign-up
- * emails (buildAuthConfirmUrl). Opening it uses nothing: it only shows a button.
+ * Landing page for the links in our invite, password reset, magic-link and
+ * sign-up emails (buildAuthConfirmUrl). Opening it uses nothing: it only shows a button.
  * The button POSTs to confirmEmailLink, which verifies the one-time token and
  * signs the person in. Email security scanners that fetch links therefore
  * cannot use the link up (spec §4.3). Links sent before this change have the

@@ -7,6 +7,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   requireAuthContext: vi.fn(),
   getAdminOverview: vi.fn(),
+  loadSignupsOverview: vi.fn(),
   redirect: vi.fn((path: string) => {
     throw new Error(`NEXT_REDIRECT:${path}`);
   }),
@@ -16,6 +17,7 @@ vi.mock('next/navigation', () => ({ redirect: mocks.redirect }));
 vi.mock('@/lib/auth/server', () => ({ requireAuthContext: mocks.requireAuthContext }));
 vi.mock('@/lib/admin/data', () => ({ getAdminOverview: mocks.getAdminOverview }));
 vi.mock('@/app/(app)/admin/admin-client', () => ({ AdminClient: () => null }));
+vi.mock('@/lib/signup/admin-overview', () => ({ loadSignupsOverview: mocks.loadSignupsOverview }));
 vi.mock('@/env', () => ({ env: { client: { NEXT_PUBLIC_SITE_URL: 'https://cheers.example.test' } } }));
 
 import AdminPage from '@/app/(app)/admin/page';
@@ -47,5 +49,16 @@ describe('AdminPage gate', () => {
 
     expect(mocks.redirect).not.toHaveBeenCalled();
     expect(mocks.getAdminOverview).toHaveBeenCalledTimes(1);
+  });
+
+  it('never reads the sign-up figures itself, so an admin action refresh cannot wait for them', async () => {
+    // The Sign-ups card fetches /api/admin/signups after the page loads
+    // (src/features/admin/signups-card-loader.tsx); revalidatePath('/admin')
+    // and router.refresh() re-run only this page.
+    mocks.requireAuthContext.mockResolvedValue({ accountId: 'account-1', isSuperAdmin: true });
+
+    await AdminPage();
+
+    expect(mocks.loadSignupsOverview).not.toHaveBeenCalled();
   });
 });

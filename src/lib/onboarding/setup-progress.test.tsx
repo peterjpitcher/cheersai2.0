@@ -69,4 +69,16 @@ describe('SetupChecklist', () => {
   it('renders nothing once hidden', () => {
     expect(renderToStaticMarkup(<SetupChecklist progress={{ ...todo, show: false }} isOwner />)).toBe('');
   });
+
+  it('links the first-post help article only when it is given (the sign-up switch is open)', () => {
+    const hidden = renderToStaticMarkup(<SetupChecklist progress={todo} isOwner />);
+    expect(hidden).not.toContain('/help/first-post');
+    expect(renderToStaticMarkup(<SetupChecklist progress={todo} isOwner firstPostHelpHref={null} />)).not.toContain(
+      'How to publish your first post',
+    );
+
+    const shown = renderToStaticMarkup(<SetupChecklist progress={todo} isOwner={false} firstPostHelpHref="/help/first-post" />);
+    expect(shown).toContain('href="/help/first-post"');
+    expect(shown).toContain('How to publish your first post');
+  });
 });
