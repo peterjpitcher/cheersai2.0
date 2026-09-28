@@ -81,6 +81,7 @@ tasks/                  SPEC-*.md, PLAN-*.md, ADS-PLAYBOOK-the-anchor.md
 - Queues and secrets: `CRON_SECRET`, `ALERTS_SECRET`, `UPSTASH_QSTASH_TOKEN`, `UPSTASH_QSTASH_CURRENT_SIGNING_KEY`, `UPSTASH_QSTASH_NEXT_SIGNING_KEY`
 - Services: `OPENAI_API_KEY` (`OPENAI_MODEL` optional), `RESEND_API_KEY`, `RESEND_FROM`, `AXIOM_TOKEN`, `AXIOM_DATASET`, `NEXT_PUBLIC_SITE_URL` (must be the deployed domain in production)
 - Ingest and flags: `BOOKING_CONVERSION_INGEST_SECRET`, `BOOKING_CONVERSION_ACCOUNT_ID`, `MANAGEMENT_ARTWORK_ORIGINS`, `ENABLE_CONNECTION_DIAGNOSTICS`, plus the three feature flags above
+- Sign-up: `NEXT_PUBLIC_TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY` (Cloudflare Turnstile on `/signup`; required in production builds; real keys in Production, Cloudflare's test keys in Preview, which a Production build refuses)
 
 `GOOGLE_MY_BUSINESS_*` variables no longer exist. `.env.example` still lists `INTERNAL_RENDER_SECRET` and `INTERNAL_RENDER_URL`, which nothing reads. Secrets live in `.env.local` (gitignored); never commit them.
 
