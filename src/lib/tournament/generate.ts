@@ -12,7 +12,7 @@ import { compositeOverlay } from '@/lib/tournament/overlay';
 import { displayTeamName } from '@/lib/tournament/team-display';
 import { interpolatePostTemplate } from '@/lib/tournament/template';
 import { getPublishedPlacements } from '@/lib/tournament/queries';
-import { MEDIA_BUCKET } from '@/lib/constants';
+import { DEFAULT_TIMEZONE, MEDIA_BUCKET } from '@/lib/constants';
 import { redactId, tournamentDebug, tournamentDebugError } from '@/lib/tournament/debug';
 import type { Tournament, TournamentFixture, TournamentPlatform, ContentPlacement } from '@/types/tournament';
 import type { OverlayData } from '@/lib/tournament/overlay';
@@ -29,14 +29,25 @@ export function computeStaggerOffset(index: number): number {
   return index * STAGGER_MS;
 }
 
-/** Computes the scheduled-for timestamp: kick-off minus lead hours, plus stagger. */
+/**
+ * Computes the scheduled-for timestamp: kick-off minus the lead, plus stagger.
+ *
+ * A whole-day lead (24, 48, 72, 168 hours; the UI calls these "N days before")
+ * means the same London clock time N calendar days earlier, so a lead that
+ * crosses a clock change keeps the kick-off's clock time instead of drifting
+ * an hour. Any other lead is elapsed hours. The stagger is elapsed time.
+ * Only kick-offs between 01:00 and 02:00 hit an odd post-day time: in the
+ * spring gap Luxon moves the post an hour later; in the repeated autumn hour
+ * it keeps the kick-off's own offset.
+ */
 export function computeScheduledFor(
   kickOff: Date,
   leadHours: number,
   staggerIndex: number,
 ): Date {
-  const base = new Date(kickOff.getTime() - leadHours * 60 * 60 * 1000);
-  return new Date(base.getTime() + computeStaggerOffset(staggerIndex));
+  const lead = leadHours % 24 === 0 ? { days: leadHours / 24 } : { hours: leadHours };
+  const base = DateTime.fromJSDate(kickOff, { zone: DEFAULT_TIMEZONE }).minus(lead);
+  return new Date(base.toMillis() + computeStaggerOffset(staggerIndex));
 }
 
 // ---------------------------------------------------------------------------
