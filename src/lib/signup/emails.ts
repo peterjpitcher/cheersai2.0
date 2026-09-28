@@ -1,4 +1,4 @@
-import type { RenderedEmail } from '@/lib/auth/email-links';
+import { escapeHtml, type RenderedEmail } from '@/lib/auth/email-links';
 
 /**
  * Emails for the self-serve sign-up request (tasks/SPEC-self-serve-signup.md
@@ -8,10 +8,6 @@ import type { RenderedEmail } from '@/lib/auth/email-links';
  * Nothing a stranger typed goes into these emails: no name, no venue. Only
  * links we built and our own contact address.
  */
-
-function escapeHtml(value: string): string {
-  return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-}
 
 /** A new sign-up, or an earlier one that was never confirmed: the confirmation link. */
 export function renderSignupConfirmEmail(options: { link: string; signupUrl: string }): RenderedEmail {
