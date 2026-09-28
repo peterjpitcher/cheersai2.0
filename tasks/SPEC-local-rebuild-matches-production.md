@@ -91,3 +91,60 @@ re-run immediately before the apply and must still read all false and 0.
 
 Production: nothing to roll back. Local: `npm run db:rebuild`. Reverting the PR restores the old
 rebuild behaviour.
+
+## Follow-up: auth.users triggers (28 September 2026)
+
+### Problem
+
+Production has two triggers on `auth.users` that mirror each login into
+`public.user_auth_snapshot`: `trg_sync_user_auth_snapshot` (after insert or update, runs
+`public.sync_user_auth_snapshot()`) and `trg_purge_user_auth_snapshot` (after delete, runs
+`public.purge_user_auth_snapshot()`). The v1 baseline creates both functions but not the
+triggers, and no migration creates them, so on a rebuild a new login never got a snapshot row.
+The fingerprint diff above compared schema `public` only, which is why it missed them. Found
+while building self-serve sign-up (PR #144). Before this change the shared local database had 3
+logins and 0 snapshot rows.
+
+### Findings (read-only, production, 28 September 2026)
+
+- Trigger definitions, from `pg_get_triggerdef`:
+  `CREATE TRIGGER trg_sync_user_auth_snapshot AFTER INSERT OR UPDATE ON auth.users FOR EACH ROW EXECUTE FUNCTION sync_user_auth_snapshot()`
+  and `CREATE TRIGGER trg_purge_user_auth_snapshot AFTER DELETE ON auth.users FOR EACH ROW EXECUTE FUNCTION purge_user_auth_snapshot()`, both enabled (`O`).
+- Both functions, from `pg_get_functiondef`: plpgsql, `SECURITY DEFINER`,
+  `search_path = public, pg_temp`, owner `postgres`, EXECUTE `{postgres=X/postgres,service_role=X/postgres}`.
+  The bodies are the same as `supabase/baseline/v1_baseline.sql`, so the functions are not recreated.
+- Every login has a snapshot row and no snapshot row lacks a login (0 and 0).
+
+### Change
+
+1. `20260928180000_auth_users_snapshot_triggers.sql`: creates each trigger only if it is
+   missing, then restates the functions' EXECUTE grants (service_role only) only where they
+   differ. SHA-256 `cee6861e094503dfb21df631d425a2042c408280e892e2e660d7af7183bcdc5f`.
+2. Section 4 of `supabase/tests/local_rebuild_matches_production_verify.sql`: both trigger
+   definitions equal production's, the functions are security definer with production's
+   search_path and service_role-only EXECUTE, and a probe login (rolled back) is mirrored on
+   insert, update and delete.
+
+### Behaviour on production
+
+Nothing runs. The migration's own guard expressions, run read-only on production on
+28 September 2026: both triggers exist (both blocks skip) and 0 functions need a grant change.
+Applying it needs Peter's explicit yes.
+
+### Validation
+
+- Section 4 failed on the old local database (`trg_sync_user_auth_snapshot is missing`).
+- Fresh rebuild (CLI 2.108.0, baseline staged in a scratch copy of the migrations): the
+  migration applies; every verify script passes except `multibrand_foundation_verify.sql`,
+  whose PR1 check that `accounts.auth_user_id` is unique predates PR2 removing it (unrelated).
+- Through the local Auth admin API: creating a login made its snapshot row (status `active`),
+  changing its email updated the row, deleting the login removed it.
+- Re-running the migration on the rebuilt database changed nothing (same trigger oids, same
+  `xmin` on the trigger and function rows, same ACL), which is the production case.
+- `supabase db lint --schema public`: no errors. `npm run ci:verify`: lint, typecheck and tests
+  pass; build passes with CI's placeholder env.
+
+### Rollback
+
+Production: nothing to roll back. Local: `npm run db:rebuild` without the migration. Reverting
+the PR restores the old rebuild behaviour.
