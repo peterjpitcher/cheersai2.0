@@ -5,7 +5,7 @@
 --   PR 4 (migration 20260928161500): public.team_invitations and the functions
 --   record_team_invitation and accept_team_invitation.
 --   PR 5 (migration 20260928170000): public.self_serve_signups,
---   public.record_self_serve_signup_request, public.self_serve_login_deletable,
+--   public.record_self_serve_signup_request, public.delete_stale_self_serve_login,
 --   the internal public.self_serve_login_is_stale (nobody but its owner may run
 --   it), public.run_data_retention (still service role only after its
 --   restatement) and public.increment_rate_limit (EXECUTE revoked from
@@ -25,13 +25,13 @@ declare
     'public.record_team_invitation(uuid, uuid, text, uuid, integer, integer, boolean)',
     'public.accept_team_invitation(uuid, uuid)',
     'public.record_self_serve_signup_request(uuid)',
-    'public.self_serve_login_deletable(uuid)',
+    'public.delete_stale_self_serve_login(uuid)',
     'public.run_data_retention(boolean)',
     'public.increment_rate_limit(uuid, text, text, timestamp with time zone, integer)'
   ];
-  -- SECURITY DEFINER functions this work wrote (they read auth.users): empty search_path.
+  -- SECURITY DEFINER functions this work wrote (they read, or delete from, auth.users): empty search_path.
   v_definer_functions constant text[] := array[
-    'public.self_serve_login_deletable(uuid)',
+    'public.delete_stale_self_serve_login(uuid)',
     'public.run_data_retention(boolean)'
   ];
   -- Internal functions: only their owner (and so the definer functions above) may run them.

@@ -17,10 +17,9 @@
 --      - self-serve logins that never became a venue: listed for deletion
 --        when never confirmed 7 days after the last request, or confirmed more
 --        than 30 days ago (no venue, no membership, not an admin, no open
---        team invitation). The daily cron deletes them through the Auth admin
---        API, at most 100 a run, each only after
---        self_serve_login_deletable (5) says yes; the user_auth_snapshot row
---        goes with each (trigger).
+--        team invitation). The daily cron hands each one, at most 100 a run,
+--        to delete_stale_self_serve_login (5), which deletes it only if the
+--        rule still holds; the user_auth_snapshot row goes with each (trigger).
 --    Rules 1 to 13 are copied unchanged from
 --    20260928161500_team_invitations.sql (applied in production as version
 --    20260928111735; the live function body was checked byte for byte
@@ -34,13 +33,21 @@
 --    and public did not.
 -- 5. The stale-login rule lives in one place, public.self_serve_login_is_stale
 --    (internal: only the functions below, which run as its owner, call it).
---    run_data_retention uses it to make the list; the cron asks
---    public.self_serve_login_deletable(user_id) just before deleting each
---    login. That function locks the login's sign-up row (select ... for
---    update) and applies the full rule again at that moment, so a login that
---    asked again, was invited, joined a brand or created a venue since the
---    list was made is left alone. Anything else that changes a sign-up row
---    (a new sign-up request; venue creation in PR 6) takes the same row lock.
+--    run_data_retention uses it to make the list. For each listed login the
+--    cron calls public.delete_stale_self_serve_login(user_id), which in ONE
+--    transaction locks the login's sign-up row (select ... for update),
+--    applies the full rule again and, only if it still holds, deletes the
+--    row in auth.users, then releases the lock at commit. Nothing can change
+--    between the check and the delete: a sign-up request (the upsert in
+--    record_self_serve_signup_request) takes the same row lock, and venue
+--    creation in PR 6 (provision_self_serve_brand) must take it too, so each
+--    either finishes first (and the login is kept) or waits until the delete
+--    is over. A login that asked again, was invited, joined a brand or
+--    created a venue since the list was made is kept.
+--    The login is deleted in SQL, not through the Auth admin API, so Supabase
+--    writes no "user_deleted" entry in auth.audit_log_entries for it; its
+--    cascades (identities, sessions, refresh tokens, MFA factors, one-time
+--    tokens) and the snapshot purge trigger are the same.
 --
 -- Access: service role only. RLS is on with no policies, and every privilege
 -- is revoked from public, anon and authenticated, because on this project
@@ -62,7 +69,7 @@
 --
 -- Rollback (revert the app first; the table holds no personal data):
 --   restore run_data_retention from 20260928161500_team_invitations.sql;
---   drop function if exists public.self_serve_login_deletable(uuid);
+--   drop function if exists public.delete_stale_self_serve_login(uuid);
 --   drop function if exists public.self_serve_login_is_stale(uuid, timestamptz);
 --   drop function if exists public.record_self_serve_signup_request(uuid);
 --   drop table if exists public.self_serve_signups;
@@ -153,14 +160,14 @@ as $$
 $$;
 
 comment on function public.self_serve_login_is_stale(uuid, timestamptz) is
-  'The P6 rule for deleting a self-serve login that never became a venue: a sign-up row with no venue, no membership, not an admin, no open team invitation, and unconfirmed 7 days after the last request or confirmed more than 30 days ago. Internal: called only by run_data_retention and self_serve_login_deletable (both run as the owner). Nobody else may execute it.';
+  'The P6 rule for deleting a self-serve login that never became a venue: a sign-up row with no venue, no membership, not an admin, no open team invitation, and unconfirmed 7 days after the last request or confirmed more than 30 days ago. Internal: called only by run_data_retention and delete_stale_self_serve_login (both run as the owner). Nobody else may execute it.';
 
 -- Internal: it reads auth.users, which service_role cannot read, so only the
 -- two SECURITY DEFINER functions below (same owner) call it.
 revoke all on function public.self_serve_login_is_stale(uuid, timestamptz) from public, anon, authenticated, service_role;
 
-create or replace function public.self_serve_login_deletable(p_user_id uuid)
-returns boolean
+create or replace function public.delete_stale_self_serve_login(p_user_id uuid)
+returns jsonb
 language plpgsql
 volatile
 security definer
@@ -168,26 +175,43 @@ set search_path = ''
 as $$
 begin
   if p_user_id is null then
-    return false;
+    return jsonb_build_object('status', 'kept');
   end if;
 
-  -- Lock the sign-up row, so a sign-up request or venue creation that takes
-  -- the same lock waits until this decision is made, then apply the full rule
-  -- again as it stands now.
+  -- Lock the sign-up row for the rest of this transaction. A sign-up request
+  -- (its upsert) or venue creation (PR 6) that takes the same lock waits until
+  -- this function has finished, and this function waits for one already under
+  -- way, then sees what it wrote.
   perform 1 from public.self_serve_signups where user_id = p_user_id for update;
   if not found then
-    return false;
+    return jsonb_build_object('status', 'kept');
   end if;
 
-  return public.self_serve_login_is_stale(p_user_id, pg_catalog.now());
+  -- The whole rule again, as it stands now, under the lock.
+  if not public.self_serve_login_is_stale(p_user_id, pg_catalog.now()) then
+    return jsonb_build_object('status', 'kept');
+  end if;
+
+  -- Delete the login in the same transaction, still under the lock. Its
+  -- identities, sessions, refresh tokens, MFA factors and one-time tokens go
+  -- by cascade, the user_auth_snapshot row by trigger, and the sign-up row
+  -- keeps its dates with user_id set to null. A blocked delete (for example
+  -- rows in audit_log, whose foreign key has no delete action) is undone by
+  -- this block alone and reported as failed.
+  begin
+    delete from auth.users where id = p_user_id;
+  exception when others then
+    return jsonb_build_object('status', 'failed', 'error', sqlstate || ' ' || sqlerrm);
+  end;
+  return jsonb_build_object('status', 'deleted');
 end;
 $$;
 
-comment on function public.self_serve_login_deletable(uuid) is
-  'Asked by the data-retention cron just before it deletes a self-serve login: locks the login''s sign-up row and returns true only if the P6 rule (self_serve_login_is_stale) still holds. SECURITY DEFINER because it reads auth.users. Service role only.';
+comment on function public.delete_stale_self_serve_login(uuid) is
+  'Called by the data-retention cron for each login run_data_retention lists: locks the login''s sign-up row, applies the P6 rule (self_serve_login_is_stale) again and, if it still holds, deletes the auth user in the same transaction. Returns {"status": "deleted" | "kept" | "failed", "error"?}. SECURITY DEFINER because it reads and deletes auth.users. Service role only.';
 
-revoke all on function public.self_serve_login_deletable(uuid) from public, anon, authenticated;
-grant execute on function public.self_serve_login_deletable(uuid) to service_role;
+revoke all on function public.delete_stale_self_serve_login(uuid) from public, anon, authenticated;
+grant execute on function public.delete_stale_self_serve_login(uuid) to service_role;
 
 -- ---------------------------------------------------------------------------
 -- run_data_retention, restated in full. Rules 1 to 13 (everything before
@@ -542,8 +566,9 @@ begin
   -- self_serve_login_is_stale (unconfirmed 7 days after the last request, or
   -- confirmed more than 30 days ago; no venue, membership, admin role or open
   -- team invitation). Listed, never deleted here: the cron deletes each one
-  -- through the Auth admin API (at most 100 a run) after
-  -- self_serve_login_deletable says yes, which also removes its
+  -- with delete_stale_self_serve_login (at most 100 a run), which re-applies
+  -- the rule under a lock on the sign-up row and deletes the auth user in the
+  -- same transaction; that also removes its
   -- user_auth_snapshot row (trigger trg_purge_user_auth_snapshot) and sets the
   -- sign-up row's user_id to null. Kept out of "rules" because this function
   -- does not act on it. The two cutoffs below are only reported; the rule

@@ -6,15 +6,16 @@ const A = '11111111-1111-4111-8111-111111111111';
 const B = '22222222-2222-4222-8222-222222222222';
 const C = '33333333-3333-4333-8333-333333333333';
 
-type Check = { data: unknown; error: { message: string } | null } | Error;
+type Answer = { data: unknown; error: { message: string } | null } | Error;
 
-function service(options: { checks?: Record<string, Check>; deleteErrors?: Record<string, { message: string }> }) {
+/** The service client: only the one RPC, answering per user id (deleted unless told otherwise). */
+function service(answers: Record<string, Answer> = {}) {
   const rpc = vi.fn(async (_fn: string, args: { p_user_id: string }) => {
-    const check = options.checks?.[args.p_user_id] ?? { data: true, error: null };
-    if (check instanceof Error) throw check;
-    return check;
+    const answer = answers[args.p_user_id] ?? { data: { status: 'deleted' }, error: null };
+    if (answer instanceof Error) throw answer;
+    return answer;
   });
-  const deleteUser = vi.fn(async (id: string) => ({ data: {}, error: options.deleteErrors?.[id] ?? null }));
+  const deleteUser = vi.fn();
   return { client: { rpc, auth: { admin: { deleteUser } } }, rpc, deleteUser };
 }
 
@@ -45,57 +46,57 @@ describe('parseSelfServeLoginList', () => {
 });
 
 describe('deleteSelfServeLogins', () => {
-  it('asks the database just before each delete, then deletes through the Auth admin API', async () => {
-    const { client, rpc, deleteUser } = service({});
+  it('leaves the decision and the delete to the database, one call per login, and never deletes itself', async () => {
+    const { client, rpc, deleteUser } = service();
     expect(await deleteSelfServeLogins(client as never, { due: 2, userIds: [A, B] }, logger)).toEqual({
       due: 2,
       deleted: 2,
       skipped: 0,
       failed: 0,
     });
-    expect(rpc).toHaveBeenCalledWith('self_serve_login_deletable', { p_user_id: A });
-    expect(rpc).toHaveBeenCalledWith('self_serve_login_deletable', { p_user_id: B });
-    expect(deleteUser).toHaveBeenCalledWith(A);
-    expect(deleteUser).toHaveBeenCalledWith(B);
+    expect(rpc).toHaveBeenCalledTimes(2);
+    expect(rpc).toHaveBeenCalledWith('delete_stale_self_serve_login', { p_user_id: A });
+    expect(rpc).toHaveBeenCalledWith('delete_stale_self_serve_login', { p_user_id: B });
+    expect(deleteUser).not.toHaveBeenCalled();
   });
 
-  it('leaves a login alone when the database says it no longer qualifies', async () => {
-    const { client, deleteUser } = service({ checks: { [A]: { data: false, error: null }, [B]: { data: null, error: null } } });
-    expect(await deleteSelfServeLogins(client as never, { due: 3, userIds: [A, B, C] }, logger)).toEqual({
-      due: 3,
+  it('counts a login the database kept (it asked again, was invited or made a venue under the lock)', async () => {
+    const { client } = service({ [A]: { data: { status: 'kept' }, error: null } });
+    expect(await deleteSelfServeLogins(client as never, { due: 2, userIds: [A, B] }, logger)).toEqual({
+      due: 2,
       deleted: 1,
-      skipped: 2,
+      skipped: 1,
       failed: 0,
     });
-    expect(deleteUser).toHaveBeenCalledTimes(1);
-    expect(deleteUser).toHaveBeenCalledWith(C);
   });
 
-  it('never deletes when the check fails, counts it, and carries on with the rest', async () => {
-    const { client, deleteUser } = service({
-      checks: { [A]: { data: null, error: { message: 'connection reset' } }, [B]: new Error('fetch failed') },
-    });
-    expect(await deleteSelfServeLogins(client as never, { due: 3, userIds: [A, B, C] }, logger)).toEqual({
-      due: 3,
-      deleted: 1,
-      skipped: 0,
-      failed: 2,
-    });
-    expect(deleteUser).toHaveBeenCalledTimes(1);
-    expect(deleteUser).toHaveBeenCalledWith(C);
-  });
-
-  it('counts a login that cannot be deleted (audit_log rows) and still deletes the others', async () => {
-    const { client, deleteUser } = service({
-      deleteErrors: { [A]: { message: 'Database error deleting user' } },
-    });
+  it('counts a login that could not be deleted (audit_log rows), logs the reason, and carries on', async () => {
+    const reason = '23503 update or delete on table "users" violates foreign key constraint "audit_log_user_id_fkey"';
+    const { client } = service({ [A]: { data: { status: 'failed', error: reason }, error: null } });
     expect(await deleteSelfServeLogins(client as never, { due: 2, userIds: [A, B] }, logger)).toEqual({
       due: 2,
       deleted: 1,
       skipped: 0,
       failed: 1,
     });
-    expect(deleteUser).toHaveBeenCalledTimes(2);
-    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('deleteUser failed'), expect.objectContaining({ userId: A }));
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('could not be deleted'),
+      expect.objectContaining({ userId: A, status: 'failed', error: reason }),
+    );
+  });
+
+  it('counts an RPC error, a throw or an answer it does not understand as failed, and carries on', async () => {
+    const { client } = service({
+      [A]: { data: null, error: { message: 'connection reset' } },
+      [B]: new Error('fetch failed'),
+      [C]: { data: { status: 'maybe' }, error: null },
+    });
+    expect(await deleteSelfServeLogins(client as never, { due: 3, userIds: [A, B, C] }, logger)).toEqual({
+      due: 3,
+      deleted: 0,
+      skipped: 0,
+      failed: 3,
+    });
+    expect(logger.warn).toHaveBeenCalledTimes(3);
   });
 });

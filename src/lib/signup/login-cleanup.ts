@@ -4,17 +4,20 @@ import type { SupabaseClient } from '@supabase/supabase-js';
  * Deletes self-serve logins that never became a venue (tasks/SPEC-self-serve-
  * signup.md §4.10, decision P6: never confirmed 7 days after the last request,
  * or confirmed more than 30 days ago). public.run_data_retention lists them
- * under "self_serve_logins" (at most 100 a run); the daily data-retention cron
- * deletes each through the Auth admin API, as offboarding does, which also
- * removes its user_auth_snapshot row (trigger) and clears the sign-up row's
- * user_id (foreign key, on delete set null).
+ * under "self_serve_logins" (at most 100 a run), and the daily data-retention
+ * cron hands each one to public.delete_stale_self_serve_login.
  *
- * The decision is the database's: just before each delete,
- * public.self_serve_login_deletable locks the login's sign-up row and applies
- * the whole rule again as it stands at that moment (no venue, no membership,
- * not an admin, no open team invitation, still past its cut-off). A login that
- * asked again, was invited, joined a brand or created a venue since the list
- * was made is left alone.
+ * The decision and the delete are one database transaction: that function
+ * locks the login's sign-up row (select ... for update), applies the whole
+ * rule again as it stands (no venue, no membership, not an admin, no open
+ * team invitation, still past its cut-off) and, only if it still holds,
+ * deletes the row in auth.users before the lock is released. A sign-up
+ * request takes the same row lock (and venue creation in PR 6 must), so it
+ * either finishes first, and the login is kept, or waits until the delete is
+ * over. The delete removes the login's identities and sessions (cascade) and
+ * its user_auth_snapshot row (trigger), and clears the sign-up row's user_id
+ * (foreign key, on delete set null). It is done in SQL, not through the Auth
+ * admin API, so Supabase writes no "user_deleted" security-log entry for it.
  */
 
 export interface SelfServeLoginList {
@@ -25,9 +28,9 @@ export interface SelfServeLoginList {
 export interface SelfServeLoginCleanup {
   due: number;
   deleted: number;
-  /** No longer past the rule when checked again: left alone. */
+  /** No longer past the rule when checked again under the lock: kept. */
   skipped: number;
-  /** The check or the delete failed (for example a login with audit_log rows): tried again next run. */
+  /** The delete failed (for example a login with audit_log rows): tried again next run. */
   failed: number;
 }
 
@@ -50,10 +53,12 @@ export function parseSelfServeLoginList(value: unknown): SelfServeLoginList | nu
 type Logger = { warn: (message: string, context?: Record<string, unknown>) => void };
 
 /**
- * Deletes each listed login, one at a time, only when
- * self_serve_login_deletable says yes. Never throws: a failed check or delete
- * is logged with the user id (never the email) and counted, and the rest carry
- * on. The caller alerts on failures; they must not fail the retention run.
+ * Hands each listed login, one at a time, to delete_stale_self_serve_login,
+ * which answers deleted, kept (it no longer qualifies) or failed (for example
+ * a login with audit_log rows). Never throws: a failure is logged with the
+ * user id and the database's reason (never the email) and counted, and the
+ * rest carry on. The caller alerts on failures; they must not fail the
+ * retention run.
  */
 export async function deleteSelfServeLogins(
   service: SupabaseClient,
@@ -64,24 +69,25 @@ export async function deleteSelfServeLogins(
 
   for (const userId of list.userIds) {
     try {
-      const { data: deletable, error: checkError } = await service.rpc('self_serve_login_deletable', { p_user_id: userId });
-      if (checkError) {
-        logger.warn('self-serve login clean-up: the deletion check failed', { userId, error: checkError.message });
-        result.failed += 1;
-        continue;
-      }
-      if (deletable !== true) {
-        result.skipped += 1;
-        continue;
-      }
-
-      const { error } = await service.auth.admin.deleteUser(userId);
+      const { data, error } = await service.rpc('delete_stale_self_serve_login', { p_user_id: userId });
       if (error) {
-        logger.warn('self-serve login clean-up: deleteUser failed', { userId, error: error.message });
+        logger.warn('self-serve login clean-up: delete_stale_self_serve_login failed', { userId, error: error.message });
         result.failed += 1;
         continue;
       }
-      result.deleted += 1;
+      const answer = (data ?? {}) as { status?: unknown; error?: unknown };
+      if (answer.status === 'deleted') {
+        result.deleted += 1;
+      } else if (answer.status === 'kept') {
+        result.skipped += 1;
+      } else {
+        logger.warn('self-serve login clean-up: the login could not be deleted', {
+          userId,
+          status: typeof answer.status === 'string' ? answer.status : 'unknown',
+          error: typeof answer.error === 'string' ? answer.error : undefined,
+        });
+        result.failed += 1;
+      }
     } catch (error) {
       logger.warn('self-serve login clean-up: unexpected error', {
         userId,
