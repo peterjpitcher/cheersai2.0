@@ -20,6 +20,9 @@ import { deleteMetaAdAccountTokens } from '@/lib/meta/ad-account-tokens';
  *    users) with purge allowed 30 days later.
  * 2. exportBrandData: a JSON copy of the brand's content, schedule, profile,
  *    link-in-bio and media links, for the owner on request. No credentials.
+ *    The operator runs it from Admin; an owner can also download it from
+ *    Settings while self-serve sign-up is on (brandExportFile gives both the
+ *    same file).
  * 3. purgeBrand: after purge_after, delete the brand's files, then its rows
  *    (every table cascades from accounts), then any login that belonged only
  *    to this brand. Posts already on Facebook or Instagram stay there.
@@ -198,6 +201,15 @@ export async function exportBrandData(service: Service, accountId: string): Prom
     })),
     note: 'Download links expire 7 days after export. Posts already published remain on your Facebook Page and Instagram account.',
   };
+}
+
+/**
+ * The export as a downloadable file. Admin (the operator) and Settings (an
+ * owner) both use this, so the two downloads have the same content, layout and
+ * file name.
+ */
+export function brandExportFile(accountId: string, data: Record<string, unknown>): { json: string; fileName: string } {
+  return { json: JSON.stringify(data, null, 2), fileName: `cheers-export-${accountId}.json` };
 }
 
 /** Every storage object that belongs to the brand (see spec §4.7). */

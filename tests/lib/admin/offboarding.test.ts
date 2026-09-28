@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { exportBrandData, offboardBrand, purgeBrand } from '@/lib/admin/offboarding';
+import { brandExportFile, exportBrandData, offboardBrand, purgeBrand } from '@/lib/admin/offboarding';
 
 import { orPredicate } from '../../helpers/postgrest-or';
 
@@ -303,6 +303,14 @@ describe('exportBrandData', () => {
     expect(json).not.toMatch(/access_token|booking_ingest_secret/);
     expect((data.media as Array<{ downloadUrl: string }>)[0].downloadUrl).toBe(`https://signed/${BRAND}/m1/a.jpg`);
     expect((data.posts as unknown[]).length).toBe(2);
+  });
+
+  it('gives the operator and the owner the same file: indented JSON named after the brand', async () => {
+    const data = await exportBrandData(service() as never, BRAND);
+    const file = brandExportFile(BRAND, data);
+    expect(file.fileName).toBe(`cheers-export-${BRAND}.json`);
+    expect(file.json).toBe(JSON.stringify(data, null, 2));
+    expect(JSON.parse(file.json)).toEqual(JSON.parse(JSON.stringify(data)));
   });
 });
 

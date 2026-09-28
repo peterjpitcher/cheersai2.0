@@ -24,18 +24,22 @@ export type AuthRateLimitAction =
   | 'signup_request'
   | 'signup_email_site'
   | 'signup_widget_report'
-  | 'signup_venue';
+  | 'signup_venue'
+  | 'owner_data_export';
 
-type LimitScope = 'email_ip' | 'email' | 'ip' | 'site' | 'user';
+type LimitScope = 'email_ip' | 'email' | 'ip' | 'site' | 'user' | 'account';
 
 /**
  * Who an attempt is counted against. userId is the verified session's login id
- * (never a form value); only the 'user' scope uses it.
+ * (never a form value); only the 'user' scope uses it. accountId is the
+ * signed-in owner's active brand (never a form value); only the 'account'
+ * scope uses it.
  */
 export interface RateLimitSubject {
   email: string;
   ip: string;
   userId?: string;
+  accountId?: string;
 }
 
 interface LimitRule {
@@ -77,6 +81,10 @@ export const AUTH_RATE_LIMIT_RULES: Record<AuthRateLimitAction, readonly LimitRu
   signup_widget_report: [{ scope: 'ip', limit: 3, windowSeconds: 60 * 60 }],
   // Venue creation at /signup/venue (spec §4.4): 10 an hour per signed-in login.
   signup_venue: [{ scope: 'user', limit: 10, windowSeconds: 60 * 60 }],
+  // An owner's "Download my data" in Settings (spec section 5, "Later (P10)"):
+  // 3 a day per brand, whoever in the brand asks. Each one reads every post and
+  // signs every media link, so the cap keeps one brand from loading the database.
+  owner_data_export: [{ scope: 'account', limit: 3, windowSeconds: 24 * 60 * 60 }],
 };
 
 export type AuthRateLimitDecision =
@@ -115,7 +123,7 @@ function rateLimitHmacKey(): Buffer {
   return key;
 }
 
-/** The stored key: purpose and scope in clear, the email, IP and login id only as an HMAC. */
+/** The stored key: purpose and scope in clear, the email, IP, login id and brand id only as an HMAC. */
 export function rateLimitKey(
   hmacKey: Buffer,
   action: AuthRateLimitAction,
@@ -124,6 +132,9 @@ export function rateLimitKey(
 ): string {
   if (scope === 'user' && !subject.userId) {
     throw new Error(`The ${action} rate limit is per login, but no login id was given.`);
+  }
+  if (scope === 'account' && !subject.accountId) {
+    throw new Error(`The ${action} rate limit is per brand, but no brand id was given.`);
   }
   const input =
     scope === 'email_ip'
@@ -134,7 +145,9 @@ export function rateLimitKey(
           ? `ip\n${subject.ip}`
           : scope === 'user'
             ? `user\n${subject.userId}`
-            : 'site';
+            : scope === 'account'
+              ? `account\n${subject.accountId}`
+              : 'site';
   const digest = crypto.createHmac('sha256', hmacKey).update(input).digest('hex');
   return `${action}:${scope}:${digest}`;
 }

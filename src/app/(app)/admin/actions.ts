@@ -6,7 +6,7 @@ import { z } from 'zod';
 
 import { env } from '@/env';
 import { logAdminEvent } from '@/lib/admin/audit';
-import { exportBrandData, offboardBrand, purgeBrand, type LoginNotDeleted } from '@/lib/admin/offboarding';
+import { brandExportFile, exportBrandData, offboardBrand, purgeBrand, type LoginNotDeleted } from '@/lib/admin/offboarding';
 import { buildAuthConfirmUrl, renderInviteEmail, renderPasswordResetEmail } from '@/lib/auth/email-links';
 import { sendEmail } from '@/lib/email/resend';
 import { can } from '@/lib/billing/entitlement';
@@ -609,7 +609,7 @@ export async function exportBrandDataAction(accountId: string): Promise<ActionRe
   try {
     const data = await exportBrandData(ctx.supabase, accountId);
     await logAdminEvent({ actorUserId: ctx.user.id, action: 'export_brand_data', targetAccountId: accountId });
-    return { success: true, json: JSON.stringify(data, null, 2), fileName: `cheers-export-${accountId}.json` };
+    return { success: true, ...brandExportFile(accountId, data) };
   } catch (error) {
     logger.error('export brand data failed', error instanceof Error ? error : undefined, { accountId });
     return { error: 'The export failed. Try again.' };

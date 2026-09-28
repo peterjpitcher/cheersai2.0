@@ -46,6 +46,25 @@ beforeEach(() => {
 });
 
 describe('reportSignupFailure', () => {
+  it("files the owner's Settings actions under their own subject, with the same bookkeeping", async () => {
+    for (const kind of ['owner_export', 'closure_request', 'closure_notice'] as const) {
+      fakeAlertCounter();
+      mockSendEmail.mockClear();
+      mockLogAdminEvent.mockClear();
+      await reportSignupFailure(kind, new Error('boom'));
+      expect(mockLogAdminEvent).toHaveBeenCalledWith({
+        actorUserId: null,
+        action: 'operator_signup_alert',
+        detail: { kind, count: 1 },
+        result: 'failure',
+      });
+      const sent = mockSendEmail.mock.calls[0]?.[0] as { subject: string; html: string };
+      expect(sent.subject).toBe(`[Cheers operator] Owner request problem: ${kind}`);
+      expect(sent.html).toContain('Settings');
+      expect(sent.html).not.toMatch(/undefined|NaN|Invalid Date/);
+    }
+  });
+
   it('records the failure in admin_audit (kind and count only), then emails the operator', async () => {
     fakeAlertCounter();
     await reportSignupFailure('turnstile', new Error('siteverify answered HTTP 503'));

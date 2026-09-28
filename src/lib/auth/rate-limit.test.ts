@@ -145,7 +145,39 @@ describe('checkAuthRateLimit: allow, block, reset', () => {
       signup_email_site: [{ scope: 'site', limit: 60, windowSeconds: 3600 }],
       signup_widget_report: [{ scope: 'ip', limit: 3, windowSeconds: 3600 }],
       signup_venue: [{ scope: 'user', limit: 10, windowSeconds: 3600 }],
+      owner_data_export: [{ scope: 'account', limit: 3, windowSeconds: 86400 }],
     });
+  });
+});
+
+describe('owner data export limit (spec section 5, Later (P10))', () => {
+  const BRAND = '55555555-5555-4555-8555-555555555555';
+
+  it('allows three exports a day per brand, whoever asks, then refuses until the day has passed', async () => {
+    const limiter = fakeLimiter();
+    for (let i = 0; i < 3; i += 1) {
+      expect((await consumeAuthRateLimit('owner_data_export', { email: '', ip: '', accountId: BRAND })).status).toBe('allowed');
+    }
+    const fourth = await consumeAuthRateLimit('owner_data_export', { email: '', ip: '', accountId: BRAND });
+    expect(fourth).toEqual({ status: 'limited', retryAfterSeconds: 86400 });
+    expect(
+      (await consumeAuthRateLimit('owner_data_export', { email: '', ip: '', accountId: '66666666-6666-4666-8666-666666666666' })).status,
+    ).toBe('allowed');
+    limiter.advance(86400);
+    expect((await consumeAuthRateLimit('owner_data_export', { email: '', ip: '', accountId: BRAND })).status).toBe('allowed');
+  });
+
+  it('keys it on the brand id only as an HMAC', async () => {
+    fakeLimiter();
+    await consumeAuthRateLimit('owner_data_export', { email: '', ip: '', accountId: BRAND });
+    const key = (mockRpc.mock.calls[0]?.[1] as RpcArgs).p_key;
+    expect(key).toMatch(/^owner_data_export:account:[0-9a-f]{64}$/);
+    expect(key).not.toContain(BRAND);
+  });
+
+  it('refuses to count a per-brand limit without a brand id (the caller fails closed)', async () => {
+    fakeLimiter();
+    await expect(consumeAuthRateLimit('owner_data_export', { email: '', ip: '' })).rejects.toThrow(/no brand id/);
   });
 });
 

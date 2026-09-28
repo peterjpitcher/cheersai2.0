@@ -26,6 +26,7 @@ vi.mock('@/lib/admin/offboarding', () => ({
   offboardBrand: (...a: unknown[]) => mockOffboard(...a),
   purgeBrand: (...a: unknown[]) => mockPurge(...a),
   exportBrandData: vi.fn(async () => ({ posts: [] })),
+  brandExportFile: (accountId: string, data: unknown) => ({ json: JSON.stringify(data, null, 2), fileName: `cheers-export-${accountId}.json` }),
 }));
 vi.mock('@/lib/billing/publish-hold', () => ({ releaseHeldPublishJobs: (...a: unknown[]) => mockReleaseHeld(...a) }));
 const mockReconcile = vi.fn();
