@@ -2,6 +2,12 @@ import { NextResponse } from 'next/server';
 
 import { sendPurgeReminder, type PurgeReminderResult } from '@/lib/admin/purge-reminder';
 import { createLogger } from '@/lib/logging';
+import {
+  deleteSelfServeLogins,
+  parseSelfServeLoginList,
+  type SelfServeLoginCleanup,
+  type SelfServeLoginList,
+} from '@/lib/signup/login-cleanup';
 import { tryCreateServiceSupabaseClient } from '@/lib/supabase/service';
 import { verifyCronAuth } from '@/lib/security/cron-auth';
 
@@ -14,11 +20,14 @@ const logger = createLogger('data-retention');
  *
  * 1. public.run_data_retention(false) deletes or clears everything past its
  *    approved retention period and returns per-rule counts.
- * 2. The operator gets one email listing offboarded brands whose 30-day hold
+ * 2. Self-serve logins that never became a venue, which step 1 lists (at most
+ *    100 a run), are deleted through the Auth admin API (spec §4.10, P6).
+ * 3. The operator gets one email listing offboarded brands whose 30-day hold
  *    is over and whose data has not been deleted (deletion stays manual).
  *
- * The two steps are independent: a failure in one does not stop the other,
- * but either failure makes the run return 500 so it shows in Vercel.
+ * Steps 1 and 3 are independent (step 2 needs step 1's list): a failure in one
+ * does not stop the other, but any failure makes the run return 500 so it
+ * shows in Vercel.
  */
 
 interface RuleResult {
@@ -32,6 +41,8 @@ interface RetentionResult {
   dry_run: boolean;
   ran_at: string;
   rules: Record<string, RuleResult>;
+  /** Absent before migration 20260928170000. */
+  selfServeLogins?: SelfServeLoginList;
 }
 
 function isRuleResult(value: unknown): value is RuleResult {
@@ -54,7 +65,9 @@ function parseRetentionResult(data: unknown): RetentionResult | null {
   const rules = result.rules as Record<string, unknown>;
   const names = Object.keys(rules);
   if (names.length === 0 || !names.every((name) => isRuleResult(rules[name]))) return null;
-  return { dry_run: false, ran_at: result.ran_at, rules: rules as Record<string, RuleResult> };
+  const selfServeLogins = parseSelfServeLoginList(result.self_serve_logins);
+  if (selfServeLogins === null) return null;
+  return { dry_run: false, ran_at: result.ran_at, rules: rules as Record<string, RuleResult>, selfServeLogins };
 }
 
 async function runRetention(
@@ -86,6 +99,26 @@ async function runRetention(
   }
 }
 
+async function runLoginCleanup(
+  service: NonNullable<ReturnType<typeof tryCreateServiceSupabaseClient>>,
+  list: SelfServeLoginList | undefined,
+): Promise<{ ok: true; result: SelfServeLoginCleanup | null } | { ok: false; error: string; result?: SelfServeLoginCleanup }> {
+  if (!list) return { ok: true, result: null };
+  try {
+    const result = await deleteSelfServeLogins(service, list, logger);
+    logger.info('self-serve login clean-up', { ...result });
+    if (result.failed > 0) {
+      logger.error('self-serve logins could not all be deleted', undefined, { ...result });
+      return { ok: false, error: `${result.failed} self-serve logins could not be deleted`, result };
+    }
+    return { ok: true, result };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    logger.error('self-serve login clean-up threw', error instanceof Error ? error : new Error(message));
+    return { ok: false, error: message };
+  }
+}
+
 async function runPurgeReminder(
   service: NonNullable<ReturnType<typeof tryCreateServiceSupabaseClient>>,
 ): Promise<{ ok: true; result: PurgeReminderResult } | { ok: false; error: string }> {
@@ -113,12 +146,15 @@ async function handle(request: Request): Promise<NextResponse> {
   }
 
   const retention = await runRetention(service);
+  const logins = retention.ok ? await runLoginCleanup(service, retention.result.selfServeLogins) : null;
   const reminder = await runPurgeReminder(service);
 
-  const failed = !retention.ok || !reminder.ok;
+  const failed = !retention.ok || (logins !== null && !logins.ok) || !reminder.ok;
   return NextResponse.json(
     {
       retention: retention.ok ? { ranAt: retention.result.ran_at, rules: retention.result.rules } : { error: retention.error },
+      selfServeLogins:
+        logins === null ? { error: 'not run: retention failed' } : logins.ok ? logins.result : { ...logins.result, error: logins.error },
       purgeReminder: reminder.ok ? reminder.result : { error: reminder.error },
     },
     { status: failed ? 500 : 200 },

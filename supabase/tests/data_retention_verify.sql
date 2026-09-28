@@ -1,5 +1,7 @@
 -- Verification for 20260927120000_data_retention (public.run_data_retention),
--- as restated by 20260928161500_team_invitations (rule 13, team_invitations).
+-- as restated by 20260928161500_team_invitations (rule 13, team_invitations)
+-- and 20260928170000_self_serve_signups (rule 14, self_serve_signups; its
+-- login list is checked by self_serve_signups_verify.sql).
 -- Run AFTER a local rebuild (`npm run db:rebuild`) with the migrations applied.
 -- Each block raises an exception if an expectation is not met; a clean run =
 -- pass, and the last notice prints 'data retention verification PASSED'.
@@ -64,7 +66,8 @@ declare
     'admin_audit', 1,
     'auth_rate_limits', 1,
     'oauth_states', 2,
-    'team_invitations', 3
+    'team_invitations', 3,
+    'self_serve_signups', 1
   );
   v_profile uuid := gen_random_uuid();
   v_old_auth uuid := gen_random_uuid();
@@ -190,6 +193,11 @@ begin
       -- kept: open and in date
       (v_inv_open, v_account, v_invitee_c, 'member', now() - interval '1 day', now() + interval '6 days', null, null, null);
 
+    -- self_serve_signups: 24 months from requested_at (legal_version marks the fixtures).
+    insert into public.self_serve_signups (user_id, requested_at, last_requested_at, legal_version) values
+      (null, now() - interval '24 months 1 day', now() - interval '24 months 1 day', 'retention-old'),
+      (null, now() - interval '23 months', now() - interval '23 months', 'retention-new');
+
     set local role service_role;
 
     -- Dry run: counts the old fixtures, changes nothing.
@@ -225,6 +233,8 @@ begin
     if v_n <> 4 then raise exception 'dry run deleted oauth_states'; end if;
     select count(*) into v_n from public.team_invitations where account_id = v_account;
     if v_n <> 7 then raise exception 'dry run deleted team_invitations'; end if;
+    select count(*) into v_n from public.self_serve_signups where legal_version like 'retention-%';
+    if v_n <> 2 then raise exception 'dry run deleted self_serve_signups'; end if;
 
     -- Real run.
     set local role service_role;
@@ -289,6 +299,10 @@ begin
        or (select count(*) from public.team_invitations
             where id in (v_inv_accepted_new, v_inv_cancelled_new, v_inv_expired_new, v_inv_open)) <> 4 then
       raise exception 'team_invitations: wrong rows deleted';
+    end if;
+    if exists (select 1 from public.self_serve_signups where legal_version = 'retention-old')
+       or not exists (select 1 from public.self_serve_signups where legal_version = 'retention-new') then
+      raise exception 'self_serve_signups: wrong rows deleted';
     end if;
 
     -- Booking rows: exactly the right ones deleted, cleared or left alone.
