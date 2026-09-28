@@ -5,16 +5,24 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { findSignupFunnel, FUNNEL_WINDOWS_DAYS } from './funnel';
+import { findSignupFunnel, FUNNEL_WINDOWS_DAYS, POSTED_CHECK_CONCURRENCY } from './funnel';
 
 type Row = Record<string, unknown>;
 
-function fakeDb(tables: Record<string, Row[]>, opts: { failTable?: string; pageCap?: number } = {}) {
-  const reads: Array<{ table: string; range: [number, number] | null }> = [];
+interface FakeDbOptions {
+  failTable?: string;
+  /** Called as each read starts, for tests that abort mid-way or count reads in flight. */
+  onRead?: (table: string) => void | Promise<void>;
+}
+
+function fakeDb(tables: Record<string, Row[]>, opts: FakeDbOptions = {}) {
+  const reads: Array<{ table: string; range: [number, number] | null; limit: number | null; signal: AbortSignal | null }> = [];
   const from = (table: string) => {
     const filters: Array<(row: Row) => boolean> = [];
     const orderBy: string[] = [];
     let range: [number, number] | null = null;
+    let limit: number | null = null;
+    let signal: AbortSignal | null = null;
     const chain: Record<string, unknown> = {};
     const compare = (a: unknown, b: unknown) => {
       if (typeof a === 'string' && typeof b === 'string') {
@@ -29,8 +37,11 @@ function fakeDb(tables: Record<string, Row[]>, opts: { failTable?: string; pageC
     chain.gte = (column: string, value: string) => (filters.push((row) => row[column] != null && compare(row[column], value) >= 0), chain);
     chain.order = (column: string) => (orderBy.push(column), chain);
     chain.range = (start: number, end: number) => ((range = [start, end]), chain);
+    chain.limit = (count: number) => ((limit = count), chain);
+    chain.abortSignal = (value: AbortSignal) => ((signal = value), chain);
     chain.returns = async () => {
-      reads.push({ table, range });
+      reads.push({ table, range, limit, signal });
+      await opts.onRead?.(table);
       if (opts.failTable === table) return { data: null, error: { message: 'connection refused' } };
       let rows = (tables[table] ?? []).filter((row) => filters.every((keep) => keep(row)));
       rows = [...rows].sort((a, b) => {
@@ -40,11 +51,8 @@ function fakeDb(tables: Record<string, Row[]>, opts: { failTable?: string; pageC
         }
         return 0;
       });
-      if (range) {
-        // PostgREST never returns more than its max-rows setting in one response.
-        const end = Math.min(range[1], range[0] + (opts.pageCap ?? 1000) - 1);
-        rows = rows.slice(range[0], end + 1);
-      }
+      if (range) rows = rows.slice(range[0], range[1] + 1);
+      if (limit !== null) rows = rows.slice(0, limit);
       return { data: rows, error: null };
     };
     return chain;
@@ -144,28 +152,108 @@ describe('findSignupFunnel', () => {
     expect(funnel.windows[0]).toMatchObject({ since: '2026-10-23T23:00:00.000Z', counts: { requested: 1 } });
   });
 
-  it('reads every page, so a busy brand cannot push another out of the derived counts', async () => {
+  it('checks each venue for a post with one "limit 1" read, however many posts it has', async () => {
     const content_items: Row[] = [];
-    // The first brand (by id order) has more posts than one 1,000-row response holds; the second has one.
-    for (let index = 0; index < 1005; index += 1) {
-      content_items.push({ id: `p${String(index).padStart(4, '0')}`, account_id: 'a-busy', status: 'posted' });
-    }
+    // One busy brand with thousands of posts, one with a single post, one with none.
+    for (let index = 0; index < 3000; index += 1) content_items.push({ id: `p${index}`, account_id: 'a-busy', status: 'posted' });
     content_items.push({ id: 'q1', account_id: 'b-quiet', status: 'posted' });
+    content_items.push({ id: 'd1', account_id: 'c-none', status: 'draft' });
     const { service, reads } = fakeDb({
       self_serve_signups: [
         signup('s1', '2026-09-27T10:00:00Z', { account_id: 'a-busy', venue_created_at: '2026-09-27T10:10:00Z' }),
         signup('s2', '2026-09-27T11:00:00Z', { account_id: 'b-quiet', venue_created_at: '2026-09-27T11:10:00Z' }),
+        signup('s3', '2026-09-27T12:00:00Z', { account_id: 'c-none', venue_created_at: '2026-09-27T12:10:00Z' }),
       ],
       content_items,
     });
 
     const funnel = await findSignupFunnel(service, NOW);
 
-    expect(reads.filter((read) => read.table === 'content_items').map((read) => read.range)).toEqual([
+    const postReads = reads.filter((read) => read.table === 'content_items');
+    expect(postReads).toHaveLength(3);
+    expect(postReads.every((read) => read.limit === 1 && read.range === null)).toBe(true);
+    expect(funnel.windows[0].counts.firstPost).toBe(2);
+  });
+
+  it('runs the per-venue post checks a few at a time', async () => {
+    let inFlight = 0;
+    let most = 0;
+    const self_serve_signups = Array.from({ length: 30 }, (_, index) =>
+      signup(`s${index}`, '2026-09-27T10:00:00Z', { account_id: `a${index}`, venue_created_at: '2026-09-27T10:10:00Z' }),
+    );
+    const { service } = fakeDb(
+      { self_serve_signups },
+      {
+        onRead: async (table) => {
+          if (table !== 'content_items') return;
+          inFlight += 1;
+          most = Math.max(most, inFlight);
+          await new Promise((resolve) => setTimeout(resolve, 1));
+          inFlight -= 1;
+        },
+      },
+    );
+
+    await findSignupFunnel(service, NOW);
+
+    expect(most).toBe(POSTED_CHECK_CONCURRENCY);
+  });
+
+  it('reads the sign-up rows page by page past 1,000', async () => {
+    const self_serve_signups = Array.from({ length: 1005 }, (_, index) =>
+      signup(`s${String(index).padStart(4, '0')}`, '2026-09-27T10:00:00Z'),
+    );
+    const { service, reads } = fakeDb({ self_serve_signups });
+
+    const funnel = await findSignupFunnel(service, NOW);
+
+    expect(reads.filter((read) => read.table === 'self_serve_signups').map((read) => read.range)).toEqual([
       [0, 999],
       [1000, 1999],
     ]);
-    expect(funnel.windows[0].counts.firstPost).toBe(2);
+    expect(funnel.windows[0].counts.requested).toBe(1005);
+  });
+
+  it('gives every read the caller\'s signal, and starts no further page once it fires', async () => {
+    const controller = new AbortController();
+    const self_serve_signups = Array.from({ length: 1005 }, (_, index) =>
+      signup(`s${String(index).padStart(4, '0')}`, '2026-09-27T10:00:00Z', { account_id: `a${index}`, venue_created_at: '2026-09-27T10:10:00Z' }),
+    );
+    const { service, reads } = fakeDb(
+      { self_serve_signups },
+      {
+        // The deadline passes while the first page is being read.
+        onRead: (table) => {
+          if (table === 'self_serve_signups') controller.abort();
+        },
+      },
+    );
+
+    await expect(findSignupFunnel(service, NOW, { signal: controller.signal })).rejects.toThrow(
+      'self_serve_signups lookup stopped: the deadline passed',
+    );
+    expect(reads).toHaveLength(1);
+    expect(reads[0].signal).toBe(controller.signal);
+  });
+
+  it('passes the signal to the brand lookups and stops the post checks once it fires', async () => {
+    const controller = new AbortController();
+    const self_serve_signups = Array.from({ length: 20 }, (_, index) =>
+      signup(`s${index}`, '2026-09-27T10:00:00Z', { account_id: `a${index}`, venue_created_at: '2026-09-27T10:10:00Z' }),
+    );
+    const { service, reads } = fakeDb(
+      { self_serve_signups },
+      {
+        onRead: (table) => {
+          if (table === 'content_items') controller.abort();
+        },
+      },
+    );
+
+    await expect(findSignupFunnel(service, NOW, { signal: controller.signal })).rejects.toThrow('lookup stopped');
+    // The first batch of checks was already in flight; no check started after the signal fired.
+    expect(reads.filter((read) => read.table === 'content_items').length).toBeLessThanOrEqual(POSTED_CHECK_CONCURRENCY);
+    expect(reads.every((read) => read.signal === controller.signal)).toBe(true);
   });
 
   it('skips the brand lookups when no sign-up has a venue', async () => {

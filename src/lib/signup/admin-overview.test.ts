@@ -1,7 +1,7 @@
 /**
  * Data for the admin Sign-ups card: reuses the digest and the funnel, and
  * never throws. A failed, missing or slow read comes back as an error for the
- * card to show, and is logged.
+ * card to show, and is logged; at the deadline the reads are cancelled.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -41,8 +41,12 @@ describe('loadSignupsOverview', () => {
     const overview = await loadSignupsOverview({ now: NOW });
 
     expect(overview).toEqual({ status: 'ready', signupSwitch: 'closed', funnel: FUNNEL, digest: DIGEST, readAt: NOW.toISOString() });
-    expect(mocks.findSignupDigest).toHaveBeenCalledWith(SERVICE, NOW);
-    expect(mocks.findSignupFunnel).toHaveBeenCalledWith(SERVICE, NOW);
+    expect(mocks.findSignupDigest).toHaveBeenCalledWith(SERVICE, NOW, { signal: expect.any(AbortSignal) });
+    expect(mocks.findSignupFunnel).toHaveBeenCalledWith(SERVICE, NOW, { signal: expect.any(AbortSignal) });
+    // Both share one deadline, which has not fired.
+    const signal = mocks.findSignupFunnel.mock.calls[0][2].signal as AbortSignal;
+    expect(mocks.findSignupDigest.mock.calls[0][2].signal).toBe(signal);
+    expect(signal.aborted).toBe(false);
     expect(mocks.logError).not.toHaveBeenCalled();
   });
 
@@ -69,18 +73,45 @@ describe('loadSignupsOverview', () => {
     expect(mocks.logError).toHaveBeenCalledTimes(1);
   });
 
-  it('gives up on a slow read and returns an error instead of holding the page', async () => {
+  it('gives up on a slow read, cancels every read in flight and returns an error', async () => {
     vi.useFakeTimers();
     try {
-      mocks.findSignupFunnel.mockReturnValue(new Promise(() => undefined));
+      // A read that only ends when its signal fires, as supabase-js does with .abortSignal().
+      const cancelled: string[] = [];
+      const hang = (name: string) => (_service: unknown, _now: Date, options: { signal: AbortSignal }) =>
+        new Promise((_, reject) => {
+          options.signal.addEventListener('abort', () => {
+            cancelled.push(name);
+            reject(new Error(`${name} lookup failed: AbortError`));
+          });
+        });
+      mocks.findSignupFunnel.mockImplementation(hang('funnel'));
+      mocks.findSignupDigest.mockImplementation(hang('digest'));
+
       const pending = loadSignupsOverview({ now: NOW, timeoutMs: 8000 });
-      await vi.advanceTimersByTimeAsync(8000);
+      await vi.advanceTimersByTimeAsync(7999);
+      expect(cancelled).toEqual([]);
+      await vi.advanceTimersByTimeAsync(1);
 
       await expect(pending).resolves.toMatchObject({
         status: 'error',
         message: 'the sign-up figures took longer than 8 seconds',
       });
+      expect(cancelled.sort()).toEqual(['digest', 'funnel']);
       expect(mocks.logError).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('clears its deadline once the reads finish', async () => {
+    vi.useFakeTimers();
+    try {
+      await loadSignupsOverview({ now: NOW, timeoutMs: 8000 });
+      expect(vi.getTimerCount()).toBe(0);
+      const signal = mocks.findSignupFunnel.mock.calls[0][2].signal as AbortSignal;
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(signal.aborted).toBe(false);
     } finally {
       vi.useRealTimers();
     }
