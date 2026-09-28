@@ -157,23 +157,30 @@ async function buildOccupancyMap(
 ): Promise<Map<string, number>> {
   const occupancy = new Map<string, number>();
 
-  // Find the date range (with ±3 day buffer for shifting)
+  // Find the date range: every calendar day a plan can shift to (±2 days).
   const dates = plans
     .filter((p) => p.scheduledFor)
     .map((p) => p.scheduledFor!.getTime());
 
   if (dates.length === 0) return occupancy;
 
-  const minDate = new Date(Math.min(...dates) - 3 * 24 * 60 * 60 * 1000);
-  const maxDate = new Date(Math.max(...dates) + 3 * 24 * 60 * 60 * 1000);
+  // Calendar days in the target zone, not 72 elapsed hours: across a 25-hour
+  // clock-change day, elapsed hours cut off the first or last hour of the
+  // furthest day. The end bound is exclusive (start of the day after).
+  const windowStart = DateTime.fromMillis(Math.min(...dates), { zone: tz })
+    .minus({ days: 2 })
+    .startOf("day");
+  const windowEnd = DateTime.fromMillis(Math.max(...dates), { zone: tz })
+    .plus({ days: 3 })
+    .startOf("day");
 
   try {
     const { data, error } = await supabase
       .from("content_items")
       .select("scheduled_for")
       .eq("account_id", accountId)
-      .gte("scheduled_for", minDate.toISOString())
-      .lte("scheduled_for", maxDate.toISOString())
+      .gte("scheduled_for", windowStart.toUTC().toISO())
+      .lt("scheduled_for", windowEnd.toUTC().toISO())
       .not("scheduled_for", "is", null);
 
     if (error) {
