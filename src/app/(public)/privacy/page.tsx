@@ -101,7 +101,7 @@ const PURPOSE_ROWS = [
 const RETENTION_ROWS = [
   [
     "Account and content",
-    "For the life of your subscription. If a subscription ends and the account is not closed, we review it 90 days later and may close it then. If you signed up on our website and no subscription starts within 30 days, we may close the account then. Deleted within 30 days after the account closes, and gone from backups within a further 7 days.",
+    "For the life of your subscription. If a subscription ends and the account is not closed, we review it 90 days later and may close it then. If you signed up on our website and no subscription starts within 30 days, we may close the account then. When an account is closed, its data is kept for 30 days and then deleted, and it is gone from our backups within a further 7 days.",
   ],
   ["Sign-up records", "24 months after you asked to sign up."],
   [
@@ -249,8 +249,8 @@ export default function PrivacyPolicyPage() {
       <LegalSection id="retention" title="6. How long we keep it">
         <LegalTable caption="How long we keep personal data" head={["Data", "How long"]} rows={RETENTION_ROWS} />
         <p>
-          Photos and videos stay until you delete them or your account closes. Posts already published on Facebook
-          and Instagram stay there until you delete them on Meta.
+          Photos and videos stay until you delete them, or until your account&apos;s data is deleted 30 days after the
+          account closes. Posts already published on Facebook and Instagram stay there until you delete them on Meta.
         </p>
       </LegalSection>
 

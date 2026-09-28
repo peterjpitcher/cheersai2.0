@@ -299,8 +299,8 @@ export default function TermsPage() {
             link-in-bio page, with download links to your media that last 7 days.
           </li>
           <li>
-            We delete your data within 30 days after your account closes, and it is gone from our backups within a
-            further 7 days. Some records, such as invoices, are kept longer; our{" "}
+            When your account closes, we keep your data for 30 days and then delete it, and it is gone from our
+            backups within a further 7 days. Some records, such as invoices, are kept longer; our{" "}
             <LegalLink href={privacy.path}>{privacy.title}</LegalLink> lists them.
           </li>
         </LegalList>
