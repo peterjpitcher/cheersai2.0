@@ -132,6 +132,25 @@ describe("the self-serve wording (spec §4.13), true while sign-up is closed", (
     expect(text).not.toContain("until you delete them or your account closes");
   });
 
+  it("the terms (section 18) say the same: kept for 30 days, then deleted", () => {
+    const text = textOf(TermsPage);
+    expect(text).toContain(
+      "When your account closes, we keep your data for 30 days and then delete it, and it is gone from our backups within a further 7 days.",
+    );
+  });
+
+  it("the DPA retention table says the same: kept for 30 days, then deleted", () => {
+    const text = textOf(DataProcessingPage);
+    expect(text).toContain(
+      "While your account is open. When the account closes, kept for 30 days and then deleted, and gone from backups within a further 7 days.",
+    );
+  });
+
+  it.each(PAGES)("the $name no longer says data is deleted within 30 days of closing", ({ Page }) => {
+    const text = textOf(Page);
+    expect(text).not.toMatch(/deleted? (your data )?within 30 days after (the|your) account closes/i);
+  });
+
   it("the DPA adds no sub-processor: Cloudflare is not one", () => {
     expect(textOf(DataProcessingPage)).not.toContain("Cloudflare");
   });
