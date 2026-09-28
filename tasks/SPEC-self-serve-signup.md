@@ -1,0 +1,316 @@
+# SPEC: Self-serve sign-up (new customer readiness, Stage 3)
+
+Status: v2.1, 28 September 2026. Revised after an independent review (approve with changes; findings 1 to 13 folded in, map in §11); Peter answered the choices the same day (§3.1: ten decided, P2 open). Nothing in this spec is built. Stage 1 may be built now (P1); the Stage 3 build waits for Peter's approval of this spec.
+Owner: Peter Pitcher. Author: Claude.
+Parent: `tasks/SPEC-new-customer-readiness.md` (decisions D1 to D7, L1 to L8; §4.4 provisioning; §5 Stage 3), review `tasks/REVIEW-SPEC-new-customer-readiness.md` (R06, R19), live state in `tasks/PLAN-new-customer-stage2.md`.
+
+## 1. Summary
+
+A venue finds Cheers at `/`, asks to sign up with its email, confirms it, then sets a password, names itself and its venue, starts the 14-day trial through the existing Stripe Checkout and connects Facebook and Instagram, with no operator step.
+
+What shapes Stage 3:
+
+1. **Sign-up goes through our server, never Supabase's public sign-up.** Public sign-up was open with email confirmation off; Peter switched both on 28 September 2026 (verified live). The house pattern (service-role `generateLink` plus Resend, as invites do) works with public sign-up off, so the Auth API stays closed.
+2. **No self-serve venue can connect Facebook or Instagram until Meta approves App Review** (D7). The sign-up flow is built behind a switch that stays off until approval and the D7 launch gate.
+3. **Billing enforcement is off** (`app_flags.billing_enforcement = false`). A venue that skipped Checkout would get the product free, so enforcement must be on before sign-up opens. The three live brands are comped and the fourth account is archived, so switching it on changes nothing for them.
+4. **Strangers who can create venues can reach every owner feature.** Team invites become a public write path (emails to any address, logins created, existing users added without asking), so they are guarded before opening (§4.6).
+
+## 2. What is true today (verified 28 September 2026)
+
+| # | Fact | Evidence |
+|---|---|---|
+| F1 | Live Supabase Auth now has `disable_signup: true` and `mailer_autoconfirm: false` (both changed by Peter on 28 September 2026; before that anyone holding the public key could create a confirmed login). Admin invites, resets, magic-link and password sign-in were tested locally with sign-up off and keep working. Only 2 logins exist, both Peter's. | `GET /auth/v1/settings` (read-only); `auth.users` counts |
+| F2 | `/` and `/auth/signup` are permanent (308) redirects to `/planner` and `/login`; browsers cache them. `robots.ts` disallows the whole site. | `src/app/page.tsx:4`, `src/app/auth/signup/page.tsx:4`, `src/app/robots.ts:5-10` |
+| F3 | Done by #137 (live): the login page's `next` goes through `safeNextPath`, which now also rejects control characters, paths over 2,048 characters and anything that resolves off-origin; the set-password form uses it; the unused `/api/auth/magic-link` route is deleted. Supabase's redirect allow list holds only `https://cheers.orangejelly.co.uk`. | `src/lib/auth/email-links.ts:20-37`; `src/app/(auth)/login/page.tsx:27` |
+| F4 | Rate limiting is off in production: `checkAuthRateLimit` allows everything when Upstash is unset, and neither Production nor Preview has `UPSTASH_REDIS_*` (`vercel env ls`, names only). The unused `/api/auth/login` route remains, with an in-memory limit per server instance, and logs email addresses. | `src/lib/auth/rate-limit.ts:21-27,65-68,113-133`; `src/app/api/auth/login/route.ts` |
+| F5 | Supabase's own per-IP limits cannot tell our visitors apart: sign-in, OTP and verify calls run server-side, so Supabase sees Vercel's addresses. | `src/lib/auth/actions.ts:45-58,106-111`; `src/app/auth/confirm/route.ts:47-50` |
+| F6 | `auth_rate_limits` (key, count, reset_at) exists, RLS limits it to the service role, it has 0 rows, and the retention job already deletes rows 24 hours after reset; the privacy notice already covers "sign-in rate limits". Nothing in `src/` writes it. | live schema; `supabase/migrations/20260927120000_data_retention.sql:285-299`; `src/app/(public)/privacy/page.tsx:97-100` |
+| F7 | Invites and resets use the house pattern: `auth.admin.generateLink`, then Resend with a `/auth/confirm?token_hash=...` link. `/auth/confirm` verifies the token on GET and signs in whoever opens the link; there is no resend. | `src/app/(app)/admin/actions.ts:268-312`; `src/lib/auth/actions.ts:176-213`; `src/app/auth/confirm/route.ts:47` |
+| F8 | Live `accounts`: `id` defaults to `gen_random_uuid()`, `email` NOT NULL and no longer unique (#75), `auth_user_id` NOT NULL with no foreign key and no reader in `src/` or the edge functions. Switches default false; `billing_override` defaults null. Four accounts: The Anchor, Orange Jelly and Cheers Test Venue (all comped) and "CheersAI Owner" (no override, archived 22 September 2026, so it resolves `archived`). No trigger creates `brand_profile`; the first Settings save does, and readers tolerate it missing. `account_members.role` defaults `owner`; a trigger keeps a last owner. | live schema; `src/app/(app)/settings/actions.ts:39-64` |
+| F9 | Admin "Create brand" writes no membership and no brand profile; access comes from a separate invite. Not one transaction. | `src/app/(app)/admin/actions.ts:54-103,256-341` |
+| F10 | Checkout: owner only, server-chosen price, trial only when the brand never had a subscription, card always collected, terms and DPA tick box, idempotency key per attempt. The chooser defaults to Starter monthly. The production Stripe key is restricted (Checkout Sessions, Customers, Portal write; Subscriptions, Prices, Products read). 0 live subscriptions (1 cancelled test). | `src/app/(app)/settings/billing-actions.ts:215-280`; `src/features/settings/billing-section.tsx:344-345`; `docs/runbooks/stripe-billing.md:85`; live count |
+| F11 | Team invites (owner only): an unpaid brand gets Starter's 2 seats; no rate limit; the owner's venue name goes into our email to any address; a new address gets a login; an existing user is added straight away with no consent. | `src/lib/billing/seats.ts:36`; `src/app/(app)/settings/team-actions.ts:76-165`; `src/lib/auth/email-links.ts:68-100` |
+| F12 | The default brand is the first by name: brands load ordered by `business_name` and the first wins when there is no cookie. A super-admin sees every live brand. So a new brand named "A Anchor" would become an invited user's default, or Peter's. | `src/lib/auth/membership.ts:64,88,111-121` |
+| F13 | Setup checklist ticks "profile" when business type or description is set, so the venue type from sign-up ticks it on its own. Live `publish_jobs` never records `completed_at` or `platform_post_id` (0 of 1,465 rows), so "published" must come from `content_items.status = 'posted'`. | `src/lib/onboarding/setup-progress.ts:47`; live counts |
+| F14 | A signed-in user with no brand lands on `/no-access` ("Ask your administrator"). | `src/app/(app)/layout.tsx:36-38`; `src/app/no-access/page.tsx:26-29` |
+| F15 | Grants on new objects: since `20260905053036` anon no longer inherits grants from `postgres`, but `authenticated` still gets EXECUTE on every new function and all privileges on every new table (live example: `increment_rate_limit`, SECURITY DEFINER, callable by any signed-in user for any account id, though the app only calls it with the service role and its counters are advisory). `tests/anon-access.test.ts` skips in CI and checks anon only. Every public table has RLS on. | live `pg_default_acl` and `proacl`; `src/lib/providers/rate-limits.ts:34-49`; `tests/anon-access.test.ts:64` |
+| F16 | Env validation runs whenever `NODE_ENV` is production, which includes Preview builds, so a required key must be set in Preview too. Preview uses the production database and has no Stripe keys. | `src/env.ts:144-163`; `docs/runbooks/stripe-billing.md:102`; `vercel env ls preview` |
+| F17 | No analytics or advertising cookies. No Turnstile variable exists for Cheers. Axiom is not configured in production, so Vercel logs (kept 1 day) and operator emails are the only failure signals, and Resend carries both. | `src/app/(public)/privacy/page.tsx:106-117,255-262`; `vercel env ls production` |
+| F18 | Terms section 19: 30 days' email notice before a change to prices or terms takes effect (L2). The Checkout tick box records acceptance on the Stripe Checkout Session with the version in its text. | `src/app/terms/page.tsx:289-295`; `docs/runbooks/stripe-billing.md:94-98` |
+
+## 3. Decisions already made
+
+| ID | Decision (short form; full text in the parent spec) | Date |
+|---|---|---|
+| D1 | Assisted paid launch first; self-serve sign-up is Stage 3. | 2026-09-24 |
+| D1a to D1d | Stripe hosted Checkout and portal; paid ads, tournaments and management import not offered to new customers; operator alerts to peter@orangejelly.co.uk. | 2026-09-24 |
+| D2a, D2c, D2d, D2e | Starter, Professional (self-serve), Group (contact us); card at trial start; AI usage logged, not capped; plan change in the trial keeps the trial. | 2026-09-24 to 26 |
+| D3 | An `incomplete` brand (no subscription) cannot create, generate, upload or publish once enforcement is on. | 2026-09-24 |
+| D4 | Owners handle billing, inviting, connections, export and deletion requests. | 2026-09-24 |
+| D5 | Offboarding is run by the operator on request; data kept 30 days, then deleted. | 2026-09-24 |
+| D7 | Every Meta permission is Standard access; until App Review is approved only people with a role on the app can connect. | 2026-09-26 |
+| L2, L4 | Businesses only; prices ex VAT; 30 days' notice of terms changes; sub-processors Supabase, Vercel, OpenAI, Resend; Upstash and Axiom left off; 30 days' notice before adding one. | 2026-09-26/27 |
+| L3, L8 | Approved retention periods, including "expired temporary security records: deleted within a day of expiring"; lapsed brands listed in the daily operator email after 90 days, closing stays manual. | 2026-09-27 |
+| L6 | One trial per brand in code, one per business in the terms; at Stage 3, repeat trials are checked by card, not email domain. | 2026-09-27 |
+| S0 | Peter approved writing this spec. | 2026-09-28 |
+| S1 | Supabase public sign-up off and email confirmation on. Done by Peter; verified live. | 2026-09-28 |
+| S2 | Login `next` validation and removal of `/api/auth/magic-link` (#137, merged and live). | 2026-09-28 |
+
+### 3.1 Choices put to Peter, answered 28 September 2026 (his questions 40 to 50)
+
+The P numbers stay so the design can refer to them. Ten are decided; P2 is open.
+
+| ID | Choice | Peter | Status |
+|---|---|---|---|
+| P1 | Ship Stage 1 (§5, PRs 1 and 2) now, separately from sign-up. It closes today's gaps (no rate limits in production; one-use links burnt by email scanners) and does not depend on Meta. | Q40 | Decided, yes, 2026-09-28 |
+| P2 | Keep sign-up closed (`app_flags.self_serve_signup` off) until App Review is approved and the D7 gate passes; until then `/` shows prices with "Talk to us". | Q41 | **Open.** Peter asked how to close the gap and believes the Meta app is already approved, because he uses it daily for The Anchor. The facts (App Dashboard, 26 September 2026): the app is in Live mode and Business Verification is done, but every permission is Standard access, so only people with a role on the app can grant them. The Anchor works because Peter, an app administrator, connects it. Closing the gap means submitting the App Review in `docs/runbooks/meta-app-review.md` and passing the D7 gate. The sign-up switch design (§4.8) is unchanged. |
+| P3 | Switch `billing_enforcement` on before sign-up opens, so a venue that skips Checkout cannot use Cheers free. | Q42 | Decided, yes, 2026-09-28 |
+| P4 | Team invites only while the brand is trialing, paid, in past-due grace or comped; at most 5 a day per brand; an existing user must accept. The default-brand fix in §4.6 (the brand a person joined first) is a safety fix that ships with it. | Q43 | Decided, yes, 2026-09-28 |
+| P5 | A card that has had a Cheers trial before: cancel the new trial at once with no charge and offer "Start your plan today". | Q44 | Decided, yes, 2026-09-28 |
+| P6 | Retention: card-check codes 24 months from the trial start; sign-up records 24 months; sign-ups never confirmed deleted after 7 days; confirmed sign-ups that never create a venue deleted after 30 days; pending team invitations deleted a day after they expire or are accepted. | Q45 | Decided, yes, 2026-09-28 |
+| P7 | A venue that never starts a subscription is listed in the daily operator email 30 days after sign-up; the operator decides whether to close it; the terms gain one sentence allowing it. | Q46 | Decided, yes, 2026-09-28 |
+| P8 | Rate limits in our own database (`auth_rate_limits`), not Upstash: no new sub-processor, no DPA change, no customer notice. | Q47 | Decided, yes, 2026-09-28 |
+| P9 | Cloudflare Turnstile on `/signup` only, checked by our server and named in the privacy notice; not Supabase's built-in CAPTCHA. | Q48 | Decided, yes, 2026-09-28 |
+| P10 | Defer the admin Sign-ups card, the first-post help article and owner export and close buttons until after sign-up opens; meanwhile Settings shows "To close this venue or get a copy of your data, email peter@orangejelly.co.uk". | Q49 | Decided, yes, 2026-09-28 |
+| P11 | Search engines may index `/` and the three legal pages; everything else stays disallowed. | Q50 | Decided, yes, 2026-09-28 |
+
+## 4. Design
+
+### 4.1 The front door: `/`
+
+- Signed out: a landing page (what Cheers does, how it works, what you need, pricing, FAQs). Signed in: a temporary (307) redirect to `/planner`. Browsers that cached the old 308 keep going to `/planner`, then login; acceptable.
+- Pricing comes only from `PLANS` (`src/lib/billing/plans.ts:45-70`): Starter £29.99 a month or £323.89 a year, Professional £59.99 or £647.89, Group "contact us", with limits and seats from the same file. Every price reads "ex VAT", with a line that VAT is added at the UK rate (L2). Trial text matches the terms: 14 days, card at the start, first charge on day 15 unless cancelled. No paid ads or tournaments (D1b).
+- "What you need" names the prerequisites before anyone starts a time-limited trial (R19): admin access to the venue's Facebook Page, and for Instagram a professional account linked to it.
+- Footer: company details from `src/lib/legal/company.ts` (required on the site), links to `/terms`, `/privacy`, `/data-processing`, `/help`, `/login`.
+- CTA: switch off, "Talk to us" (email and WhatsApp from `CONTACT`); switch on, "Start your free trial". The login page's "Contact support" link (`login/page.tsx:266-272`) follows the switch. `/auth/signup` redirects (307) to `/signup`.
+- No cookies added, so no banner (F17). `robots.ts` allows `/` and the legal pages (P11); `noindex` on `/signup/*` and `/auth/*`.
+- Copy drafted only from `plans.ts`, the terms and `company.ts`; Peter approves it on the PR preview.
+
+### 4.2 Sign-up request: `/signup`
+
+Form: email and a Turnstile widget only. No name (it would put a stranger's text into our emails and onto a login before the email is proved) and no password (see below). Server action `requestSignup`, each step failing closed:
+
+1. Environment: refuse on Vercel Preview (`VERCEL_ENV=preview`), because Preview writes to the production database (F16). Switch: read `app_flags.self_serve_signup`; an error counts as off ("Sign-up is not open yet. Talk to us.").
+2. Validate the email (lower-cased).
+3. Turnstile siteverify with the secret, the visitor's IP (first `x-forwarded-for` entry, set by Vercel), `action = signup`, and in production `hostname = cheers.orangejelly.co.uk`; 5-second timeout. Missing keys, timeout or failure: refuse.
+4. Rate limits (P8): per email 3 an hour, per IP 10 an hour, and a site-wide 60 an hour that refuses and alerts the operator (it protects the shared Resend sending reputation). Keys are HMAC-SHA256 of the email or IP with `RATE_LIMIT_HMAC_KEY`, so the table holds nothing reversible.
+5. Look up the email in `user_auth_snapshot` (as team invites do), then read the login's confirmation and memberships with the service role:
+
+| Case | Action | Email |
+|---|---|---|
+| No login | `generateLink({ type: 'invite', email })`; upsert the sign-up row on `user_id` | "Confirm your email to start your Cheers trial" |
+| Login, unconfirmed, no brand (an earlier abandoned sign-up) | new link; upsert the sign-up row on `user_id` (so it can never be missing) | same |
+| Login, unconfirmed, has a brand (a member invited by the operator or an owner who never accepted) | new link, which replaces the old one; no sign-up row | the normal member invite (`renderInviteEmail`) with their brand names |
+| Login, confirmed | nothing created | "You already have a Cheers login": sign-in and reset links; "to add another venue, email peter@orangejelly.co.uk" (the sending address receives nothing) |
+| Any lookup or `generateLink` error | refuse, alert | none |
+
+6. The screen always says "Check your email" for the same email, so the form never reveals who has a login. It offers "Send it again" after 60 seconds (the same action and limits; the email stays in the page, never in the URL).
+
+Why no password here: a password chosen before the email is proved lets someone register a victim's address with their own password and wait for the victim to confirm it.
+
+Why app-level Turnstile, not Supabase's CAPTCHA: Supabase's CAPTCHA covers the public Auth endpoints and would force a challenge onto the existing login form, but it does not apply to admin calls, which is how this sign-up works; with public sign-up off (S1) there is no public sign-up endpoint left to protect.
+
+Disposable emails: not blocked (lists go stale and catch real venues); the card-up-front trial, Turnstile, limits and the card check carry the load. The operator email shows the email domain.
+
+### 4.3 Email confirmation
+
+- `/auth/confirm` stops verifying on GET. GET shows a page with "Confirm and continue" (no token used, `noindex`, no referrer); the button POSTs, which runs `verifyOtp` and redirects to the fixed `next` (checked by `safeNextPath`). Link scanners that only fetch cannot burn the link. This covers invites and resets too, and old links keep working (Stage 1, PR 2).
+- The email is not shown before the button: that would need the address in the URL, which we avoid. Instead `/signup/venue` says "Signed in as x@y.com. Not you? Sign out" at the top and asks the person to type their email, which must match the login. This defeats someone mailing their own sign-up link to a venue so that the venue sets up its card and Facebook under the sender's login.
+- The link works on any device (a token hash needs no browser state). Expired or used: the existing link error on the login page, then "Send it again" or a new request.
+- Emails are rendered from fixtures in tests and fail on `undefined`, empty links or `Invalid Date`.
+
+### 4.4 Venue creation: `/signup/venue`
+
+For a signed-in, confirmed user (on first load it sets `verified_at`). A user who already belongs to a brand goes to `/planner` (or `/auth/set-password` for an invited member who never set one). Fields: your email (must match, §4.3), your name (1 to 80 characters, saved as `full_name` in the login's user metadata), password and confirm (12 to 72 characters, as `setPassword`), venue name (1 to 120 characters; refused if it contains `://`, `www.` or `@`, so it cannot carry a link into our emails), venue type (pub, bar, restaurant, cafe, hotel, other; saved to `brand_profile.business_type`, which ticks the checklist's profile step on its own, F13), and a required "I am signing up for a business, not as a consumer" (terms section 2, `src/app/terms/page.tsx:65-69`).
+
+Server action `createSelfServeVenue`: Preview and switch checks; rate limit (per user 10 an hour); validate; the user id comes from `auth.getUser()`, never the form. Set the password and name (`auth.updateUser`, safe to repeat). Then call `public.provision_self_serve_brand(p_user_id, p_venue_name, p_business_type, p_email, p_legal_version)` through the service role: one plpgsql function (`security invoker`, `set search_path = public`), so one transaction:
+
+- `select ... from self_serve_signups where user_id = p_user_id for update`; none: raise;
+- `account_id` already set: return it (a double submit, refresh or second tab ends here);
+- insert `accounts` (`business_name` and `display_name` = venue name, `email` = sign-up email, Europe/London, `created_by_user_id` and `auth_user_id` = the user; switches and `billing_override` left at their defaults);
+- insert `account_members` (role `owner`, `created_by` the user) and `brand_profile` (`account_id`, `business_type`);
+- update the sign-up row (`account_id`, `venue_created_at`, `business_confirmed_at`, `legal_version`); return the id.
+
+Then record `self_serve_venue_created` in `admin_audit` (ids only), email the operator (§4.9) and go to `/settings#billing`.
+
+`self_serve_signups` (service role only; stores no email, name or IP):
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | uuid primary key, default `gen_random_uuid()` | |
+| `user_id` | uuid unique, references `auth.users` on delete set null | the stable attempt key: one row per login |
+| `account_id` | uuid unique, references `accounts` on delete set null | set once |
+| `requested_at`, `last_requested_at` | timestamptz not null, default now() | |
+| `request_count` | integer not null default 1 | |
+| `verified_at`, `venue_created_at`, `business_confirmed_at` | timestamptz | |
+| `legal_version` | text | version shown at the business tick |
+
+An existing login with no brand sees "Start a free trial for your venue" on `/no-access` when the switch is on; that upserts its sign-up row and goes to `/signup/venue`. A member who wants a second venue is told to contact us (Group plan). Admin "Create brand" and invites are unchanged.
+
+### 4.5 Trial and payment
+
+- After the venue exists the owner lands on Settings, Billing: the existing chooser (Starter monthly preselected), a short welcome line, the existing Checkout with the terms and DPA tick box, and "Confirming your payment" on return. One addition: `legal_version` in the Checkout Session metadata, so the accepted version is readable in Stripe (§4.13).
+- With enforcement on (P3) the brand is `incomplete` until the webhook confirms, so it cannot create or publish; the existing banner explains why. A cancelled Checkout leaves it `incomplete`; never-started brands are handled by P7.
+
+### 4.6 Team invites once strangers can create venues (P4)
+
+- **Gate:** `inviteTeamMember` refuses unless the brand's entitlement is `trialing`, `active`, `past_due_grace` or `comped` ("Start your plan to invite your team"). A card on file raises the cost of abuse.
+- **Cap:** 5 invites per brand per rolling 24 hours (database limiter, key per account id), on top of seats; pending invitations count towards seats.
+- **Existing users accept:** instead of inserting a membership, create a `team_invitations` row (`id`, `account_id` references `accounts` on delete cascade, `user_id` references `auth.users` on delete cascade, `role`, `invited_by`, `created_at`, `expires_at` 7 days, `accepted_at`; partial unique index on `(account_id, user_id)` where not accepted) and email "You have been invited to <venue> on Cheers; sign in to accept". Signed-in users see pending invitations and accept or decline; accepting inserts the membership with the user id from the session. A new address keeps today's flow (the login is created and the person accepts by setting a password).
+- **Default brand:** `resolveActiveBrand` falls back to the brand the person joined first (`account_members.created_at`), not the first by name; a super-admin's own memberships come before brands seen only as super-admin. The switcher keeps its alphabetical display. A new membership therefore never changes anyone's default, including Peter's.
+- The venue-name rule (§4.4) keeps links out of invite emails.
+
+### 4.7 Repeat trials, checked by card (L6, P5)
+
+- **Where:** inside `reconcileBrandFromStripe` (`src/lib/billing/reconcile.ts:345`), after the current subscription row is written and before `finish()` (`reconcile.ts:330-343`). One path serves the webhook, "Check again" and admin re-sync.
+- **When:** the current subscription is `trialing`. Subscriptions created before the deploy time (a constant in code) are recorded as `first_trial` but never refused; today there are none (0 live subscriptions).
+- **How:** retrieve the subscription with `default_payment_method` expanded; HMAC-SHA256 of `card.fingerprint` with `TRIAL_CARD_HASH_KEY`. Stripe events for one Checkout arrive together and reconcile concurrently (dedupe is per event, `src/lib/billing/webhook.ts:120-122`), so every write is race-safe:
+  1. `insert ... (outcome 'first_trial') on conflict do nothing returning`. A row back: done.
+  2. Nothing back: read this subscription's row. Present: a parallel reconcile already decided; use its outcome. Absent: the conflict was the partial unique index on `card_hash` where `outcome = 'first_trial'` (another brand holds that card's trial), so insert `repeat_refused` `on conflict (stripe_subscription_id) do nothing returning`.
+  3. Only the reconcile that inserted `repeat_refused` cancels in Stripe (`invoice_now: false`, `prorate: false`; nothing is charged in a trial); "already cancelled" counts as success. It sets `cancelled_at`, then writes the cancelled subscription row from Stripe's response, so `finish()` sees the cancellation, not the trial. A row with `repeat_refused` and no `cancelled_at` is retried on the next reconcile.
+  4. Records `trial_refused_repeat_card` in `admin_audit` and emails the operator. Billing then says: "This card has already been used for a Cheers free trial, so this plan cannot start with one. Start your plan today to carry on." The button is the existing `startCheckout`, which offers no trial because the brand now has an earlier subscription (`billing-actions.ts:245-246`).
+  5. No card on the subscription: `outcome = 'no_card'`, operator email.
+- **Failure:** a Stripe or database error throws; the webhook answers 500, Stripe retries and the existing webhook alert emails the operator. The trial runs meanwhile, a visible billing-control gap.
+- **Table** `trial_card_checks`: `stripe_subscription_id` text primary key, `account_id` references `accounts` on delete cascade, `card_hash` text not null, `outcome` text check (`first_trial`, `repeat_refused`, `no_card`), `cancelled_at`, `created_at`; partial unique index on `card_hash` where `outcome = 'first_trial'`. Kept 24 months (P6). A deleted brand's rows go with it; accepted.
+- **Config:** `TRIAL_CARD_HASH_KEY` joins the billing variables, so a missing key means "billing not set up" (the webhook answers 503 and Stripe retries) rather than breaking builds; Preview has no Stripe keys, so it needs none. The restricted key needs PaymentMethods read and Subscriptions write.
+- **Limits:** Apple Pay and Google Pay may give device-specific fingerprints; accepted and checked in test mode. The same card on a second venue of one business is refused, matching "one free trial per business".
+
+### 4.8 Facebook and Instagram until Meta approves (P2)
+
+- A self-serve owner has no role on the Meta app, so Meta will not grant the Standard-access permissions. What they would see has not been tested; most likely Meta's dialog refuses or Cheers shows "No Facebook Pages found for the connected account." (`src/lib/connections/token-exchange.ts:99`).
+- Options: (a) open now with "connect later": rejected, the trial clock runs with nothing to post; (b) add each owner as an app tester: works for a few assisted venues, needs an acceptance step in Meta's developer settings, not self-serve; (c) a waitlist form: another store of personal data for little gain; (d) build now, open later: recommended.
+- Launch order: App Review approved (`docs/runbooks/meta-app-review.md` §6); the D7 gate passes, including the business-portfolio Instagram case that may need `ads_read`; `billing_enforcement` on (P3); then the sign-up switch on.
+
+### 4.9 Onboarding and operator visibility
+
+- Onboarding is the existing checklist (F13): profile is already ticked by the venue type; then Facebook, Instagram, first post.
+- New venue: one email to `OPERATOR_ALERT_EMAIL` (venue name, type, sign-up email, time). A failed send is logged and never blocks the customer.
+- Sign-up failures caused by a dependency (switch read, Turnstile, limiter, lookup or `generateLink`, Resend, provisioning) and the site-wide limit: first write `operator_signup_alert` to `admin_audit` (kind and count only; that table keeps rows 6 years), then email at most once per kind per hour. Ordinary validation errors do not alert.
+- The daily data-retention email (`docs/runbooks/data-retention.md`) gains: every `operator_signup_alert` row from the last 24 hours (so a Resend outage that killed the instant alert still shows up next morning); "stuck" sign-ups (verified with no venue after 1 day; venue with no Checkout after 3 days; trialing with no connection after 3 days); and "never started" (P7).
+- **Database down:** sign-up refuses with the fallback message; the alert row cannot be written, so the email is sent without the dedupe lookup, limited to one per kind per server instance per hour. **Resend and database both down:** only Vercel logs (1 day) and Supabase's own status emails remain. Adding Axiom would need a sub-processor change (L4), so it is not proposed here.
+
+### 4.10 Funnel
+
+- Stored steps (`self_serve_signups`): `requested_at`, `verified_at`, `venue_created_at`. One row per login, so retries never count twice.
+- Derived steps, using the checklist's rules (F13): checkout confirmed = the brand's first `subscriptions` row; channel connected = `social_connections` active or expiring; first published post = a `content_items` row with status `posted`. A later disconnect or deleted post can remove a derived tick; acceptable.
+- No cookies or client-side tracking. The query lives in the runbook; the admin card is deferred (P10):
+
+```sql
+select count(*) as requested, count(verified_at) as verified, count(venue_created_at) as venue_created,
+  count(*) filter (where exists (select 1 from subscriptions s where s.account_id = x.account_id)) as checkout_confirmed,
+  count(*) filter (where exists (select 1 from social_connections c where c.account_id = x.account_id and c.status in ('active','expiring'))) as channel_connected,
+  count(*) filter (where exists (select 1 from content_items i where i.account_id = x.account_id and i.status = 'posted')) as first_post
+from self_serve_signups x where x.requested_at >= now() - interval '30 days';
+```
+
+- Retention (P6): `run_data_retention` deletes sign-up rows 24 months after `requested_at` and expired `team_invitations`; it also returns the ids of self-serve logins due for deletion (no membership, not an admin, a sign-up row with no venue, and either unconfirmed for 7 days or confirmed for 30), which the cron deletes with `auth.admin.deleteUser` as offboarding does (`src/lib/admin/offboarding.ts:330`), at most 100 a run. Their `user_auth_snapshot` rows go with them (trigger `trg_purge_user_auth_snapshot`).
+
+### 4.11 Rate limits (P8)
+
+- `public.consume_rate_limit(p_key text, p_limit int, p_window_seconds int)`: one atomic upsert on `auth_rate_limits` that resets an expired window and returns whether the call is allowed and when the window resets. Keys are `<purpose>:<hmac>` with `RATE_LIMIT_HMAC_KEY` (required in Production and Preview).
+- Sign-in: 5 a minute per email and IP pair, 20 a minute per IP. Keying on the pair means nobody can lock The Anchor's login by failing from elsewhere; distributed guessing against one email is left to the 12-character password rule.
+- Magic link and reset: 3 an hour per email, 10 an hour per IP. Sign-up and invites as in §4.2, §4.4 and §4.6.
+- A limiter error refuses the action with a visible error (fail closed). So the migration must be applied, and the key set, before the code deploys, or nobody can sign in (§5).
+
+### 4.12 Abuse and security
+
+- **Fail closed:** every public write refuses on dependency failure, shows "We could not finish this. Please try again, or email peter@orangejelly.co.uk", and alerts (§4.9); each handler gets a test that injects the failing dependency and asserts both.
+- **Enumeration:** one screen for every email outcome (§4.2).
+- **CSRF:** server actions only; Next.js checks Origin against the host (no `allowedOrigins` override). The only new POST outside an action is the confirm button, which carries the one-use token.
+- **Service role:** user ids always come from the verified session; every new query carries `.eq('user_id', ...)` or `.eq('account_id', ...)`.
+- **Grants** (F15): every new table gets RLS on with no policies, `revoke all ... from public, anon, authenticated` and `grant all ... to service_role`; every new function (`consume_rate_limit`, `provision_self_serve_brand`) gets `revoke all on function ... from public, anon, authenticated` and `grant execute ... to service_role`. Before opening, also revoke EXECUTE on `increment_rate_limit` from `authenticated`. A new `supabase/tests/self_serve_grants_verify.sql`, run on a local rebuild, fails if anon or authenticated can execute the new functions or read or write the new tables; the same SELECT checks run read-only against production after each migration.
+- **CSP:** add `https://challenges.cloudflare.com` to `script-src` and `frame-src` (`src/lib/security/headers.ts`, unit-tested).
+- **Legacy route:** delete `/api/auth/login` (F4).
+
+### 4.13 Legal and privacy
+
+- **Privacy notice:** a sign-up records row (when you asked, confirmed and created your venue; to run sign-up and see where people drop off; legitimate interests); the billing row adds a keyed code made from the card's Stripe fingerprint to keep to one free trial per business; a security line naming Cloudflare Turnstile on the sign-up form (IP and browser details), with Cloudflare's role taken from its Turnstile privacy terms; retention rows per P6; cookies section changed only if Turnstile stores anything (checked at build).
+- **Terms:** the one-trial line (`src/app/terms/page.tsx:72`) adds "for example, when the card has been used for a trial before"; section 18 adds the never-started sentence if P7 is agreed.
+- **DPA:** no change. Turnstile sits only on the sign-up form, whose data is Cheers's own account data (controller, L4); the limiter stays in Supabase (P8). No sub-processor notice.
+- **Notice (terms section 19):** the new terms apply to new customers from publication. Anyone who accepted an earlier version gets an email at least 30 days before the change applies to them. On the day the legal PR is ready, list who has accepted: owners of every brand with a `subscriptions` row that is not comped or offboarded (each passed the tick box; the version is on their Checkout Session, and from §4.5 also in its metadata). Today that is nobody (0 live subscriptions; the 1 cancelled row is Peter's test brand), so shipping the legal PR before the first paying customer needs no notice. If anyone has accepted by then, Peter sends the notice and the effective date goes on the terms page.
+- **Version:** bump `LEGAL_VERSION` and `LEGAL_UPDATED` together (`src/lib/legal/company.ts:33-34`).
+
+## 5. Build stages
+
+Each PR deploys on its own, passes `npm run ci:verify` (London and UTC), targets production's shape with its own grants, and applies its migration (with Peter's yes) before its code deploys.
+
+| # | Branch | What | Migration | Gate |
+|---|---|---|---|---|
+| **Stage 1 (P1: can ship now)** | | | | |
+| 1 | `fix/auth-rate-limits` | Database limiter replacing the Upstash no-op on sign-in, magic link and reset (§4.11); delete `/api/auth/login`; remove `@upstash/ratelimit` and `@upstash/redis`; `config.toml` `[auth] enable_signup = false`, `[auth.email] enable_confirmations = true` (now matching live) | `consume_rate_limit` with explicit grants | Order: migration, then `RATE_LIMIT_HMAC_KEY` in Production and Preview, then deploy; then sign in as Peter |
+| 2 | `fix/auth-confirm-button` | `/auth/confirm` GET shows "Confirm and continue", POST verifies (§4.3) | none | none |
+| **Stage 3 (dark until opening)** | | | | |
+| 3 | `feat/front-door-and-legal` | §4.1 landing and pricing, robots, footer, redirects, login link; §4.13 wording, version bump, `legal_version` in Checkout metadata | insert `app_flags ('self_serve_signup', false)` | CTA follows the switch; notice check (§4.13) before merge |
+| 4 | `feat/team-invite-guard` | §4.6 gate, cap, `team_invitations` and accept page, default-brand fix | `team_invitations` with grants; `run_data_retention` restated | before opening |
+| 5 | `feat/signup-request` | §4.2 and §4.3: `/signup`, Turnstile (`NEXT_PUBLIC_TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY` in `src/env.ts`, required in production, Cloudflare test keys in Preview), `requestSignup`, emails, resend, CSP, alerts, Preview refusal, grants SQL check | `self_serve_signups`; `run_data_retention` restated; revoke `increment_rate_limit` from authenticated | switch |
+| 6 | `feat/signup-venue` | §4.4, `/no-access` entry, operator emails, digest lists (§4.9), login clean-up step in the retention cron, Settings email line (P10) | `provision_self_serve_brand` with grants | switch |
+| 7 | `feat/trial-card-check` | §4.7 | `trial_card_checks` with grants; `run_data_retention` restated | after PR 3 is live |
+| **Later (P10)** | `feat/signup-admin-card`, `feat/owner-export-closure` | Admin Sign-ups card and first-post help article; owner "Download my data" and "Ask us to close this venue" | none | after opening |
+
+Tests (Vitest, mocks only; SQL checks on a local rebuild):
+- PR 1: allow, block, reset; limiter error refuses with a visible error; pair keying (a second IP still signs in); concurrent calls at the limit let exactly one through (SQL).
+- PR 2: GET never calls `verifyOtp`; POST verifies and redirects only to a safe path; invite and reset links from before the change still work.
+- PR 3: signed-in visitor 307; prices from `PLANS` with "ex VAT"; no ads or tournament text; CTA per switch; switch read error shows "Talk to us"; robots output; metadata carries `legal_version`.
+- PR 4: incomplete, lapsed and suspended brands cannot invite; sixth invite in 24 hours refused; existing user gets an invitation, not a membership, until accepting; expired invitation refused; a new membership does not change the default brand (ordinary user and super-admin).
+- PR 5: one test per failing dependency (§4.9 list) asserting the user's error and the alert; the same screen for all five cases in §4.2; the member case sends the member invite and writes no sign-up row; re-request always leaves a sign-up row; Preview refuses; templates from fixtures; grants SQL check.
+- PR 6: email mismatch refused; double submit, refresh and two tabs give one venue; failure mid-function leaves no account and no membership (SQL); defaults on the new brand; member redirected; form user id ignored; venue names with links refused; digest lists from fixtures (London dates, a clock-change day).
+- PR 7: first trial recorded; repeat refused without charge, then no trial offered; two concurrent reconciles make one decision and one cancel; two brands with one card: one `first_trial`, one refused; `finish()` sees the cancellation; pre-deploy subscription recorded, not refused; Stripe error throws (webhook 500).
+
+Rollback: switch off (`app_flags`, no deploy) stops new sign-ups at once; each PR reverts on its own; tables and functions are additive and can stay. Reverting PR 1 returns sign-in to the old no-op limiter, which is today's state; the function can stay. A refused trial or a sent email cannot be undone.
+
+## 6. Off-app work
+
+| When | What | Who |
+|---|---|---|
+| Done 28 Sep | Supabase: public sign-up off, confirm email on (S1). | Peter |
+| Before PR 1 deploys | `RATE_LIMIT_HMAC_KEY` (64 hex characters) in Vercel Production and Preview. | Peter, or Claude with his yes |
+| Before PR 5 deploys | Cloudflare Turnstile widget for `cheers.orangejelly.co.uk` (managed); real keys in Production, Cloudflare's test keys in Preview. | Peter |
+| Before PR 7 deploys | Stripe: PaymentMethods read and Subscriptions write on the "CheersAI production" restricted key; `TRIAL_CARD_HASH_KEY` (64 hex characters) in Production. | Peter |
+| Before opening | Meta: App Review approved and the D7 gate passed (runbook §7). | Peter |
+| Opening day | `billing_enforcement` on, then `self_serve_signup` on (SQL, each with Peter's yes); re-check `billing_override` on every live brand; one real sign-up by Peter on a spare email and card, cancelled in the portal before day 15. | Claude runs, Peter approves |
+
+## 7. Verification (local stack only, never production)
+
+- Local Supabase per `docs/runbooks/stripe-billing.md` "Testing in test mode", with the `config.toml` auth settings from PR 1; Stripe test mode with `stripe listen`; Turnstile test keys (always pass, always fail); Resend to a plus-addressed mailbox Peter owns. Automated e2e injects the email sender and follows the captured link through the confirm button.
+- Must-pass journeys: new owner end to end to a trialing brand; the same card on a second brand refused with no charge; each §4.2 case; a link opened by a "scanner" GET then by the person; a link opened on another device; someone else's link refused at the email check; double submit and two tabs; database stopped mid-journey; Turnstile and Resend failing; switch off mid-journey; `/no-access` user starting a venue; a stranger's brand trying to invite before and after Checkout; keyboard-only and mobile width on every new page (WCAG 2.2 AA as the design target).
+- Grants: `self_serve_grants_verify.sql` passes on a local rebuild, and the same checks read back from production after each migration.
+- Say it works only after running these paths and quoting what was seen.
+
+## 8. Out of scope
+
+Self-serve Group plan and second venues for existing members; paid ads, tournaments and management import for new brands (D1b, D1c); AI caps (D2d); automatic offboarding or deletion (D5); analytics or marketing cookies; a waitlist; Google sign-in; moving admin Create brand onto the new function; anything in the Anchor website or management app (no hours, availability, booking or Turnstile change there).
+
+## 9. Risks
+
+| Risk | Handling |
+|---|---|
+| Meta approval is slow or rejects `business_management` | Sign-up stays closed (P2); assisted launch with testers continues. |
+| PR 1 deployed before its migration or key | Build fails without the key (required in production); runbook order puts the migration first; sign in as Peter straight after deploy. |
+| Preview writes to the production database | Sign-up actions refuse on Preview (§4.2). |
+| Wallet cards bypass the card check | Accepted; the operator sees every refusal. |
+| Resend reputation hit by abuse | Turnstile, per-IP and site-wide limits, the invite gate and cap, the venue-name rule. |
+| A trial runs while the card check is retried | Visible through the webhook alert; re-sync after the fix. |
+| Peter's switcher grows with every self-serve brand | Display only; the default brand stays the one he joined first (§4.6). |
+| Enforcement switched on breaks a brand | All live brands are comped; re-check on the day. |
+
+## 10. Pending decisions
+
+Only P2 (when sign-up may open, tied to Meta App Review) is open; see §3.1. P1 and P3 to P11 were decided on 2026-09-28.
+
+## 11. Review findings (28 September 2026) and where they are handled
+
+| Finding | Where |
+|---|---|
+| 1 Login open redirect | Done by #137 (S2, F3); removed from Stage 1 |
+| 2 Team invites as a public write path | §4.6, P4, PR 4 |
+| 3 Confirm link signs in whoever opens it; scanners; no resend | §4.2 step 6, §4.3, PR 2 |
+| 4 Default EXECUTE for `authenticated`; anon-only test | F15, §4.12 grants, `self_serve_grants_verify.sql` |
+| 5 Stranded re-request; killing a member's invite | §4.2 table |
+| 6 Card-check races; stale `finish()`; backfill wording | §4.7 |
+| 7 Name before email proof | §4.2, §4.4 |
+| 8 Terms change notice | §4.13 notice |
+| 9 Operator visibility | §4.9 |
+| 10 Unused confirmed logins; table columns; HMAC; sign-in lockout | §4.4 table, §4.10 retention, §4.11 |
+| 11 Turnstile keys; Preview validation; PR 1 order | PR 5 row, F16, PR 1 row, §9 |
+| 12 Facts | F8, F13, F15 |
+| 13 Scope | PRs 2 and 3 of v1 merged into PR 3; admin card and export deferred (P10) |
