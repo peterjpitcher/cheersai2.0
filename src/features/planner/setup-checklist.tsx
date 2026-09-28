@@ -6,6 +6,11 @@ import type { SetupProgress } from '@/lib/onboarding/setup-progress';
 interface SetupChecklistProps {
   progress: SetupProgress;
   isOwner: boolean;
+  /**
+   * The first-post help article, or null while it is hidden (it follows the
+   * self-serve sign-up switch: src/lib/help/first-post.ts).
+   */
+  firstPostHelpHref?: string | null;
 }
 
 interface Step {
@@ -49,7 +54,7 @@ const STEPS: Step[] = [
  * First-run checklist on the planner (piece 2.8). Shown until the brand's
  * first post is published; progress comes from the brand's own data.
  */
-export function SetupChecklist({ progress, isOwner }: SetupChecklistProps) {
+export function SetupChecklist({ progress, isOwner, firstPostHelpHref = null }: SetupChecklistProps) {
   if (!progress.show) return null;
   const done = STEPS.filter((step) => progress[step.key]).length;
 
@@ -98,6 +103,17 @@ export function SetupChecklist({ progress, isOwner }: SetupChecklistProps) {
                 <p className="text-xs" style={{ color: 'var(--c-ink-3)' }}>
                   {blocked ? 'Ask an owner of this brand to do this.' : step.detail}
                 </p>
+                {step.key === 'firstPost' && !complete && firstPostHelpHref ? (
+                  <p className="mt-1 text-xs">
+                    <Link
+                      href={firstPostHelpHref}
+                      className="font-medium underline-offset-4 hover:underline"
+                      style={{ color: 'var(--c-orange)' }}
+                    >
+                      How to publish your first post
+                    </Link>
+                  </p>
+                ) : null}
               </div>
             </li>
           );

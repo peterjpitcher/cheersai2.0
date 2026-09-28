@@ -32,12 +32,20 @@ describe('parseConfirmLinkParams', () => {
     expect(parseConfirmLinkParams(paramsOf(link))).toEqual({ tokenHash: TOKEN, type: 'signup', next: '/signup/venue' });
   });
 
-  it('verifies a sign-up link as a Supabase invite, because generateLink made it as one', () => {
-    expect(SUPABASE_OTP_TYPE).toEqual({ invite: 'invite', recovery: 'recovery', signup: 'invite' });
+  it('reads magic links, which go to the next path the login page gave, else the dashboard', () => {
+    const link = buildAuthConfirmUrl({ siteUrl: SITE, tokenHash: TOKEN, type: 'magiclink', next: '/planner' });
+    expect(parseConfirmLinkParams(paramsOf(link))).toEqual({ tokenHash: TOKEN, type: 'magiclink', next: '/planner' });
+    const bare = buildAuthConfirmUrl({ siteUrl: SITE, tokenHash: TOKEN, type: 'magiclink' });
+    expect(parseConfirmLinkParams(paramsOf(bare))?.next).toBe('/dashboard');
+    expect(parseConfirmLinkParams({ token_hash: TOKEN, type: 'magiclink', next: '//evil.example' })?.next).toBe('/dashboard');
   });
 
-  it('accepts only invite, recovery and signup links (magic links go through Supabase and /auth/callback)', () => {
-    for (const type of ['magiclink', 'email', 'email_change', 'Signup', 'sign_up']) {
+  it('verifies a sign-up link as a Supabase invite, and a magic link as a magic link (never the generic email type)', () => {
+    expect(SUPABASE_OTP_TYPE).toEqual({ invite: 'invite', recovery: 'recovery', signup: 'invite', magiclink: 'magiclink' });
+  });
+
+  it('accepts only invite, recovery, signup and magiclink links', () => {
+    for (const type of ['email', 'email_change', 'Signup', 'sign_up', 'MagicLink', 'magic_link']) {
       expect(parseConfirmLinkParams({ token_hash: TOKEN, type })).toBeNull();
     }
   });

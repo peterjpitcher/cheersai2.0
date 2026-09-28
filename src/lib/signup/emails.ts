@@ -21,7 +21,7 @@ export function renderSignupConfirmEmail(options: { link: string; signupUrl: str
 <p>Thanks for asking to try Cheers by Orange Jelly, the social media tool for hospitality venues.</p>
 <p><a href="${escapeHtml(options.link)}">Confirm your email</a></p>
 <p>You will then set up your venue and your password, and start your free trial.</p>
-<p>This link works once and expires in 24 hours. If it has expired, ask for a new one at <a href="${escapeHtml(options.signupUrl)}">${escapeHtml(options.signupUrl)}</a>.</p>
+<p>This link works once and only for a short time. If it has expired, ask for a new one at <a href="${escapeHtml(options.signupUrl)}">${escapeHtml(options.signupUrl)}</a>.</p>
 <p>If you did not ask to sign up, you can ignore this email. Sign-ups that are not confirmed are deleted after 7 days.</p>
 <p>Cheers by Orange Jelly</p>
 `.trim(),
