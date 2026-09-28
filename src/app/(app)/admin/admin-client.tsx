@@ -8,7 +8,6 @@ import {
   assignMembership,
   clearBookingIngestKey,
   createBrand,
-  exportBrandDataAction,
   generateBookingIngestKey,
   inviteUser,
   offboardBrandAction,
@@ -22,6 +21,14 @@ import {
 } from '@/app/(app)/admin/actions';
 import { SignupsCardLoader } from '@/features/admin/signups-card-loader';
 import { FEATURE_LABELS, type BrandFeature } from '@/lib/auth/brand-features';
+import { requestExportDownload, saveDownload } from '@/lib/export/download-request';
+
+/** Admin, Offboarding, Export data: a streamed download (src/app/api/admin/brand-export/route.ts). */
+const ADMIN_EXPORT_PATH = '/api/admin/brand-export';
+const ADMIN_EXPORT_MESSAGES = {
+  failed: 'The export failed. Try again.',
+  signedOut: 'You are not signed in any more. Refresh the page, sign in and try again.',
+} as const;
 
 const CARD = 'rounded-lg border p-4';
 const CARD_STYLE = { borderColor: 'var(--c-line)' } as const;
@@ -257,16 +264,11 @@ function OffboardingCard({ brands }: { brands: AdminBrand[] }) {
     if (!brand) return;
     start(async () => {
       setMsg({});
-      const r = await exportBrandDataAction(brand.accountId);
-      if (r.success && r.json && r.fileName) {
-        const url = URL.createObjectURL(new Blob([r.json], { type: 'application/json' }));
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = r.fileName;
-        link.click();
-        URL.revokeObjectURL(url);
+      const r = await requestExportDownload(ADMIN_EXPORT_PATH, brand.accountId, ADMIN_EXPORT_MESSAGES);
+      if (r.ok) {
+        saveDownload(r.blob, r.fileName);
         setMsg({ ok: `Export for ${brand.name ?? 'brand'} downloaded.` });
-      } else setMsg({ error: r.error ?? 'The export failed.' });
+      } else setMsg({ error: r.error });
     });
   }
 

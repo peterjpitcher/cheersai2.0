@@ -20,6 +20,7 @@ export type AdminAction =
   | 'operator_stripe_double_billing_alert'
   | 'offboard_brand'
   | 'export_brand_data'
+  | 'venue_closure_request'
   | 'purge_brand'
   | 'operator_publish_failure_alert'
   | 'operator_signup_alert'

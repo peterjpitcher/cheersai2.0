@@ -379,6 +379,19 @@ function listItems<T>(items: T[], render: (item: T) => string): string {
   return `<ul>\n${shown.join('\n')}\n</ul>`;
 }
 
+/**
+ * Alert kinds where nobody was refused (src/lib/signup/alerts.ts), and what
+ * happened instead. Every other kind refused the person with an error and our
+ * email address.
+ */
+const NOT_REFUSED_KINDS: Readonly<Record<string, string>> = {
+  venue_notice: 'Not refused: the venue was created and the owner went on to Billing; only its new-venue email to you or its admin_audit record failed.',
+  closure_notice:
+    "Not refused: the owner was told we have their request to close the venue, and the request email reached you; only its admin_audit record or the owner's confirmation email failed.",
+  login_cleanup: 'Nobody was refused: the nightly clean-up could not delete some unused sign-up logins and tries again the next day.',
+  admin_export: 'No customer involved: an operator export in Admin failed at the sign-in lookup, and the Admin page said so.',
+};
+
 /** The digest's sections for the operator email; empty lists are left out. Pure, for fixture tests. */
 export function renderSignupDigestSections(digest: SignupDigest, siteUrl: string): string[] {
   const adminUrl = escapeHtml(`${siteUrl.replace(/\/+$/, '')}/admin#offboarding`);
@@ -387,10 +400,11 @@ export function renderSignupDigestSections(digest: SignupDigest, siteUrl: string
   if (digest.alerts.length > 0) {
     sections.push(`
 <h3>Sign-up problems in the last 24 hours</h3>
-<p>Failures recorded in admin_audit (operator_signup_alert), by kind. Each one was refused with an error and our email address. The Vercel logs have the detail.</p>
+<p>Failures recorded in admin_audit (operator_signup_alert), by kind. Unless a line says otherwise, each one was refused with an error and our email address. The Vercel logs have the detail.</p>
 ${listItems(digest.alerts, (alert) => {
   if (!Number.isFinite(alert.rows)) throw new Error('Cannot render an alert count in the sign-up digest.');
-  return `<strong>${escapeHtml(alert.kind)}</strong>: ${alert.rows === 1 ? '1 time' : `${alert.rows} times`}, last at ${dateTime(alert.lastAt)} (UK time).`;
+  const note = Object.hasOwn(NOT_REFUSED_KINDS, alert.kind) ? ` ${escapeHtml(NOT_REFUSED_KINDS[alert.kind] ?? '')}` : '';
+  return `<strong>${escapeHtml(alert.kind)}</strong>: ${alert.rows === 1 ? '1 time' : `${alert.rows} times`}, last at ${dateTime(alert.lastAt)} (UK time).${note}`;
 })}`);
   }
 
