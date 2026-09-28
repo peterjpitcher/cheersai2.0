@@ -33,8 +33,8 @@ describe.each(PAGES)("the $name page", ({ Page, title }) => {
   it("shows its title, date and version", () => {
     const { container, text } = renderPage();
     expect(container.querySelector("h1")?.textContent).toBe(title);
-    expect(text).toContain("Last updated 27 September 2026");
-    expect(text).toContain("Version 2026-09-27.2");
+    expect(text).toContain("Last updated 28 September 2026");
+    expect(text).toContain("Version 2026-09-28");
   });
 
   it("shows the company details and contacts", () => {
@@ -73,5 +73,14 @@ describe("the terms", () => {
     }
     expect(text).toContain("We do not refund part of a month or year");
     expect(text).toContain("at least 30 days");
+  });
+});
+
+describe("the privacy notice", () => {
+  it("states how long team invitations are kept, matching the retention job's rule", () => {
+    const { container } = render(<PrivacyPolicyPage />);
+    const text = container.textContent ?? "";
+    expect(text).toContain("Team invitations");
+    expect(text).toContain("Deleted a day after the invitation is accepted, declined, cancelled or expires.");
   });
 });

@@ -38,7 +38,7 @@ const NOT_SET_UP = 'Billing is not set up yet. Please contact Cheers support.';
 const BRAND_SWITCHED = 'You switched brand in another tab. Refresh the page and try again.';
 const TERMS_ACCEPTANCE =
   'I agree to the [Terms of Service](https://cheers.orangejelly.co.uk/terms) and the ' +
-  '[Data Processing Agreement](https://cheers.orangejelly.co.uk/data-processing) (version 2026-09-27.2), ' +
+  '[Data Processing Agreement](https://cheers.orangejelly.co.uk/data-processing) (version 2026-09-28), ' +
   'and I am buying for my business.';
 
 let db: InMemoryBillingDb;
@@ -183,7 +183,7 @@ describe('startCheckout: the Checkout Session', () => {
         .terms_of_service_acceptance;
       expect(message).toContain('(https://cheers.orangejelly.co.uk/terms)');
       expect(message).toContain('(https://cheers.orangejelly.co.uk/data-processing)');
-      expect(message).toContain('version 2026-09-27.2');
+      expect(message).toContain('version 2026-09-28');
       // Stripe's limit for this text.
       expect(message.length).toBeLessThanOrEqual(1200);
     }
