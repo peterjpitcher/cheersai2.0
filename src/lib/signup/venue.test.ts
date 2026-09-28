@@ -30,7 +30,8 @@ function token(claims: Record<string, unknown>): string {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mockGetSession.mockResolvedValue({ data: { session: { access_token: token({ amr: [{ method: 'invite', timestamp: 1 }] }) } } });
+  // What the local stack's Supabase Auth puts in a session opened by an invite or sign-up link.
+  mockGetSession.mockResolvedValue({ data: { session: { access_token: token({ amr: [{ method: 'otp', timestamp: 1 }] }) } } });
 });
 
 describe('readSignedInLogin', () => {
@@ -41,7 +42,7 @@ describe('readSignedInLogin', () => {
     });
     expect(await readSignedInLogin()).toEqual({
       status: 'signed_in',
-      user: { id: USER_ID, email: 'owner@venue.test', emailConfirmed: true, cameFromInviteLink: true },
+      user: { id: USER_ID, email: 'owner@venue.test', emailConfirmed: true, cameFromEmailLink: true },
     });
   });
 
@@ -49,7 +50,7 @@ describe('readSignedInLogin', () => {
     mockGetUser.mockResolvedValue({ data: { user: { id: USER_ID, email: 'a@b.test', email_confirmed_at: null } }, error: null });
     mockGetSession.mockResolvedValue({ data: { session: { access_token: token({ amr: [{ method: 'password' }] }) } } });
     const login = await readSignedInLogin();
-    expect(login).toMatchObject({ status: 'signed_in', user: { emailConfirmed: false, cameFromInviteLink: false } });
+    expect(login).toMatchObject({ status: 'signed_in', user: { emailConfirmed: false, cameFromEmailLink: false } });
   });
 
   it.each([
@@ -67,6 +68,22 @@ describe('readSignedInLogin', () => {
     expect(await readSignedInLogin()).toMatchObject({ status: 'unavailable' });
     mockGetUser.mockRejectedValue(new Error('fetch failed'));
     expect(await readSignedInLogin()).toEqual({ status: 'unavailable', error: 'fetch failed' });
+  });
+});
+
+describe('how the session was opened', () => {
+  it.each(['otp', 'invite', 'recovery', 'magiclink'])('an email link recorded as "%s" counts as an email link', async (method) => {
+    mockGetUser.mockResolvedValue({ data: { user: { id: USER_ID, email: 'a@b.test', email_confirmed_at: 'x' } }, error: null });
+    mockGetSession.mockResolvedValue({ data: { session: { access_token: token({ amr: [{ method }] }) } } });
+    expect(await readSignedInLogin()).toMatchObject({ user: { cameFromEmailLink: true } });
+  });
+
+  it('a password sign-in does not, and neither does an unreadable session', async () => {
+    mockGetUser.mockResolvedValue({ data: { user: { id: USER_ID, email: 'a@b.test', email_confirmed_at: 'x' } }, error: null });
+    mockGetSession.mockResolvedValue({ data: { session: { access_token: token({ amr: [{ method: 'password' }] }) } } });
+    expect(await readSignedInLogin()).toMatchObject({ user: { cameFromEmailLink: false } });
+    mockGetSession.mockRejectedValue(new Error('cookie unreadable'));
+    expect(await readSignedInLogin()).toMatchObject({ status: 'signed_in', user: { cameFromEmailLink: false } });
   });
 });
 
@@ -144,16 +161,16 @@ describe('readVenueSignupState and markSignupVerified', () => {
 });
 
 describe('destinationForMember', () => {
-  const user = { id: USER_ID, email: 'a@b.test', emailConfirmed: true, cameFromInviteLink: true };
+  const user = { id: USER_ID, email: 'a@b.test', emailConfirmed: true, cameFromEmailLink: true };
 
-  it('an invited member who arrived by an invite link, with no venue from this sign-up, chooses a password', async () => {
+  it('an invited member who arrived by an email link, with no venue from this sign-up, chooses a password', async () => {
     expect(await destinationForMember(user, null)).toBe('/auth/set-password');
     expect(await destinationForMember(user, { accountId: null, verifiedAt: null, venueCreatedAt: null })).toBe('/auth/set-password');
   });
 
   it('the owner of the venue this sign-up made, or someone signed in with a password, goes to Billing or the planner', async () => {
     expect(await destinationForMember(user, { accountId: ACCOUNT_ID, verifiedAt: 'v', venueCreatedAt: 'c' })).toBe('/settings#billing');
-    expect(await destinationForMember({ ...user, cameFromInviteLink: false }, null)).toBe('/settings#billing');
+    expect(await destinationForMember({ ...user, cameFromEmailLink: false }, null)).toBe('/settings#billing');
   });
 });
 

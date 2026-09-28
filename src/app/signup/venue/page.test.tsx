@@ -20,12 +20,12 @@ vi.mock('@/lib/signup/alerts', () => ({ reportSignupFailure: (kind: string, erro
 
 const USER_ID = '11111111-1111-4111-8111-111111111111';
 type Login =
-  | { status: 'signed_in'; user: { id: string; email: string; emailConfirmed: boolean; cameFromInviteLink: boolean } }
+  | { status: 'signed_in'; user: { id: string; email: string; emailConfirmed: boolean; cameFromEmailLink: boolean } }
   | { status: 'signed_out' }
   | { status: 'unavailable'; error: string };
-const signedIn = (overrides: Partial<{ emailConfirmed: boolean; cameFromInviteLink: boolean }> = {}): Login => ({
+const signedIn = (overrides: Partial<{ emailConfirmed: boolean; cameFromEmailLink: boolean }> = {}): Login => ({
   status: 'signed_in',
-  user: { id: USER_ID, email: 'owner@venue.test', emailConfirmed: true, cameFromInviteLink: true, ...overrides },
+  user: { id: USER_ID, email: 'owner@venue.test', emailConfirmed: true, cameFromEmailLink: true, ...overrides },
 });
 type SignupRow = { accountId: string | null; verifiedAt: string | null; venueCreatedAt: string | null };
 const mockReadLogin = vi.fn<() => Promise<Login>>(async () => signedIn());

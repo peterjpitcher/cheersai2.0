@@ -16,8 +16,13 @@ export interface SignedInUser {
   id: string;
   email: string;
   emailConfirmed: boolean;
-  /** The session was opened by an invite or sign-up link (Supabase AMR "invite"). */
-  cameFromInviteLink: boolean;
+  /**
+   * The session was opened by a one-time email link (invite, sign-up, reset),
+   * not a password: Supabase records the method as "otp" (seen on the local
+   * stack, 28 September 2026) or, in some versions, "invite", "recovery" or
+   * "magiclink".
+   */
+  cameFromEmailLink: boolean;
 }
 
 export type SignedInLogin =
@@ -60,6 +65,8 @@ export function amrMethods(accessToken: string | null | undefined): string[] {
   }
 }
 
+const EMAIL_LINK_METHODS = new Set(['otp', 'invite', 'recovery', 'magiclink']);
+
 /** The signed-in login from the verified session (auth.getUser), never from the form. */
 export async function readSignedInLogin(): Promise<SignedInLogin> {
   try {
@@ -74,14 +81,14 @@ export async function readSignedInLogin(): Promise<SignedInLogin> {
     }
     if (!user) return { status: 'signed_out' };
 
-    let cameFromInviteLink = false;
+    let cameFromEmailLink = false;
     try {
       const {
         data: { session },
       } = await supabase.auth.getSession();
-      cameFromInviteLink = amrMethods(session?.access_token).includes('invite');
+      cameFromEmailLink = amrMethods(session?.access_token).some((method) => EMAIL_LINK_METHODS.has(method));
     } catch {
-      cameFromInviteLink = false;
+      cameFromEmailLink = false;
     }
 
     return {
@@ -90,7 +97,7 @@ export async function readSignedInLogin(): Promise<SignedInLogin> {
         id: user.id,
         email: (user.email ?? '').trim().toLowerCase(),
         emailConfirmed: Boolean(user.email_confirmed_at),
-        cameFromInviteLink,
+        cameFromEmailLink,
       },
     };
   } catch (error) {
@@ -148,12 +155,13 @@ export async function markSignupVerified(service: SupabaseClient, userId: string
 /**
  * Where a signed-in person who already belongs to a brand goes instead of the
  * venue form (spec §4.4): the owner of the venue this sign-up made goes to
- * Billing (if it has not started a plan) or the planner; someone brought in by
- * an invite link who has no venue from this sign-up chooses a password first;
- * everyone else goes to Billing or the planner. Navigation only.
+ * Billing (if it has not started a plan) or the planner; someone who arrived
+ * by an email link (an invited member who may never have set a password) and
+ * has no venue from this sign-up chooses a password first; everyone else goes
+ * to Billing or the planner. Navigation only.
  */
 export async function destinationForMember(user: SignedInUser, signup: SelfServeSignupRow | null): Promise<string> {
-  if (!signup?.accountId && user.cameFromInviteLink) return SET_PASSWORD_PATH;
+  if (!signup?.accountId && user.cameFromEmailLink) return SET_PASSWORD_PATH;
   return destinationAfterPasswordSet();
 }
 
