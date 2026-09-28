@@ -46,8 +46,8 @@ Deleting and closing stay manual (Peter's decisions). After the retention rules,
 The same email also carries the self-serve sign-up lists (spec §4.9, decision P7; `src/lib/signup/digest.ts`), each only when it has something in it:
 
 - **Sign-up problems in the last 24 hours:** every `operator_signup_alert` row in `admin_audit` from the last 24 hours, by kind, with how many and the last time. It catches an outage that also stopped the instant alert email.
-- **Stuck sign-ups:** logins that confirmed their email at least 1 London day ago and have no venue (listed by login id: no venue, so no name); self-serve venues 3 to 29 London days old with no subscription (no Checkout); trials at least 3 London days old with no Facebook or Instagram connection (active or expiring).
-- **Never started a plan (30 days):** self-serve venues at least 30 London days old that have never had a subscription. The operator decides whether to offboard them; setting a billing override keeps one off the list.
+- **Stuck sign-ups:** logins that confirmed their email 1 to 29 London days ago and have no venue, no brand and no open invitation (listed by login id: no venue, so no name); self-serve venues 3 to 29 London days old with no subscription (no Checkout); trials at least 3 London days old with no Facebook or Instagram connection (active or expiring).
+- **Never started a plan (30 days):** self-serve venues 30 to 89 London days old that have never had a subscription. The operator decides whether to offboard them; setting a billing override keeps one off the list. After 89 days a venue drops off the sign-up lists (so they cannot grow for ever); a venue that later has a subscription that ends is covered by the 90-day lapsed list above.
 
 Offboarded, archived and overridden brands, and brands the operator created (no sign-up row), never appear. If the sign-up lists cannot be read, the email says "Sign-up lists unavailable" with the reason and still goes out; the run does not fail.
 

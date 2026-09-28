@@ -36,6 +36,7 @@ function fakeDb(tables: Record<string, Row[]>, failTable?: string) {
     chain.not = (column: string, _op: 'is', value: null) => (filters.push((row) => (row[column] ?? null) !== value), chain);
     chain.lt = (column: string, value: string) => (filters.push((row) => row[column] != null && compare(row[column], value) < 0), chain);
     chain.gte = (column: string, value: string) => (filters.push((row) => row[column] != null && compare(row[column], value) >= 0), chain);
+    chain.gt = (column: string, value: string) => (filters.push((row) => row[column] != null && compare(row[column], value) > 0), chain);
     chain.order = (column: string) => ((orderBy = column), chain);
     chain.range = (start: number, end: number) => ((range = [start, end]), chain);
     chain.returns = async () => {
@@ -155,6 +156,43 @@ describe('findSignupDigest', () => {
       { accountId: 'a-trial-quiet', name: 'Trial Quiet Bar', since: '2026-09-20T10:00:00Z', days: 8 },
     ]);
     expect(signupDigestSize(digest)).toBe(7);
+  });
+
+  it('leaves out confirmed logins that have since joined a brand or been invited to one', async () => {
+    const { service } = fakeDb({
+      self_serve_signups: [
+        { user_id: 'u-stuck', account_id: null, verified_at: '2026-09-26T10:00:00Z', venue_created_at: null },
+        { user_id: 'u-joined', account_id: null, verified_at: '2026-09-26T10:00:00Z', venue_created_at: null },
+        { user_id: 'u-invited', account_id: null, verified_at: '2026-09-26T10:00:00Z', venue_created_at: null },
+        { user_id: 'u-old-invite', account_id: null, verified_at: '2026-09-26T10:00:00Z', venue_created_at: null },
+      ],
+      account_members: [{ user_id: 'u-joined', account_id: 'a1' }],
+      team_invitations: [
+        { user_id: 'u-invited', accepted_at: null, declined_at: null, cancelled_at: null, expires_at: '2026-10-02T00:00:00Z' },
+        // Expired, and a declined one: they do not settle anything.
+        { user_id: 'u-old-invite', accepted_at: null, declined_at: null, cancelled_at: null, expires_at: '2026-09-27T00:00:00Z' },
+        { user_id: 'u-stuck', accepted_at: null, declined_at: '2026-09-27T00:00:00Z', cancelled_at: null, expires_at: '2026-10-02T00:00:00Z' },
+      ],
+    });
+    const digest = await findSignupDigest(service, NOW);
+    expect(digest.verifiedWithoutVenue.map((row) => row.userId)).toEqual(['u-stuck', 'u-old-invite']);
+  });
+
+  it('is bounded: confirmed logins for 30 London days, venues for 90, so the lists cannot grow for ever', async () => {
+    const { service } = fakeDb({
+      self_serve_signups: [
+        // 29 and 30 London days before Monday 28 September.
+        { user_id: 'u-29', account_id: null, verified_at: '2026-08-30T10:00:00Z', venue_created_at: null },
+        { user_id: 'u-30', account_id: null, verified_at: '2026-08-29T10:00:00Z', venue_created_at: null },
+        // 89 and 90 London days before.
+        { user_id: 'o1', account_id: 'a-89', verified_at: '2026-07-01T09:00:00Z', venue_created_at: '2026-07-01T09:10:00Z' },
+        { user_id: 'o2', account_id: 'a-90', verified_at: '2026-06-30T09:00:00Z', venue_created_at: '2026-06-30T09:10:00Z' },
+      ],
+      accounts: [account('a-89', 'Eighty Nine Inn'), account('a-90', 'Ninety Bar')],
+    });
+    const digest = await findSignupDigest(service, NOW);
+    expect(digest.verifiedWithoutVenue.map((row) => [row.userId, row.days])).toEqual([['u-29', 29]]);
+    expect(digest.neverStarted.map((venue) => [venue.name, venue.days])).toEqual([['Eighty Nine Inn', 89]]);
   });
 
   it('moves a venue from "no Checkout" to "never started" on its 30th London day', async () => {

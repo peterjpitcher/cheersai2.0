@@ -12,12 +12,19 @@ import { formatUkDateTime, formatUkLongDate } from '@/lib/utils/date';
 //   1. every operator_signup_alert row from the last 24 hours, by kind, so an
 //      outage that also stopped the instant alert email still shows up the
 //      next morning;
-//   2. stuck sign-ups: confirmed (verified) for at least a day with no venue;
-//      a venue at least 3 days old with no Checkout (and less than 30 days
-//      old, when it moves to list 3); a trial at least 3 days old with no
-//      Facebook or Instagram connection;
+//   2. stuck sign-ups: confirmed (verified) for at least a day with no venue,
+//      no brand and no open invitation (someone who joined or was invited to
+//      a venue is not stuck); a venue at least 3 days old with no Checkout
+//      (and less than 30 days old, when it moves to list 3); a trial at least
+//      3 days old with no Facebook or Instagram connection;
 //   3. never started (P7): a venue at least 30 days old that has never had a
 //      subscription. The operator decides whether to close it.
+//
+// The lists are bounded so they cannot grow for ever (review of PR #146):
+// confirmed logins are listed for 30 days (the clean-up deletes a confirmed
+// login with no venue after 30 days anyway), venues for 90 days from creation
+// (so a never-started venue is listed every day from day 30 to day 89: two
+// months to decide, then it drops off).
 //
 // Day counts are London calendar days (Luxon), so a clock change never moves
 // a venue from one list to another a day early or late. Only self-serve
@@ -31,6 +38,10 @@ export const STUCK_VERIFIED_DAYS = 1;
 export const STUCK_NO_CHECKOUT_DAYS = 3;
 export const STUCK_NO_CONNECTION_DAYS = 3;
 export const NEVER_STARTED_DAYS = 30;
+/** Confirmed logins with no venue are listed until they are this many London days old. */
+export const VERIFIED_WINDOW_DAYS = 30;
+/** Self-serve venues are listed until they are this many London days old. */
+export const VENUE_WINDOW_DAYS = 90;
 /** Longest list the email shows; the rest are counted. */
 export const DIGEST_LIST_LIMIT = 50;
 
@@ -157,6 +168,7 @@ export async function findSignupDigest(service: SupabaseClient, now: Date = new 
   const alerts = await findSignupAlerts(service, now);
 
   const verifiedCutoff = londonDaysCutoff(now, STUCK_VERIFIED_DAYS);
+  const verifiedWindowStart = londonDaysCutoff(now, VERIFIED_WINDOW_DAYS);
   const verified = await readAll<{ user_id: string; verified_at: string }>('self_serve_signups', (from, to) =>
     service
       .from('self_serve_signups')
@@ -165,24 +177,52 @@ export async function findSignupDigest(service: SupabaseClient, now: Date = new 
       .not('verified_at', 'is', null)
       .is('venue_created_at', null)
       .lt('verified_at', verifiedCutoff)
+      .gte('verified_at', verifiedWindowStart)
       .order('verified_at', { ascending: true })
       .range(from, to)
       .returns<Array<{ user_id: string; verified_at: string }>>(),
   );
-  const verifiedWithoutVenue = verified.map((row) => ({
-    userId: row.user_id,
-    verifiedAt: row.verified_at,
-    days: londonDaysSince(row.verified_at, now),
-  }));
+  // Someone who has since joined a brand or been invited to one is not stuck.
+  const settled = new Set<string>();
+  const nowIso = now.toISOString();
+  for (const ids of chunk(
+    verified.map((row) => row.user_id),
+    ID_CHUNK,
+  )) {
+    const [members, invitations] = await Promise.all([
+      service.from('account_members').select('user_id').in('user_id', ids).returns<Array<{ user_id: string }>>(),
+      service
+        .from('team_invitations')
+        .select('user_id')
+        .in('user_id', ids)
+        .is('accepted_at', null)
+        .is('declined_at', null)
+        .is('cancelled_at', null)
+        .gt('expires_at', nowIso)
+        .returns<Array<{ user_id: string }>>(),
+    ]);
+    if (members.error) throw new Error(`account_members lookup failed: ${members.error.message}`);
+    if (invitations.error) throw new Error(`team_invitations lookup failed: ${invitations.error.message}`);
+    for (const row of [...(members.data ?? []), ...(invitations.data ?? [])]) settled.add(row.user_id);
+  }
+  const verifiedWithoutVenue = verified
+    .filter((row) => !settled.has(row.user_id))
+    .map((row) => ({
+      userId: row.user_id,
+      verifiedAt: row.verified_at,
+      days: londonDaysSince(row.verified_at, now),
+    }));
 
-  // Self-serve venues old enough for any venue list (3 days or more).
+  // Self-serve venues old enough for any venue list (3 days or more) and still inside the window.
   const venueCutoff = londonDaysCutoff(now, Math.min(STUCK_NO_CHECKOUT_DAYS, STUCK_NO_CONNECTION_DAYS));
+  const venueWindowStart = londonDaysCutoff(now, VENUE_WINDOW_DAYS);
   const venues = await readAll<{ account_id: string; venue_created_at: string }>('self_serve_signups', (from, to) =>
     service
       .from('self_serve_signups')
       .select('account_id, venue_created_at')
       .not('account_id', 'is', null)
       .lt('venue_created_at', venueCutoff)
+      .gte('venue_created_at', venueWindowStart)
       .order('venue_created_at', { ascending: true })
       .range(from, to)
       .returns<Array<{ account_id: string; venue_created_at: string }>>(),
