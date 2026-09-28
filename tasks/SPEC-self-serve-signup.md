@@ -247,6 +247,8 @@ Each PR deploys on its own, passes `npm run ci:verify` (London and UTC), targets
 | 7 | `feat/trial-card-check` | §4.7 | `trial_card_checks` with grants; `run_data_retention` restated | after PR 3 is live |
 | **Later (P10)** | `feat/signup-admin-card`, `feat/owner-export-closure` | Admin Sign-ups card and first-post help article; owner "Download my data" and "Ask us to close this venue" | none | after opening |
 
+When PRs 5 and 7 restate `run_data_retention`, they must carry PR 4's rule 13 (`team_invitations`, migration `20260928161500_team_invitations.sql`) and every earlier rule unchanged, and extend `supabase/tests/data_retention_verify.sql` rather than replace it.
+
 Tests (Vitest, mocks only; SQL checks on a local rebuild):
 - PR 1: allow, block, reset; limiter error refuses with a visible error; pair keying (a second IP still signs in); concurrent calls at the limit let exactly one through (SQL).
 - PR 2: GET never calls `verifyOtp`; POST verifies and redirects only to a safe path; invite and reset links from before the change still work.
@@ -291,6 +293,7 @@ Self-serve Group plan and second venues for existing members; paid ads, tourname
 | Resend reputation hit by abuse | Turnstile, per-IP and site-wide limits, the invite gate and cap, the venue-name rule. |
 | A trial runs while the card check is retried | Visible through the webhook alert; re-sync after the fix. |
 | Peter's switcher grows with every self-serve brand | Display only; the default brand stays the one he joined first (§4.6). |
+| An owner can tell whether an email address already has a Cheers login: an existing login appears under "Waiting to accept", a new address gets access at once (§4.6, P4) | Accepted after the PR 4 review (28 September 2026), no code change: only trialing, paid, past-due-grace or comped brands can invite, and each counts towards the cap of 5 invites a day per brand. |
 | Enforcement switched on breaks a brand | All live brands are comped; re-check on the day. |
 
 ## 10. Pending decisions
