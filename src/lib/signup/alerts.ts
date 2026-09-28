@@ -28,18 +28,22 @@ import { createServiceSupabaseClient } from '@/lib/supabase/service';
 export type SignupFailureKind =
   | 'switch'
   | 'turnstile'
+  | 'turnstile_widget'
   | 'rate_limiter'
   | 'site_limit'
   | 'lookup'
   | 'generate_link'
   | 'database'
   | 'email'
+  | 'login_cleanup'
   | 'unexpected';
 
 const WHAT_BROKE: Record<SignupFailureKind, string> = {
   switch: 'Cheers could not read the self-serve sign-up switch (app_flags.self_serve_signup), so sign-up is refused as if it were off.',
   turnstile:
     'Cheers could not check the Cloudflare Turnstile answer on the sign-up form (TURNSTILE_SECRET_KEY missing or rejected, Cloudflare down or slow, or test keys in Production).',
+  turnstile_widget:
+    "A visitor's browser reported that the Cloudflare Turnstile check on the sign-up form could not load or run (Cloudflare's script blocked or down, or the site key refused for this domain), so they could not ask to sign up. They were shown an error and our email address.",
   rate_limiter: 'Cheers could not check the sign-up rate limits (public.consume_rate_limit failed; Supabase may be down).',
   site_limit:
     'The site-wide limit of 60 sign-up emails an hour was reached, so further sign-up requests are refused this hour. It protects the shared sending address; check for abuse before raising it.',
@@ -47,6 +51,8 @@ const WHAT_BROKE: Record<SignupFailureKind, string> = {
   generate_link: 'Supabase Auth could not create a sign-up or invite link (auth.admin.generateLink failed).',
   database: 'Cheers could not record a sign-up request in public.self_serve_signups (record_self_serve_signup_request failed).',
   email: 'Resend could not send a sign-up email (confirmation, member invite or "you already have a login").',
+  login_cleanup:
+    'The daily data-retention run could not delete some self-serve logins that never became a venue (the deletion check or the Auth admin API failed; a login with rows in audit_log cannot be deleted). The other retention rules ran. The next daily run tries again; the Vercel logs name each user id and the reason.',
   unexpected: 'Something unexpected failed while handling a sign-up request (for example the service-role client could not be created). The error below says what.',
 };
 

@@ -17,9 +17,10 @@
 --      - self-serve logins that never became a venue: listed for deletion
 --        when never confirmed 7 days after the last request, or confirmed more
 --        than 30 days ago (no venue, no membership, not an admin, no open
---        team invitation). The daily
---        cron deletes them through the Auth admin API, at most 100 a run; the
---        user_auth_snapshot row goes with each (trigger).
+--        team invitation). The daily cron deletes them through the Auth admin
+--        API, at most 100 a run, each only after
+--        self_serve_login_deletable (5) says yes; the user_auth_snapshot row
+--        goes with each (trigger).
 --    Rules 1 to 13 are copied unchanged from
 --    20260928161500_team_invitations.sql (applied in production as version
 --    20260928111735; the live function body was checked byte for byte
@@ -31,6 +32,15 @@
 --    no RLS policy uses it (both checked 28 September 2026). Live grants read
 --    the same day: postgres, authenticated and service_role had EXECUTE; anon
 --    and public did not.
+-- 5. The stale-login rule lives in one place, public.self_serve_login_is_stale
+--    (internal: only the functions below, which run as its owner, call it).
+--    run_data_retention uses it to make the list; the cron asks
+--    public.self_serve_login_deletable(user_id) just before deleting each
+--    login. That function locks the login's sign-up row (select ... for
+--    update) and applies the full rule again at that moment, so a login that
+--    asked again, was invited, joined a brand or created a venue since the
+--    list was made is left alone. Anything else that changes a sign-up row
+--    (a new sign-up request; venue creation in PR 6) takes the same row lock.
 --
 -- Access: service role only. RLS is on with no policies, and every privilege
 -- is revoked from public, anon and authenticated, because on this project
@@ -52,6 +62,8 @@
 --
 -- Rollback (revert the app first; the table holds no personal data):
 --   restore run_data_retention from 20260928161500_team_invitations.sql;
+--   drop function if exists public.self_serve_login_deletable(uuid);
+--   drop function if exists public.self_serve_login_is_stale(uuid, timestamptz);
 --   drop function if exists public.record_self_serve_signup_request(uuid);
 --   drop table if exists public.self_serve_signups;
 --   grant execute on function public.increment_rate_limit(uuid, text, text, timestamptz, integer) to authenticated;
@@ -109,6 +121,73 @@ comment on function public.record_self_serve_signup_request(uuid) is
 
 revoke all on function public.record_self_serve_signup_request(uuid) from public, anon, authenticated;
 grant execute on function public.record_self_serve_signup_request(uuid) to service_role;
+
+-- ---------------------------------------------------------------------------
+-- The stale self-serve login rule (P6), in one place.
+-- ---------------------------------------------------------------------------
+create or replace function public.self_serve_login_is_stale(p_user_id uuid, p_now timestamptz)
+returns boolean
+language sql
+stable
+security invoker
+set search_path = ''
+as $$
+  select exists (
+    select 1
+      from public.self_serve_signups s
+      join auth.users u on u.id = s.user_id
+     where s.user_id = p_user_id
+       and s.account_id is null
+       and s.venue_created_at is null
+       and not exists (select 1 from public.account_members m where m.user_id = s.user_id)
+       and not exists (select 1 from public.app_admins a where a.user_id = s.user_id)
+       -- An open invitation to a brand: deleting the login would delete it too.
+       and not exists (
+         select 1 from public.team_invitations t
+          where t.user_id = s.user_id
+            and t.accepted_at is null and t.declined_at is null and t.cancelled_at is null
+            and t.expires_at > p_now)
+       and ((u.email_confirmed_at is null and s.last_requested_at < p_now - interval '7 days')
+            or u.email_confirmed_at < p_now - interval '30 days')
+  );
+$$;
+
+comment on function public.self_serve_login_is_stale(uuid, timestamptz) is
+  'The P6 rule for deleting a self-serve login that never became a venue: a sign-up row with no venue, no membership, not an admin, no open team invitation, and unconfirmed 7 days after the last request or confirmed more than 30 days ago. Internal: called only by run_data_retention and self_serve_login_deletable (both run as the owner). Nobody else may execute it.';
+
+-- Internal: it reads auth.users, which service_role cannot read, so only the
+-- two SECURITY DEFINER functions below (same owner) call it.
+revoke all on function public.self_serve_login_is_stale(uuid, timestamptz) from public, anon, authenticated, service_role;
+
+create or replace function public.self_serve_login_deletable(p_user_id uuid)
+returns boolean
+language plpgsql
+volatile
+security definer
+set search_path = ''
+as $$
+begin
+  if p_user_id is null then
+    return false;
+  end if;
+
+  -- Lock the sign-up row, so a sign-up request or venue creation that takes
+  -- the same lock waits until this decision is made, then apply the full rule
+  -- again as it stands now.
+  perform 1 from public.self_serve_signups where user_id = p_user_id for update;
+  if not found then
+    return false;
+  end if;
+
+  return public.self_serve_login_is_stale(p_user_id, pg_catalog.now());
+end;
+$$;
+
+comment on function public.self_serve_login_deletable(uuid) is
+  'Asked by the data-retention cron just before it deletes a self-serve login: locks the login''s sign-up row and returns true only if the P6 rule (self_serve_login_is_stale) still holds. SECURITY DEFINER because it reads auth.users. Service role only.';
+
+revoke all on function public.self_serve_login_deletable(uuid) from public, anon, authenticated;
+grant execute on function public.self_serve_login_deletable(uuid) to service_role;
 
 -- ---------------------------------------------------------------------------
 -- run_data_retention, restated in full. Rules 1 to 13 (everything before
@@ -459,32 +538,23 @@ begin
   v_rules := v_rules || jsonb_build_object('self_serve_signups',
     jsonb_build_object('action', 'delete', 'cutoff', v_cutoff, 'due', v_due, 'done', v_done));
 
-  -- Self-serve logins that never became a venue (P6): never confirmed 7 days
-  -- after the last request, or confirmed more than 30 days ago. Only logins
-  -- with a sign-up row and no venue, no brand membership, no admin role and
-  -- no open team invitation (someone invited them to a brand; deleting the
-  -- login would delete the invitation with it).
-  -- Listed, never deleted here: the cron deletes each one through the Auth
-  -- admin API (at most 100 a run), which also removes its user_auth_snapshot
-  -- row (trigger trg_purge_user_auth_snapshot) and sets the sign-up row's
-  -- user_id to null. Kept out of "rules" because this function does not act.
+  -- Self-serve logins that never became a venue (P6): the rule is
+  -- self_serve_login_is_stale (unconfirmed 7 days after the last request, or
+  -- confirmed more than 30 days ago; no venue, membership, admin role or open
+  -- team invitation). Listed, never deleted here: the cron deletes each one
+  -- through the Auth admin API (at most 100 a run) after
+  -- self_serve_login_deletable says yes, which also removes its
+  -- user_auth_snapshot row (trigger trg_purge_user_auth_snapshot) and sets the
+  -- sign-up row's user_id to null. Kept out of "rules" because this function
+  -- does not act on it. The two cutoffs below are only reported; the rule
+  -- itself holds the same intervals.
   v_unconfirmed_cutoff := v_now - interval '7 days';
   v_confirmed_cutoff := v_now - interval '30 days';
   with due as (
     select s.user_id, s.last_requested_at
       from public.self_serve_signups s
-      join auth.users u on u.id = s.user_id
-     where s.account_id is null
-       and s.venue_created_at is null
-       and not exists (select 1 from public.account_members m where m.user_id = s.user_id)
-       and not exists (select 1 from public.app_admins a where a.user_id = s.user_id)
-       and not exists (
-         select 1 from public.team_invitations t
-          where t.user_id = s.user_id
-            and t.accepted_at is null and t.declined_at is null and t.cancelled_at is null
-            and t.expires_at > v_now)
-       and ((u.email_confirmed_at is null and s.last_requested_at < v_unconfirmed_cutoff)
-            or u.email_confirmed_at < v_confirmed_cutoff)
+     where s.user_id is not null
+       and public.self_serve_login_is_stale(s.user_id, v_now)
   )
   select (select count(*) from due),
          coalesce((select jsonb_agg(d.user_id order by d.last_requested_at)

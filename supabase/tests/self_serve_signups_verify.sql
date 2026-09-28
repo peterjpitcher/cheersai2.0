@@ -118,7 +118,40 @@ begin
     select count(*) into v_count from auth.users where id in (v_stale, v_confirmed_old);
     if v_count <> 2 then raise exception 'run_data_retention deleted a login itself'; end if;
 
-    -- 4. Deleting a login keeps its sign-up row for the funnel, with user_id cleared.
+    -- 4. The check the cron makes just before each delete: the full rule, as it
+    --    stands at that moment, under a lock on the sign-up row.
+    set local role service_role;
+    if not public.self_serve_login_deletable(v_confirmed_old) then
+      raise exception 'deletable: a listed login (confirmed 31 days ago) was refused';
+    end if;
+    if public.self_serve_login_deletable(v_new) or public.self_serve_login_deletable(v_confirmed_new)
+       or public.self_serve_login_deletable(v_with_venue) or public.self_serve_login_deletable(v_member)
+       or public.self_serve_login_deletable(v_admin) or public.self_serve_login_deletable(v_invited)
+       or public.self_serve_login_deletable(v_no_row) then
+      raise exception 'deletable: a login outside the rule was allowed';
+    end if;
+    if public.self_serve_login_deletable(gen_random_uuid()) or public.self_serve_login_deletable(null) then
+      raise exception 'deletable: an unknown or null login was allowed';
+    end if;
+    -- Listed, then asked to sign up again before the delete: must NOT be deleted.
+    if not public.self_serve_login_deletable(v_stale) then
+      raise exception 'deletable: the stale login was refused before it asked again';
+    end if;
+    perform public.record_self_serve_signup_request(v_stale);
+    if public.self_serve_login_deletable(v_stale) then
+      raise exception 'deletable: a login with a fresh last_requested_at was allowed';
+    end if;
+    -- Listed, then invited to a brand before the delete (pending invitation): must NOT be deleted.
+    set local role postgres;
+    insert into public.team_invitations (account_id, user_id, role, created_at, expires_at)
+      values (v_account, v_invite_expired, 'member', now(), now() + interval '7 days');
+    set local role service_role;
+    if public.self_serve_login_deletable(v_invite_expired) then
+      raise exception 'deletable: a login with a pending team invitation was allowed';
+    end if;
+    set local role postgres;
+
+    -- 5. Deleting a login keeps its sign-up row for the funnel, with user_id cleared.
     delete from auth.users where id = v_stale;
     select count(*) into v_count from public.self_serve_signups
      where user_id is null and requested_at::date = (now() - interval '8 days')::date;

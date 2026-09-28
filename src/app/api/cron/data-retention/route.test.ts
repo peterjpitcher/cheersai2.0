@@ -14,6 +14,10 @@ vi.mock('@/lib/signup/login-cleanup', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/signup/login-cleanup')>()),
   deleteSelfServeLogins: (...args: unknown[]) => mockDeleteLogins(...args),
 }));
+const mockReportSignup = vi.hoisted(() => vi.fn<(kind: string, error: unknown) => Promise<void>>(async () => {}));
+vi.mock('@/lib/signup/alerts', () => ({
+  reportSignupFailure: (kind: string, error: unknown) => mockReportSignup(kind, error),
+}));
 vi.mock('@/lib/email/resend', () => ({ sendEmail: vi.fn() }));
 vi.mock('@/env', () => ({
   env: {
@@ -174,7 +178,38 @@ describe('data-retention cron', () => {
     expect(JSON.stringify(body)).not.toContain(userIds[0]);
   });
 
-  it('returns 500 when a self-serve login cannot be deleted, and still sends the reminder step', async () => {
+  it('a login that cannot be deleted (audit_log rows) is skipped and alerted, and never fails the run', async () => {
+    useDb({
+      rpc: {
+        data: {
+          ...RPC_OK.data,
+          self_serve_logins: {
+            action: 'delete_login',
+            due: 2,
+            max_per_run: 100,
+            user_ids: ['11111111-1111-4111-8111-111111111111', '22222222-2222-4222-8222-222222222222'],
+          },
+        },
+        error: null,
+      },
+    });
+    mockDeleteLogins.mockResolvedValue({ due: 2, deleted: 1, skipped: 0, failed: 1 });
+
+    const { status, body } = await run();
+
+    expect(status).toBe(200);
+    expect(body.retention).toEqual({ ranAt: '2026-09-27T03:45:00+00:00', rules: RULES });
+    expect(body.selfServeLogins).toEqual({ due: 2, deleted: 1, skipped: 0, failed: 1 });
+    expect(body.purgeReminder).toEqual({ due: 0, lapsed: 0, sent: false });
+    // Kind and count only: no user id, no email.
+    expect(mockReportSignup).toHaveBeenCalledTimes(1);
+    const [kind, error] = mockReportSignup.mock.calls[0] as [string, Error];
+    expect(kind).toBe('login_cleanup');
+    expect(error.message).toContain('1 of 2 self-serve logins');
+    expect(error.message).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-/);
+  });
+
+  it('does not alert when every listed login was deleted or skipped', async () => {
     useDb({
       rpc: {
         data: {
@@ -184,22 +219,42 @@ describe('data-retention cron', () => {
         error: null,
       },
     });
-    mockDeleteLogins.mockResolvedValue({ due: 1, deleted: 0, skipped: 0, failed: 1 });
-
-    const { status, body } = await run();
-
-    expect(status).toBe(500);
-    expect(body.selfServeLogins).toMatchObject({ failed: 1, error: expect.stringContaining('could not be deleted') });
-    expect(body.purgeReminder).toEqual({ due: 0, lapsed: 0, sent: false });
-  });
-
-  it('returns 500 when the self-serve login list is malformed', async () => {
-    useDb({ rpc: { data: { ...RPC_OK.data, self_serve_logins: { due: 1, user_ids: ['not-a-uuid'] } }, error: null } });
+    mockDeleteLogins.mockResolvedValue({ due: 1, deleted: 0, skipped: 1, failed: 0 });
 
     const { status } = await run();
 
-    expect(status).toBe(500);
+    expect(status).toBe(200);
+    expect(mockReportSignup).not.toHaveBeenCalled();
+  });
+
+  it('a clean-up that throws is alerted and never fails the run', async () => {
+    useDb({
+      rpc: {
+        data: {
+          ...RPC_OK.data,
+          self_serve_logins: { action: 'delete_login', due: 1, max_per_run: 100, user_ids: ['11111111-1111-4111-8111-111111111111'] },
+        },
+        error: null,
+      },
+    });
+    mockDeleteLogins.mockRejectedValue(new Error('boom'));
+
+    const { status, body } = await run();
+
+    expect(status).toBe(200);
+    expect(body.selfServeLogins).toEqual({ error: 'boom' });
+    expect(mockReportSignup).toHaveBeenCalledWith('login_cleanup', expect.any(Error));
+  });
+
+  it('a login list the app cannot read deletes nothing, is alerted, and never fails the run', async () => {
+    useDb({ rpc: { data: { ...RPC_OK.data, self_serve_logins: { due: 1, user_ids: ['not-a-uuid'] } }, error: null } });
+
+    const { status, body } = await run();
+
+    expect(status).toBe(200);
+    expect(body.retention).toEqual({ ranAt: '2026-09-27T03:45:00+00:00', rules: RULES });
     expect(mockDeleteLogins).not.toHaveBeenCalled();
+    expect(mockReportSignup).toHaveBeenCalledWith('login_cleanup', expect.any(Error));
   });
 
   it('deletes no logins when the function has no list (before the sign-up migration)', async () => {

@@ -8,6 +8,13 @@ import type { SupabaseClient } from '@supabase/supabase-js';
  * deletes each through the Auth admin API, as offboarding does, which also
  * removes its user_auth_snapshot row (trigger) and clears the sign-up row's
  * user_id (foreign key, on delete set null).
+ *
+ * The decision is the database's: just before each delete,
+ * public.self_serve_login_deletable locks the login's sign-up row and applies
+ * the whole rule again as it stands at that moment (no venue, no membership,
+ * not an admin, no open team invitation, still past its cut-off). A login that
+ * asked again, was invited, joined a brand or created a venue since the list
+ * was made is left alone.
  */
 
 export interface SelfServeLoginList {
@@ -18,8 +25,9 @@ export interface SelfServeLoginList {
 export interface SelfServeLoginCleanup {
   due: number;
   deleted: number;
-  /** Became a venue or a member between the list and the delete: left alone. */
+  /** No longer past the rule when checked again: left alone. */
   skipped: number;
+  /** The check or the delete failed (for example a login with audit_log rows): tried again next run. */
   failed: number;
 }
 
@@ -42,10 +50,10 @@ export function parseSelfServeLoginList(value: unknown): SelfServeLoginList | nu
 type Logger = { warn: (message: string, context?: Record<string, unknown>) => void };
 
 /**
- * Deletes each listed login, one at a time. Just before each delete it checks
- * again that the login still has no venue and no membership, so a person who
- * created their venue after the list was made keeps their login. Reports
- * counts only; failures are logged with the user id (never the email).
+ * Deletes each listed login, one at a time, only when
+ * self_serve_login_deletable says yes. Never throws: a failed check or delete
+ * is logged with the user id (never the email) and counted, and the rest carry
+ * on. The caller alerts on failures; they must not fail the retention run.
  */
 export async function deleteSelfServeLogins(
   service: SupabaseClient,
@@ -55,42 +63,32 @@ export async function deleteSelfServeLogins(
   const result: SelfServeLoginCleanup = { due: list.due, deleted: 0, skipped: 0, failed: 0 };
 
   for (const userId of list.userIds) {
-    const { data: signup, error: signupError } = await service
-      .from('self_serve_signups')
-      .select('account_id, venue_created_at')
-      .eq('user_id', userId)
-      .maybeSingle<{ account_id: string | null; venue_created_at: string | null }>();
-    if (signupError) {
-      logger.warn('self-serve login clean-up: could not re-check the sign-up row', { userId, error: signupError.message });
-      result.failed += 1;
-      continue;
-    }
-    if (!signup || signup.account_id || signup.venue_created_at) {
-      result.skipped += 1;
-      continue;
-    }
+    try {
+      const { data: deletable, error: checkError } = await service.rpc('self_serve_login_deletable', { p_user_id: userId });
+      if (checkError) {
+        logger.warn('self-serve login clean-up: the deletion check failed', { userId, error: checkError.message });
+        result.failed += 1;
+        continue;
+      }
+      if (deletable !== true) {
+        result.skipped += 1;
+        continue;
+      }
 
-    const { count, error: memberError } = await service
-      .from('account_members')
-      .select('user_id', { count: 'exact', head: true })
-      .eq('user_id', userId);
-    if (memberError) {
-      logger.warn('self-serve login clean-up: could not re-check memberships', { userId, error: memberError.message });
+      const { error } = await service.auth.admin.deleteUser(userId);
+      if (error) {
+        logger.warn('self-serve login clean-up: deleteUser failed', { userId, error: error.message });
+        result.failed += 1;
+        continue;
+      }
+      result.deleted += 1;
+    } catch (error) {
+      logger.warn('self-serve login clean-up: unexpected error', {
+        userId,
+        error: error instanceof Error ? error.message : String(error),
+      });
       result.failed += 1;
-      continue;
     }
-    if ((count ?? 0) > 0) {
-      result.skipped += 1;
-      continue;
-    }
-
-    const { error } = await service.auth.admin.deleteUser(userId);
-    if (error) {
-      logger.warn('self-serve login clean-up: deleteUser failed', { userId, error: error.message });
-      result.failed += 1;
-      continue;
-    }
-    result.deleted += 1;
   }
 
   return result;

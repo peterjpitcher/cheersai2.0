@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 
 import { sendPurgeReminder, type PurgeReminderResult } from '@/lib/admin/purge-reminder';
 import { createLogger } from '@/lib/logging';
+import { reportSignupFailure } from '@/lib/signup/alerts';
 import {
   deleteSelfServeLogins,
   parseSelfServeLoginList,
@@ -25,9 +26,12 @@ const logger = createLogger('data-retention');
  * 3. The operator gets one email listing offboarded brands whose 30-day hold
  *    is over and whose data has not been deleted (deletion stays manual).
  *
- * Steps 1 and 3 are independent (step 2 needs step 1's list): a failure in one
- * does not stop the other, but any failure makes the run return 500 so it
- * shows in Vercel.
+ * Steps 1 and 3 are independent (step 2 needs step 1's list): a failure in
+ * one does not stop the other, and a failure in either makes the run return
+ * 500 so it shows in Vercel. Step 2 never fails the run: a login that cannot
+ * be deleted (for example one with audit_log rows, whose foreign key has no
+ * ON DELETE action) is logged, skipped and tried again the next day, and the
+ * operator gets a sign-up alert with the count (kind and count only).
  */
 
 interface RuleResult {
@@ -41,8 +45,8 @@ interface RetentionResult {
   dry_run: boolean;
   ran_at: string;
   rules: Record<string, RuleResult>;
-  /** Absent before migration 20260928170000. */
-  selfServeLogins?: SelfServeLoginList;
+  /** Undefined before migration 20260928170000; null when it could not be read. */
+  selfServeLogins: SelfServeLoginList | null | undefined;
 }
 
 function isRuleResult(value: unknown): value is RuleResult {
@@ -65,8 +69,9 @@ function parseRetentionResult(data: unknown): RetentionResult | null {
   const rules = result.rules as Record<string, unknown>;
   const names = Object.keys(rules);
   if (names.length === 0 || !names.every((name) => isRuleResult(rules[name]))) return null;
+  // A login list the app cannot read is the clean-up's problem, not the rules':
+  // it is alerted in runLoginCleanup and never fails the run.
   const selfServeLogins = parseSelfServeLoginList(result.self_serve_logins);
-  if (selfServeLogins === null) return null;
   return { dry_run: false, ran_at: result.ran_at, rules: rules as Record<string, RuleResult>, selfServeLogins };
 }
 
@@ -99,23 +104,36 @@ async function runRetention(
   }
 }
 
+type LoginCleanupOutcome = SelfServeLoginCleanup | { error: string } | null;
+
+/** Step 2. Never fails the run; problems are logged and alerted (kind and count only). */
 async function runLoginCleanup(
   service: NonNullable<ReturnType<typeof tryCreateServiceSupabaseClient>>,
-  list: SelfServeLoginList | undefined,
-): Promise<{ ok: true; result: SelfServeLoginCleanup | null } | { ok: false; error: string; result?: SelfServeLoginCleanup }> {
-  if (!list) return { ok: true, result: null };
+  list: SelfServeLoginList | null | undefined,
+): Promise<LoginCleanupOutcome> {
+  if (list === undefined) return null;
+  if (list === null) {
+    const error = 'run_data_retention returned a self_serve_logins list the app could not read';
+    logger.error(error);
+    await reportSignupFailure('login_cleanup', new Error(`${error}; no logins were deleted`));
+    return { error };
+  }
   try {
     const result = await deleteSelfServeLogins(service, list, logger);
     logger.info('self-serve login clean-up', { ...result });
     if (result.failed > 0) {
       logger.error('self-serve logins could not all be deleted', undefined, { ...result });
-      return { ok: false, error: `${result.failed} self-serve logins could not be deleted`, result };
+      await reportSignupFailure(
+        'login_cleanup',
+        new Error(`${result.failed} of ${result.due} self-serve logins due for deletion could not be deleted; the next run tries again`),
+      );
     }
-    return { ok: true, result };
+    return result;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     logger.error('self-serve login clean-up threw', error instanceof Error ? error : new Error(message));
-    return { ok: false, error: message };
+    await reportSignupFailure('login_cleanup', new Error(`the clean-up stopped: ${message}`));
+    return { error: message };
   }
 }
 
@@ -149,12 +167,12 @@ async function handle(request: Request): Promise<NextResponse> {
   const logins = retention.ok ? await runLoginCleanup(service, retention.result.selfServeLogins) : null;
   const reminder = await runPurgeReminder(service);
 
-  const failed = !retention.ok || (logins !== null && !logins.ok) || !reminder.ok;
+  // The login clean-up is deliberately left out: it alerts on its own.
+  const failed = !retention.ok || !reminder.ok;
   return NextResponse.json(
     {
       retention: retention.ok ? { ranAt: retention.result.ran_at, rules: retention.result.rules } : { error: retention.error },
-      selfServeLogins:
-        logins === null ? { error: 'not run: retention failed' } : logins.ok ? logins.result : { ...logins.result, error: logins.error },
+      selfServeLogins: retention.ok ? logins : { error: 'not run: retention failed' },
       purgeReminder: reminder.ok ? reminder.result : { error: reminder.error },
     },
     { status: failed ? 500 : 200 },
