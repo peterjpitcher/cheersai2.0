@@ -43,7 +43,7 @@ A second route to the same outcome: a post sent back to draft keeps a stopped jo
 
 ## Deploy
 
-Two independent deploys; either order is safe, and each closes the hole on its own.
+Two deploys, in this order (corrected after review, 28 September 2026). The app goes first. If the worker went first, the old app would still arm jobs for drafts when they are moved; the worker would refuse them, and the old `approveDraftContent` skips any post that already has a job, so an approved post would sit "scheduled" and never go out. So: merge the app and let Vercel deploy it, run the check below, then deploy the worker.
 
 1. The app (Vercel, on merge): stops creating jobs for drafts. This is the root fix.
 2. The worker, separately and by name: `npx supabase functions deploy publish-queue` (never a bare deploy-all; see `supabase/config.toml` drift on `media-derivatives`).
