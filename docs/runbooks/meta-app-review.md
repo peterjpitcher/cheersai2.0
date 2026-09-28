@@ -1,6 +1,6 @@
 # Runbook: Meta App Review for organic publishing
 
-**Last updated:** 2026-09-27
+**Last updated:** 2026-09-28
 **Applies to:** the CheersAI Meta app (`1001401138674450`, business portfolio Orange Jelly `1042710779156582`)
 **Decision:** spec `tasks/SPEC-new-customer-readiness.md` D7 and finding M1.
 
@@ -68,8 +68,8 @@ Meta's requirements (checked 26 September 2026): Page posts and stories need `pa
 | App icon, category, contact email (`peter@orangejelly.co.uk`), app domain | Set | done |
 | Business Verification | Verified | done |
 | A test Facebook Page linked to a test Instagram professional account, held in the Orange Jelly business portfolio | Not yet made. Use it for the recording so no test post reaches The Anchor's followers | Peter |
-| A CheersAI brand for the review (for example "Meta Review Venue"), with paid ads, tournaments and management import off | Not yet made. Admin, Create brand | Peter |
-| A CheersAI login for Meta's reviewers with a password, belonging only to that brand | Not yet made. Admin, invite, then set the password from the invite email. Give Meta the email and password in the submission form only, never in the repo | Peter |
+| A CheersAI brand for the review, with paid ads, tournaments and management import off | Done 28 September 2026: **Cheers Test Venue** (`ebbf257d-6b15-4dcd-80bc-ba557d786364`). It was used for the live Stripe sign-up test (trial started and cancelled, nothing charged), then set to comped (question 35) so it stays free, fully usable and off the 90-day lapsed list | done |
+| A CheersAI login for Meta's reviewers with a password, belonging only to Cheers Test Venue | Not yet made. Admin, invite a new email address with access to Cheers Test Venue only, then set the password from the invite email. Give Meta the email and password in the submission form only, never in the repo | Peter |
 
 ## 4. The recording
 
