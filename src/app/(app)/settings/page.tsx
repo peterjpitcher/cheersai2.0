@@ -8,7 +8,7 @@ import { listMediaAssets } from "@/lib/library/data";
 import { getManagementConnectionSummary } from "@/lib/management-app/data";
 import { getOwnerSettings } from "@/lib/settings/data";
 import { requireAuthContext } from "@/lib/auth/server";
-import { listTeam } from "@/app/(app)/settings/team-actions";
+import { listTeam, listTeamInvitations } from "@/app/(app)/settings/team-actions";
 import { TeamSection } from "@/features/settings/team-section";
 import { BillingSection, type CheckoutReturn } from "@/features/settings/billing-section";
 import { BILLING_TRIAL_DAYS, billingPlanOptions, getBillingOverview } from "@/lib/billing/overview";
@@ -25,12 +25,17 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
   // The management-app import is a per-brand switch, off by default.
   const { features, role, supabase, accountId } = await requireAuthContext();
   const params = searchParams ? await searchParams : {};
-  const [settings, managementConnection, linkInBioData, mediaAssets, team, billing] = await Promise.all([
+  const [settings, managementConnection, linkInBioData, mediaAssets, team, invitations, billing] = await Promise.all([
     getOwnerSettings(),
     features.managementImport ? getManagementConnectionSummary() : Promise.resolve(null),
     getLinkInBioProfileWithTiles(),
     listMediaAssets({ excludeTags: ["Tournament"], includeSystemAssets: true }),
     listTeam(),
+    // A failed read shows a note in the Team section, not a broken page.
+    listTeamInvitations().catch((error: unknown) => {
+      console.error("[settings] team invitations lookup failed", error);
+      return null;
+    }),
     // A billing lookup failure shows an error in the Billing section, not a broken page.
     getBillingOverview(supabase, accountId).catch((error: unknown) => {
       console.error("[settings] billing overview failed", error);
@@ -127,7 +132,7 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
             Owners manage billing, people and connections. Members create and schedule posts.
           </p>
         </div>
-        <TeamSection members={team} canManage={role === "owner"} />
+        <TeamSection members={team} invitations={invitations} canManage={role === "owner"} />
       </section>
 
       {managementConnection ? (

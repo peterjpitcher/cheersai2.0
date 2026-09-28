@@ -52,7 +52,7 @@ export function buildAuthConfirmUrl(options: {
   return url.toString();
 }
 
-function escapeHtml(value: string): string {
+export function escapeHtml(value: string): string {
   return value
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
@@ -79,21 +79,6 @@ export function renderInviteEmail(options: { link: string; brandNames: string[] 
 ${brandLine}
 <p><a href="${escapeHtml(options.link)}">Accept the invite and set your password</a></p>
 <p>This link works once and expires in 24 hours. If it has expired, ask the person who invited you to send a new one.</p>
-<p>Cheers by Orange Jelly</p>
-`.trim(),
-  };
-}
-
-/** For someone who already has a CheersAI login and has been given access to another brand. */
-export function renderAddedToBrandEmail(options: { loginUrl: string; brandName: string }): RenderedEmail {
-  if (!options.loginUrl) throw new Error('Added-to-brand email needs a login link.');
-  const brand = options.brandName.trim() || 'a brand';
-  return {
-    subject: `You now have access to ${brand} on Cheers`,
-    html: `
-<p>Hi,</p>
-<p>You've been given access to <strong>${escapeHtml(brand)}</strong> on Cheers.</p>
-<p><a href="${escapeHtml(options.loginUrl)}">Sign in to Cheers</a>, then pick ${escapeHtml(brand)} from the brand switcher.</p>
 <p>Cheers by Orange Jelly</p>
 `.trim(),
   };
