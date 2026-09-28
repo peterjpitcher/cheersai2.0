@@ -37,7 +37,7 @@ describe.each(PAGES)("the $name page", ({ Page, title }) => {
     const { container, text } = renderPage();
     expect(container.querySelector("h1")?.textContent).toBe(title);
     expect(text).toContain("Last updated 28 September 2026");
-    expect(text).toContain("Version 2026-09-28.3");
+    expect(text).toContain("Version 2026-09-28.4");
   });
 
   it("shows the company details and contacts", () => {
@@ -120,6 +120,16 @@ describe("the self-serve wording (spec §4.13), true while sign-up is closed", (
     const text = textOf(PrivacyPolicyPage);
     expect(text).toContain("Team invitations");
     expect(text).toContain("Deleted a day after the invitation is accepted, declined, cancelled or expires.");
+  });
+
+  it("the privacy notice says a closed account's data is kept for 30 days, then deleted (D5, the offboarding runbook)", () => {
+    const text = textOf(PrivacyPolicyPage);
+    expect(text).toContain(
+      "When an account is closed, its data is kept for 30 days and then deleted, and it is gone from our backups within a further 7 days.",
+    );
+    expect(text).toContain("until your account's data is deleted 30 days after the account closes");
+    expect(text).not.toContain("Deleted within 30 days after the account closes");
+    expect(text).not.toContain("until you delete them or your account closes");
   });
 
   it("the DPA adds no sub-processor: Cloudflare is not one", () => {
