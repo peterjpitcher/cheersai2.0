@@ -10,8 +10,10 @@ import { ConfirmButton } from './confirm-button';
 export const metadata: Metadata = {
   title: 'Confirm and continue',
   robots: { index: false, follow: false },
-  // The one-time token is in this page's address; never send it on as a referrer.
-  referrer: 'no-referrer',
+  // The one-time token is in this page's address, so never send it to another
+  // site. Not 'no-referrer': with that, a browser posting the form before
+  // JavaScript loads sends `Origin: null`, and Next.js refuses the server action.
+  referrer: 'same-origin',
 };
 
 const COPY: Record<ConfirmLinkType, { title: string; description: string }> = {
@@ -23,9 +25,6 @@ const COPY: Record<ConfirmLinkType, { title: string; description: string }> = {
     title: 'Reset your password',
     description: 'Press the button to continue. You will then choose a new password.',
   },
-  magiclink: { title: 'Sign in to Cheers', description: 'Press the button to finish signing in.' },
-  email: { title: 'Sign in to Cheers', description: 'Press the button to finish signing in.' },
-  signup: { title: 'Confirm your email', description: 'Press the button to confirm your email address.' },
 };
 
 interface ConfirmPageProps {

@@ -26,9 +26,9 @@ describe('parseConfirmLinkParams', () => {
     expect(parseConfirmLinkParams(paramsOf(link))).toEqual({ tokenHash: TOKEN, type: 'recovery', next: '/auth/set-password' });
   });
 
-  it('accepts the magic-link types the old route accepted', () => {
-    for (const type of ['magiclink', 'email', 'signup']) {
-      expect(parseConfirmLinkParams({ token_hash: TOKEN, type })?.type).toBe(type);
+  it('accepts only invite and recovery links (magic links go through Supabase and /auth/callback)', () => {
+    for (const type of ['magiclink', 'email', 'signup', 'email_change']) {
+      expect(parseConfirmLinkParams({ token_hash: TOKEN, type })).toBeNull();
     }
   });
 

@@ -29,7 +29,7 @@ vi.mock('react-dom', async (importOriginal) => {
   return { ...actual, useFormStatus: () => ({ pending: false }) };
 });
 
-const { default: ConfirmPage } = await import('@/app/auth/confirm/page');
+const { default: ConfirmPage, metadata } = await import('@/app/auth/confirm/page');
 const { confirmEmailLink } = await import('@/app/auth/confirm/actions');
 const { buildAuthConfirmUrl } = await import('@/lib/auth/email-links');
 
@@ -64,6 +64,13 @@ beforeEach(() => {
 // ---------------------------------------------------------------------------
 
 describe('GET /auth/confirm (the page)', () => {
+  it('keeps the Origin header on a form post made before JavaScript loads', () => {
+    // 'no-referrer' makes browsers send `Origin: null` on the native form POST,
+    // which Next.js rejects (500). 'same-origin' still keeps the token off other sites.
+    expect(metadata.referrer).toBe('same-origin');
+    expect(metadata.robots).toEqual({ index: false, follow: false });
+  });
+
   it('never uses the token: opening the link, as a scanner would, only shows the button', async () => {
     const html = renderToStaticMarkup(await ConfirmPage({ searchParams: Promise.resolve(linkSearchParams('invite')) }));
 
@@ -139,6 +146,13 @@ describe('POST /auth/confirm (the button)', () => {
 
   it('refuses a malformed form without calling Supabase', async () => {
     expect(await redirectOf(confirmEmailLink(form({ token_hash: TOKEN, type: 'email_change' })))).toBe(
+      '/login?error=invalid_confirmation',
+    );
+    expect(mockVerifyOtp).not.toHaveBeenCalled();
+  });
+
+  it('refuses a magic-link token: only invite and recovery links come here', async () => {
+    expect(await redirectOf(confirmEmailLink(form({ token_hash: TOKEN, type: 'magiclink' })))).toBe(
       '/login?error=invalid_confirmation',
     );
     expect(mockVerifyOtp).not.toHaveBeenCalled();

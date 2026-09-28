@@ -1,12 +1,17 @@
-import { safeNextPath } from '@/lib/auth/email-links';
+import { safeNextPath, type AuthEmailLinkType } from '@/lib/auth/email-links';
 
 /**
  * The query string of an email link to /auth/confirm (built by
  * buildAuthConfirmUrl for invites and resets). Read by the page, which only
  * shows the button, and again by the button's server action, which verifies.
  * Safe to import anywhere (no server imports).
+ *
+ * Only invite and recovery links come here. Magic links use Supabase's own
+ * template ({{ .ConfirmationURL }}: Supabase verifies, then /auth/callback),
+ * checked in the dashboard on 28 September 2026. Add a type only when
+ * something starts sending it here.
  */
-export const CONFIRM_LINK_TYPES = ['invite', 'recovery', 'magiclink', 'email', 'signup'] as const;
+export const CONFIRM_LINK_TYPES = ['invite', 'recovery'] as const satisfies readonly AuthEmailLinkType[];
 
 export type ConfirmLinkType = (typeof CONFIRM_LINK_TYPES)[number];
 
