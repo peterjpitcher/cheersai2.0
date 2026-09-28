@@ -112,9 +112,6 @@ const serverEnv = {
   // Axiom structured logging
   AXIOM_DATASET: readOptionalEnv("AXIOM_DATASET"),
   AXIOM_TOKEN: readOptionalEnv("AXIOM_TOKEN"),
-  // Upstash Redis (rate limiting)
-  UPSTASH_REDIS_REST_URL: readOptionalEnv("UPSTASH_REDIS_REST_URL"),
-  UPSTASH_REDIS_REST_TOKEN: readOptionalEnv("UPSTASH_REDIS_REST_TOKEN"),
   // Upstash QStash (background job queue)
   UPSTASH_QSTASH_TOKEN: readOptionalEnv("UPSTASH_QSTASH_TOKEN"),
   UPSTASH_QSTASH_CURRENT_SIGNING_KEY: readOptionalEnv("UPSTASH_QSTASH_CURRENT_SIGNING_KEY"),

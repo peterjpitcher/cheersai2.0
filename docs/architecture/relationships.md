@@ -37,11 +37,11 @@ project: cheersai-2.0
 | Scheduler | `src/app/api/cron/publish-scheduler/route.ts` | Dispatch due jobs |
 | Retry action | `src/app/actions/publish.ts` | Manual retry |
 
-### Upstash Redis
+### Auth rate limits (Supabase)
 
 | Consumer | File | Purpose |
 |----------|------|---------|
-| Rate limiting | `src/lib/auth/rate-limit.ts` | Per-user rate limits |
+| Sign-in, magic link, password reset | `src/lib/auth/rate-limit.ts` | `public.consume_rate_limit` on `auth_rate_limits`; fails closed |
 
 ### Sharp + Satori (Image Generation)
 
@@ -97,7 +97,7 @@ Request
 |------|---------|
 | `src/lib/auth/server.ts` | `getCurrentUser()`, `requireAuthContext()` |
 | `src/lib/auth/actions.ts` | Auth-related server actions |
-| `src/lib/auth/rate-limit.ts` | Upstash rate limiting |
+| `src/lib/auth/rate-limit.ts` | Database auth rate limits |
 | `src/lib/auth/types.ts` | Auth type definitions |
 
 ## Feature -> Table -> Integration Map
@@ -135,7 +135,6 @@ Request
 | BOOKING_CONVERSION_INGEST_SECRET | Booking API |
 | UPSTASH_QSTASH_TOKEN | QStash dispatch |
 | UPSTASH_QSTASH_CURRENT/NEXT_SIGNING_KEY | QStash webhook verification |
-| UPSTASH_REDIS_REST_URL / TOKEN | Rate limiting |
 | AXIOM_DATASET / AXIOM_TOKEN | Structured logging |
 | TOKEN_VAULT_KEY | Token encryption; must match Vercel and Supabase Edge Function secrets |
 | TOKEN_VAULT_KEY_VERSION | Token encryption |

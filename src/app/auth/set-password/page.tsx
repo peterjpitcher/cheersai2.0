@@ -6,9 +6,9 @@ import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { SetPasswordForm } from './set-password-form';
 
 /**
- * Landing page after an invite or password reset link. `/auth/confirm` has
- * already verified the link and signed the user in, so a missing session here
- * means the link expired or was opened in another browser.
+ * Landing page after an invite or password reset link. The person pressed
+ * "Confirm and continue" on `/auth/confirm`, which verified the link and signed
+ * them in, so a missing session here means the link expired or the session was lost.
  */
 export default async function SetPasswordPage() {
   const supabase = await createServerSupabaseClient();
