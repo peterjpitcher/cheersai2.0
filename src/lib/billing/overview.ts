@@ -62,6 +62,12 @@ export interface BillingOverview {
   portalReady: boolean;
   /** A trial of any plan runs on this plan's limits (spec §2.1). */
   trialLimitsPlan: { plan: PlanId; name: string };
+  /**
+   * The brand's newest subscription was a free trial refused because its card
+   * had a Cheers trial before (spec §4.7, P5), so Billing says why and offers
+   * a paid plan straight away.
+   */
+  trialRefusedRepeatCard: boolean;
 }
 
 export type TrialEligibility = 'eligible' | 'uncertain' | 'ineligible';
@@ -101,6 +107,7 @@ export function billingPlanOptions(): BillingPlanOption[] {
 export const BILLING_TRIAL_DAYS = TRIAL_DAYS;
 
 interface SubscriptionRow {
+  stripe_subscription_id: string;
   plan: PlanId;
   billing_interval: BillingInterval;
   status: StripeSubscriptionStatus;
@@ -121,7 +128,7 @@ export async function getBillingOverview(service: SupabaseClient, accountId: str
     // state; the rest say whether anything else could still bill it.
     service
       .from('subscriptions')
-      .select('plan, billing_interval, status, trial_end, current_period_start, current_period_end, cancel_at_period_end')
+      .select('stripe_subscription_id, plan, billing_interval, status, trial_end, current_period_start, current_period_end, cancel_at_period_end')
       .eq('account_id', accountId)
       .order('stripe_state_at', { ascending: false })
       .limit(50)
@@ -136,6 +143,21 @@ export async function getBillingOverview(service: SupabaseClient, accountId: str
   const account = accountResult.data;
   const rows = subscriptionResult.data ?? [];
   const row = rows[0] ?? null;
+
+  // Was the newest subscription a trial refused for a repeat card (spec §4.7)?
+  // Only asked for a brand Billing can offer a plan to: comped, suspended and
+  // closed brands never show the message, so they never read the table.
+  let trialRefusedRepeatCard = false;
+  if (row && !account.archived_at && !account.billing_override) {
+    const { data: check, error: checkError } = await service
+      .from('trial_card_checks')
+      .select('outcome')
+      .eq('account_id', accountId)
+      .eq('stripe_subscription_id', row.stripe_subscription_id)
+      .maybeSingle<{ outcome: string }>();
+    if (checkError) throw new Error(`billing overview: trial card check lookup failed: ${checkError.message}`);
+    trialRefusedRepeatCard = check?.outcome === 'repeat_refused';
+  }
   const state = resolveEntitlement({
     archivedAt: account.archived_at,
     billingOverride: account.billing_override,
@@ -171,5 +193,6 @@ export async function getBillingOverview(service: SupabaseClient, accountId: str
     checkoutReady: missingBillingEnv('checkout').length === 0,
     portalReady: missingBillingEnv('portal').length === 0,
     trialLimitsPlan: { plan: TRIAL_PLAN, name: PLANS[TRIAL_PLAN].name },
+    trialRefusedRepeatCard,
   };
 }

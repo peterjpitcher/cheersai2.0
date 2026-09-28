@@ -25,6 +25,7 @@ export type AdminAction =
   | 'operator_publish_failure_alert'
   | 'operator_signup_alert'
   | 'self_serve_venue_created'
+  | 'trial_refused_repeat_card'
   | 'team_invite'
   | 'team_remove'
   | 'team_role_change'

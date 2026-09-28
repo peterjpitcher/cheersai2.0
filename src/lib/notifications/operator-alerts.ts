@@ -237,6 +237,65 @@ export async function alertPossibleDoubleBilling(
   );
 }
 
+/**
+ * Repeat free-trial check (SPEC-self-serve-signup §4.7, P5): a new trial was
+ * started with a card that has already had a Cheers trial, so it was cancelled
+ * at once with nothing charged. One email per refused subscription (not
+ * deduplicated: each is a separate decision). No card details at all: not the
+ * card brand, last four digits, fingerprint or its code.
+ */
+export async function alertTrialRefusedRepeatCard(details: {
+  accountId: string;
+  brandName: string | null;
+  subscriptionId: string;
+  customerId: string;
+}): Promise<void> {
+  const to = env.server.OPERATOR_ALERT_EMAIL;
+  if (!to) throw new Error('OPERATOR_ALERT_EMAIL is not set; cannot send operator alert.');
+  const brand = details.brandName?.trim() || details.accountId;
+  await sendEmail({
+    to,
+    subject: `[Cheers operator] Free trial refused for ${brand}: card already used for a trial`,
+    html: `
+<p>${escapeHtml(brand)} started a free trial with a card that has already had a Cheers free trial, so the trial was cancelled straight away. Nothing was charged.</p>
+<p>Brand id: ${escapeHtml(details.accountId)}</p>
+<p>Stripe subscription: ${escapeHtml(details.subscriptionId)} (cancelled)</p>
+<p>Stripe customer: ${escapeHtml(details.customerId)}</p>
+<p>The owner now sees "This card has already been used for a Cheers free trial" on Billing and can start a paid plan straight away. Nothing to do unless they contact you. Recorded in admin_audit as trial_refused_repeat_card.</p>
+`.trim(),
+    required: true,
+  });
+}
+
+/**
+ * Repeat free-trial check (SPEC-self-serve-signup §4.7 step 5): a new trial's
+ * subscription has no card to check (for example a wallet or Link payment
+ * method with no card fingerprint), so the check could not run and the trial
+ * carries on. One email per such subscription.
+ */
+export async function alertTrialStartedWithoutCard(details: {
+  accountId: string;
+  brandName: string | null;
+  subscriptionId: string;
+  customerId: string;
+}): Promise<void> {
+  const to = env.server.OPERATOR_ALERT_EMAIL;
+  if (!to) throw new Error('OPERATOR_ALERT_EMAIL is not set; cannot send operator alert.');
+  const brand = details.brandName?.trim() || details.accountId;
+  await sendEmail({
+    to,
+    subject: `[Cheers operator] Free trial started with no card to check: ${brand}`,
+    html: `
+<p>${escapeHtml(brand)} started a free trial, but its Stripe subscription has no card payment method, so the one-trial-per-card check could not run. The trial carries on.</p>
+<p>Brand id: ${escapeHtml(details.accountId)}</p>
+<p>Stripe subscription: ${escapeHtml(details.subscriptionId)}</p>
+<p>Stripe customer: ${escapeHtml(details.customerId)}</p>
+<p>Look at the subscription's payment method in Stripe. If this business has had a Cheers trial before, decide whether to cancel the trial there by hand.</p>
+`.trim(),
+    required: true,
+  });
+}
+
 function escapeHtml(text: string): string {
   return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }

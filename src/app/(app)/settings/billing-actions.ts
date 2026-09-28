@@ -312,7 +312,9 @@ export async function openBillingPortal(input: BillingPageBrand): Promise<Billin
 }
 
 /** "Check again" after Checkout: read the brand's subscription from Stripe now. */
-export async function checkBillingAgain(input: BillingPageBrand): Promise<ActionResult & { state?: EntitlementState }> {
+export async function checkBillingAgain(
+  input: BillingPageBrand,
+): Promise<ActionResult & { state?: EntitlementState; trialRefused?: boolean }> {
   const ctx = await ownerContext();
   if ('error' in ctx) return ctx;
   const switched = brandSwitched(ctx, input?.accountId);
@@ -322,7 +324,7 @@ export async function checkBillingAgain(input: BillingPageBrand): Promise<Action
   try {
     const result = await reconcileBrandFromStripe(ctx.accountId, { service: ctx.supabase });
     revalidatePath('/settings');
-    return { success: true, state: result.state };
+    return { success: true, state: result.state, trialRefused: result.trialRefused };
   } catch (error) {
     if (error instanceof BillingNotConfiguredError) return { error: BILLING_NOT_CONFIGURED_MESSAGE };
     logger.error('check again: reconcile failed', error instanceof Error ? error : undefined, { accountId: ctx.accountId });

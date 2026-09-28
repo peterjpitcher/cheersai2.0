@@ -11,9 +11,14 @@ vi.mock('@/lib/admin/audit', () => ({ logAdminEvent: (...args: unknown[]) => moc
 const envState = { OPERATOR_ALERT_EMAIL: 'ops@test.example' };
 vi.mock('@/env', () => ({ env: { server: envState, client: {} } }));
 
-const { alertPossibleDoubleBilling, alertRepeatedPublishFailures, alertStripeInvoiceFinalizationFailed, alertStripeWebhookFailure } = await import(
-  '@/lib/notifications/operator-alerts'
-);
+const {
+  alertPossibleDoubleBilling,
+  alertRepeatedPublishFailures,
+  alertStripeInvoiceFinalizationFailed,
+  alertStripeWebhookFailure,
+  alertTrialRefusedRepeatCard,
+  alertTrialStartedWithoutCard,
+} = await import('@/lib/notifications/operator-alerts');
 
 type Result = { data: unknown; error: unknown };
 
@@ -169,5 +174,38 @@ describe('Stripe operator alerts: one per brand per 24 hours', () => {
     db.fail('admin_audit', 'select');
     await expect(failure(BRAND_A, 'evt_1')).rejects.toThrow(/admin_audit lookup failed/);
     expect(mockSendEmail).not.toHaveBeenCalled();
+  });
+});
+
+describe('repeat free-trial alerts (spec §4.7)', () => {
+  const details = { accountId: 'b1b1b1b1-1111-4111-8111-111111111111', brandName: 'The <Crown>', subscriptionId: 'sub_refused', customerId: 'cus_refused' };
+
+  it('tells the operator a trial was refused, with ids and no card details, escaped', async () => {
+    await alertTrialRefusedRepeatCard(details);
+    expect(mockSendEmail).toHaveBeenCalledTimes(1);
+    const [options] = mockSendEmail.mock.calls[0] as [{ to: string; subject: string; html: string; required: boolean }];
+    expect(options).toMatchObject({ to: 'ops@test.example', required: true });
+    expect(options.subject).toBe('[Cheers operator] Free trial refused for The <Crown>: card already used for a trial');
+    expect(options.html).toContain('The &lt;Crown&gt;');
+    expect(options.html).toContain('sub_refused');
+    expect(options.html).toContain('cus_refused');
+    expect(options.html).toContain('Nothing was charged');
+    expect(options.html).not.toMatch(/fingerprint|last4|4242|card_hash/i);
+  });
+
+  it('tells the operator a trial started with no card to check', async () => {
+    await alertTrialStartedWithoutCard({ ...details, brandName: null });
+    const [options] = mockSendEmail.mock.calls[0] as [{ subject: string; html: string }];
+    expect(options.subject).toBe(`[Cheers operator] Free trial started with no card to check: ${details.accountId}`);
+    expect(options.html).toContain('The trial carries on');
+  });
+
+  it('fails loudly when the operator address is missing or the email fails', async () => {
+    envState.OPERATOR_ALERT_EMAIL = '';
+    await expect(alertTrialRefusedRepeatCard(details)).rejects.toThrow(/OPERATOR_ALERT_EMAIL/);
+    await expect(alertTrialStartedWithoutCard(details)).rejects.toThrow(/OPERATOR_ALERT_EMAIL/);
+    envState.OPERATOR_ALERT_EMAIL = 'ops@test.example';
+    mockSendEmail.mockRejectedValueOnce(new Error('Resend API error: down'));
+    await expect(alertTrialRefusedRepeatCard(details)).rejects.toThrow(/Resend API error/);
   });
 });

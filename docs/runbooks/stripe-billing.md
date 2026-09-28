@@ -2,7 +2,7 @@
 
 CheersAI bills through the **Orange Jelly Limited** Stripe account. That account is shared with the Orange Jelly management app, so everything CheersAI creates is tagged `app=cheersai`, CheersAI always passes its own customer portal configuration, and the webhook ignores any event that is not about one of its own customers. Code: `src/lib/billing/`, the webhook at `src/app/api/stripe/webhook/route.ts`.
 
-The Stripe CLI on Peter's machine is linked to The Anchor's account (`the-anchor.pub`). Never use it for CheersAI without an explicit `--api-key` for Orange Jelly Limited.
+Check which account the Stripe CLI on Peter's machine is linked to before using it (`~/.config/stripe/config.toml`, `display_name` and `account_id`): on 28 September 2026 it was Orange Jelly Limited (`acct_1HUtLSIMsxxxvzCC`); earlier it was The Anchor's account (`the-anchor.pub`). Never use it for CheersAI while it points at another account, and use test mode only (never `--live`) for testing.
 
 ## Environment variables
 
@@ -14,10 +14,11 @@ Set in Vercel, per environment. Production must use live-mode values; preview an
 | `STRIPE_WEBHOOK_SECRET` | The signing secret (`whsec_...`) of the webhook endpoint for that environment. |
 | `STRIPE_PRICE_STARTER_MONTHLY`, `STRIPE_PRICE_STARTER_ANNUAL`, `STRIPE_PRICE_PROFESSIONAL_MONTHLY`, `STRIPE_PRICE_PROFESSIONAL_ANNUAL` | Price ids Checkout sells. Reconcile maps a subscription's price to a plan by these ids first, then by the price's metadata (`app=cheersai`, `plan`, `interval`) or lookup key (`cheers_<plan>_<monthly|annual>`), so a replaced or grandfathered price keeps working if it carries either. |
 | `STRIPE_PORTAL_CONFIGURATION_ID` | CheersAI's own customer portal configuration (`bpc_...`). The account default portal belongs to the management app. |
+| `TRIAL_CARD_HASH_KEY` | Key for the repeat free-trial check (below): exactly 64 hex characters, made with `openssl rand -hex 32`, Production only. Checkout, reconcile and the webhook need it; a missing or malformed key counts as "billing not set up" (logged once, without the key). Keep it secret and do not rotate it casually: a new key makes every stored card code unmatchable, so a card that had a trial could have another. |
 | `OPERATOR_ALERT_EMAIL` | Where operator alerts go (already required in production). |
 | `VERCEL_ENV` | Set by Vercel itself; nothing to configure. |
 
-Missing values never break the build: Checkout and the portal say "Billing is not set up yet" and the webhook answers 503 (Stripe retries, nothing is lost).
+Missing values never break the build: Checkout and the portal say "Billing is not set up yet" and the webhook answers 503 (Stripe retries, nothing is lost). The portal does not need `TRIAL_CARD_HASH_KEY`, so an owner can always manage an existing plan.
 
 ## The webhook endpoint
 
@@ -60,6 +61,42 @@ All go to `OPERATOR_ALERT_EMAIL`, at most one of each kind per brand per 24 hour
 | Invoice could not be finalised | `operator_stripe_invoice_alert` | Open the invoice in Stripe, fix the cause (usually the customer's address or tax details), finalise it. |
 | Possible double billing | `operator_stripe_double_billing_alert` | The brand's customer has more than one live CheersAI subscription. Cancel the extra one in Stripe (refund if it charged), then re-sync. |
 
+Two more come from the repeat free-trial check (below). They are not throttled, because each is about one subscription and is sent once:
+
+| Alert | Record | What to do |
+|---|---|---|
+| Free trial refused: card already used for a trial | `trial_refused_repeat_card` in `admin_audit` | Nothing, unless the owner contacts you. The trial was cancelled with nothing charged, and Billing offers them a paid plan straight away. |
+| Free trial started with no card to check | a `no_card` row in `trial_card_checks` | The subscription has no card payment method (for example Link), so the check could not run and the trial carries on. Look at it in Stripe and cancel by hand if this business has had a trial before. |
+
+## Repeat free trials, checked by card
+
+One free trial per card, across every brand (spec §4.7, decisions L6 and P5). Code: `src/lib/billing/trial-card-check.ts`, called by the reconcile after the current subscription row is stored, so the webhook, "Check again" and admin re-sync all run it. Table: `trial_card_checks` (migration `20260928200000_trial_card_checks.sql`), service role only, kept 24 months (the data-retention job).
+
+- **Only trials are checked.** A trialing subscription's default payment method is read from Stripe (expanded), and its card fingerprint is turned into a code: HMAC-SHA256 with `TRIAL_CARD_HASH_KEY`. No card number, fingerprint, brand or last four digits is stored, logged or emailed. Any other subscription costs one or two database reads and no Stripe call, so comped brands are unaffected.
+- **The first trial on a card** is recorded as `first_trial`. A partial unique index allows one `first_trial` per code, which is the whole cross-brand check.
+- **A later trial on the same card**, on any brand (a second venue of the same business included), is recorded as `repeat_refused`. The reconcile that recorded it cancels the trial in Stripe at once (`invoice_now: false`, `prorate: false`: nothing is charged in a trial), stores the cancelled subscription, writes `trial_refused_repeat_card` to `admin_audit`, emails the operator and then sets `cancelled_at`. The owner sees "This card has already been used for a Cheers free trial, so this plan cannot start with one. Start your plan today to carry on." with the usual plan picker, which offers no trial because the brand has subscribed before.
+- **No card** on the subscription: `no_card` (its `card_hash` is `none`) and an operator email; the trial carries on.
+- **Trials Stripe created before 13:00 London time on 28 September 2026** (`TRIAL_CARD_CHECK_STARTS_AT`, when the check was written) are recorded when their card is free but never refused. Production had no trialing subscription then; before the check deploys, confirm it still has none (`select count(*) from subscriptions where status = 'trialing'` must be 0), because a trial started between that moment and the deploy would be checked on its next reconcile.
+- **Races.** Stripe's events for one Checkout reconcile at the same time. The table's keys decide: exactly one reconcile records the outcome and only that one cancels. Any other reconcile of the same subscription (including the ones our own cancellation triggers) waits up to 20 seconds for it to finish.
+- **Failures.** A Stripe or database error fails the reconcile: the webhook answers 500, Stripe redelivers, and the "Stripe webhook failing" alert goes out. The trial runs meanwhile. A refusal left unfinished (`repeat_refused` with no `cancelled_at`) is finished by the first reconcile at least 10 minutes after it was recorded (a redelivery, Check again or Re-sync from Stripe); an earlier one waits, then fails again so Stripe redelivers later. If a refused trial is somehow no longer a trial by then (it was charged), the reconcile fails with "cancel or keep it by hand": decide in Stripe, then set `cancelled_at` on its row.
+- **Wallets.** Apple Pay and Google Pay can give a device-specific card fingerprint, so the same physical card through a wallet may not match. Accepted: the operator sees every refusal.
+
+Read only, in the Supabase SQL editor:
+
+```sql
+-- Recent checks, newest first (no card data is stored).
+select t.created_at, a.business_name, t.outcome, t.cancelled_at, t.stripe_subscription_id
+from trial_card_checks t join accounts a on a.id = t.account_id
+order by t.created_at desc limit 50;
+
+-- Which brand had the first trial on the card a refused subscription used.
+select a.business_name, f.stripe_subscription_id, f.created_at
+from trial_card_checks r
+join trial_card_checks f on f.card_hash = r.card_hash and f.outcome = 'first_trial'
+join accounts a on a.id = f.account_id
+where r.stripe_subscription_id = '<refused sub_...>';
+```
+
 ## Customer portal configuration
 
 CheersAI's portal configuration (the id in `STRIPE_PORTAL_CONFIGURATION_ID`) must have:
@@ -82,12 +119,22 @@ Approved by Peter (question 20). Everything below was read back from Stripe afte
 | Portal | `bpc_1UKYyQIMsxxxvzCC8JoU8Fpd`, `continue_trial`, upgrades `always_invoice`, downgrades at period end, cancel at period end |
 | Stripe Tax | GB standard registration `taxreg_1UKYyRIMsxxxvzCCdBieKRyk`, active; account tax ID `txi_1UKYySIMsxxxvzCCANqfHTTU` (GB315203647); invoices display tax IDs by taxable location |
 | Webhook | `we_1UKYyUIMsxxxvzCCyBApA6gk` to `https://cheers.orangejelly.co.uk/api/stripe/webhook`, API version `2026-08-26.dahlia`, the nine events listed above |
-| Vercel production | the four `STRIPE_PRICE_*`, `STRIPE_PORTAL_CONFIGURATION_ID`, `STRIPE_SECRET_KEY` (restricted `rk_live_` key "CheersAI production": Checkout Sessions, Customers and Customer Portal write; Subscriptions, Prices and Products read) and `STRIPE_WEBHOOK_SECRET` |
+| Vercel production | the four `STRIPE_PRICE_*`, `STRIPE_PORTAL_CONFIGURATION_ID`, `STRIPE_SECRET_KEY` (restricted `rk_live_` key "CheersAI production": Checkout Sessions, Customers and Customer Portal write; Subscriptions, Prices and Products read; the repeat free-trial check also needs PaymentMethods read and Subscriptions write, see below) and `STRIPE_WEBHOOK_SECRET` |
 | Emails | Stripe sends upcoming-renewal, trial-ending (7 days) and expiring-card emails |
 
 Checks after the production redeploy (`dpl_9YTot6wLnzgnZQU59rnNqkLZ5WQv`): the webhook answers 400 to a missing or wrong signature (503 before the secrets were set), and a correctly signed self-test event for an unknown customer was accepted and ignored (its `stripe_events` row was then deleted). The restricted key's permissions were checked with requests against ids that do not exist, so nothing was created. No real live Checkout has been run yet.
 
 The Stripe CLI's own live key was given write access to Products, Prices, Customer Portal, Tax IDs, Tax registrations and Webhook Endpoints for the setup; it expires on its own after 90 days.
+
+### Before the repeat free-trial check deploys (PR 7)
+
+In this order, each by Peter:
+
+1. Apply `supabase/migrations/20260928200000_trial_card_checks.sql` (it only adds the table and one retention rule; nothing reads them yet).
+2. On the "CheersAI production" restricted key, add two permissions: **PaymentMethods: Read** (to read the trial's card fingerprint) and **Subscriptions: Write** (to cancel a refused trial). Without the first, every trial's reconcile fails with a permission error (webhook 500 and an alert) and the trial runs unchecked; without the second, a refused trial cannot be cancelled and fails the same way.
+3. Add `TRIAL_CARD_HASH_KEY` to Vercel **Production** only: `openssl rand -hex 32`, pasted straight into Vercel, never into a file or chat. Preview needs none.
+4. Just before merging, confirm production still has no trialing subscription (read only: `select count(*) from subscriptions where status = 'trialing'` is 0; see `TRIAL_CARD_CHECK_STARTS_AT` below).
+5. Merge and deploy. Until the key is there, Checkout says "Billing is not set up yet" and the webhook answers 503, which Stripe retries.
 
 ## Terms acceptance at Checkout
 
@@ -125,6 +172,22 @@ stripe listen \
 | Cancel in the portal | app: "Professional, billed monthly. Ends on 26 October 2026" |
 | Subscription deleted | app: "Your subscription has ended", no second free trial offered |
 | Admin, Re-sync from Stripe | "Subscription updated from Stripe", audited as `stripe_resync` |
+
+### Repeat free-trial check, verified (2026-09-28, test mode, local stack)
+
+The tool browser could not open the hosted Checkout page, so the app's "Start 14-day free trial" created the customer and Checkout Session and the subscription was then created through the API as Checkout does (a real Checkout's `customer.subscription.created` of 2026-09-26 shows Checkout sets the card as `default_payment_method` at creation). `stripe listen` forwarded the webhooks; a mock Resend captured the emails.
+
+| Step | Result |
+|---|---|
+| First trial, card 4242 | `first_trial`; webhooks 200 (two at once for one subscription) |
+| Same card on a second brand | `repeat_refused`; cancelled in Stripe at once (one cancel request, invoice total £0.00, nothing paid); `trial_refused_repeat_card` audited; one operator email with no card details; Billing: "This card has already been used for a Cheers free trial..." with "Continue to payment", whose Checkout Session is £29.99 today (no trial) |
+| Different card (Mastercard 4444) | `first_trial`; Billing: "Free trial of Starter, billed monthly, until 12 October 2026." |
+| No card | `no_card`; operator email; trial carries on |
+| Database refuses the insert | webhook 500, "Stripe webhook failing" email; after the fix, a redelivery answers 200 and records `first_trial` |
+| Operator email fails during a refusal | trial cancelled and stored cancelled; the three reconciles answer 500 (the other two after waiting 20 seconds, without cancelling); a redelivery inside 10 minutes waits and fails again; one after 10 minutes finishes it (email, `cancelled_at`) with no second cancel |
+| Five reconciles of one new trial at once, plus its webhooks | one `repeat_refused`, one cancel request, one audit row, one email |
+| Two brands, one new card, at once (plus webhooks) | one `first_trial`, one `repeat_refused`, one cancel request |
+| Comped brand whose only subscription is cancelled | only `subscriptions.list` called; nothing written |
 
 ## Re-syncing a brand
 

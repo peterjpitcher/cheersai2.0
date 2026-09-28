@@ -23,6 +23,9 @@ interface BillingSectionProps {
 }
 
 const NOT_SET_UP = "Billing is not set up yet. Please contact Cheers support.";
+/** Spec §4.7 step 4 (P5): the trial was cancelled because the card had a Cheers trial before. */
+export const TRIAL_REFUSED_REPEAT_CARD =
+  "This card has already been used for a Cheers free trial, so this plan cannot start with one. Start your plan today to carry on.";
 const AUTO_REFRESH_MS = 4000;
 const AUTO_REFRESH_TRIES = 8;
 
@@ -113,7 +116,9 @@ export function BillingSection({ accountId, overview, plans, canManage, checkout
         toast.error("Billing", { description: message });
         return;
       }
-      if (result.state === "incomplete" || result.state === "lapsed") {
+      // A refused repeat trial is confirmed, just not as a trial: the page
+      // explains it after the refresh, so no "not confirmed" toast.
+      if (!result.trialRefused && (result.state === "incomplete" || result.state === "lapsed")) {
         toast.info("Not confirmed yet", {
           description: "Stripe has not confirmed a subscription yet. If you finished checkout, wait a minute and check again.",
         });
@@ -233,8 +238,10 @@ export function BillingSection({ accountId, overview, plans, canManage, checkout
 
   // Held states: lapsed or incomplete. Back from Checkout, both mean "not
   // confirmed yet": a first subscription (incomplete) or a returning brand
-  // whose old subscription has ended (lapsed).
-  if (checkoutReturn === "success") {
+  // whose old subscription has ended (lapsed). Unless the trial was refused
+  // for a repeat card: that is final, so say so instead of "confirming".
+  const refusedTrial = overview.trialRefusedRepeatCard && state === "lapsed";
+  if (checkoutReturn === "success" && !refusedTrial) {
     return <ConfirmingPayment canManage={canManage} isPending={isPending} onCheckAgain={checkAgain} error={errorNotice} />;
   }
 
@@ -258,11 +265,15 @@ export function BillingSection({ accountId, overview, plans, canManage, checkout
   return (
     <div className="space-y-4">
       {checkoutReturn === "cancelled" ? <Notice>Checkout was cancelled. Nothing has been charged.</Notice> : null}
-      <Line>
-        {state === "lapsed"
-          ? "Your subscription has ended. Choose a plan to start posting again."
-          : "Choose a plan to start using Cheers for this brand."}
-      </Line>
+      {refusedTrial ? (
+        <Notice>{TRIAL_REFUSED_REPEAT_CARD}</Notice>
+      ) : (
+        <Line>
+          {state === "lapsed"
+            ? "Your subscription has ended. Choose a plan to start posting again."
+            : "Choose a plan to start using Cheers for this brand."}
+        </Line>
+      )}
       {canManage ? (
         overview.checkoutReady ? (
           <PlanPicker

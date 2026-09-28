@@ -24,6 +24,8 @@ export function billingServerEnv(): Record<string, string> {
     STRIPE_PRICE_PROFESSIONAL_ANNUAL: TEST_PRICES.professionalAnnual,
     STRIPE_PORTAL_CONFIGURATION_ID: TEST_PORTAL_CONFIGURATION,
     OPERATOR_ALERT_EMAIL: 'operator@example.test',
+    // A made-up 64 hex character key for the repeat-trial card check (unit tests only).
+    TRIAL_CARD_HASH_KEY: '0f1e2d3c4b5a69788796a5b4c3d2e1f00112233445566778899aabbccddeeff0',
   };
 }
 
@@ -47,9 +49,31 @@ export interface FakeSubscriptionInput {
   cancelAt?: string | null;
   canceledAt?: string | null;
   metadata?: Record<string, string>;
+  /**
+   * The default payment method, as Stripe returns it with
+   * expand: ['default_payment_method']. Defaults to a card whose fingerprint
+   * is unique to the subscription; pass { fingerprint } to share a card
+   * between subscriptions, { type: 'link' } for a method with no card, or null
+   * for none.
+   */
+  paymentMethod?: { fingerprint: string | null } | { type: 'link' } | null;
 }
 
 let counter = 0;
+
+function fakePaymentMethod(id: string, input: FakeSubscriptionInput['paymentMethod']): Stripe.PaymentMethod | null {
+  if (input === null) return null;
+  if (input && 'type' in input) {
+    return { id: `pm_link_${id}`, object: 'payment_method', type: 'link', link: { email: null } } as unknown as Stripe.PaymentMethod;
+  }
+  const fingerprint = input ? input.fingerprint : `fp_${id}`;
+  return {
+    id: `pm_card_${id}`,
+    object: 'payment_method',
+    type: 'card',
+    card: { brand: 'visa', last4: '4242', fingerprint },
+  } as unknown as Stripe.PaymentMethod;
+}
 
 /** A Stripe subscription object with the fields reconcile reads (API 2026-08-26.dahlia shape). */
 export function fakeSubscription(input: FakeSubscriptionInput): Stripe.Subscription {
@@ -66,6 +90,7 @@ export function fakeSubscription(input: FakeSubscriptionInput): Stripe.Subscript
     cancel_at: input.cancelAt ? seconds(input.cancelAt) : null,
     canceled_at: input.canceledAt ? seconds(input.canceledAt) : null,
     metadata: input.metadata ?? { app: 'cheersai' },
+    default_payment_method: fakePaymentMethod(id, input.paymentMethod),
     items: {
       object: 'list',
       data: [
@@ -95,6 +120,10 @@ export interface FakeStripe {
   openSessions: Array<{ id: string; metadata: Record<string, string> }>;
   customersCreate: ReturnType<typeof vi.fn>;
   subscriptionsList: ReturnType<typeof vi.fn>;
+  /** retrieve(id, params): the stored subscription (its payment method is always expanded). */
+  subscriptionsRetrieve: ReturnType<typeof vi.fn>;
+  /** cancel(id, params): cancels at once; cancelling a cancelled one fails as Stripe does. */
+  subscriptionsCancel: ReturnType<typeof vi.fn>;
   sessionsCreate: ReturnType<typeof vi.fn>;
   sessionsList: ReturnType<typeof vi.fn>;
   sessionsExpire: ReturnType<typeof vi.fn>;
@@ -115,9 +144,23 @@ export function createFakeStripe(): FakeStripe {
   }));
   fake.subscriptionsList = vi.fn(async (params: { customer: string }) => ({
     object: 'list',
-    data: fake.subscriptions.filter((subscription) => subscription.customer === params.customer),
+    data: fake.subscriptions.filter((subscription) => subscription.customer === params.customer).map((subscription) => ({ ...subscription })),
     has_more: false,
   }));
+  const find = (id: string): Stripe.Subscription => {
+    const subscription = fake.subscriptions.find((candidate) => candidate.id === id);
+    if (!subscription) throw Object.assign(new Error(`No such subscription: '${id}'`), { type: 'StripeInvalidRequestError', code: 'resource_missing' });
+    return subscription;
+  };
+  fake.subscriptionsRetrieve = vi.fn(async (id: string) => ({ ...find(id) }));
+  fake.subscriptionsCancel = vi.fn(async (id: string) => {
+    const subscription = find(id);
+    if (subscription.status === 'canceled') {
+      throw Object.assign(new Error('A canceled subscription can only update its cancellation_details.'), { type: 'StripeInvalidRequestError' });
+    }
+    Object.assign(subscription, { status: 'canceled', canceled_at: Math.floor(Date.now() / 1000), ended_at: Math.floor(Date.now() / 1000) });
+    return { ...subscription };
+  });
   let sessionCount = 0;
   fake.sessionsCreate = vi.fn(async () => {
     sessionCount += 1;
@@ -129,7 +172,7 @@ export function createFakeStripe(): FakeStripe {
 
   fake.stripe = {
     customers: { create: fake.customersCreate },
-    subscriptions: { list: fake.subscriptionsList },
+    subscriptions: { list: fake.subscriptionsList, retrieve: fake.subscriptionsRetrieve, cancel: fake.subscriptionsCancel },
     checkout: { sessions: { create: fake.sessionsCreate, list: fake.sessionsList, expire: fake.sessionsExpire } },
     billingPortal: { sessions: { create: fake.portalCreate } },
   } as unknown as Stripe;
