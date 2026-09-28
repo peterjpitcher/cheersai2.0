@@ -52,7 +52,7 @@ const PURPOSE_ROWS = [
     "Legitimate interests (security).",
   ],
   [
-    "Sign-up records, if you sign up on our website: when you asked to sign up, confirmed your email address, confirmed you are signing up for a business and created your venue, and the version of our terms shown to you.",
+    "Sign-up records, if you sign up on our website: when you asked to sign up, confirmed your email address, confirmed you are signing up for a business and created your venue, and the version of our terms shown to you. Our sign-in provider's security log also records the email address you typed and the time of each sign-up link we send you, and of any deletion of your login that we make through the provider, and keeps them for 24 months.",
     "To run sign-up and see where people stop before finishing it.",
     "Legitimate interests.",
   ],
