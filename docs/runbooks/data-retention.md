@@ -1,6 +1,6 @@
 # Runbook: data retention
 
-Peter approved these retention periods on 27 September 2026 for the privacy notice and the DPA. A daily job makes them true: `/api/cron/data-retention` at 03:45 UTC (`vercel.json`) calls `public.run_data_retention(false)` (migration `20260927120000_data_retention.sql`), then sends the operator the purge reminder below.
+Peter approved these retention periods on 27 September 2026 for the privacy notice and the DPA. A daily job makes them true: `/api/cron/data-retention` at 03:45 UTC (`vercel.json`) calls `public.run_data_retention(false)` (migration `20260927120000_data_retention.sql`, restated with the team invitations rule, approved on 28 September 2026 as P6, by `20260928161500_team_invitations.sql`), then sends the operator the purge reminder below.
 
 ## What each rule does
 
@@ -19,6 +19,7 @@ Every cutoff is measured back from the moment the job runs.
 | `admin_audit` | operator (admin) actions | 6 years from `created_at` | deleted |
 | `auth_rate_limits` | sign-in rate limit windows | until 24 hours after `reset_at` | deleted |
 | `oauth_states` | Facebook and Instagram connection handshakes | until 24 hours after `expires_at` (or `created_at` if it has none) | deleted |
+| `team_invitations` | team invitations (who was invited to which brand, by whom) | until 24 hours after the invitation was accepted, declined, cancelled or expired (7 days after it was sent), whichever came first | deleted |
 
 Kept on purpose: `publish_jobs`, posts and all other content. They belong to the content, which is kept for the life of the subscription. Offboarded brands are deleted by hand (below).
 

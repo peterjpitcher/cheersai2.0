@@ -1,5 +1,6 @@
--- Verification for 20260927120000_data_retention (public.run_data_retention).
--- Run AFTER a local rebuild (`npm run db:rebuild`) with the migration applied.
+-- Verification for 20260927120000_data_retention (public.run_data_retention),
+-- as restated by 20260928161500_team_invitations (rule 13, team_invitations).
+-- Run AFTER a local rebuild (`npm run db:rebuild`) with the migrations applied.
 -- Each block raises an exception if an expectation is not met; a clean run =
 -- pass, and the last notice prints 'data retention verification PASSED'.
 -- Writes nothing lasting: the fixture rows live inside a sub-transaction that
@@ -62,11 +63,23 @@ declare
     'meta_data_requests', 1,
     'admin_audit', 1,
     'auth_rate_limits', 1,
-    'oauth_states', 2
+    'oauth_states', 2,
+    'team_invitations', 3
   );
   v_profile uuid := gen_random_uuid();
   v_old_auth uuid := gen_random_uuid();
   v_new_auth uuid := gen_random_uuid();
+  v_invitee_a uuid := gen_random_uuid();
+  v_invitee_b uuid := gen_random_uuid();
+  v_invitee_c uuid := gen_random_uuid();
+  -- team_invitations fixtures: old ones are deleted, new ones kept.
+  v_inv_accepted_old uuid := gen_random_uuid();
+  v_inv_accepted_new uuid := gen_random_uuid();
+  v_inv_declined_old uuid := gen_random_uuid();
+  v_inv_cancelled_new uuid := gen_random_uuid();
+  v_inv_expired_old uuid := gen_random_uuid();
+  v_inv_expired_new uuid := gen_random_uuid();
+  v_inv_open uuid := gen_random_uuid();
   v_row record;
   v_n bigint;
 begin
@@ -153,6 +166,30 @@ begin
       ('facebook', 'retention-noexpiry-old', null, now() - interval '2 days'),
       ('facebook', 'retention-noexpiry-new', null, now() - interval '1 hour');
 
+    -- team_invitations: a day after accepted, declined, cancelled or expired,
+    -- whichever came first. Open rows need a person each (one open row per
+    -- person per brand).
+    insert into auth.users (id, email, created_at) values
+      (v_invitee_a, 'retention-invitee-a@example.invalid', now()),
+      (v_invitee_b, 'retention-invitee-b@example.invalid', now()),
+      (v_invitee_c, 'retention-invitee-c@example.invalid', now());
+    insert into public.team_invitations
+      (id, account_id, user_id, role, created_at, expires_at, accepted_at, declined_at, cancelled_at) values
+      -- deleted: accepted 25 hours ago
+      (v_inv_accepted_old, v_account, v_invitee_a, 'member', now() - interval '26 hours', now() + interval '6 days', now() - interval '25 hours', null, null),
+      -- kept: accepted 23 hours ago
+      (v_inv_accepted_new, v_account, v_invitee_a, 'member', now() - interval '23 hours 30 minutes', now() + interval '6 days', now() - interval '23 hours', null, null),
+      -- deleted: declined 25 hours ago
+      (v_inv_declined_old, v_account, v_invitee_b, 'member', now() - interval '2 days', now() + interval '5 days', null, now() - interval '25 hours', null),
+      -- kept: cancelled 23 hours ago
+      (v_inv_cancelled_new, v_account, v_invitee_b, 'owner', now() - interval '2 days', now() + interval '5 days', null, null, now() - interval '23 hours'),
+      -- deleted: never answered, expired 25 hours ago
+      (v_inv_expired_old, v_account, v_invitee_a, 'member', now() - interval '8 days 1 hour', now() - interval '25 hours', null, null, null),
+      -- kept: never answered, expired 23 hours ago
+      (v_inv_expired_new, v_account, v_invitee_b, 'member', now() - interval '7 days 23 hours', now() - interval '23 hours', null, null, null),
+      -- kept: open and in date
+      (v_inv_open, v_account, v_invitee_c, 'member', now() - interval '1 day', now() + interval '6 days', null, null, null);
+
     set local role service_role;
 
     -- Dry run: counts the old fixtures, changes nothing.
@@ -186,6 +223,8 @@ begin
     if v_n <> 4 then raise exception 'dry run cleared booking identifiers (% rows still have an IP)', v_n; end if;
     select count(*) into v_n from public.oauth_states where state like 'retention-%';
     if v_n <> 4 then raise exception 'dry run deleted oauth_states'; end if;
+    select count(*) into v_n from public.team_invitations where account_id = v_account;
+    if v_n <> 7 then raise exception 'dry run deleted team_invitations'; end if;
 
     -- Real run.
     set local role service_role;
@@ -244,6 +283,12 @@ begin
     if exists (select 1 from public.oauth_states where state in ('retention-old', 'retention-noexpiry-old'))
        or (select count(*) from public.oauth_states where state in ('retention-new', 'retention-noexpiry-new')) <> 2 then
       raise exception 'oauth_states: wrong rows deleted';
+    end if;
+    if exists (select 1 from public.team_invitations
+                where id in (v_inv_accepted_old, v_inv_declined_old, v_inv_expired_old))
+       or (select count(*) from public.team_invitations
+            where id in (v_inv_accepted_new, v_inv_cancelled_new, v_inv_expired_new, v_inv_open)) <> 4 then
+      raise exception 'team_invitations: wrong rows deleted';
     end if;
 
     -- Booking rows: exactly the right ones deleted, cleared or left alone.
