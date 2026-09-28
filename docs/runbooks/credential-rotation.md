@@ -50,6 +50,8 @@ This is the most sensitive credential. Uses lazy re-encrypt strategy:
    ```
    (Create this script if it does not exist -- it should iterate all token_vault entries, decrypt with old key, re-encrypt with new key, and update in place)
 7. Redeploy the application and Supabase Edge Functions to pick up the new env var
+
+Side effect: the sign-in rate limits (`src/lib/auth/rate-limit.ts`) derive their HMAC key from `TOKEN_VAULT_KEY` (HKDF, label `cheersai/auth-rate-limit/hmac-sha256/v1`). A new vault key makes new rate-limit keys, so every counter starts again from zero. That is harmless; old rows are deleted by the data-retention job a day after their window ends.
 8. Test: navigate to /connections, reconnect one provider, verify `token_vault` receives an `access` row, then trigger `publish-queue` once in staging.
 
 ### SUPABASE_SERVICE_ROLE_KEY
