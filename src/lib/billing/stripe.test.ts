@@ -44,6 +44,25 @@ describe('Stripe key mode', () => {
     expect(logger.error).not.toHaveBeenCalled();
   });
 
+  it('needs TRIAL_CARD_HASH_KEY for Checkout, reconcile and the webhook, not for the portal or a lookup (spec §4.7)', () => {
+    delete serverEnv.TRIAL_CARD_HASH_KEY;
+    expect(missingBillingEnv('checkout')).toEqual(['TRIAL_CARD_HASH_KEY']);
+    expect(missingBillingEnv('reconcile')).toEqual(['TRIAL_CARD_HASH_KEY']);
+    expect(missingBillingEnv('webhook')).toEqual(['TRIAL_CARD_HASH_KEY']);
+    expect(missingBillingEnv('portal')).toEqual([]);
+    expect(missingBillingEnv('lookup')).toEqual([]);
+  });
+
+  it('treats a TRIAL_CARD_HASH_KEY that is not 64 hex characters as missing, and logs it without the key', () => {
+    for (const bad of ['abc123', 'g'.repeat(64), 'a'.repeat(63), 'a'.repeat(65)]) {
+      serverEnv.TRIAL_CARD_HASH_KEY = bad;
+      expect(missingBillingEnv('webhook')).toEqual(['TRIAL_CARD_HASH_KEY']);
+    }
+    expect(JSON.stringify(logger.error.mock.calls)).not.toContain('abc123');
+    serverEnv.TRIAL_CARD_HASH_KEY = 'A'.repeat(32) + '0'.repeat(32);
+    expect(missingBillingEnv('webhook')).toEqual([]);
+  });
+
   it('accepts a test key outside production (preview, development, local)', () => {
     for (const vercelEnv of ['preview', 'development', '']) {
       serverEnv.VERCEL_ENV = vercelEnv;

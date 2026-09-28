@@ -45,6 +45,7 @@ describe('getBillingOverview', () => {
       checkoutReady: true,
       portalReady: true,
       trialLimitsPlan: { plan: 'starter', name: 'Starter' },
+      trialRefusedRepeatCard: false,
     });
   });
 
@@ -126,6 +127,61 @@ describe('getBillingOverview', () => {
   it('throws on a database failure (the page shows an error, not a wrong state)', async () => {
     db.fail('subscriptions', 'select');
     await expect(getBillingOverview(db.client(), BRAND)).rejects.toThrow(/subscriptions lookup failed/);
+  });
+});
+
+describe('getBillingOverview: a trial refused for a repeat card (spec §4.7)', () => {
+  const HASH = 'a'.repeat(64);
+
+  beforeEach(() => {
+    db.seed('billing_customers', [{ account_id: BRAND, stripe_customer_id: 'cus_1' }]);
+  });
+
+  it('flags a brand whose newest subscription was a refused trial, and offers no trial', async () => {
+    db.seed('subscriptions', [subscription({ stripe_subscription_id: 'sub_refused', status: 'canceled' })]);
+    db.seed('trial_card_checks', [
+      { stripe_subscription_id: 'sub_refused', account_id: BRAND, card_hash: HASH, outcome: 'repeat_refused', cancelled_at: '2026-09-26T10:00:01Z' },
+    ]);
+    expect(await getBillingOverview(db.client(), BRAND)).toMatchObject({ state: 'lapsed', trial: 'ineligible', trialRefusedRepeatCard: true });
+  });
+
+  it('stops flagging once the owner has a newer subscription', async () => {
+    db.seed('subscriptions', [
+      subscription({ stripe_subscription_id: 'sub_refused', status: 'canceled', stripe_state_at: '2026-09-26T10:00:00Z' }),
+      subscription({ stripe_subscription_id: 'sub_paid', status: 'active', stripe_state_at: '2026-09-26T11:00:00Z' }),
+    ]);
+    db.seed('trial_card_checks', [
+      { stripe_subscription_id: 'sub_refused', account_id: BRAND, card_hash: HASH, outcome: 'repeat_refused', cancelled_at: '2026-09-26T10:00:01Z' },
+    ]);
+    expect(await getBillingOverview(db.client(), BRAND, new Date('2026-09-26T12:00:00Z'))).toMatchObject({ state: 'active', trialRefusedRepeatCard: false });
+  });
+
+  it('does not flag a first trial, and never reads the table for a comped brand', async () => {
+    db.seed('subscriptions', [subscription({ stripe_subscription_id: 'sub_first', status: 'trialing' })]);
+    db.seed('trial_card_checks', [{ stripe_subscription_id: 'sub_first', account_id: BRAND, card_hash: HASH, outcome: 'first_trial' }]);
+    expect((await getBillingOverview(db.client(), BRAND)).trialRefusedRepeatCard).toBe(false);
+
+    db.tables.accounts[0].billing_override = 'comped';
+    db.queries.length = 0;
+    expect((await getBillingOverview(db.client(), BRAND)).trialRefusedRepeatCard).toBe(false);
+    expect(db.queries.some((query) => query.table === 'trial_card_checks')).toBe(false);
+  });
+
+  it('reads only this brand\'s check row', async () => {
+    db.seed('subscriptions', [subscription({ stripe_subscription_id: 'sub_refused', status: 'canceled' })]);
+    db.seed('trial_card_checks', [
+      { stripe_subscription_id: 'sub_refused', account_id: BRAND, card_hash: HASH, outcome: 'repeat_refused', cancelled_at: '2026-09-26T10:00:01Z' },
+    ]);
+    await getBillingOverview(db.client(), BRAND);
+    const reads = db.queries.filter((query) => query.table === 'trial_card_checks');
+    expect(reads).toHaveLength(1);
+    expect(reads[0].eq).toContainEqual(['account_id', BRAND]);
+  });
+
+  it('throws when the check cannot be read', async () => {
+    db.seed('subscriptions', [subscription({ stripe_subscription_id: 'sub_refused', status: 'canceled' })]);
+    db.fail('trial_card_checks', 'select');
+    await expect(getBillingOverview(db.client(), BRAND)).rejects.toThrow(/trial card check lookup failed/);
   });
 });
 

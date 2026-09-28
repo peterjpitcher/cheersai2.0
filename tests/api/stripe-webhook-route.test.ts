@@ -71,6 +71,14 @@ describe('POST /api/stripe/webhook: trust', () => {
     expect(logger.error).toHaveBeenCalled();
   });
 
+  it('answers 503 without the trial card key, so Stripe retries until the check can run (spec §4.7)', async () => {
+    delete serverEnv.TRIAL_CARD_HASH_KEY;
+    const response = await POST(signedRequest(subscriptionUpdated()));
+    expect(response.status).toBe(503);
+    expect(db.rows('stripe_events')).toHaveLength(0);
+    expect(mockReconcile).not.toHaveBeenCalled();
+  });
+
   it('rejects a missing signature with 400 and stores nothing', async () => {
     const request = new Request('https://cheers.orangejelly.co.uk/api/stripe/webhook', { method: 'POST', body: subscriptionUpdated() });
     expect((await POST(request)).status).toBe(400);

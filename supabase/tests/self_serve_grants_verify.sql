@@ -14,6 +14,9 @@
 --   (SECURITY INVOKER: service_role can already write every table it touches)
 --   and its helper public.self_serve_login_confirmation (SECURITY DEFINER: it
 --   reads auth.users, which service_role cannot).
+--   PR 7 (migration 20260928200000): public.trial_card_checks (service role
+--   only, RLS on, no policy, no column that could hold card data) and
+--   public.run_data_retention again (restated with its trial_card_checks rule).
 --
 -- Read-only: it reads the catalogue and nothing else, so it is safe to run on a
 -- local rebuild AND against production after each migration. A clean run ends
@@ -55,9 +58,9 @@ declare
     'public.provision_self_serve_brand(uuid, text, text, text, text)'
   ];
   -- Tables only service_role may touch, with RLS on.
-  v_tables constant text[] := array['public.auth_rate_limits', 'public.team_invitations', 'public.self_serve_signups'];
+  v_tables constant text[] := array['public.auth_rate_limits', 'public.team_invitations', 'public.self_serve_signups', 'public.trial_card_checks'];
   -- Of those, the ones read only through the service role: no RLS policy at all.
-  v_no_policy_tables constant text[] := array['team_invitations', 'self_serve_signups'];
+  v_no_policy_tables constant text[] := array['team_invitations', 'self_serve_signups', 'trial_card_checks'];
   v_fn text;
   v_table text;
   v_role text;
@@ -151,6 +154,24 @@ begin
        and column_name ~* '(email|name|address|^ip$|^ip_|_ip$)'
   ) then
     raise exception 'public.self_serve_signups has a column that looks like an email, name or IP';
+  end if;
+
+  -- trial_card_checks keeps a keyed code only, never card data (spec §4.7).
+  if exists (
+    select 1 from information_schema.columns
+     where table_schema = 'public' and table_name = 'trial_card_checks'
+       and column_name ~* '(fingerprint|last4|last_4|number|pan|expir|exp_|brand|email|name)'
+  ) then
+    raise exception 'public.trial_card_checks has a column that looks like card data';
+  end if;
+  -- The code must be the 64 hex character HMAC (or 'none' for no_card), so a raw
+  -- Stripe fingerprint can never be stored.
+  if not exists (
+    select 1 from pg_constraint
+     where conrelid = 'public.trial_card_checks'::regclass
+       and conname = 'trial_card_checks_card_hash_format' and contype = 'c'
+  ) then
+    raise exception 'public.trial_card_checks is missing its card_hash format check';
   end if;
 end;
 $$;

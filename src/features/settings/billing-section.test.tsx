@@ -34,7 +34,30 @@ const NEW_BRAND: BillingOverview = {
   checkoutReady: true,
   portalReady: true,
   trialLimitsPlan: { plan: "starter", name: "Starter" },
+  trialRefusedRepeatCard: false,
 };
+
+/** A brand whose Checkout trial was cancelled because the card had a Cheers trial before (spec §4.7). */
+const REFUSED_TRIAL: BillingOverview = {
+  ...NEW_BRAND,
+  state: "lapsed",
+  hasCustomer: true,
+  trial: "ineligible",
+  trialRefusedRepeatCard: true,
+  subscription: {
+    plan: "starter",
+    planName: "Starter",
+    interval: "month",
+    status: "canceled",
+    cancelAtPeriodEnd: false,
+    trialEndLabel: "12 October 2026",
+    periodEndLabel: "12 October 2026",
+    graceEndLabel: null,
+  },
+};
+
+const REFUSED_MESSAGE =
+  "This card has already been used for a Cheers free trial, so this plan cannot start with one. Start your plan today to carry on.";
 
 const assign = vi.fn();
 
@@ -201,6 +224,41 @@ describe("BillingSection", () => {
     });
     expect(screen.getByText(/Your subscription has ended/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Continue to payment" })).toBeInTheDocument();
+  });
+
+  it("tells an owner whose trial was refused for a repeat card why, and offers a paid plan with no trial (spec §4.7)", async () => {
+    mockStartCheckout.mockResolvedValue({ success: true, url: "https://checkout.stripe.com/c/pay/cs_test_paid" });
+    renderSection(REFUSED_TRIAL);
+
+    expect(screen.getByRole("status")).toHaveTextContent(REFUSED_MESSAGE);
+    expect(screen.queryByText(/Your subscription has ended/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /free trial/ })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Continue to payment" }));
+    await waitFor(() => expect(mockStartCheckout).toHaveBeenCalledWith({ plan: "starter", interval: "month", accountId: BRAND }));
+    await waitFor(() => expect(assign).toHaveBeenCalledWith("https://checkout.stripe.com/c/pay/cs_test_paid"));
+  });
+
+  it("shows the refusal on return from Checkout instead of 'Confirming your payment'", () => {
+    renderSection(REFUSED_TRIAL, { checkoutReturn: "success" });
+    expect(screen.getByRole("status")).toHaveTextContent(REFUSED_MESSAGE);
+    expect(screen.queryByText(/Confirming your payment/)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Continue to payment" })).toBeInTheDocument();
+  });
+
+  it("shows a member of a refused brand the reason but no plan picker", () => {
+    renderSection(REFUSED_TRIAL, { canManage: false });
+    expect(screen.getByRole("status")).toHaveTextContent(REFUSED_MESSAGE);
+    expect(screen.getByText("Ask an owner of this brand to choose a plan.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Continue to payment" })).not.toBeInTheDocument();
+  });
+
+  it("does not say 'Not confirmed yet' when Check again finds the trial was refused", async () => {
+    mockCheckAgain.mockResolvedValue({ success: true, state: "lapsed", trialRefused: true });
+    renderSection(NEW_BRAND, { checkoutReturn: "success" });
+    fireEvent.click(screen.getByRole("button", { name: "Check again" }));
+    await waitFor(() => expect(refresh).toHaveBeenCalled());
+    expect(screen.queryByText("Not confirmed yet")).not.toBeInTheDocument();
   });
 
   it("does not promise a free trial it cannot be sure of", () => {
