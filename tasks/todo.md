@@ -1,3 +1,21 @@
+# Planner post page actions (2026-09-27)
+
+Spec: `tasks/SPEC-planner-post-page-actions.md`.
+
+- [x] Confirm the eight buttons are dead in the running app (local dev server, local Supabase)
+- [x] Find the existing actions; `retryPublishJob` ruled out (cannot deliver in production)
+- [x] `publishPlannerContentNow` guard (entitlement, state machine) + 17 tests, London and UTC
+- [x] Client actions: Cancel (confirm, trash, undo), Publish now / Try again now, Reconnect link
+- [x] Remove Save changes, Download copy & image, Regenerate, Try a different angle
+- [x] Component tests (10) and a page render test per status (6)
+- [x] Re-run the page locally: each button does its job (running the page caught an icon prop that
+      cannot cross the server/client boundary; fixed)
+- [x] `npm run ci:verify`: lint, typecheck, 2,940 tests in London and UTC; build clean with CI's env
+- [x] PR #128 with the dead-button sweep (one more found: `AdPreview.tsx:69`)
+- [ ] Peter's yes, then merge and deploy
+- [ ] Separate tasks raised: clock-change slot maths (before 25 October), rescheduled drafts
+      publishing unapproved, the unusable `retryPublishJob`
+
 # Local rebuild matches production (2026-09-26)
 
 Spec: `tasks/SPEC-local-rebuild-matches-production.md`.

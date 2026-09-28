@@ -3,12 +3,8 @@ import { notFound } from "next/navigation";
 import { DateTime } from "luxon";
 import {
   ArrowLeft,
-  Trash2,
-  Play,
   AlertTriangle,
-  RefreshCw,
   Link2,
-  Download,
   ChevronDown,
 } from "lucide-react";
 
@@ -16,10 +12,12 @@ import { BelongsToCard } from "@/features/planner/belongs-to-card";
 import { PlannerContentScheduleForm } from "@/features/planner/content-schedule-form";
 import { PlannerContentComposer } from "@/features/planner/planner-content-composer";
 import { PlannerMediaSwapButton } from "@/features/planner/planner-media-swap-button";
+import { CancelPostButton, PublishNowButton } from "@/features/planner/planner-post-actions";
 import { formatPlatformLabel } from "@/features/planner/utils";
 import { getPlannerContentDetail } from "@/lib/planner/data";
 import { listMediaAssets } from "@/lib/library/data";
 import { getOwnerSettings } from "@/lib/settings/data";
+import { canTransition } from "@/lib/publishing/state-machine";
 import { DEFAULT_TIMEZONE } from "@/lib/constants";
 import { Status } from "@/components/ui/status";
 import type { DesignStatus } from "@/components/ui/status";
@@ -111,7 +109,10 @@ export default async function PlannerContentPage({
   const heroImage = detail.media.length > 0 ? detail.media[0] : null;
   const campaignName = detail.campaign?.name ?? "Instant post";
   const venueName = campaignName !== "Instant post" ? campaignName : "Your Venue";
-  const canEditMedia = ["draft", "scheduled", "queued", "failed"].includes(detail.status);
+  const isEditable = ["draft", "scheduled", "queued", "failed"].includes(detail.status);
+  // Only a post the state machine lets move to queued (scheduled or failed) can
+  // be sent now: drafts need approval first, and a published post never resends.
+  const canPublishNow = canTransition(detail.status, "queued");
 
   return (
     <div className="flex flex-col gap-6 h-full font-sans" style={{ color: "var(--c-ink)" }}>
@@ -190,21 +191,26 @@ export default async function PlannerContentPage({
               <p className="text-[15px]" style={{ color: "var(--c-ink-2)" }}>
                 {detail.lastError
                   ? detail.lastError
-                  : "Something went wrong when we tried to publish. You can reconnect the platform, try publishing again, or download your content to post manually."}
+                  : "Something went wrong when we tried to publish. You can reconnect the platform or try publishing again."}
               </p>
             </div>
 
             {/* Action buttons */}
             <div className="flex flex-wrap items-center gap-2">
-              <Button variant="primary" size="md" icon={Link2}>
-                Reconnect {formatPlatformLabel(detail.platform)}
+              <Button variant="primary" size="md" asChild>
+                <Link href="/connections">
+                  <Link2 className="h-4 w-4 shrink-0" />
+                  Reconnect {formatPlatformLabel(detail.platform)}
+                </Link>
               </Button>
-              <Button variant="secondary" size="md" icon={RefreshCw}>
-                Try again now
-              </Button>
-              <Button variant="ghost" size="md" icon={Download}>
-                Download copy &amp; image
-              </Button>
+              {canPublishNow && (
+                <PublishNowButton
+                  contentId={detail.id}
+                  label="Try again now"
+                  variant="secondary"
+                  icon="retry"
+                />
+              )}
             </div>
 
             {/* Diagnostic footer */}
@@ -266,17 +272,6 @@ export default async function PlannerContentPage({
             ownerTimezone={ownerTimezone}
             mediaLibrary={mediaLibrary}
           />
-
-          {!isFailed && (
-            <div className="flex items-center gap-2 mt-4">
-              <Button variant="ghost" size="sm" icon={RefreshCw}>
-                Regenerate
-              </Button>
-              <Button variant="ghost" size="sm">
-                Try a different angle
-              </Button>
-            </div>
-          )}
         </div>
 
         {/* Right column — Preview */}
@@ -421,7 +416,7 @@ export default async function PlannerContentPage({
                 fileName: media.fileName,
               }))}
               placement={detail.placement}
-              disabled={!canEditMedia}
+              disabled={!isEditable}
               buttonLabel="Swap media"
               ariaLabel="Swap media"
               buttonVariant="ghost"
@@ -437,22 +432,21 @@ export default async function PlannerContentPage({
       </div>
 
       {/* ---- Footer actions ---- */}
-      <footer
-        className="flex items-center justify-between mx-auto w-full pb-8"
-        style={{ maxWidth: 1200 }}
-      >
-        <Button variant="danger" size="md" icon={Trash2}>
-          Cancel this post
-        </Button>
-        <div className="flex items-center gap-2">
-          <Button variant="secondary" size="md">
-            Save changes
-          </Button>
-          <Button variant="amber" size="md" icon={Play}>
-            Publish now
-          </Button>
-        </div>
-      </footer>
+      {/* Each card above saves its own edits (caption, schedule, media, banner),
+          so there is no page-level save. A post with an error offers
+          "Try again now" in the recovery card instead of "Publish now" here.
+          Publishing and published posts cannot be cancelled, so they get no footer. */}
+      {isEditable && (
+        <footer
+          className="flex items-center justify-between mx-auto w-full pb-8"
+          style={{ maxWidth: 1200 }}
+        >
+          <CancelPostButton contentId={detail.id} />
+          <div className="flex items-center gap-2">
+            {canPublishNow && !isFailed && <PublishNowButton contentId={detail.id} />}
+          </div>
+        </footer>
+      )}
     </div>
   );
 }
