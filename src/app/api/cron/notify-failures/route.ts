@@ -24,6 +24,8 @@ type FailedJobRow = {
   error_message: string | null;
   error_code: string | null;
   content_item_id: string;
+  /** When the job last changed, which for a failed job is when it failed. */
+  updated_at: string;
 };
 
 type ContentItemRow = {
@@ -64,8 +66,11 @@ async function notifyFailures(): Promise<{
   // Fetch recently-failed publish jobs
   const { data: failedJobs, error: jobsError } = await service
     .from("publish_jobs")
-    .select("id, error_message, error_code, content_item_id")
+    .select("id, error_message, error_code, content_item_id, updated_at")
     .eq("status", "failed")
+    // An archived or auto-resolved failure needs no email; archiving also
+    // bumps updated_at, which would otherwise look like a new failure.
+    .is("resolved_at", null)
     .gt("updated_at", cutoff)
     .returns<FailedJobRow[]>();
 
@@ -90,13 +95,17 @@ async function notifyFailures(): Promise<{
   for (const job of failedJobs) {
     try {
       // ── Idempotency check ────────────────────────────────────────────────
-      // Skip if we already sent an email for this job
+      // Skip if we already emailed about THIS failure. A job keeps its id
+      // when it is re-armed (approving a draft, rescheduling, Publish now), so
+      // an email about an earlier failure must not hide a later one: only an
+      // email sent at or after the job's latest failure counts.
       const { data: existing } = await service
         .from("notifications")
         .select("id")
         .in("category", [NOTIFICATION_CATEGORY, IMMEDIATE_NOTIFICATION_CATEGORY])
         // metadata is JSONB: filter by the job_id key
         .filter("metadata->>job_id", "eq", job.id)
+        .gte("created_at", job.updated_at)
         .limit(1)
         .maybeSingle<NotificationRow>();
 

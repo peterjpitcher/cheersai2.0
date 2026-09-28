@@ -122,11 +122,23 @@ export const BILLING_SCHEMA: Record<string, TableSpec> = {
     columns: {
       id: { type: 'uuid', notNull: true, default: () => randomUUID() },
       account_id: { type: 'uuid', notNull: true },
+      content_item_id: { type: 'uuid' },
       status: { type: 'text', notNull: true },
       hold_reason: { type: 'text' },
       last_error: { type: 'text' },
       next_attempt_at: { type: 'timestamptz' },
       updated_at: { type: 'timestamptz', notNull: true, default: now },
+    },
+    primaryKey: ['id'],
+  },
+  // Only the columns releaseHeldPublishJobs reads.
+  content_items: {
+    columns: {
+      id: { type: 'uuid', notNull: true, default: () => randomUUID() },
+      account_id: { type: 'uuid', notNull: true },
+      // Live CHECK on content_items.status (production shape).
+      status: { type: 'text', notNull: true, check: ['draft', 'scheduled', 'queued', 'publishing', 'posted', 'failed'] },
+      deleted_at: { type: 'timestamptz' },
     },
     primaryKey: ['id'],
   },

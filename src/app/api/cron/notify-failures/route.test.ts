@@ -87,7 +87,7 @@ function createMockDb(tableResults: Record<string, { data: unknown; error: unkno
     chain.maybeSingle = terminal;
 
     // Chainable methods — each returns the chain
-    for (const method of ['select', 'eq', 'gt', 'filter', 'update', 'insert', 'in', 'limit']) {
+    for (const method of ['select', 'eq', 'gt', 'is', 'filter', 'update', 'insert', 'in', 'limit']) {
       chain[method] = vi.fn(() => chain);
     }
 
@@ -245,7 +245,7 @@ describe('notify-failures cron route', () => {
   describe('duplicate emails', () => {
     const sendableJob = () =>
       createMockDb({
-        publish_jobs: { data: [{ id: JOB_ID, error_message: null, error_code: null, content_item_id: CONTENT_ITEM_ID }], error: null },
+        publish_jobs: { data: [{ id: JOB_ID, updated_at: '2026-01-01T00:00:00.000Z', error_message: null, error_code: null, content_item_id: CONTENT_ITEM_ID }], error: null },
         content_items: { data: { account_id: ACCOUNT_ID, platform: 'facebook' }, error: null },
         posting_defaults: { data: { notifications: { emailFailures: true } }, error: null },
         accounts: { data: { email: 'owner9@test.com', display_name: null }, error: null },
@@ -290,7 +290,7 @@ describe('notify-failures cron route', () => {
   describe('failed writes', () => {
     it('fails the run when the in-app alert cannot be recorded, after emailing the owner', async () => {
       const mockDb = createMockDb({
-        publish_jobs: { data: [{ id: JOB_ID, error_message: 'Token expired', error_code: null, content_item_id: CONTENT_ITEM_ID }], error: null },
+        publish_jobs: { data: [{ id: JOB_ID, updated_at: '2026-01-01T00:00:00.000Z', error_message: 'Token expired', error_code: null, content_item_id: CONTENT_ITEM_ID }], error: null },
         content_items: { data: { account_id: ACCOUNT_ID, platform: 'instagram' }, error: null },
         posting_defaults: { data: { notifications: { emailFailures: true } }, error: null },
         accounts: { data: { email: 'owner@test.com', display_name: null }, error: null },
@@ -313,7 +313,7 @@ describe('notify-failures cron route', () => {
 
     it('fails the run when the email cannot be sent', async () => {
       const mockDb = createMockDb({
-        publish_jobs: { data: [{ id: JOB_ID, error_message: null, error_code: null, content_item_id: CONTENT_ITEM_ID }], error: null },
+        publish_jobs: { data: [{ id: JOB_ID, updated_at: '2026-01-01T00:00:00.000Z', error_message: null, error_code: null, content_item_id: CONTENT_ITEM_ID }], error: null },
         content_items: { data: { account_id: ACCOUNT_ID, platform: 'facebook' }, error: null },
         posting_defaults: { data: { notifications: { emailFailures: true } }, error: null },
         accounts: { data: { email: 'owner@test.com', display_name: null }, error: null },
@@ -325,6 +325,32 @@ describe('notify-failures cron route', () => {
 
       expect(res.status).toBe(500);
       expect(await res.json()).toMatchObject({ emailed: 0, skipped: 0, errors: 1 });
+    });
+  });
+
+  describe('a job that failed again after being re-armed', () => {
+    it('emails about the new failure even though an earlier failure of the same job was emailed', async () => {
+      // The earlier email went out before the job's latest failure.
+      table.seed({
+        account_id: ACCOUNT_ID,
+        category: 'publish_failed_email_sent',
+        message: 'Earlier failure',
+        metadata: { job_id: JOB_ID },
+        created_at: '2025-12-31T00:00:00.000Z',
+      });
+      const mockDb = createMockDb({
+        publish_jobs: { data: [{ id: JOB_ID, updated_at: '2026-01-01T00:00:00.000Z', error_message: 'Token expired', error_code: null, content_item_id: CONTENT_ITEM_ID }], error: null },
+        content_items: { data: { account_id: ACCOUNT_ID, platform: 'instagram' }, error: null },
+        accounts: { data: { email: 'owner@venue.test', display_name: 'The Venue' }, error: null },
+        posting_defaults: { data: { notifications: { emailFailures: true } }, error: null },
+      });
+      vi.mocked(tryCreateServiceSupabaseClient).mockReturnValue(mockDb as never);
+      vi.mocked(sendEmail).mockResolvedValue(undefined);
+
+      const res = await GET(makeRequest({ 'x-cron-secret': 'test-secret' }));
+      const body = await res.json();
+      expect(body).toMatchObject({ emailed: 1, skipped: 0, errors: 0 });
+      expect(sendEmail).toHaveBeenCalledOnce();
     });
   });
 });
