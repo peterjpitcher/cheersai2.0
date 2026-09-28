@@ -1,3 +1,19 @@
+# Self-serve sign-up PR 6: venue creation (2026-09-28)
+
+Spec: `tasks/SPEC-self-serve-signup.md` §4.4, §4.3 (switch gate), §4.9, §4.10, P10; branch `feat/signup-venue`.
+
+- [ ] Read-only check of production's accounts, account_members, brand_profile, self_serve_signups
+      constraints, triggers and grants
+- [ ] Migration: `provision_self_serve_brand` (service role only, invoker, empty search_path, takes
+      the sign-up row lock, re-checks under it)
+- [ ] `/signup/venue` page and `createSelfServeVenue`; switch, Preview, session, limiter, email match
+- [ ] `/no-access` entry (switch on only); operator new-venue email; admin_audit record
+- [ ] Daily operator email: sign-up alerts, stuck sign-ups, never started
+- [ ] Settings email line (P10), behind the switch
+- [ ] Tests (each failing dependency), grants SQL, migration twice on the local stack
+- [ ] Browser run of the section 7 journeys on the local stack
+- [ ] ci:verify (London and UTC), PR, CI green
+
 # Planner post page actions (2026-09-27)
 
 Spec: `tasks/SPEC-planner-post-page-actions.md`.
