@@ -27,13 +27,6 @@ export const CLOSED_VENUE_KEPT_DAYS = 30;
 export const OWNER_EXPORT_PATH = '/api/settings/data-export';
 
 /**
- * A header the Settings section sends with the download request. A page on
- * another site cannot add it without a CORS preflight, which this route never
- * answers, so a cross-site form or script cannot start an export.
- */
-export const OWNER_EXPORT_HEADER = 'x-cheers-owner-export';
-
-/**
  * What happens after an owner asks us to close their venue, in plain words.
  * It follows docs/runbooks/customer-offboarding.md ("When a customer asks to
  * leave" and "After 30 days"); change both together.

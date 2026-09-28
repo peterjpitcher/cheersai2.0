@@ -4,9 +4,9 @@ import { useState, useTransition, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
 import { requestVenueClosure } from "@/app/(app)/settings/venue-data-actions";
-import { requestOwnerExport } from "@/features/settings/export-download";
+import { requestExportDownload, saveDownload } from "@/lib/export/download-request";
 import { CONTACT } from "@/lib/legal/company";
-import { CLOSURE_STEPS, OWNER_DATA_MESSAGES, OWNER_EXPORTS_PER_DAY } from "@/lib/settings/owner-data";
+import { CLOSURE_STEPS, OWNER_DATA_MESSAGES, OWNER_EXPORT_PATH, OWNER_EXPORTS_PER_DAY } from "@/lib/settings/owner-data";
 import { formatUkDateTime } from "@/lib/utils/date";
 
 /**
@@ -79,20 +79,15 @@ export function VenueDataSection({ accountId }: VenueDataSectionProps) {
   function downloadData() {
     startExport(async () => {
       setExportNotice(null);
-      const result = await requestOwnerExport(accountId);
+      const result = await requestExportDownload(OWNER_EXPORT_PATH, accountId, {
+        failed: OWNER_DATA_MESSAGES.exportFailed,
+        signedOut: OWNER_DATA_MESSAGES.signedOut,
+      });
       if (!result.ok) {
         setExportNotice({ tone: "error", text: result.error });
         return;
       }
-      const url = URL.createObjectURL(result.blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = result.fileName;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      // Give the browser a moment to start the download before the link goes.
-      setTimeout(() => URL.revokeObjectURL(url), 10_000);
+      saveDownload(result.blob, result.fileName);
       setExportNotice({ tone: "success", text: "Your download has started." });
     });
   }

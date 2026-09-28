@@ -43,7 +43,7 @@ const EXPORT = {
 
 function request(options: { header?: boolean; accountId?: unknown } = {}): Request {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  if (options.header !== false) headers['x-cheers-owner-export'] = '1';
+  if (options.header !== false) headers['x-cheers-export'] = '1';
   return new Request('http://localhost:3600/api/settings/data-export', {
     method: 'POST',
     headers,

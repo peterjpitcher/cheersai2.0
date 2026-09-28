@@ -6,7 +6,7 @@ import { z } from 'zod';
 
 import { env } from '@/env';
 import { logAdminEvent } from '@/lib/admin/audit';
-import { brandExportFile, exportBrandData, offboardBrand, purgeBrand, type LoginNotDeleted } from '@/lib/admin/offboarding';
+import { offboardBrand, purgeBrand, type LoginNotDeleted } from '@/lib/admin/offboarding';
 import { buildAuthConfirmUrl, renderInviteEmail, renderPasswordResetEmail } from '@/lib/auth/email-links';
 import { sendEmail } from '@/lib/email/resend';
 import { can } from '@/lib/billing/entitlement';
@@ -602,19 +602,9 @@ export async function offboardBrandAction(accountId: string, typedName: string):
   }
 }
 
-export async function exportBrandDataAction(accountId: string): Promise<ActionResult & { json?: string; fileName?: string }> {
-  const ctx = await requireSuperAdmin();
-  if (!ctx) return { error: 'Forbidden.' };
-  if (!uuid.safeParse(accountId).success) return { error: 'Invalid brand.' };
-  try {
-    const data = await exportBrandData(ctx.supabase, accountId);
-    await logAdminEvent({ actorUserId: ctx.user.id, action: 'export_brand_data', targetAccountId: accountId });
-    return { success: true, ...brandExportFile(accountId, data) };
-  } catch (error) {
-    logger.error('export brand data failed', error instanceof Error ? error : undefined, { accountId });
-    return { error: 'The export failed. Try again.' };
-  }
-}
+// Export data is POST /api/admin/brand-export (a streamed download, so a large
+// brand's file is not cut off by Vercel's 4.5 MB response limit); same check
+// and admin_audit record as the other steps here.
 
 export async function purgeBrandAction(
   accountId: string,
