@@ -13,8 +13,8 @@ import { formatUkDateTime, formatUkLongDate } from '@/lib/utils/date';
 
 // ---------------------------------------------------------------------------
 // Admin Sign-ups card (tasks/SPEC-self-serve-signup.md §4.9, §4.10, P10).
-// Server component: the admin page gates on the super-admin flag before it
-// loads the data, so nothing here reaches anyone else. It shows the funnel
+// A plain render of the data from /api/admin/signups, which refuses anyone
+// who is not a super admin (./signups-card-loader.tsx fetches it). It shows the funnel
 // and the daily operator email's lists; no email address or other personal
 // detail, only venue names and, for a login with no venue yet, its id.
 // Rendering never throws, so a bad value cannot take the admin page down.
@@ -121,7 +121,7 @@ export function SignupsCard({ overview }: { overview: SignupsOverview }): React.
         >
           <p className="font-medium">The sign-up figures could not be read.</p>
           <p className="mt-1 break-words">{overview.message}</p>
-          <p className="mt-1">The rest of this page is unaffected. Reload to try again; the logs have the detail.</p>
+          <p className="mt-1">The rest of this page is unaffected. Reload the page to try again.</p>
         </div>
       ) : (
         <>
@@ -237,11 +237,6 @@ export function SignupsCard({ overview }: { overview: SignupsOverview }): React.
       )}
     </div>
   );
-}
-
-/** Streams the card in once its reads finish, so a slow read never holds up the rest of the admin page. */
-export async function SignupsCardSection({ overview }: { overview: Promise<SignupsOverview> }): Promise<React.JSX.Element> {
-  return <SignupsCard overview={await overview} />;
 }
 
 export function SignupsCardSkeleton(): React.JSX.Element {

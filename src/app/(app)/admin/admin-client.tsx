@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useState, useTransition, type ReactNode } from 'react';
+import { useState, useTransition } from 'react';
 
 import type { AdminBrand, AdminUser } from '@/lib/admin/data';
 import {
@@ -20,6 +20,7 @@ import {
   setBrandFeature,
   setSuperAdmin,
 } from '@/app/(app)/admin/actions';
+import { SignupsCardLoader } from '@/features/admin/signups-card-loader';
 import { FEATURE_LABELS, type BrandFeature } from '@/lib/auth/brand-features';
 
 const CARD = 'rounded-lg border p-4';
@@ -658,13 +659,10 @@ export function AdminClient({
   brands,
   users,
   ingestEndpoint,
-  signupsCard,
 }: {
   brands: AdminBrand[];
   users: AdminUser[];
   ingestEndpoint: string;
-  /** The server-rendered Sign-ups card (src/features/admin/signups-card.tsx). */
-  signupsCard?: ReactNode;
 }) {
   return (
     <div className="space-y-6">
@@ -674,7 +672,8 @@ export function AdminClient({
       </div>
 
       <BillingCard brands={brands} />
-      {signupsCard}
+      {/* Fetches its own data after the page loads, so an admin action's refresh never waits for it. */}
+      <SignupsCardLoader />
       <BrandFeaturesCard brands={brands} />
       <OffboardingCard brands={brands} />
       <BookingKeysCard brands={brands} ingestEndpoint={ingestEndpoint} />

@@ -6,7 +6,7 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
-import { SignupsCard, SignupsCardSection, SignupsCardSkeleton } from '@/features/admin/signups-card';
+import { SignupsCard, SignupsCardSkeleton } from '@/features/admin/signups-card';
 import type { SignupsOverview } from '@/lib/signup/admin-overview';
 import { DIGEST_LIST_LIMIT, type SignupDigest } from '@/lib/signup/digest';
 
@@ -177,12 +177,7 @@ describe('SignupsCard', () => {
   });
 });
 
-describe('SignupsCardSection and skeleton', () => {
-  it('renders the card once the reads finish', async () => {
-    const element = await SignupsCardSection({ overview: Promise.resolve(ready()) });
-    expect(renderToStaticMarkup(element)).toContain('No Checkout Arms');
-  });
-
+describe('SignupsCardSkeleton', () => {
   it('shows a loading card while the reads run', () => {
     const html = renderToStaticMarkup(<SignupsCardSkeleton />);
     expect(html).toContain('Loading the sign-up figures');
