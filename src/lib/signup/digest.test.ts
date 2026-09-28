@@ -263,6 +263,27 @@ describe('renderSignupDigestSections', () => {
     for (const bad of BAD_OUTPUT) expect(html).not.toContain(bad);
   });
 
+  it('says which kinds refused nobody, so a closure_notice is not described as a refusal', () => {
+    const html = renderSignupDigestSections(
+      {
+        ...DIGEST,
+        alerts: [
+          { kind: 'provisioning', rows: 3, lastAt: '2026-09-27T21:00:00Z' },
+          { kind: 'closure_notice', rows: 1, lastAt: '2026-09-27T20:00:00Z' },
+          { kind: 'closure_request', rows: 2, lastAt: '2026-09-27T19:00:00Z' },
+        ],
+      },
+      'https://cheers.test',
+    ).join('\n');
+    expect(html).toContain('Unless a line says otherwise, each one was refused with an error and our email address.');
+    expect(html).toContain(
+      "<strong>closure_notice</strong>: 1 time, last at 27/09/2026, 21:00:00 (UK time). Not refused: the owner was told we have their request to close the venue",
+    );
+    expect(html).toContain('<strong>closure_request</strong>: 2 times, last at 27/09/2026, 20:00:00 (UK time).</li>');
+    expect(html).toContain('<strong>provisioning</strong>: 3 times, last at 27/09/2026, 22:00:00 (UK time).</li>');
+    expect(html).not.toContain('Each one was refused');
+  });
+
   it('leaves empty lists out entirely', () => {
     expect(
       renderSignupDigestSections({ alerts: [], verifiedWithoutVenue: [], noCheckout: [], trialWithoutConnection: [], neverStarted: [] }, 'https://cheers.test'),
