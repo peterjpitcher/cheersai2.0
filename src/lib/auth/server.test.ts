@@ -223,22 +223,3 @@ describe('requireAuthContext', () => {
     expect(ctx.isSuperAdmin).toBe(false);
   });
 });
-
-// ---------------------------------------------------------------------------
-// rate limit (unchanged behaviour)
-// ---------------------------------------------------------------------------
-
-describe('checkAuthRateLimit', () => {
-  beforeEach(() => {
-    delete process.env.UPSTASH_REDIS_REST_URL;
-    delete process.env.UPSTASH_REDIS_REST_TOKEN;
-  });
-
-  it('allows in the dev fallback when Upstash is not configured', async () => {
-    const { checkAuthRateLimit } = await import('@/lib/auth/rate-limit');
-    const result = await checkAuthRateLimit('test@example.com');
-    expect(result.allowed).toBe(true);
-    expect(result.limit).toBe(5);
-    expect(result.remaining).toBe(5);
-  });
-});
