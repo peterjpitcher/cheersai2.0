@@ -48,9 +48,14 @@ export function venueNameHasLink(name: string): boolean {
   return lower.includes('://') || lower.includes('www.') || lower.includes('@');
 }
 
-/** Line breaks, tabs and other control characters: never wanted in a name. */
+/**
+ * Line breaks, tabs and other control characters: never wanted in a name.
+ * Unicode's Cc category (U+0000 to U+001F and U+007F to U+009F, including
+ * U+0085), the same set the database's [[:cntrl:]] matches under production's
+ * en_US.UTF-8 locale, so the app refuses exactly what provision_self_serve_brand does.
+ */
 export function hasControlCharacters(text: string): boolean {
-  return /[\u0000-\u001f\u007f]/.test(text);
+  return /\p{Cc}/u.test(text);
 }
 
 export const VENUE_FORM_MESSAGES = {

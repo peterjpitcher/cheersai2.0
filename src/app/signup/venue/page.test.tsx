@@ -27,20 +27,27 @@ const signedIn = (overrides: Partial<{ emailConfirmed: boolean; cameFromEmailLin
   status: 'signed_in',
   user: { id: USER_ID, email: 'owner@venue.test', emailConfirmed: true, cameFromEmailLink: true, ...overrides },
 });
-type SignupRow = { accountId: string | null; verifiedAt: string | null; venueCreatedAt: string | null };
-const mockReadLogin = vi.fn<() => Promise<Login>>(async () => signedIn());
-const mockReadState = vi.fn<(service: unknown, userId: string) => Promise<{ isMember: boolean; signup: SignupRow | null }>>(async () => ({
-  isMember: false,
+type VenueState = import('@/lib/signup/venue').VenueSignupState;
+const NEW_LOGIN: VenueState = {
+  memberships: [],
+  isAdmin: false,
+  hasOpenInvitation: false,
   signup: { accountId: null, verifiedAt: null, venueCreatedAt: null },
-}));
+};
+const mockReadLogin = vi.fn<() => Promise<Login>>(async () => signedIn());
+const mockReadState = vi.fn<(service: unknown, userId: string) => Promise<VenueState>>(async () => NEW_LOGIN);
 const mockMarkVerified = vi.fn<(service: unknown, userId: string) => Promise<void>>(async () => {});
 const mockDestination = vi.fn<() => Promise<string>>(async () => '/planner');
-vi.mock('@/lib/signup/venue', () => ({
+// decideVenueAccess stays real, so the page is tested with the real rules.
+vi.mock('@/lib/signup/venue', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/signup/venue')>()),
   readSignedInLogin: () => mockReadLogin(),
   readVenueSignupState: (service: unknown, userId: string) => mockReadState(service, userId),
   markSignupVerified: (service: unknown, userId: string) => mockMarkVerified(service, userId),
   destinationForMember: () => mockDestination(),
 }));
+vi.mock('@/lib/billing/setup-redirect', () => ({ destinationAfterPasswordSet: vi.fn() }));
+vi.mock('@/lib/supabase/server', () => ({ createServerSupabaseClient: vi.fn() }));
 vi.mock('@/lib/supabase/service', () => ({ createServiceSupabaseClient: () => ({}) }));
 vi.mock('@/lib/auth/actions', () => ({ signOut: vi.fn() }));
 vi.mock('@/app/signup/venue/actions', () => ({ createSelfServeVenue: vi.fn() }));
@@ -70,7 +77,7 @@ beforeEach(() => {
   mockEnv.server.VERCEL_ENV = 'production';
   mockSwitch.mockResolvedValue('open');
   mockReadLogin.mockResolvedValue(signedIn());
-  mockReadState.mockResolvedValue({ isMember: false, signup: { accountId: null, verifiedAt: null, venueCreatedAt: null } });
+  mockReadState.mockResolvedValue(NEW_LOGIN);
   mockMarkVerified.mockResolvedValue(undefined);
 });
 
@@ -94,16 +101,13 @@ describe('/signup/venue', () => {
   });
 
   it('records the first visit only once', async () => {
-    mockReadState.mockResolvedValue({
-      isMember: false,
-      signup: { accountId: null, verifiedAt: '2026-09-28T09:00:00Z', venueCreatedAt: null },
-    });
+    mockReadState.mockResolvedValue({ ...NEW_LOGIN, signup: { accountId: null, verifiedAt: '2026-09-28T09:00:00Z', venueCreatedAt: null } });
     await render();
     expect(mockMarkVerified).not.toHaveBeenCalled();
   });
 
   it('shows the form to a signed-in login with no brand and no sign-up row (the /no-access entry), writing nothing', async () => {
-    mockReadState.mockResolvedValue({ isMember: false, signup: null });
+    mockReadState.mockResolvedValue({ ...NEW_LOGIN, signup: null });
     const html = await render();
     expect(html).toContain('name="venueName"');
     expect(mockMarkVerified).not.toHaveBeenCalled();
@@ -178,8 +182,8 @@ describe('/signup/venue', () => {
     expect(mockReport).toHaveBeenCalledWith('venue_lookup', expect.anything());
   });
 
-  it('someone who already belongs to a brand goes into the app instead', async () => {
-    mockReadState.mockResolvedValue({ isMember: true, signup: null });
+  it('someone who already belongs to a live brand goes into the app instead', async () => {
+    mockReadState.mockResolvedValue({ ...NEW_LOGIN, memberships: [{ accountId: 'a1', usable: true }], signup: null });
     mockDestination.mockResolvedValue('/auth/set-password');
     await expect(render()).rejects.toMatchObject({ url: '/auth/set-password' });
     mockDestination.mockResolvedValue('/planner');
@@ -188,12 +192,47 @@ describe('/signup/venue', () => {
 
   it('a venue made and since deleted is not replaced: contact us', async () => {
     mockReadState.mockResolvedValue({
-      isMember: false,
+      ...NEW_LOGIN,
       signup: { accountId: null, verifiedAt: '2026-08-01T09:00:00Z', venueCreatedAt: '2026-08-01T09:05:00Z' },
     });
     const html = await render();
     expect(html).toContain('This venue has been closed');
     expect(html).toContain('peter@orangejelly.co.uk');
+    expect(html).not.toContain('name="venueName"');
+  });
+
+  it('a member of only archived brands sees the member notice, not a redirect back into the app (no loop)', async () => {
+    mockReadState.mockResolvedValue({ ...NEW_LOGIN, memberships: [{ accountId: 'a1', usable: false }], signup: null });
+    const html = await render();
+    expect(html).toContain('Your venue is closed');
+    expect(html).toContain('peter@orangejelly.co.uk');
+    expect(html).not.toContain('name="venueName"');
+    expect(mockDestination).not.toHaveBeenCalled();
+  });
+
+  it('someone removed from the venue they set up is told so, not "closed"', async () => {
+    mockReadState.mockResolvedValue({
+      ...NEW_LOGIN,
+      signup: { accountId: 'a1', verifiedAt: '2026-09-01T09:00:00Z', venueCreatedAt: '2026-09-01T09:05:00Z' },
+    });
+    const html = await render();
+    expect(html).toContain('No access to this venue');
+    expect(html).not.toContain('This venue has been closed');
+    expect(html).not.toContain('name="venueName"');
+  });
+
+  it('someone with an open invitation is pointed at accepting it, with no form', async () => {
+    mockReadState.mockResolvedValue({ ...NEW_LOGIN, hasOpenInvitation: true });
+    const html = await render();
+    expect(html).toContain('You have an invitation');
+    expect(html).toContain('href="/invitations"');
+    expect(html).not.toContain('name="venueName"');
+  });
+
+  it('an app admin gets no form', async () => {
+    mockReadState.mockResolvedValue({ ...NEW_LOGIN, isAdmin: true });
+    const html = await render();
+    expect(html).toContain('Not for admin logins');
     expect(html).not.toContain('name="venueName"');
   });
 });

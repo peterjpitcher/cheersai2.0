@@ -9,8 +9,16 @@ import { CONTACT } from '@/lib/legal/company';
 import { reportSignupFailure } from '@/lib/signup/alerts';
 import { VENUE_MESSAGES } from '@/lib/signup/messages';
 import { getSelfServeSignupSwitch } from '@/lib/signup/switch';
-import { destinationForMember, markSignupVerified, readSignedInLogin, readVenueSignupState, type VenueSignupState } from '@/lib/signup/venue';
+import {
+  decideVenueAccess,
+  destinationForMember,
+  markSignupVerified,
+  readSignedInLogin,
+  readVenueSignupState,
+  type VenueSignupState,
+} from '@/lib/signup/venue';
 import { createServiceSupabaseClient } from '@/lib/supabase/service';
+import { INVITATIONS_PATH } from '@/lib/team/invitations';
 
 import { VenueForm } from './venue-form';
 
@@ -131,11 +139,41 @@ export default async function SignupVenuePage(): Promise<React.JSX.Element> {
     return <Notice title="Something went wrong" description={VENUE_MESSAGES.couldNotFinish} signedIn />;
   }
 
-  // Already belongs to a brand: into the app (redirect() throws, so it stays out of the try).
-  if (signupState.isMember) redirect(await destinationForMember(user, signupState.signup));
-
-  if (signupState.signup?.venueCreatedAt) {
+  const access = decideVenueAccess(signupState);
+  // Already in a live brand: into the app (redirect() throws, so it stays out of the try).
+  if (access === 'own_venue' || access === 'member') redirect(await destinationForMember(user, signupState.signup));
+  if (access === 'member_no_brand') {
+    return <Notice title="Your venue is closed" description={VENUE_MESSAGES.memberNoBrand} signedIn />;
+  }
+  if (access === 'removed') {
+    return <Notice title="No access to this venue" description={VENUE_MESSAGES.removed} signedIn />;
+  }
+  if (access === 'venue_closed') {
     return <Notice title="This venue has been closed" description={VENUE_MESSAGES.venueClosed} signedIn />;
+  }
+  if (access === 'admin') {
+    return (
+      <AuthCard title="Not for admin logins" description={VENUE_MESSAGES.admin}>
+        <p className="text-center text-sm">
+          <Link href="/admin" className="font-semibold underline" style={{ color: 'var(--c-orange)' }}>
+            Go to Admin
+          </Link>
+        </p>
+      </AuthCard>
+    );
+  }
+  if (access === 'invited') {
+    return (
+      <AuthCard title="You have an invitation" description={VENUE_MESSAGES.invited}>
+        <p className="text-center text-sm">
+          <Link href={INVITATIONS_PATH} className="font-semibold underline" style={{ color: 'var(--c-orange)' }}>
+            See your invitation
+          </Link>
+        </p>
+        <ContactLine />
+        <SignOutButton label="Sign out" />
+      </AuthCard>
+    );
   }
 
   return (

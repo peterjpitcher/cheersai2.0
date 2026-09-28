@@ -111,17 +111,42 @@ export interface SelfServeSignupRow {
   venueCreatedAt: string | null;
 }
 
+export interface VenueMembership {
+  accountId: string;
+  /** The brand is live (not archived), so the app can open it. */
+  usable: boolean;
+}
+
 export interface VenueSignupState {
-  /** Belongs to at least one brand (any role, archived or not). */
-  isMember: boolean;
+  /** Every brand the login belongs to, archived or not. */
+  memberships: VenueMembership[];
+  /** The login is an app admin (app_admins). */
+  isAdmin: boolean;
+  /** An open, unexpired team invitation to a live brand (the person can accept it at /invitations). */
+  hasOpenInvitation: boolean;
   /** The login's sign-up row, or null (a login starting from /no-access has none yet). */
   signup: SelfServeSignupRow | null;
 }
 
-/** Throws on any read error: the caller refuses and alerts. */
+/**
+ * Everything that decides whether this login may create a self-serve venue,
+ * read with the service role and scoped to the verified session's user id.
+ * Throws on any read error: the caller refuses and alerts.
+ */
 export async function readVenueSignupState(service: SupabaseClient, userId: string): Promise<VenueSignupState> {
-  const [memberships, signups] = await Promise.all([
-    service.from('account_members').select('account_id').eq('user_id', userId).limit(1),
+  // An instant compared in the database, not a date shown to anyone.
+  const now = new Date().toISOString();
+  const [memberships, admins, invitations, signups] = await Promise.all([
+    service.from('account_members').select('account_id').eq('user_id', userId),
+    service.from('app_admins').select('user_id').eq('user_id', userId).maybeSingle(),
+    service
+      .from('team_invitations')
+      .select('account_id')
+      .eq('user_id', userId)
+      .is('accepted_at', null)
+      .is('declined_at', null)
+      .is('cancelled_at', null)
+      .gt('expires_at', now),
     service
       .from('self_serve_signups')
       .select('account_id, verified_at, venue_created_at')
@@ -129,12 +154,70 @@ export async function readVenueSignupState(service: SupabaseClient, userId: stri
       .maybeSingle<{ account_id: string | null; verified_at: string | null; venue_created_at: string | null }>(),
   ]);
   if (memberships.error) throw new Error(`account_members: ${memberships.error.message}`);
+  if (admins.error) throw new Error(`app_admins: ${admins.error.message}`);
+  if (invitations.error) throw new Error(`team_invitations: ${invitations.error.message}`);
   if (signups.error) throw new Error(`self_serve_signups: ${signups.error.message}`);
+
+  const memberIds = [...new Set(((memberships.data ?? []) as Array<{ account_id: string }>).map((row) => row.account_id))];
+  const invitedIds = [...new Set(((invitations.data ?? []) as Array<{ account_id: string }>).map((row) => row.account_id))];
+  const brandIds = [...new Set([...memberIds, ...invitedIds])];
+
+  // Which of those brands are live: only the login's own brands and invitations are read.
+  let liveIds = new Set<string>();
+  if (brandIds.length > 0) {
+    const { data, error } = await service.from('accounts').select('id').in('id', brandIds).is('archived_at', null);
+    if (error) throw new Error(`accounts: ${error.message}`);
+    liveIds = new Set(((data ?? []) as Array<{ id: string }>).map((row) => row.id));
+  }
+
   const row = signups.data;
   return {
-    isMember: ((memberships.data ?? []) as unknown[]).length > 0,
+    memberships: memberIds.map((accountId) => ({ accountId, usable: liveIds.has(accountId) })),
+    isAdmin: Boolean(admins.data),
+    hasOpenInvitation: invitedIds.some((accountId) => liveIds.has(accountId)),
     signup: row ? { accountId: row.account_id, verifiedAt: row.verified_at, venueCreatedAt: row.venue_created_at } : null,
   };
+}
+
+/**
+ * What a signed-in login may do about a self-serve venue (spec §4.4, and the
+ * review of PR #146). The page, its action and /no-access all use this, and
+ * public.provision_self_serve_brand checks the same again under the lock.
+ *   form            no brand, not an admin, no open invitation: may create one
+ *   own_venue       the venue this sign-up made, still a member and still live
+ *   member          belongs to another live brand: into the app
+ *   member_no_brand belongs only to archived brands: a notice (sending them into
+ *                   the app would send them straight back to /no-access)
+ *   removed         this sign-up made a venue, but the login was removed from it
+ *   venue_closed    the venue this sign-up made was deleted or archived
+ *   admin           an app admin: admins use Admin, Create brand
+ *   invited         an open invitation to a live brand: accept it instead
+ */
+export type VenueAccess =
+  | 'form'
+  | 'own_venue'
+  | 'member'
+  | 'member_no_brand'
+  | 'removed'
+  | 'venue_closed'
+  | 'admin'
+  | 'invited';
+
+export function decideVenueAccess(state: VenueSignupState): VenueAccess {
+  const usableBrand = state.memberships.some((membership) => membership.usable);
+  const ownVenueId = state.signup?.accountId ?? null;
+  if (ownVenueId) {
+    const own = state.memberships.find((membership) => membership.accountId === ownVenueId);
+    if (own?.usable) return 'own_venue';
+    if (usableBrand) return 'member';
+    return own ? 'venue_closed' : 'removed';
+  }
+  if (state.signup?.venueCreatedAt) return usableBrand ? 'member' : 'venue_closed';
+  if (usableBrand) return 'member';
+  if (state.memberships.length > 0) return 'member_no_brand';
+  if (state.isAdmin) return 'admin';
+  if (state.hasOpenInvitation) return 'invited';
+  return 'form';
 }
 
 /**
@@ -165,7 +248,9 @@ export async function destinationForMember(user: SignedInUser, signup: SelfServe
   return destinationAfterPasswordSet();
 }
 
-export type ProvisionRefusal = { status: 'closed' | 'no_login' | 'venue_closed' | 'member' | 'email_mismatch' };
+export type ProvisionRefusal = {
+  status: 'closed' | 'no_login' | 'venue_closed' | 'member' | 'email_mismatch' | 'removed' | 'admin' | 'invited' | 'unconfirmed';
+};
 
 export type ProvisionOutcome = { status: 'created'; accountId: string } | { status: 'existing'; accountId: string } | ProvisionRefusal;
 
@@ -173,6 +258,18 @@ export type ProvisionOutcome = { status: 'created'; accountId: string } | { stat
 export function isProvisioned(outcome: ProvisionOutcome): outcome is Exclude<ProvisionOutcome, ProvisionRefusal> {
   return outcome.status === 'created' || outcome.status === 'existing';
 }
+
+const REFUSALS = [
+  'closed',
+  'no_login',
+  'venue_closed',
+  'member',
+  'email_mismatch',
+  'removed',
+  'admin',
+  'invited',
+  'unconfirmed',
+] as const satisfies readonly ProvisionRefusal['status'][];
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -184,8 +281,8 @@ export function parseProvisionOutcome(data: unknown): ProvisionOutcome | null {
     if (typeof accountId !== 'string' || !UUID_PATTERN.test(accountId)) return null;
     return status === 'created' ? { status: 'created', accountId } : { status: 'existing', accountId };
   }
-  if (status === 'closed' || status === 'no_login' || status === 'venue_closed' || status === 'member' || status === 'email_mismatch') {
-    return { status };
+  if (typeof status === 'string' && (REFUSALS as readonly string[]).includes(status)) {
+    return { status: status as ProvisionRefusal['status'] };
   }
   return null;
 }

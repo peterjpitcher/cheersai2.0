@@ -1,6 +1,7 @@
 'use server';
 
 import { headers } from 'next/headers';
+import { after } from 'next/server';
 
 import { env } from '@/env';
 import { logAdminEvent } from '@/lib/admin/audit';
@@ -14,12 +15,15 @@ import { renderNewVenueOperatorEmail } from '@/lib/signup/emails';
 import { VENUE_MESSAGES } from '@/lib/signup/messages';
 import { getSelfServeSignupSwitch } from '@/lib/signup/switch';
 import {
+  decideVenueAccess,
   isProvisioned,
   provisionSelfServeBrand,
   readSignedInLogin,
+  readVenueSignupState,
   type ProvisionOutcome,
   type ProvisionRefusal,
   type SignedInUser,
+  type VenueAccess,
 } from '@/lib/signup/venue';
 import { readVenueForm, storedBusinessType, VENUE_TYPES, venueFormSchema, type VenueForm } from '@/lib/signup/venue-form';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
@@ -40,13 +44,19 @@ import { createServiceSupabaseClient } from '@/lib/supabase/service';
 //   3. the signed-in login, from the verified session (never the form), with
 //      a confirmed email;
 //   4. 10 attempts an hour per login;
-//   5. the fields, and the typed email must be the login's (§4.3);
-//   6. the password and name (auth.updateUser, safe to repeat);
-//   7. public.provision_self_serve_brand: one transaction, under the sign-up
+//   5. who they are: a member of a brand, an admin, someone with an open
+//      invitation, or someone whose sign-up venue was removed or closed is
+//      refused here, before anything is saved (review of PR #146); a submit
+//      after the venue already exists goes straight to Billing;
+//   6. the fields, and the typed email must be the login's (§4.3);
+//   7. the password and name (auth.updateUser, safe to repeat);
+//   8. public.provision_self_serve_brand: one transaction, under the sign-up
 //      row lock, re-checking everything (a double submit, refresh or second
 //      tab gets the same brand back);
-//   8. for a new brand only: admin_audit (ids only) and the operator's email,
-//      neither of which ever blocks the customer; then Billing.
+//   9. for a new brand only, after the response has been sent (next/server
+//      after()): admin_audit (ids only) and the operator's email, with a
+//      timeout, so a slow or failing Resend never makes a created venue look
+//      failed; a failure is logged and alerted; then Billing.
 // ---------------------------------------------------------------------------
 
 export interface CreateVenueResult {
@@ -90,7 +100,22 @@ async function savePasswordAndName(password: string, fullName: string): Promise<
   }
 }
 
-/** Step 8: the record and the operator's email. Never throws; a failure alerts. */
+/** The operator's new-venue email gives up after this long (it runs after the response). */
+const OPERATOR_EMAIL_TIMEOUT_MS = 5000;
+
+function withTimeout<T>(promise: Promise<T>, ms: number, what: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`${what} timed out after ${ms} ms`)), ms);
+    }),
+  ]).finally(() => {
+    if (timer) clearTimeout(timer);
+  });
+}
+
+/** Step 9: the record and the operator's email. Never throws; a failure is logged and alerted. */
 async function announceNewVenue(user: SignedInUser, form: VenueForm, accountId: string, createdAt: Date): Promise<void> {
   try {
     await logAdminEvent({
@@ -119,26 +144,42 @@ async function announceNewVenue(user: SignedInUser, form: VenueForm, accountId: 
       accountId,
       adminUrl: new URL('/admin', env.client.NEXT_PUBLIC_SITE_URL).toString(),
     });
-    await sendEmail({ to, subject: message.subject, html: message.html, required: true });
+    await withTimeout(
+      sendEmail({ to, subject: message.subject, html: message.html, required: true }),
+      OPERATOR_EMAIL_TIMEOUT_MS,
+      'the new-venue email',
+    );
   } catch (error) {
     logger.error('could not email the operator about a new self-serve venue', error instanceof Error ? error : undefined, { accountId });
     await reportSignupFailure('venue_notice', new Error(`new-venue email failed for brand ${accountId}`));
   }
 }
 
+/** What someone who may not create a venue is told (the same for the pre-check and the database's answer). */
+const ACCESS_REFUSALS: Record<Exclude<VenueAccess, 'form' | 'own_venue'>, string> = {
+  member: VENUE_MESSAGES.member,
+  member_no_brand: VENUE_MESSAGES.memberNoBrand,
+  removed: VENUE_MESSAGES.removed,
+  venue_closed: VENUE_MESSAGES.venueClosed,
+  admin: VENUE_MESSAGES.admin,
+  invited: VENUE_MESSAGES.invited,
+};
+
 function refusal(outcome: ProvisionRefusal): CreateVenueResult | null {
   switch (outcome.status) {
     case 'closed':
       return { error: VENUE_MESSAGES.notOpen };
     case 'member':
-      return { error: VENUE_MESSAGES.member };
     case 'venue_closed':
-      return { error: VENUE_MESSAGES.venueClosed };
+    case 'removed':
+    case 'admin':
+    case 'invited':
+      return { error: ACCESS_REFUSALS[outcome.status] };
     case 'no_login':
       return { error: VENUE_MESSAGES.signedOut };
     default:
-      // email_mismatch: the app already matched the form to the session, so
-      // the login's stored email disagreeing is a fault on our side.
+      // email_mismatch or unconfirmed: the app already checked both against
+      // the verified session, so the database disagreeing is a fault on our side.
       return null;
   }
 }
@@ -180,13 +221,25 @@ export async function createSelfServeVenue(formData: FormData): Promise<CreateVe
     return { error: VENUE_MESSAGES.couldNotFinish };
   }
 
-  // 5. The fields. The typed email must be the login's (spec §4.3).
+  // 5. Who they are, before anything is saved.
+  let access: VenueAccess;
+  try {
+    access = decideVenueAccess(await readVenueSignupState(createServiceSupabaseClient(), user.id));
+  } catch (error) {
+    await reportSignupFailure('venue_lookup', error);
+    return { error: VENUE_MESSAGES.couldNotFinish };
+  }
+  // A refresh, second tab or double submit after the venue was made: nothing to save or create.
+  if (access === 'own_venue') return { success: true, next: BILLING_SETUP_PATH };
+  if (access !== 'form') return { error: ACCESS_REFUSALS[access] };
+
+  // 6. The fields. The typed email must be the login's (spec §4.3).
   const parsed = venueFormSchema.safeParse(readVenueForm(formData));
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? VENUE_MESSAGES.couldNotFinish };
   const form = parsed.data;
   if (form.email !== user.email) return { error: VENUE_MESSAGES.emailMismatch(user.email) };
 
-  // 6. The password and name. Safe to repeat.
+  // 7. The password and name. Safe to repeat.
   const saved = await savePasswordAndName(form.password, form.fullName);
   if (saved.status === 'weak') return { error: VENUE_MESSAGES.weakPassword };
   if (saved.status === 'failed') {
@@ -194,7 +247,7 @@ export async function createSelfServeVenue(formData: FormData): Promise<CreateVe
     return { error: VENUE_MESSAGES.couldNotFinish };
   }
 
-  // 7. The brand, in one transaction under the sign-up row lock.
+  // 8. The brand, in one transaction under the sign-up row lock.
   let outcome: ProvisionOutcome;
   const createdAt = new Date();
   try {
@@ -218,7 +271,10 @@ export async function createSelfServeVenue(formData: FormData): Promise<CreateVe
   }
 
   logger.info('self-serve venue', { status: outcome.status, accountId: outcome.accountId });
-  // 8. Only the call that made the brand announces it.
-  if (outcome.status === 'created') await announceNewVenue(user, form, outcome.accountId, createdAt);
+  // 9. Only the call that made the brand announces it, after the response.
+  if (outcome.status === 'created') {
+    const accountId = outcome.accountId;
+    after(() => announceNewVenue(user, form, accountId, createdAt));
+  }
   return { success: true, next: BILLING_SETUP_PATH };
 }

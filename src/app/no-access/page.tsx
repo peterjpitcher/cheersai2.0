@@ -5,7 +5,9 @@ import { env } from '@/env';
 import { signOut } from '@/lib/auth/actions';
 import { SIGNUP_VENUE_PATH } from '@/lib/auth/email-links';
 import { getCurrentUser } from '@/lib/auth/server';
+import { VENUE_MESSAGES } from '@/lib/signup/messages';
 import { getSelfServeSignupSwitch } from '@/lib/signup/switch';
+import { decideVenueAccess, readVenueSignupState, type VenueAccess } from '@/lib/signup/venue';
 import { createServiceSupabaseClient } from '@/lib/supabase/service';
 import { INVITATIONS_PATH, listPendingInvitationsForUser } from '@/lib/team/invitations';
 
@@ -19,7 +21,12 @@ import { INVITATIONS_PATH, listPendingInvitationsForUser } from '@/lib/team/invi
  * also offers "Start a free trial for your venue" (tasks/SPEC-self-serve-
  * signup.md §4.4), a plain link to /signup/venue, which checks everything
  * again. The link writes nothing: the sign-up record is made with the venue.
- * With the switch off or unreadable the page is exactly as before.
+ * It is offered only to someone /signup/venue would let in (decideVenueAccess):
+ * a person with an open invitation is pointed at accepting it; a member of
+ * only closed brands, or someone removed from the venue they set up, gets a
+ * notice (the trial page would send them back here); admins get neither. A
+ * failed lookup offers nothing. With the switch off or unreadable the page is
+ * exactly as before.
  */
 export default async function NoAccessPage() {
   const user = await getCurrentUser();
@@ -41,10 +48,24 @@ export default async function NoAccessPage() {
     console.error('[no-access] team invitations lookup failed', error);
   }
 
-  let canStartVenue = false;
-  if (env.server.VERCEL_ENV !== 'preview') {
-    canStartVenue = (await getSelfServeSignupSwitch()) === 'open';
+  let access: VenueAccess | null = null;
+  if (env.server.VERCEL_ENV !== 'preview' && (await getSelfServeSignupSwitch()) === 'open') {
+    try {
+      access = decideVenueAccess(await readVenueSignupState(createServiceSupabaseClient(), user.id));
+    } catch (error) {
+      console.error('[no-access] venue sign-up lookup failed; not offering a trial', error);
+    }
   }
+  const canStartVenue = access === 'form' && invitationCount === 0;
+  const showInvitations = invitationCount > 0 || access === 'invited';
+  const notice =
+    access === 'member_no_brand'
+      ? VENUE_MESSAGES.memberNoBrand
+      : access === 'removed'
+        ? VENUE_MESSAGES.removed
+        : access === 'venue_closed'
+          ? VENUE_MESSAGES.venueClosed
+          : null;
 
   return (
     <main className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center gap-6 p-6 text-center">
@@ -55,15 +76,19 @@ export default async function NoAccessPage() {
           access, then reload this page.
         </p>
       </div>
-      {invitationCount > 0 ? (
+      {showInvitations ? (
         <Link
           href={INVITATIONS_PATH}
           className="rounded-full px-4 py-2 text-sm font-medium text-white"
           style={{ backgroundColor: 'var(--c-orange)' }}
         >
-          {invitationCount === 1 ? 'You have an invitation waiting' : `You have ${invitationCount} invitations waiting`}
+          {invitationCount > 1 ? `You have ${invitationCount} invitations waiting` : 'You have an invitation waiting'}
         </Link>
       ) : null}
+      {access === 'invited' ? (
+        <p className="text-sm text-[var(--c-fg-muted)]">Accept it to join that venue on Cheers.</p>
+      ) : null}
+      {notice ? <p className="text-sm text-[var(--c-fg-muted)]">{notice}</p> : null}
       {canStartVenue ? (
         <Link
           href={SIGNUP_VENUE_PATH}

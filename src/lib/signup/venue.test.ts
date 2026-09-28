@@ -11,6 +11,7 @@ vi.mock('@/lib/billing/setup-redirect', () => ({ destinationAfterPasswordSet: ()
 
 const {
   amrMethods,
+  decideVenueAccess,
   destinationForMember,
   markSignupVerified,
   parseProvisionOutcome,
@@ -18,7 +19,7 @@ const {
   readSignedInLogin,
   readVenueSignupState,
 } = await import('@/lib/signup/venue');
-const { storedBusinessType, venueNameHasLink, VENUE_TYPES } = await import('@/lib/signup/venue-form');
+const { hasControlCharacters, storedBusinessType, venueNameHasLink, VENUE_TYPES } = await import('@/lib/signup/venue-form');
 
 const USER_ID = '11111111-1111-4111-8111-111111111111';
 const ACCOUNT_ID = '22222222-2222-4222-8222-222222222222';
@@ -97,55 +98,106 @@ describe('amrMethods', () => {
 });
 
 describe('readVenueSignupState and markSignupVerified', () => {
-  function service(answers: { members?: unknown; signup?: unknown; memberError?: string; signupError?: string; updateError?: string }) {
+  type Answer = { data: unknown; error: { message: string } | null };
+  /** Table answers, plus a log of every filter, so scoping by user id can be checked. */
+  function service(answers: Partial<Record<string, Answer>>, updateError?: string) {
     const filters: Array<[string, string, unknown]> = [];
     const update = vi.fn();
+    const answer = (table: string): Answer => answers[table] ?? { data: table === 'self_serve_signups' || table === 'app_admins' ? null : [], error: null };
     return {
       filters,
       update,
       client: {
         from: (table: string) => {
+          let updating = false;
           const chain: Record<string, unknown> = {};
           chain.select = () => chain;
           chain.update = (values: unknown) => {
+            updating = true;
             update(table, values);
             return chain;
           };
-          chain.eq = (column: string, value: unknown) => {
-            filters.push([table, column, value]);
-            return chain;
-          };
+          for (const method of ['eq', 'in', 'gt']) {
+            chain[method] = (column: string, value: unknown) => {
+              filters.push([table, method === 'eq' ? column : `${method}:${column}`, value]);
+              return chain;
+            };
+          }
           chain.is = (column: string, value: unknown) => {
             filters.push([table, `is:${column}`, value]);
-            return Promise.resolve({ error: answers.updateError ? { message: answers.updateError } : null });
+            if (updating) return Promise.resolve({ error: updateError ? { message: updateError } : null });
+            return chain;
           };
-          chain.limit = async () => ({ data: answers.members ?? [], error: answers.memberError ? { message: answers.memberError } : null });
-          chain.maybeSingle = async () => ({ data: answers.signup ?? null, error: answers.signupError ? { message: answers.signupError } : null });
+          chain.maybeSingle = async () => answer(table);
+          chain.then = (resolve: (value: Answer) => unknown, reject: (reason: unknown) => unknown) =>
+            Promise.resolve(answer(table)).then(resolve, reject);
           return chain;
         },
       } as never,
     };
   }
 
-  it('reads membership and the sign-up row, both scoped to the user id', async () => {
-    const db = service({ members: [{ account_id: ACCOUNT_ID }], signup: { account_id: ACCOUNT_ID, verified_at: 'v', venue_created_at: 'c' } });
+  it('reads memberships (and which are live), admin, open invitations and the sign-up row, all scoped to the user', async () => {
+    const ARCHIVED = '44444444-4444-4444-8444-444444444444';
+    const INVITED = '55555555-5555-4555-8555-555555555555';
+    const db = service({
+      account_members: { data: [{ account_id: ACCOUNT_ID }, { account_id: ARCHIVED }], error: null },
+      app_admins: { data: null, error: null },
+      team_invitations: { data: [{ account_id: INVITED }], error: null },
+      accounts: { data: [{ id: ACCOUNT_ID }, { id: INVITED }], error: null },
+      self_serve_signups: { data: { account_id: ACCOUNT_ID, verified_at: 'v', venue_created_at: 'c' }, error: null },
+    });
     expect(await readVenueSignupState(db.client, USER_ID)).toEqual({
-      isMember: true,
+      memberships: [
+        { accountId: ACCOUNT_ID, usable: true },
+        { accountId: ARCHIVED, usable: false },
+      ],
+      isAdmin: false,
+      hasOpenInvitation: true,
       signup: { accountId: ACCOUNT_ID, verifiedAt: 'v', venueCreatedAt: 'c' },
     });
-    expect(db.filters).toEqual([
-      ['account_members', 'user_id', USER_ID],
-      ['self_serve_signups', 'user_id', USER_ID],
-    ]);
+    for (const table of ['account_members', 'app_admins', 'team_invitations', 'self_serve_signups']) {
+      expect(db.filters).toContainEqual([table, 'user_id', USER_ID]);
+    }
+    // Only open, unexpired invitations; only the login's own brands are looked up.
+    expect(db.filters).toContainEqual(['team_invitations', 'is:accepted_at', null]);
+    expect(db.filters).toContainEqual(['team_invitations', 'is:declined_at', null]);
+    expect(db.filters).toContainEqual(['team_invitations', 'is:cancelled_at', null]);
+    expect(db.filters.some(([table, column]) => table === 'team_invitations' && column === 'gt:expires_at')).toBe(true);
+    expect(db.filters).toContainEqual(['accounts', 'in:id', [ACCOUNT_ID, ARCHIVED, INVITED]]);
+    expect(db.filters).toContainEqual(['accounts', 'is:archived_at', null]);
   });
 
-  it('no row and no brand', async () => {
-    expect(await readVenueSignupState(service({}).client, USER_ID)).toEqual({ isMember: false, signup: null });
+  it('an invitation to an archived brand does not count', async () => {
+    const db = service({
+      team_invitations: { data: [{ account_id: ACCOUNT_ID }], error: null },
+      accounts: { data: [], error: null },
+    });
+    expect((await readVenueSignupState(db.client, USER_ID)).hasOpenInvitation).toBe(false);
   });
 
-  it('throws on either read failing', async () => {
-    await expect(readVenueSignupState(service({ memberError: 'boom' }).client, USER_ID)).rejects.toThrow(/account_members/);
-    await expect(readVenueSignupState(service({ signupError: 'boom' }).client, USER_ID)).rejects.toThrow(/self_serve_signups/);
+  it('an admin is marked as one', async () => {
+    const db = service({ app_admins: { data: { user_id: USER_ID }, error: null } });
+    expect((await readVenueSignupState(db.client, USER_ID)).isAdmin).toBe(true);
+  });
+
+  it('no row, no brand, not an admin, no invitation, and no brands read', async () => {
+    const db = service({});
+    expect(await readVenueSignupState(db.client, USER_ID)).toEqual({ memberships: [], isAdmin: false, hasOpenInvitation: false, signup: null });
+    expect(db.filters.some(([table]) => table === 'accounts')).toBe(false);
+  });
+
+  it.each(['account_members', 'app_admins', 'team_invitations', 'self_serve_signups'])('throws when %s cannot be read', async (table) => {
+    const db = service({ [table]: { data: null, error: { message: 'boom' } } });
+    await expect(readVenueSignupState(db.client, USER_ID)).rejects.toThrow(table);
+  });
+
+  it('throws when the brands cannot be read', async () => {
+    const db = service({
+      account_members: { data: [{ account_id: ACCOUNT_ID }], error: null },
+      accounts: { data: null, error: { message: 'boom' } },
+    });
+    await expect(readVenueSignupState(db.client, USER_ID)).rejects.toThrow(/accounts/);
   });
 
   it('sets verified_at once, for this user only', async () => {
@@ -156,7 +208,30 @@ describe('readVenueSignupState and markSignupVerified', () => {
       ['self_serve_signups', 'user_id', USER_ID],
       ['self_serve_signups', 'is:verified_at', null],
     ]);
-    await expect(markSignupVerified(service({ updateError: 'timeout' }).client, USER_ID)).rejects.toThrow(/verified_at/);
+    await expect(markSignupVerified(service({}, 'timeout').client, USER_ID)).rejects.toThrow(/verified_at/);
+  });
+});
+
+describe('decideVenueAccess', () => {
+  const OTHER = '66666666-6666-4666-8666-666666666666';
+  const base = { memberships: [], isAdmin: false, hasOpenInvitation: false, signup: null };
+  const ownRow = { accountId: ACCOUNT_ID, verifiedAt: 'v', venueCreatedAt: 'c' };
+
+  it.each<[string, Parameters<typeof decideVenueAccess>[0], string]>([
+    ['nobody special', base, 'form'],
+    ['a sign-up row with no venue', { ...base, signup: { accountId: null, verifiedAt: 'v', venueCreatedAt: null } }, 'form'],
+    ['the venue this sign-up made, still a live member', { ...base, memberships: [{ accountId: ACCOUNT_ID, usable: true }], signup: ownRow }, 'own_venue'],
+    ['the venue this sign-up made, archived', { ...base, memberships: [{ accountId: ACCOUNT_ID, usable: false }], signup: ownRow }, 'venue_closed'],
+    ['removed from the venue this sign-up made', { ...base, signup: ownRow }, 'removed'],
+    ['removed, but a member of another live brand', { ...base, memberships: [{ accountId: OTHER, usable: true }], signup: ownRow }, 'member'],
+    ['a venue made and deleted', { ...base, signup: { accountId: null, verifiedAt: 'v', venueCreatedAt: 'c' } }, 'venue_closed'],
+    ['a member of a live brand', { ...base, memberships: [{ accountId: OTHER, usable: true }] }, 'member'],
+    ['a member of only archived brands', { ...base, memberships: [{ accountId: OTHER, usable: false }] }, 'member_no_brand'],
+    ['an admin', { ...base, isAdmin: true }, 'admin'],
+    ['someone with an open invitation', { ...base, hasOpenInvitation: true }, 'invited'],
+    ['a member with an invitation (member wins)', { ...base, memberships: [{ accountId: OTHER, usable: true }], hasOpenInvitation: true }, 'member'],
+  ])('%s: %s', (_label, state, expected) => {
+    expect(decideVenueAccess(state)).toBe(expected);
   });
 });
 
@@ -178,7 +253,7 @@ describe('parseProvisionOutcome and provisionSelfServeBrand', () => {
   it('accepts only answers it knows', () => {
     expect(parseProvisionOutcome({ status: 'created', account_id: ACCOUNT_ID })).toEqual({ status: 'created', accountId: ACCOUNT_ID });
     expect(parseProvisionOutcome({ status: 'existing', account_id: ACCOUNT_ID })).toEqual({ status: 'existing', accountId: ACCOUNT_ID });
-    for (const status of ['closed', 'no_login', 'venue_closed', 'member', 'email_mismatch']) {
+    for (const status of ['closed', 'no_login', 'venue_closed', 'member', 'email_mismatch', 'removed', 'admin', 'invited', 'unconfirmed']) {
       expect(parseProvisionOutcome({ status })).toEqual({ status });
     }
     expect(parseProvisionOutcome({ status: 'created' })).toBeNull();
@@ -214,5 +289,11 @@ describe('venue form rules', () => {
   it('spots links and email addresses in a venue name', () => {
     for (const name of ['http://x.test', 'HTTPS://X.TEST', 'www.pub.test', 'WWW.PUB', 'a@b']) expect(venueNameHasLink(name)).toBe(true);
     for (const name of ["The King's Head", 'Fish & Chips Co.', 'Bar 2:30']) expect(venueNameHasLink(name)).toBe(false);
+  });
+
+  it('refuses the same control characters as the database, including U+0085 (next line)', () => {
+    for (const text of ['a\nb', 'a\tb', 'a\u0000b', 'a\u007fb', 'a\u0085b', 'a\u009fb']) expect(hasControlCharacters(text), JSON.stringify(text)).toBe(true);
+    // Not controls: a no-break space, a zero-width space, accents and emoji.
+    for (const text of ['Caf\u00e9 du Parc', 'a\u00a0b', 'a\u200bb', 'The \u{1F37A} Bar']) expect(hasControlCharacters(text), JSON.stringify(text)).toBe(false);
   });
 });

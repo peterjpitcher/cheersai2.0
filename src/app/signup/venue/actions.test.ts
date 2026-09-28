@@ -16,6 +16,15 @@ vi.mock('next/headers', () => ({
   headers: vi.fn(async () => new Headers({ 'x-forwarded-for': '203.0.113.7' })),
 }));
 
+// next/server after(): the callbacks are kept, and run by the test when it chooses
+// (after the action has already answered, as on Vercel).
+const afterCallbacks: Array<() => unknown> = [];
+vi.mock('next/server', () => ({ after: (callback: () => unknown) => afterCallbacks.push(callback) }));
+async function runAfter(): Promise<void> {
+  const callbacks = afterCallbacks.splice(0);
+  for (const callback of callbacks) await callback();
+}
+
 type SwitchState = 'open' | 'closed' | 'unavailable';
 const mockSwitch = vi.fn<() => Promise<SwitchState>>(async () => 'open');
 vi.mock('@/lib/signup/switch', () => ({ getSelfServeSignupSwitch: () => mockSwitch() }));
@@ -66,9 +75,23 @@ vi.mock('@/lib/supabase/service', () => ({
   createServiceSupabaseClient: () => ({ rpc: (fn: string, args: Record<string, unknown>) => mockRpc(fn, args) }),
 }));
 
+// Who the login is (readVenueSignupState); decideVenueAccess stays real.
+type VenueState = import('@/lib/signup/venue').VenueSignupState;
+const NEW_LOGIN: VenueState = {
+  memberships: [],
+  isAdmin: false,
+  hasOpenInvitation: false,
+  signup: { accountId: null, verifiedAt: '2026-09-28T09:00:00Z', venueCreatedAt: null },
+};
+const mockReadState = vi.fn<(service: unknown, userId: string) => Promise<VenueState>>(async () => NEW_LOGIN);
+
 vi.mock('@/lib/signup/venue', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/signup/venue')>();
-  return { ...actual, readSignedInLogin: () => mockReadLogin() };
+  return {
+    ...actual,
+    readSignedInLogin: () => mockReadLogin(),
+    readVenueSignupState: (service: unknown, userId: string) => mockReadState(service, userId),
+  };
 });
 
 type UpdateAnswer = { error: { status?: number; code?: string; message: string } | null };
@@ -111,6 +134,8 @@ function expectRefusedWithAlert(result: { error?: string; success?: boolean }, k
 
 beforeEach(() => {
   vi.clearAllMocks();
+  afterCallbacks.length = 0;
+  mockReadState.mockResolvedValue(NEW_LOGIN);
   mockEnv.server.VERCEL_ENV = 'production';
   mockEnv.server.OPERATOR_ALERT_EMAIL = 'ops@cheers.test';
   mockSwitch.mockResolvedValue('open');
@@ -141,6 +166,13 @@ describe('createSelfServeVenue: the happy path', () => {
       ],
     ]);
     expect(mockConsume).toHaveBeenCalledWith('signup_venue', { email: '', ip: '203.0.113.7', userId: USER_ID });
+    expect(mockReadState).toHaveBeenCalledWith(expect.anything(), USER_ID);
+
+    // Nothing is announced until the response has gone: then the record and the email.
+    expect(mockAudit).not.toHaveBeenCalled();
+    expect(mockSendEmail).not.toHaveBeenCalled();
+    expect(afterCallbacks).toHaveLength(1);
+    await runAfter();
     expect(mockAudit).toHaveBeenCalledWith({
       actorUserId: USER_ID,
       action: 'self_serve_venue_created',
@@ -179,7 +211,7 @@ describe('createSelfServeVenue: the happy path', () => {
     expect(JSON.stringify(provisionCalls()[0]![1])).not.toContain('99999999');
   });
 
-  it('a double submit, refresh or second tab gets the same brand back and announces nothing twice', async () => {
+  it('a double submit racing the first (the venue not there yet at the pre-check) gets the same brand back and announces nothing twice', async () => {
     mockRpc.mockResolvedValue({ data: { status: 'existing', account_id: ACCOUNT_ID }, error: null });
     // The first submit already set this password.
     mockUpdateUser
@@ -190,9 +222,77 @@ describe('createSelfServeVenue: the happy path', () => {
 
     expect(result).toEqual({ success: true, next: '/settings#billing' });
     expect(mockUpdateUser).toHaveBeenLastCalledWith({ data: { full_name: 'Sam Owner' } });
+    expect(afterCallbacks).toHaveLength(0);
     expect(mockAudit).not.toHaveBeenCalled();
     expect(mockSendEmail).not.toHaveBeenCalled();
     expect(mockReport).not.toHaveBeenCalled();
+  });
+
+  it('a refresh or second tab after the venue exists goes to Billing, saving and creating nothing', async () => {
+    mockReadState.mockResolvedValue({
+      ...NEW_LOGIN,
+      memberships: [{ accountId: ACCOUNT_ID, usable: true }],
+      signup: { accountId: ACCOUNT_ID, verifiedAt: '2026-09-28T09:00:00Z', venueCreatedAt: '2026-09-28T09:05:00Z' },
+    });
+    expect(await createSelfServeVenue(form({ password: 'a different password', confirm: 'a different password' }))).toEqual({
+      success: true,
+      next: '/settings#billing',
+    });
+    expect(mockUpdateUser).not.toHaveBeenCalled();
+    expect(provisionCalls()).toHaveLength(0);
+    expect(afterCallbacks).toHaveLength(0);
+  });
+});
+
+describe('createSelfServeVenue: who may create a venue is checked before anything is saved (review of PR #146)', () => {
+  const OTHER = '33333333-3333-4333-8333-333333333333';
+  it.each<[string, Partial<VenueState>, string]>([
+    ['a member of another live brand', { memberships: [{ accountId: OTHER, usable: true }] }, VENUE_MESSAGES.member],
+    ['a member of only archived brands', { memberships: [{ accountId: OTHER, usable: false }] }, VENUE_MESSAGES.memberNoBrand],
+    ['an app admin', { isAdmin: true }, VENUE_MESSAGES.admin],
+    ['someone with an open invitation', { hasOpenInvitation: true }, VENUE_MESSAGES.invited],
+    [
+      'someone removed from the venue they set up',
+      { signup: { accountId: ACCOUNT_ID, verifiedAt: 'v', venueCreatedAt: 'c' } },
+      VENUE_MESSAGES.removed,
+    ],
+    [
+      'someone whose venue was deleted',
+      { signup: { accountId: null, verifiedAt: 'v', venueCreatedAt: 'c' } },
+      VENUE_MESSAGES.venueClosed,
+    ],
+    [
+      'someone whose venue was archived',
+      { memberships: [{ accountId: ACCOUNT_ID, usable: false }], signup: { accountId: ACCOUNT_ID, verifiedAt: 'v', venueCreatedAt: 'c' } },
+      VENUE_MESSAGES.venueClosed,
+    ],
+  ])('refuses %s, and their password and name are NOT changed', async (_label, state, message) => {
+    mockReadState.mockResolvedValue({ ...NEW_LOGIN, ...state });
+    expect(await createSelfServeVenue(form())).toEqual({ error: message });
+    expect(mockUpdateUser).not.toHaveBeenCalled();
+    expect(provisionCalls()).toHaveLength(0);
+    expect(mockReport).not.toHaveBeenCalled();
+  });
+
+  it('a closed switch refuses before anything is saved (password and name NOT changed)', async () => {
+    mockSwitch.mockResolvedValue('closed');
+    await createSelfServeVenue(form());
+    expect(mockUpdateUser).not.toHaveBeenCalled();
+  });
+
+  it('a lookup failure refuses with our email and alerts, and changes nothing', async () => {
+    mockReadState.mockRejectedValue(new Error('team_invitations: connection refused'));
+    expectRefusedWithAlert(await createSelfServeVenue(form()), 'venue_lookup');
+    expect(mockUpdateUser).not.toHaveBeenCalled();
+    expect(provisionCalls()).toHaveLength(0);
+  });
+
+  it('the member, admin and invited notices point to the right next step', () => {
+    expect(VENUE_MESSAGES.member).toContain(CONTACT_EMAIL);
+    expect(VENUE_MESSAGES.removed).toContain(CONTACT_EMAIL);
+    expect(VENUE_MESSAGES.memberNoBrand).toContain(CONTACT_EMAIL);
+    expect(VENUE_MESSAGES.invited).toMatch(/Accept the invitation/);
+    expect(VENUE_MESSAGES.admin).toMatch(/Create brand/);
   });
 });
 
@@ -278,6 +378,7 @@ describe('createSelfServeVenue: limits and fields', () => {
     ['www.', 'www.example.com Tavern'],
     ['an email address', 'Mail me@evil.example'],
     ['a line break', 'Line\nBreak Bar'],
+    ['U+0085 (next line), which the database also refuses', 'Next\u0085Line Inn'],
     ['nothing', '   '],
     ['121 characters', 'x'.repeat(121)],
   ])('refuses a venue name with %s', async (_label, venueName) => {
@@ -349,11 +450,19 @@ describe('createSelfServeVenue: provisioning', () => {
     expectRefusedWithAlert(await createSelfServeVenue(form()), 'provisioning');
   });
 
+  it('the database saying the email is unconfirmed (the session said confirmed) is our fault: refused and alerted', async () => {
+    mockRpc.mockResolvedValue({ data: { status: 'unconfirmed' }, error: null });
+    expectRefusedWithAlert(await createSelfServeVenue(form()), 'provisioning');
+  });
+
   it.each([
     ['member', VENUE_MESSAGES.member],
     ['venue_closed', VENUE_MESSAGES.venueClosed],
     ['no_login', VENUE_MESSAGES.signedOut],
-  ])('%s is refused with its own message and no alert', async (status, message) => {
+    ['removed', VENUE_MESSAGES.removed],
+    ['admin', VENUE_MESSAGES.admin],
+    ['invited', VENUE_MESSAGES.invited],
+  ])('%s from the database (it changed between the checks) is refused with its own message and no alert', async (status, message) => {
     mockRpc.mockResolvedValue({ data: { status }, error: null });
     expect(await createSelfServeVenue(form())).toEqual({ error: message });
     expect(mockReport).not.toHaveBeenCalled();
@@ -369,6 +478,7 @@ describe('createSelfServeVenue: telling the operator never blocks the customer',
   it('a failed operator email alerts, but the customer still goes to Billing', async () => {
     mockSendEmail.mockRejectedValue(new Error('Resend API error: 500'));
     expect(await createSelfServeVenue(form())).toEqual({ success: true, next: '/settings#billing' });
+    await runAfter();
     expect(mockReport).toHaveBeenCalledWith('venue_notice', expect.any(Error));
     const alert = mockReport.mock.calls[0]![1] as Error;
     expect(alert.message).toContain(ACCOUNT_ID);
@@ -378,6 +488,7 @@ describe('createSelfServeVenue: telling the operator never blocks the customer',
   it('a failed admin_audit write alerts, but the customer still goes to Billing and the operator is still emailed', async () => {
     mockAudit.mockRejectedValue(new Error('insert failed'));
     expect(await createSelfServeVenue(form())).toEqual({ success: true, next: '/settings#billing' });
+    await runAfter();
     expect(mockReport).toHaveBeenCalledWith('venue_notice', expect.any(Error));
     expect(mockSendEmail).toHaveBeenCalledTimes(1);
   });
@@ -385,6 +496,22 @@ describe('createSelfServeVenue: telling the operator never blocks the customer',
   it('no OPERATOR_ALERT_EMAIL: logged, the customer carries on', async () => {
     mockEnv.server.OPERATOR_ALERT_EMAIL = undefined;
     expect(await createSelfServeVenue(form())).toEqual({ success: true, next: '/settings#billing' });
+    await runAfter();
     expect(mockSendEmail).not.toHaveBeenCalled();
+  });
+
+  it('a Resend that hangs cannot hold up the customer: they have their answer first, and the email gives up after 5 seconds with an alert', async () => {
+    vi.useFakeTimers();
+    try {
+      mockSendEmail.mockImplementation(() => new Promise<void>(() => {}));
+      expect(await createSelfServeVenue(form())).toEqual({ success: true, next: '/settings#billing' });
+      const running = runAfter();
+      await vi.advanceTimersByTimeAsync(5000);
+      await running;
+      expect(mockReport).toHaveBeenCalledWith('venue_notice', expect.any(Error));
+      expect((mockReport.mock.calls[0]![1] as Error).message).toContain(ACCOUNT_ID);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
