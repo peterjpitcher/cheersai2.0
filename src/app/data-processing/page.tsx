@@ -10,12 +10,14 @@ import {
   LegalTable,
 } from "@/features/legal/legal-page";
 import { COMPANY, LEGAL_DOCUMENTS } from "@/lib/legal/company";
+import { indexableWhenOpen } from "@/lib/signup/front-door";
+import { getSelfServeSignupSwitch } from "@/lib/signup/switch";
 import { SUB_PROCESSOR_ROWS } from "@/lib/legal/sub-processors";
 
 const DESCRIPTION =
   "The Cheers Data Processing Agreement: how Orange Jelly Limited handles personal data for the venues that use Cheers, and the providers it uses.";
 
-export const metadata: Metadata = {
+const METADATA: Metadata = {
   title: "Data Processing Agreement | Cheers",
   description: DESCRIPTION,
   openGraph: {
@@ -24,6 +26,16 @@ export const metadata: Metadata = {
     type: "article",
   },
 };
+
+/**
+ * Indexable only once the self-serve sign-up switch is on (P11); until then it
+ * keeps the site-wide noindex. Revalidated every minute so a flip needs no deploy.
+ */
+export const revalidate = 60;
+
+export async function generateMetadata(): Promise<Metadata> {
+  return indexableWhenOpen(METADATA, await getSelfServeSignupSwitch());
+}
 
 const { terms, privacy } = LEGAL_DOCUMENTS;
 
