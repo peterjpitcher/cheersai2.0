@@ -15,8 +15,8 @@ import type { SupabaseClient } from '@supabase/supabase-js';
  *
  * Supports the builder calls the billing code uses: select (with count/head),
  * insert, update, delete, eq, neq, lt, lte, gt, gte, in, is, order, limit,
- * maybeSingle, single, returns. Failures can be injected per table and
- * operation to simulate an outage.
+ * maybeSingle, single, returns, and rpc('consume_rate_limit'). Failures can be
+ * injected per table and operation to simulate an outage.
  */
 
 type Row = Record<string, unknown>;
@@ -222,9 +222,20 @@ export class InMemoryBillingDb {
     return this.tables[table].map((row) => ({ ...row }));
   }
 
-  /** Make the next `times` calls of `op` on `table` fail like an outage. */
-  fail(table: string, op: Op, times = Number.POSITIVE_INFINITY, message = 'connection refused'): void {
-    this.failures.push({ table, op, error: dbError('08006', message), times });
+  /** The database's now() for rpc calls; tests set it to match their clock. */
+  now: () => Date = () => new Date();
+  /** public.consume_rate_limit windows by key (auth_rate_limits). */
+  rateLimits = new Map<string, { count: number; resetAt: number }>();
+  /** Every rpc call, in order. */
+  rpcCalls: Array<{ fn: string; params: Record<string, unknown> }> = [];
+
+  /**
+   * Make the next `times` calls of `op` on `table` fail like an outage, or with
+   * another Postgres error code (23505 for a unique violation, say). Use the
+   * table name 'rpc:<function>' to fail an rpc call.
+   */
+  fail(table: string, op: Op, times = Number.POSITIVE_INFINITY, message = 'connection refused', code = '08006'): void {
+    this.failures.push({ table, op, error: dbError(code, message), times });
   }
 
   takeFailure(table: string, op: Op): DbError | null {
@@ -234,8 +245,28 @@ export class InMemoryBillingDb {
     return failure.error;
   }
 
+  /** The rpc functions the billing code calls, with the live semantics. */
+  private async rpc(fn: string, params: Record<string, unknown>): Promise<{ data: unknown; error: DbError | null }> {
+    this.rpcCalls.push({ fn, params });
+    const failure = this.takeFailure(`rpc:${fn}`, 'select');
+    if (failure) return { data: null, error: failure };
+    if (fn !== 'consume_rate_limit') throw new Error(`in-memory db: unknown rpc ${fn}`);
+    // public.consume_rate_limit (migration 20260928120000): one fixed window per key.
+    const key = String(params.p_key);
+    const limit = Number(params.p_limit);
+    const windowMs = Number(params.p_window_seconds) * 1000;
+    const nowMs = this.now().getTime();
+    const existing = this.rateLimits.get(key);
+    const next = !existing || existing.resetAt <= nowMs ? { count: 1, resetAt: nowMs + windowMs } : { count: existing.count + 1, resetAt: existing.resetAt };
+    this.rateLimits.set(key, next);
+    return { data: [{ allowed: next.count <= limit, hits: next.count, resets_at: new Date(next.resetAt).toISOString() }], error: null };
+  }
+
   client(): SupabaseClient {
-    return { from: (table: string) => new Query(this, table) } as unknown as SupabaseClient;
+    return {
+      from: (table: string) => new Query(this, table),
+      rpc: (fn: string, params: Record<string, unknown>) => this.rpc(fn, params ?? {}),
+    } as unknown as SupabaseClient;
   }
 
   spec(table: string): TableSpec {

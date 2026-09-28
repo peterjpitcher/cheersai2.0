@@ -18,6 +18,7 @@ const {
   alertStripeWebhookFailure,
   alertTrialRefusedRepeatCard,
   alertTrialStartedWithoutCard,
+  alertRefusedTrialNotOnCustomer,
 } = await import('@/lib/notifications/operator-alerts');
 
 type Result = { data: unknown; error: unknown };
@@ -174,6 +175,22 @@ describe('Stripe operator alerts: one per brand per 24 hours', () => {
     db.fail('admin_audit', 'select');
     await expect(failure(BRAND_A, 'evt_1')).rejects.toThrow(/admin_audit lookup failed/);
     expect(mockSendEmail).not.toHaveBeenCalled();
+  });
+
+  it('tells the operator a refused trial is no longer on its Stripe customer, ids only, at most once a day per brand', async () => {
+    const details = { accountId: BRAND_A, customerId: 'cus_a', subscriptionId: 'sub_refused' };
+    expect(await alertRefusedTrialNotOnCustomer(db.client(), details, NOW)).toBe('sent');
+    expect(await alertRefusedTrialNotOnCustomer(db.client(), details, NOW)).toBe('skipped');
+    expect(mockSendEmail).toHaveBeenCalledTimes(1);
+    const [options] = mockSendEmail.mock.calls[0] as [{ subject: string; html: string; required: boolean }];
+    expect(options).toMatchObject({ subject: '[Cheers operator] A refused free trial is no longer on its Stripe customer', required: true });
+    expect(options.html).toContain('sub_refused');
+    expect(options.html).toContain('cus_a');
+    expect(mockLogAdminEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'operator_stripe_trial_card_alert', targetAccountId: BRAND_A, detail: { customerId: 'cus_a', subscriptionId: 'sub_refused' } }),
+    );
+    // Its own bucket: a webhook failure alert for the same brand still goes out.
+    expect(await failure(BRAND_A, 'evt_1')).toBe('sent');
   });
 });
 

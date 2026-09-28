@@ -5,7 +5,11 @@ import type Stripe from 'stripe';
 
 import { BillingNotConfiguredError, usableTrialCardHashKey } from '@/lib/billing/stripe';
 import { createLogger } from '@/lib/logging';
-import { alertTrialRefusedRepeatCard, alertTrialStartedWithoutCard } from '@/lib/notifications/operator-alerts';
+import {
+  alertRefusedTrialNotOnCustomer,
+  alertTrialRefusedRepeatCard,
+  alertTrialStartedWithoutCard,
+} from '@/lib/notifications/operator-alerts';
 
 /**
  * Repeat free trials, checked by card (SPEC-self-serve-signup §4.7, decisions
@@ -13,26 +17,32 @@ import { alertTrialRefusedRepeatCard, alertTrialStartedWithoutCard } from '@/lib
  *
  * Runs inside reconcileBrandFromStripe after the current subscription row is
  * written and before finish(), so the webhook, "Check again" and the admin
- * re-sync all share it. Only a trialing subscription is checked; anything
- * else costs one or two database reads and no Stripe call, so brands with no
- * trial (every comped brand today) are unaffected.
+ * re-sync all share it. Only a free trial that started with its subscription
+ * (the trial CheersAI's Checkout gives) is checked: a subscription moved into a
+ * trial later (for example a free month given in the Stripe Dashboard) is left
+ * alone and nothing is recorded. Anything else costs one or two database reads
+ * and no Stripe call, so brands with no trial (every comped brand today) are
+ * unaffected.
  *
  * The decision, race-safe because Stripe's events for one Checkout arrive
  * together and reconcile concurrently:
  *   1. insert (subscription, card code, 'first_trial'). Inserted: done.
  *   2. A unique violation: read this subscription's row. Present: a parallel
- *      reconcile already decided; use its outcome. Absent: the violation was
- *      the partial unique index on card_hash (another subscription holds this
- *      card's trial), so insert 'repeat_refused'; a unique violation there
- *      means a parallel reconcile inserted it first, so use its row.
+ *      reconcile already decided; use its outcome. Absent: the violation should
+ *      be the partial unique index on card_hash (another subscription holds
+ *      this card's trial). That is confirmed (a first_trial row exists for the
+ *      code) before 'repeat_refused' is inserted, so a primary-key clash with a
+ *      row that has since gone is never read as a card clash; a unique
+ *      violation on that insert means a parallel reconcile inserted it first,
+ *      so use its row.
  *   3. Only the reconcile that inserted 'repeat_refused' cancels the trial in
  *      Stripe (invoice_now false, prorate false; "already cancelled" counts
  *      as success), stores the cancelled subscription row from Stripe's
- *      answer (so finish() sees the cancellation, not the trial), records
- *      trial_refused_repeat_card in admin_audit, emails the operator and
- *      finally sets cancelled_at. cancelled_at is the "all done" marker, set
- *      last, so a failure at any step leaves it empty and the refusal is
- *      finished by a later reconcile (see finishRefusal).
+ *      answer (so finish() sees the cancellation, not the trial), emails the
+ *      operator, records trial_refused_repeat_card in admin_audit (once per
+ *      subscription) and finally sets cancelled_at. cancelled_at is the "all
+ *      done" marker, set last, so a failure at any step leaves it empty and
+ *      the refusal is finished by a later reconcile (see finishRefusal).
  *   4. No card on the subscription: 'no_card', and the operator is emailed.
  * Every Stripe or database error throws, so the webhook answers 500, Stripe
  * retries and the existing webhook alert emails the operator. The trial runs
@@ -57,6 +67,24 @@ export type TrialCardOutcome = 'first_trial' | 'repeat_refused' | 'no_card';
  * re-checks that count before merging.
  */
 export const TRIAL_CARD_CHECK_STARTS_AT = new Date('2026-09-28T12:00:00.000Z');
+
+/**
+ * How close (in seconds) a subscription's trial_start must be to its creation
+ * (created or start_date) for the trial to count as the one it started with.
+ * CheersAI's Checkout creates the subscription and its trial in one step, so
+ * the two match to the second; a trial added to a running subscription starts
+ * whenever it was added.
+ */
+export const TRIAL_FROM_CREATION_TOLERANCE_SECONDS = 60;
+
+/** True when the subscription's trial began when the subscription was created. */
+export function trialBeganAtCreation(subscription: Pick<Stripe.Subscription, 'trial_start' | 'created' | 'start_date'>): boolean {
+  const trialStart = subscription.trial_start;
+  if (typeof trialStart !== 'number') return false;
+  const near = (other: number | null | undefined): boolean =>
+    typeof other === 'number' && Math.abs(trialStart - other) <= TRIAL_FROM_CREATION_TOLERANCE_SECONDS;
+  return near(subscription.created) || near(subscription.start_date);
+}
 
 /** card_hash for a no_card row (the table's CHECK allows it only with that outcome). */
 export const NO_CARD_HASH = 'none';
@@ -88,7 +116,7 @@ export class TrialCardCheckError extends Error {
 }
 
 export interface TrialCardCheckResult {
-  /** The current subscription's recorded outcome, or null when it has none (not a trial, or grandfathered). */
+  /** The current subscription's recorded outcome, or null when it has none (not a trial, a trial added after creation, or grandfathered). */
   outcome: TrialCardOutcome | null;
   /** The current subscription is a refused trial (already cancelled in Stripe when this returns). */
   refused: boolean;
@@ -105,7 +133,11 @@ export interface TrialCardCheckInput {
   listed: readonly Stripe.Subscription[];
   clock: () => Date;
   sleep: (ms: number) => Promise<void>;
-  /** Store the cancelled subscription Stripe returned, as reconcile stores any other row. */
+  /**
+   * Store the cancelled subscription Stripe returned, as reconcile stores any
+   * other row: stamped newest when it is the current subscription, otherwise
+   * older than the current one, so the brand's state still comes from it.
+   */
   storeCancelledSubscription: (subscription: Stripe.Subscription) => Promise<void>;
 }
 
@@ -153,6 +185,34 @@ async function insertCheck(
   if (!error) return 'inserted';
   if (error.code === '23505') return 'conflict';
   throw new Error(`trial_card_checks insert failed: ${error.message}`);
+}
+
+/**
+ * Whether any brand has had its first trial on this card code. The one
+ * deliberate cross-brand read: it asks only for a count, so nothing about the
+ * other brand (not even which one) reaches this reconcile.
+ */
+async function cardHasFirstTrial(service: SupabaseClient, cardHash: string): Promise<boolean> {
+  const { count, error } = await service
+    .from('trial_card_checks')
+    .select('stripe_subscription_id', { count: 'exact', head: true })
+    .eq('card_hash', cardHash)
+    .eq('outcome', 'first_trial');
+  if (error) throw new Error(`trial_card_checks lookup failed: ${error.message}`);
+  return (count ?? 0) > 0;
+}
+
+/** Whether this subscription's refusal is already in admin_audit (a retry after the email or the final mark failed). */
+async function refusalAudited(service: SupabaseClient, accountId: string, subscriptionId: string): Promise<boolean> {
+  const { data, error } = await service
+    .from('admin_audit')
+    .select('detail')
+    .eq('action', 'trial_refused_repeat_card')
+    .eq('target_account_id', accountId)
+    .limit(50)
+    .returns<Array<{ detail: { subscriptionId?: unknown } | null }>>();
+  if (error) throw new Error(`admin_audit lookup failed: ${error.message}`);
+  return (data ?? []).some((row) => row.detail?.subscriptionId === subscriptionId);
 }
 
 async function loadBrandName(service: SupabaseClient, accountId: string): Promise<string | null> {
@@ -234,6 +294,18 @@ async function decide(input: TrialCardCheckInput): Promise<Decision> {
   const existing = await readCheck(service, accountId, current.id);
   if (existing) return { outcome: existing.outcome, inserted: false };
 
+  // Only the trial a subscription started with is a free trial CheersAI gave.
+  // A paid subscription moved into a trial later (a free month given in the
+  // Stripe Dashboard, say) is the operator's choice: record nothing, refuse
+  // nothing, and ask Stripe nothing about the card.
+  if (!trialBeganAtCreation(current)) {
+    logger.info('a trial that began after its subscription was created is not checked', {
+      accountId,
+      subscriptionId: current.id,
+    });
+    return { outcome: null, inserted: false };
+  }
+
   const key = usableTrialCardHashKey();
   if (!key) throw new BillingNotConfiguredError(['TRIAL_CARD_HASH_KEY']);
 
@@ -258,6 +330,12 @@ async function decide(input: TrialCardCheckInput): Promise<Decision> {
     });
     return { outcome: null, inserted: false };
   }
+  // Confirm the clash was the card before refusing: a primary-key clash with a
+  // row that has since gone (a no_card row removed after its email failed)
+  // must never read as "this card had a trial".
+  if (!(await cardHasFirstTrial(service, cardHash))) {
+    throw new TrialCardCheckError(`Could not decide the trial ${current.id}: its row changed while checking; this reconcile will be retried`);
+  }
   if ((await insertCheck(input, { card_hash: cardHash, outcome: 'repeat_refused' })) === 'inserted') {
     logger.warn('trial refused: the card has already had a Cheers free trial', { accountId, subscriptionId: current.id });
     return { outcome: 'repeat_refused', inserted: true };
@@ -278,6 +356,25 @@ async function cancelTrial(stripe: Stripe, subscriptionId: string): Promise<Stri
   }
 }
 
+/**
+ * Claim the right to finish an unfinished refusal: at most one reconcile per
+ * subscription per takeover window, through the database's atomic counter
+ * (public.consume_rate_limit, one upsert on auth_rate_limits, whose rows the
+ * retention job clears a day after they reset). The key holds the Stripe
+ * subscription id only.
+ */
+async function claimTakeover(service: SupabaseClient, subscriptionId: string): Promise<boolean> {
+  const { data, error } = await service.rpc('consume_rate_limit', {
+    p_key: `trial_card_finish:${subscriptionId}`,
+    p_limit: 1,
+    p_window_seconds: REFUSAL_TAKEOVER_AFTER_MS / 1000,
+  });
+  if (error) throw new Error(`consume_rate_limit failed: ${error.message}`);
+  const result = (Array.isArray(data) ? data[0] : data) as { allowed?: unknown } | null;
+  if (!result || typeof result.allowed !== 'boolean') throw new Error('consume_rate_limit returned no usable row');
+  return result.allowed;
+}
+
 /** Wait for the reconcile that inserted this refusal to finish it. True once cancelled_at is set. */
 async function waitForFinish(input: TrialCardCheckInput, subscriptionId: string): Promise<boolean> {
   for (let poll = 0; poll < REFUSAL_WAIT_POLLS; poll += 1) {
@@ -296,7 +393,9 @@ async function waitForFinish(input: TrialCardCheckInput, subscriptionId: string)
  * events) waits for that one to finish, so exactly one cancel is sent. A
  * refusal still unfinished after REFUSAL_TAKEOVER_AFTER_MS lost its reconcile
  * (Stripe or the database failed, or the function was killed), and the next
- * reconcile finishes it: that is the retry.
+ * reconcile finishes it: that is the retry. Only one reconcile per window may
+ * take over (claimTakeover), so retries arriving together do not each cancel,
+ * email and audit.
  */
 async function finishRefusal(input: TrialCardCheckInput, row: CheckRow, subscription: Stripe.Subscription, insertedByUs: boolean): Promise<void> {
   const { service, stripe, accountId, customerId, clock } = input;
@@ -308,6 +407,15 @@ async function finishRefusal(input: TrialCardCheckInput, row: CheckRow, subscrip
       if (await waitForFinish(input, subscriptionId)) return;
       throw new TrialCardCheckError(
         `The refused trial ${subscriptionId} is still being cancelled by another reconcile; this one will be retried`,
+      );
+    }
+    // Past the window, several reconciles can arrive at once (Stripe retries
+    // the failed events of one Checkout together). Only one may finish it in
+    // each window; the others wait for it like any parallel reconcile.
+    if (!(await claimTakeover(service, subscriptionId))) {
+      if (await waitForFinish(input, subscriptionId)) return;
+      throw new TrialCardCheckError(
+        `The refused trial ${subscriptionId} is being finished by another reconcile; this one will be retried`,
       );
     }
     logger.warn('finishing a refused trial that an earlier reconcile left unfinished', { accountId, subscriptionId, ageMs });
@@ -331,16 +439,21 @@ async function finishRefusal(input: TrialCardCheckInput, row: CheckRow, subscrip
 
   await input.storeCancelledSubscription(cancelled);
 
-  const { error: auditError } = await service.from('admin_audit').insert({
-    actor_user_id: null,
-    action: 'trial_refused_repeat_card',
-    target_account_id: accountId,
-    detail: { subscriptionId, customerId },
-    result: 'success',
-  });
-  if (auditError) throw new Error(`admin_audit insert failed: ${auditError.message}`);
-
+  // The email first (at least once: a failure leaves cancelled_at empty, so it
+  // is sent again), then one audit row per refused subscription however many
+  // times this runs.
   await alertTrialRefusedRepeatCard({ accountId, brandName: await loadBrandName(service, accountId), subscriptionId, customerId });
+
+  if (!(await refusalAudited(service, accountId, subscriptionId))) {
+    const { error: auditError } = await service.from('admin_audit').insert({
+      actor_user_id: null,
+      action: 'trial_refused_repeat_card',
+      target_account_id: accountId,
+      detail: { subscriptionId, customerId },
+      result: 'success',
+    });
+    if (auditError) throw new Error(`admin_audit insert failed: ${auditError.message}`);
+  }
 
   const { error: markError } = await service
     .from('trial_card_checks')
@@ -381,10 +494,24 @@ export async function runTrialCardCheck(input: TrialCardCheckInput): Promise<Tri
   for (const row of data ?? []) {
     const subscription = input.listed.find((listed) => listed.id === row.stripe_subscription_id);
     if (!subscription) {
+      // Moved to another customer or deleted in Stripe: the code cannot tell
+      // whether it still runs, so a person looks. The alert never blocks the
+      // reconcile (at most one a day per brand).
       logger.error('a refused trial is not on the brand\'s Stripe customer any more; finish it by hand', undefined, {
         accountId,
         subscriptionId: row.stripe_subscription_id,
       });
+      try {
+        await alertRefusedTrialNotOnCustomer(
+          service,
+          { accountId, customerId: input.customerId, subscriptionId: row.stripe_subscription_id },
+          input.clock(),
+        );
+      } catch (alertError) {
+        logger.error('operator alert for a refused trial not on its customer could not be sent', alertError instanceof Error ? alertError : undefined, {
+          accountId,
+        });
+      }
       continue;
     }
     const insertedByUs = decision.inserted && decision.outcome === 'repeat_refused' && row.stripe_subscription_id === current.id;

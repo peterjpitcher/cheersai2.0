@@ -106,11 +106,13 @@ export async function alertRepeatedPublishFailures(
 const STRIPE_WEBHOOK_ALERT_ACTION = 'operator_stripe_webhook_alert';
 const STRIPE_INVOICE_ALERT_ACTION = 'operator_stripe_invoice_alert';
 const STRIPE_DOUBLE_BILLING_ALERT_ACTION = 'operator_stripe_double_billing_alert';
+const STRIPE_TRIAL_CARD_ALERT_ACTION = 'operator_stripe_trial_card_alert';
 
 type StripeAlertAction =
   | typeof STRIPE_WEBHOOK_ALERT_ACTION
   | typeof STRIPE_INVOICE_ALERT_ACTION
-  | typeof STRIPE_DOUBLE_BILLING_ALERT_ACTION;
+  | typeof STRIPE_DOUBLE_BILLING_ALERT_ACTION
+  | typeof STRIPE_TRIAL_CARD_ALERT_ACTION;
 
 /**
  * True when this kind of alert went out in the last 24 hours for this brand,
@@ -232,6 +234,37 @@ export async function alertPossibleDoubleBilling(
 <p>Cancel the extra subscription in Stripe (refund if it has charged), then use "Re-sync from Stripe" on the admin page. You will not get another alert like this for this brand for 24 hours.</p>
 `.trim(),
       detail: { customerId: details.customerId, subscriptionIds: details.subscriptionIds },
+    },
+    now,
+  );
+}
+
+/**
+ * Repeat free-trial check (SPEC-self-serve-signup §4.7): a trial refused for a
+ * repeat card is not finished (not yet marked cancelled) and Stripe no longer
+ * lists it on the brand's customer (moved or deleted), so the code cannot
+ * tell whether it still runs. At most one email per brand per rolling 24
+ * hours. Ids only: no card details, no names beyond the brand id.
+ */
+export async function alertRefusedTrialNotOnCustomer(
+  service: SupabaseClient,
+  details: { accountId: string; customerId: string; subscriptionId: string },
+  now: Date = new Date(),
+): Promise<'sent' | 'skipped'> {
+  return sendStripeAlert(
+    service,
+    {
+      action: STRIPE_TRIAL_CARD_ALERT_ACTION,
+      accountId: details.accountId,
+      subject: '[Cheers operator] A refused free trial is no longer on its Stripe customer',
+      html: `
+<p>A free trial refused because its card had a Cheers trial before has not been finished, and Stripe no longer lists it on the brand's customer (it was moved to another customer or deleted), so Cheers cannot tell whether it still runs.</p>
+<p>Brand id: ${escapeHtml(details.accountId)}</p>
+<p>Customer: ${escapeHtml(details.customerId)}</p>
+<p>Subscription: ${escapeHtml(details.subscriptionId)}</p>
+<p>Find the subscription in Stripe and cancel it if it is still running (nothing should have been charged while it was a trial), then set cancelled_at on its trial_card_checks row. You will not get another alert like this for this brand for 24 hours.</p>
+`.trim(),
+      detail: { customerId: details.customerId, subscriptionId: details.subscriptionId },
     },
     now,
   );

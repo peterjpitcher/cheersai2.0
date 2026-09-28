@@ -18,6 +18,7 @@ export type AdminAction =
   | 'operator_stripe_webhook_alert'
   | 'operator_stripe_invoice_alert'
   | 'operator_stripe_double_billing_alert'
+  | 'operator_stripe_trial_card_alert'
   | 'offboard_brand'
   | 'export_brand_data'
   | 'venue_closure_request'

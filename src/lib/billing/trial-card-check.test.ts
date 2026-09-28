@@ -25,7 +25,10 @@ vi.mock('@/lib/admin/audit', () => ({ logAdminEvent: (...args: unknown[]) => moc
 const { reconcileBrandFromStripe } = await import('./reconcile');
 const { processStripeEvent } = await import('./webhook');
 const { BillingNotConfiguredError } = await import('./stripe');
-const { NO_CARD_HASH, REFUSAL_TAKEOVER_AFTER_MS, TRIAL_CARD_CHECK_STARTS_AT, TrialCardCheckError, trialCardHash } = await import('./trial-card-check');
+const { NO_CARD_HASH, REFUSAL_TAKEOVER_AFTER_MS, TRIAL_CARD_CHECK_STARTS_AT, TrialCardCheckError, trialBeganAtCreation, trialCardHash } = await import(
+  './trial-card-check'
+);
+const { getBrandEntitlement } = await import('./entitlement-server');
 
 const FIRST = '1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d';
 const SECOND = '2b3c4d5e-6f7a-4b8c-9d0e-1f2a3b4c5d6e';
@@ -42,6 +45,8 @@ let fake: FakeStripe;
 const tick = (): Promise<void> => new Promise((resolve) => setImmediate(resolve));
 
 function reconcile(accountId: string, now: Date = NOW) {
+  // The database's own now() (consume_rate_limit) follows the same clock.
+  db.now = () => now;
   return reconcileBrandFromStripe(accountId, { service: db.client(), stripe: fake.stripe, now: () => now, sleep: tick });
 }
 
@@ -103,7 +108,19 @@ async function firstBrandHadATrial(): Promise<void> {
 beforeEach(() => {
   vi.clearAllMocks();
   mockSendEmail.mockResolvedValue(undefined);
-  mockLogAdminEvent.mockResolvedValue(undefined);
+  // The operator alerts' own audit rows land in the same database, so their
+  // once-a-day throttle works as it does live.
+  mockLogAdminEvent.mockImplementation(async (params: { action: string; targetAccountId?: string | null; detail?: Record<string, unknown> }) => {
+    db.seed('admin_audit', [
+      {
+        actor_user_id: null,
+        action: params.action,
+        target_account_id: params.targetAccountId ?? null,
+        detail: params.detail ?? null,
+        created_at: db.now().toISOString(),
+      },
+    ]);
+  });
   for (const key of Object.keys(serverEnv)) delete serverEnv[key];
   Object.assign(serverEnv, billingServerEnv(), { RESEND_API_KEY: 're_unit', RESEND_FROM: 'Cheers <alerts@example.test>' });
   db = new InMemoryBillingDb();
@@ -153,6 +170,43 @@ describe('trial card check: first trials', () => {
     expect(result).toMatchObject({ state: 'trialing', trialRefused: false });
     expect(check('sub_second')?.outcome).toBe('first_trial');
     expect(fake.subscriptionsCancel).not.toHaveBeenCalled();
+  });
+
+  it('counts only a trial that began when its subscription was created (within a minute of created or start_date)', () => {
+    const created = 1_790_000_000;
+    expect(trialBeganAtCreation({ created, start_date: created, trial_start: created })).toBe(true);
+    expect(trialBeganAtCreation({ created, start_date: created, trial_start: created + 59 })).toBe(true);
+    expect(trialBeganAtCreation({ created, start_date: created - 3600, trial_start: created + 30 })).toBe(true);
+    expect(trialBeganAtCreation({ created: created + 3600, start_date: created, trial_start: created + 10 })).toBe(true);
+    expect(trialBeganAtCreation({ created, start_date: created, trial_start: created + 61 })).toBe(false);
+    expect(trialBeganAtCreation({ created, start_date: created, trial_start: created + 30 * 86400 })).toBe(false);
+    expect(trialBeganAtCreation({ created, start_date: created, trial_start: null })).toBe(false);
+  });
+
+  it('leaves alone an active subscription moved into a trial later (a free month given in Stripe), even on a card that had a trial', async () => {
+    await firstBrandHadATrial();
+    fake.subscriptions.push(
+      fakeSubscription({
+        id: 'sub_paid_given_free_month',
+        customer: CUSTOMER[SECOND],
+        status: 'trialing',
+        created: '2026-08-01T09:00:00Z',
+        trialStart: '2026-10-01T09:30:00Z',
+        trialEnd: '2026-11-01T09:30:00Z',
+        currentPeriodStart: '2026-10-01T09:30:00Z',
+        currentPeriodEnd: '2026-11-01T09:30:00Z',
+        paymentMethod: { fingerprint: SHARED_CARD },
+      }),
+    );
+
+    const result = await reconcile(SECOND);
+
+    expect(result).toMatchObject({ subscriptionId: 'sub_paid_given_free_month', status: 'trialing', state: 'trialing', trialRefused: false });
+    expect(check('sub_paid_given_free_month')).toBeUndefined();
+    expect(fake.subscriptionsRetrieve).not.toHaveBeenCalled();
+    expect(fake.subscriptionsCancel).not.toHaveBeenCalled();
+    expect(refusalAudits()).toHaveLength(0);
+    expect(mockSendEmail).not.toHaveBeenCalled();
   });
 
   it('keys the code with TRIAL_CARD_HASH_KEY, so another key gives another code', () => {
@@ -386,38 +440,162 @@ describe('trial card check: failures throw, and the refusal is finished on a lat
     expect(emailsWithSubject(/Free trial refused/)).toHaveLength(1);
   });
 
-  it('a failed audit write or email throws after the cancel; the retry finishes without cancelling again', async () => {
+  it('a failed email throws after the cancel and writes no audit row; the retry emails, audits once and does not cancel again', async () => {
+    await firstBrandHadATrial();
+    fake.subscriptions.push(trial(SECOND, 'sub_second'));
+    mockSendEmail.mockRejectedValueOnce(new Error('Resend API error: down'));
+
+    await expect(reconcile(SECOND)).rejects.toThrow(/Resend API error/);
+    expect(stored('sub_second')?.status).toBe('canceled');
+    expect(check('sub_second')?.cancelled_at).toBeNull();
+    expect(refusalAudits()).toHaveLength(0);
+
+    const later = minutes(REFUSAL_TAKEOVER_AFTER_MS / 60000 + 1);
+    expect(await reconcile(SECOND, later)).toMatchObject({ state: 'lapsed', trialRefused: true });
+    expect(fake.subscriptionsCancel).toHaveBeenCalledTimes(1);
+    expect(check('sub_second')?.cancelled_at).toBe(later.toISOString());
+    expect(refusalAudits()).toHaveLength(1);
+    expect(emailsWithSubject(/Free trial refused/)).toHaveLength(2); // one failed, one sent
+  });
+
+  it('a failed audit write throws after the email; the retry emails again (at least once) and audits once', async () => {
     await firstBrandHadATrial();
     fake.subscriptions.push(trial(SECOND, 'sub_second'));
     db.fail('admin_audit', 'insert', 1);
 
     await expect(reconcile(SECOND)).rejects.toThrow(/admin_audit insert failed/);
-    expect(stored('sub_second')?.status).toBe('canceled');
     expect(check('sub_second')?.cancelled_at).toBeNull();
 
-    mockSendEmail.mockRejectedValueOnce(new Error('Resend API error: down'));
     const later = minutes(REFUSAL_TAKEOVER_AFTER_MS / 60000 + 1);
-    await expect(reconcile(SECOND, later)).rejects.toThrow(/Resend API error/);
-    expect(check('sub_second')?.cancelled_at).toBeNull();
-
-    const result = await reconcile(SECOND, minutes(REFUSAL_TAKEOVER_AFTER_MS / 60000 + 2));
-    expect(result).toMatchObject({ state: 'lapsed', trialRefused: true });
+    expect(await reconcile(SECOND, later)).toMatchObject({ state: 'lapsed', trialRefused: true });
     expect(fake.subscriptionsCancel).toHaveBeenCalledTimes(1);
-    expect(check('sub_second')?.cancelled_at).not.toBeNull();
-    // At least once, never lost: the audit write that succeeded before the email failed stays.
-    expect(refusalAudits().length).toBeGreaterThanOrEqual(1);
+    expect(refusalAudits()).toHaveLength(1);
+    expect(emailsWithSubject(/Free trial refused/)).toHaveLength(2);
   });
 
-  it('a failed cancelled_at write throws; the retry marks it without a second cancel', async () => {
+  it('a failed cancelled_at write throws; the retry marks it without a second cancel or a second audit row', async () => {
     await firstBrandHadATrial();
     fake.subscriptions.push(trial(SECOND, 'sub_second'));
     db.fail('trial_card_checks', 'update', 1);
 
     await expect(reconcile(SECOND)).rejects.toThrow(/trial_card_checks update failed/);
+    expect(refusalAudits()).toHaveLength(1);
     const later = minutes(REFUSAL_TAKEOVER_AFTER_MS / 60000 + 1);
     expect(await reconcile(SECOND, later)).toMatchObject({ trialRefused: true, state: 'lapsed' });
     expect(fake.subscriptionsCancel).toHaveBeenCalledTimes(1);
     expect(check('sub_second')?.cancelled_at).toBe(later.toISOString());
+    expect(refusalAudits()).toHaveLength(1);
+  });
+
+  it('retries arriving together after the window: one takes over, the others wait; one cancel, one email, one audit row', async () => {
+    await firstBrandHadATrial();
+    fake.subscriptions.push(trial(SECOND, 'sub_second'));
+    fake.subscriptionsCancel.mockRejectedValueOnce(new Error('Stripe API unavailable'));
+    await expect(reconcile(SECOND)).rejects.toThrow('Stripe API unavailable');
+    mockSendEmail.mockClear();
+
+    const later = minutes(REFUSAL_TAKEOVER_AFTER_MS / 60000 + 1);
+    const results = await Promise.all([reconcile(SECOND, later), reconcile(SECOND, later), reconcile(SECOND, later)]);
+
+    for (const result of results) expect(result).toMatchObject({ state: 'lapsed', trialRefused: true });
+    // The failed first attempt plus exactly one takeover.
+    expect(fake.subscriptionsCancel).toHaveBeenCalledTimes(2);
+    expect(fake.subscriptions.find((subscription) => subscription.id === 'sub_second')?.status).toBe('canceled');
+    expect(emailsWithSubject(/Free trial refused/)).toHaveLength(1);
+    expect(refusalAudits()).toHaveLength(1);
+    expect(db.rpcCalls.filter((call) => call.fn === 'consume_rate_limit')).toHaveLength(3);
+    expect(db.rpcCalls[0].params).toEqual({ p_key: 'trial_card_finish:sub_second', p_limit: 1, p_window_seconds: 600 });
+  });
+
+  it('fails the reconcile when the takeover cannot be claimed (database down), and cancels nothing', async () => {
+    await firstBrandHadATrial();
+    fake.subscriptions.push(trial(SECOND, 'sub_second'));
+    fake.subscriptionsCancel.mockRejectedValueOnce(new Error('Stripe API unavailable'));
+    await expect(reconcile(SECOND)).rejects.toThrow('Stripe API unavailable');
+    db.fail('rpc:consume_rate_limit', 'select', 1);
+
+    await expect(reconcile(SECOND, minutes(REFUSAL_TAKEOVER_AFTER_MS / 60000 + 1))).rejects.toThrow(/consume_rate_limit failed/);
+    expect(fake.subscriptionsCancel).toHaveBeenCalledTimes(1);
+    expect(check('sub_second')?.cancelled_at).toBeNull();
+  });
+
+  it('finishing an old refusal after the owner started a paid plan keeps the brand active (it was cancelled in Stripe already)', async () => {
+    // The refused trial was cancelled in Stripe, but its email failed, so it is
+    // unfinished. The owner then paid for a new subscription.
+    db.seed('trial_card_checks', [
+      { stripe_subscription_id: 'sub_refused', account_id: SECOND, card_hash: 'c'.repeat(64), outcome: 'repeat_refused', created_at: minutes(-30).toISOString() },
+    ]);
+    fake.subscriptions.push(
+      fakeSubscription({ id: 'sub_refused', customer: CUSTOMER[SECOND], status: 'canceled', created: minutes(-31).toISOString(), trialEnd: '2026-10-15T09:29:00Z', canceledAt: minutes(-30).toISOString() }),
+      fakeSubscription({ id: 'sub_paid', customer: CUSTOMER[SECOND], status: 'active', created: minutes(-5).toISOString(), currentPeriodEnd: '2026-11-01T09:55:00Z' }),
+    );
+
+    const result = await reconcile(SECOND);
+
+    expect(result).toMatchObject({ subscriptionId: 'sub_paid', status: 'active', state: 'active', trialRefused: false });
+    expect(await getBrandEntitlement(db.client(), SECOND, NOW)).toBe('active');
+    expect(stored('sub_refused')?.status).toBe('canceled');
+    expect(Date.parse(String(stored('sub_refused')?.stripe_state_at))).toBeLessThan(Date.parse(String(stored('sub_paid')?.stripe_state_at)));
+    expect(check('sub_refused')?.cancelled_at).toBe(NOW.toISOString());
+    expect(fake.subscriptionsCancel).not.toHaveBeenCalled();
+    expect(refusalAudits()).toHaveLength(1);
+  });
+
+  it('cancelling an old refused trial that is not the current subscription keeps the brand on its current one', async () => {
+    // Only possible by hand (a newer live subscription beside the refused trial):
+    // the takeover cancels the old trial and the brand stays active.
+    db.seed('trial_card_checks', [
+      { stripe_subscription_id: 'sub_refused', account_id: SECOND, card_hash: 'c'.repeat(64), outcome: 'repeat_refused', created_at: minutes(-30).toISOString() },
+    ]);
+    fake.subscriptions.push(
+      fakeSubscription({ id: 'sub_refused', customer: CUSTOMER[SECOND], status: 'trialing', created: minutes(-31).toISOString(), trialEnd: '2026-10-15T09:29:00Z' }),
+      fakeSubscription({ id: 'sub_paid', customer: CUSTOMER[SECOND], status: 'active', created: minutes(-5).toISOString(), currentPeriodEnd: '2026-11-01T09:55:00Z' }),
+    );
+
+    const result = await reconcile(SECOND);
+
+    expect(result).toMatchObject({ subscriptionId: 'sub_paid', state: 'active', trialRefused: false });
+    expect(fake.subscriptionsCancel).toHaveBeenCalledWith('sub_refused', { invoice_now: false, prorate: false });
+    expect(stored('sub_refused')?.status).toBe('canceled');
+    expect(await getBrandEntitlement(db.client(), SECOND, NOW)).toBe('active');
+  });
+
+  it('never reads a primary-key clash with a row that has since gone as a card clash', async () => {
+    // Step 1 clashes on the primary key (another reconcile's no_card row), and
+    // that row is removed (its email failed) before this one reads it.
+    fake.subscriptions.push(trial(FIRST, 'sub_first'));
+    db.fail('trial_card_checks', 'insert', 1, 'duplicate key value violates unique constraint "trial_card_checks_pkey"', '23505');
+
+    await expect(reconcile(FIRST)).rejects.toBeInstanceOf(TrialCardCheckError);
+    expect(db.rows('trial_card_checks')).toHaveLength(0);
+    expect(fake.subscriptionsCancel).not.toHaveBeenCalled();
+
+    // The retry decides it properly.
+    expect(await reconcile(FIRST, minutes(1))).toMatchObject({ state: 'trialing', trialRefused: false });
+    expect(check('sub_first')?.outcome).toBe('first_trial');
+  });
+
+  it('alerts the operator (once a day) when an unfinished refusal is no longer on the brand\'s Stripe customer, and carries on', async () => {
+    db.seed('trial_card_checks', [
+      { stripe_subscription_id: 'sub_moved_away', account_id: SECOND, card_hash: 'c'.repeat(64), outcome: 'repeat_refused', created_at: minutes(-30).toISOString() },
+    ]);
+    fake.subscriptions.push(fakeSubscription({ id: 'sub_paid', customer: CUSTOMER[SECOND], status: 'active', currentPeriodEnd: '2026-11-01T09:55:00Z' }));
+
+    expect(await reconcile(SECOND)).toMatchObject({ state: 'active' });
+    const [alert] = emailsWithSubject(/A refused free trial is no longer on its Stripe customer/);
+    expect(alert).toBeDefined();
+    expect(alert.html).toContain('sub_moved_away');
+    expect(alert.html).toContain(CUSTOMER[SECOND]);
+    expect(db.rows('admin_audit').filter((row) => row.action === 'operator_stripe_trial_card_alert')).toHaveLength(1);
+    expect(check('sub_moved_away')?.cancelled_at).toBeNull();
+
+    await reconcile(SECOND, minutes(60));
+    expect(emailsWithSubject(/no longer on its Stripe customer/)).toHaveLength(1);
+
+    // An alert that cannot be sent is logged and never blocks the reconcile.
+    mockSendEmail.mockRejectedValueOnce(new Error('Resend API error: down'));
+    expect(await reconcile(SECOND, minutes(60 * 25))).toMatchObject({ state: 'active' });
+    expect(logger.error).toHaveBeenCalledWith(expect.stringMatching(/could not be sent/), expect.any(Error), expect.objectContaining({ accountId: SECOND }));
   });
 
   it('leaves a refused trial that is somehow paid by now to a person, loudly', async () => {
@@ -529,8 +707,16 @@ describe('trial card check: existing brands are unaffected', () => {
     db.queries.length = 0;
     await reconcile(SECOND);
     const checks = db.queries.filter((query) => query.table === 'trial_card_checks' && query.op !== 'insert');
-    expect(checks.length).toBeGreaterThan(2);
-    for (const query of checks) expect(query.eq).toContainEqual(['account_id', SECOND]);
+    // The one deliberate cross-brand read: a count of first trials on this
+    // card code (no rows come back), before refusing.
+    const cardCounts = checks.filter((query) => query.eq.some(([column]) => column === 'card_hash'));
+    expect(cardCounts).toHaveLength(1);
+    expect(cardCounts[0]).toMatchObject({ op: 'select', eq: [['card_hash', check('sub_first')?.card_hash], ['outcome', 'first_trial']] });
+    const scoped = checks.filter((query) => !cardCounts.includes(query));
+    expect(scoped.length).toBeGreaterThan(2);
+    for (const query of scoped) expect(query.eq).toContainEqual(['account_id', SECOND]);
+    const audits = db.queries.filter((query) => query.table === 'admin_audit' && query.op === 'select');
+    for (const query of audits) expect(query.eq).toContainEqual(['target_account_id', SECOND]);
   });
 });
 

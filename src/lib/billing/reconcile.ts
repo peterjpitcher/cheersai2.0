@@ -190,16 +190,32 @@ export function mapStripeSubscription(
 
 type WriteOutcome = 'written' | 'stale' | 'absent';
 
-/** Replace the row only if it holds an older state; insert it when missing (if allowed). */
-async function writeSubscriptionRow(service: SupabaseClient, row: SubscriptionRow, insertIfMissing: boolean): Promise<WriteOutcome> {
+/** Statuses Stripe never moves on from. */
+const FINAL_STATUSES: ReadonlySet<StripeSubscriptionStatus> = new Set<StripeSubscriptionStatus>(['canceled', 'incomplete_expired']);
+
+/**
+ * Replace the row only if it holds an older state; insert it when missing (if
+ * allowed). With replaceSameStamp, a final (cancelled) state may also replace
+ * a row holding the very same stamp: nothing can follow a cancellation, so no
+ * state read at that moment can be newer.
+ */
+async function writeSubscriptionRow(
+  service: SupabaseClient,
+  row: SubscriptionRow,
+  insertIfMissing: boolean,
+  options: { replaceSameStamp?: boolean } = {},
+): Promise<WriteOutcome> {
+  const sameStampAllowed = options.replaceSameStamp === true && FINAL_STATUSES.has(row.status);
   const conditionalUpdate = async (): Promise<boolean> => {
-    const { data, error } = await service
+    const query = service
       .from('subscriptions')
       .update(row)
       .eq('stripe_subscription_id', row.stripe_subscription_id)
-      .eq('account_id', row.account_id)
-      .lt('stripe_state_at', row.stripe_state_at)
-      .select('stripe_subscription_id');
+      .eq('account_id', row.account_id);
+    const { data, error } = await (sameStampAllowed
+      ? query.lte('stripe_state_at', row.stripe_state_at)
+      : query.lt('stripe_state_at', row.stripe_state_at)
+    ).select('stripe_subscription_id');
     if (error) throw new Error(`subscriptions update failed: ${error.message}`);
     return (data?.length ?? 0) > 0;
   };
@@ -417,12 +433,23 @@ export async function reconcileBrandFromStripe(accountId: string, deps: Reconcil
     clock,
     sleep: deps.sleep ?? defaultSleep,
     storeCancelledSubscription: async (cancelled) => {
-      // Cancelled is final in Stripe, so the time after Stripe answered is a
-      // safe stripe_state_at: any read that still saw the trial began before
-      // the cancellation, so it can never replace this row.
-      const cancelledAt = new Date(Math.max(clock().getTime(), stateAt.getTime() + 1));
-      const cancelledRow = mapStripeSubscription(cancelled, { accountId, customerId, stateAt: cancelledAt, now: clock() });
-      await writeSubscriptionRow(service, cancelledRow, true);
+      if (cancelled.id === current.id) {
+        // The refused trial is the brand's current subscription. Cancelled is
+        // final in Stripe, so the time after Stripe answered is a safe
+        // stripe_state_at: any read that still saw the trial began before the
+        // cancellation, so it can never replace this row.
+        const cancelledAt = new Date(Math.max(clock().getTime(), stateAt.getTime() + 1));
+        const cancelledRow = mapStripeSubscription(cancelled, { accountId, customerId, stateAt: cancelledAt, now: clock() });
+        await writeSubscriptionRow(service, cancelledRow, true);
+        return;
+      }
+      // An older refusal finished late (for example after the owner started a
+      // paid plan): stored one millisecond older than the current row, like
+      // every other subscription above, so the brand's state still comes from
+      // its current subscription. It may replace the row the loop above wrote
+      // at that same stamp, because cancelled is final.
+      const olderRow = mapStripeSubscription(cancelled, { accountId, customerId, stateAt: olderStateAt, now: clock() });
+      await writeSubscriptionRow(service, olderRow, true, { replaceSameStamp: true });
     },
   });
 

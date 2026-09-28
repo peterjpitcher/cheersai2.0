@@ -42,6 +42,14 @@ export interface FakeSubscriptionInput {
   priceInterval?: 'month' | 'year';
   created?: string;
   trialEnd?: string | null;
+  /**
+   * When the trial began. Defaults to the creation time for a trialing
+   * subscription or one with a trial end (a trial it started with, as Checkout
+   * gives), else null. A later time is a trial added to a running subscription.
+   */
+  trialStart?: string | null;
+  /** Defaults to the creation time. */
+  startDate?: string;
   /** Start of the current period. For past_due, Stripe has already moved it to the start of the unpaid period. */
   currentPeriodStart?: string;
   currentPeriodEnd?: string;
@@ -85,6 +93,15 @@ export function fakeSubscription(input: FakeSubscriptionInput): Stripe.Subscript
     customer: input.customer,
     status: input.status,
     created: seconds(input.created ?? '2026-09-26T09:00:00Z'),
+    start_date: seconds(input.startDate ?? input.created ?? '2026-09-26T09:00:00Z'),
+    trial_start:
+      input.trialStart !== undefined
+        ? input.trialStart
+          ? seconds(input.trialStart)
+          : null
+        : input.status === 'trialing' || input.trialEnd
+          ? seconds(input.created ?? '2026-09-26T09:00:00Z')
+          : null,
     trial_end: input.trialEnd ? seconds(input.trialEnd) : null,
     cancel_at_period_end: input.cancelAtPeriodEnd ?? false,
     cancel_at: input.cancelAt ? seconds(input.cancelAt) : null,
