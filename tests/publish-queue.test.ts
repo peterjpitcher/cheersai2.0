@@ -111,6 +111,7 @@ describe("PublishQueueWorker", () => {
                     data: {
                         id: "content-gbp",
                         account_id: "acc-1",
+                        status: "scheduled",
                         platform: "gbp",
                         placement: "feed",
                         scheduled_for: new Date().toISOString(),
@@ -188,6 +189,7 @@ describe("PublishQueueWorker", () => {
                     data: {
                         id: "content-1",
                         account_id: "acc-1",
+                        status: "scheduled",
                         platform: "facebook",
                         placement: "feed",
                         prompt_context: {},
@@ -273,7 +275,7 @@ describe("PublishQueueWorker", () => {
             mockSupabase.from.mockReturnValueOnce({ update: vi.fn().mockReturnThis(), eq: vi.fn().mockReturnThis(), select: vi.fn().mockReturnThis(), maybeSingle: vi.fn().mockResolvedValue({ data: { id: "job-2" }, error: null }) });
 
             // 3. Content
-            mockSupabase.from.mockReturnValueOnce({ select: vi.fn().mockReturnThis(), eq: vi.fn().mockReturnThis(), maybeSingle: vi.fn().mockResolvedValue({ data: { id: "content-2", account_id: "acc-1", platform: "facebook", placement: "feed" }, error: null }) });
+            mockSupabase.from.mockReturnValueOnce({ select: vi.fn().mockReturnThis(), eq: vi.fn().mockReturnThis(), maybeSingle: vi.fn().mockResolvedValue({ data: { id: "content-2", account_id: "acc-1", status: "scheduled", platform: "facebook", placement: "feed" }, error: null }) });
             // 4. Variant — banner override columns all null
             mockSupabase.from.mockReturnValueOnce({
                 select: vi.fn().mockReturnThis(),
@@ -353,6 +355,7 @@ describe("PublishQueueWorker", () => {
                     data: {
                         id: "content-story-1",
                         account_id: "acc-1",
+                        status: "scheduled",
                         platform: "instagram",
                         placement: "story",
                         scheduled_for: nowIso,
@@ -492,6 +495,7 @@ describe("PublishQueueWorker", () => {
                     data: {
                         id: job.content_item_id,
                         account_id: "acc-1",
+                        status: "scheduled",
                         platform: "instagram",
                         placement: "story",
                         scheduled_for: nowIso,
@@ -638,6 +642,7 @@ describe("PublishQueueWorker", () => {
                     data: {
                         id: job.content_item_id,
                         account_id: "acc-1",
+                        status: "scheduled",
                         platform: "instagram",
                         placement: "story",
                         scheduled_for: nowIso,
@@ -772,6 +777,7 @@ describe("PublishQueueWorker", () => {
                     data: {
                         id: job.content_item_id,
                         account_id: "acc-1",
+                        status: "scheduled",
                         platform: "instagram",
                         placement: "story",
                         scheduled_for: nowIso,
@@ -901,6 +907,7 @@ describe("PublishQueueWorker", () => {
                     data: {
                         id: job.content_item_id,
                         account_id: "acc-1",
+                        status: "scheduled",
                         platform: "instagram",
                         placement: "feed",
                         scheduled_for: new Date().toISOString(),
@@ -1103,6 +1110,7 @@ describe("PublishQueueWorker", () => {
                     data: {
                         id: "content-banner",
                         account_id: "acc-banner",
+                        status: "scheduled",
                         platform: "facebook",
                         placement: "feed",
                         scheduled_for: scheduledFor,
@@ -1475,6 +1483,7 @@ describe("PublishQueueWorker", () => {
                         data: {
                             id: "content-banner",
                             account_id: "acc-banner",
+                            status: "scheduled",
                             platform: "facebook",
                             placement: "feed",
                             scheduled_for: "2026-04-29T08:00:00.000+01:00",
@@ -1633,6 +1642,7 @@ describe("PublishQueueWorker", () => {
                     data: {
                         id: "content-story-banner",
                         account_id: "acc-story-banner",
+                        status: "scheduled",
                         platform: "instagram",
                         placement: "story",
                         scheduled_for: scheduledFor,

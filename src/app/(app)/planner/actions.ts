@@ -88,6 +88,35 @@ const FAILURE_NOTIFICATION_CATEGORIES = [
   "publish_failed_immediate",
 ] as const;
 
+/**
+ * Job statuses approval may put back in the queue. A draft can carry a job
+ * that was stopped when it went back to draft (screening changed, brand
+ * offboarded, or refused by the publish worker). A succeeded or in-progress
+ * job is left alone so a post is never sent twice.
+ */
+const REARMABLE_JOB_STATUSES = ["queued", "failed", "held"] as const;
+
+/**
+ * The fields that put a publish job back in the queue for a new time. The old
+ * error_message and error_code go too: the failure email quotes them, so a
+ * later failure would otherwise be reported with the earlier reason.
+ */
+function rearmedPublishJobFields(nextAttemptIso: string, nowIso: string) {
+  return {
+    status: "queued",
+    next_attempt_at: nextAttemptIso,
+    last_error: null,
+    error_message: null,
+    error_code: null,
+    attempt: 0,
+    hold_reason: null,
+    resolved_at: null,
+    resolution_kind: null,
+    resolution_note: null,
+    updated_at: nowIso,
+  };
+}
+
 type PlannerMediaAssetRow = {
   id: string;
   media_type: "image" | "video";
@@ -258,14 +287,32 @@ export async function approveDraftContent(payload: unknown) {
     throw updateError;
   }
 
-  const { data: existingJob } = await supabase
+  // Approval is where a draft's publish job is armed; rescheduling a draft
+  // never arms one. A job stopped while the post was a draft goes back in the
+  // queue at the approved time, or the post would sit "scheduled" and never go.
+  const { data: existingJobs, error: existingJobsError } = await supabase
     .from("publish_jobs")
-    .select("id")
+    .select("id, status")
     .eq("content_item_id", contentId)
-    .limit(1)
-    .maybeSingle();
+    .returns<Array<{ id: string; status: string }>>();
 
-  if (!existingJob) {
+  if (existingJobsError) {
+    throw existingJobsError;
+  }
+
+  const jobs = existingJobs ?? [];
+  const allRearmable = jobs.every((job) => (REARMABLE_JOB_STATUSES as readonly string[]).includes(job.status));
+
+  if (jobs.length && allRearmable) {
+    const { error: rearmError } = await supabase
+      .from("publish_jobs")
+      .update(rearmedPublishJobFields((scheduledFor ?? new Date()).toISOString(), nowIso))
+      .in("id", jobs.map((job) => job.id));
+
+    if (rearmError) {
+      throw rearmError;
+    }
+  } else if (!jobs.length) {
     const { data: variantRow, error: variantError } = await supabase
       .from("content_variants")
       .select("id")
@@ -1199,13 +1246,14 @@ export async function updatePlannerContentSchedule(payload: unknown) {
   });
 
   const nowIso = new Date().toISOString();
+  const isDraft = content.status === "draft";
 
   const contentUpdate: Record<string, unknown> = {
     scheduled_for: scheduledIso,
     updated_at: nowIso,
   };
 
-  if (content.status !== "draft") {
+  if (!isDraft) {
     contentUpdate.status = "scheduled";
   }
 
@@ -1218,19 +1266,25 @@ export async function updatePlannerContentSchedule(payload: unknown) {
     throw updateError;
   }
 
+  // A draft only moves. Its publish job is armed when it is approved
+  // (approveDraftContent), at whatever time it then has. Arming one here
+  // would let the publish worker send a post nobody approved.
+  if (isDraft) {
+    revalidatePath(`/planner/${contentId}`);
+    revalidatePath("/planner");
+
+    return {
+      ok: true as const,
+      scheduledFor: scheduledIso,
+      timezone,
+      warning: drift.stale ? drift.message : null,
+      awaitingApproval: true,
+    };
+  }
+
   const { data: jobRows, error: jobUpdateError } = await supabase
     .from("publish_jobs")
-    .update({
-      status: "queued",
-      next_attempt_at: scheduledIso,
-      last_error: null,
-      attempt: 0,
-      hold_reason: null,
-      resolved_at: null,
-      resolution_kind: null,
-      resolution_note: null,
-      updated_at: nowIso,
-    })
+    .update(rearmedPublishJobFields(scheduledIso, nowIso))
     .eq("content_item_id", contentId)
     .select("id");
 
@@ -1271,6 +1325,7 @@ export async function updatePlannerContentSchedule(payload: unknown) {
     scheduledFor: scheduledIso,
     timezone,
     warning: drift.stale ? drift.message : null,
+    awaitingApproval: false,
   };
 }
 
