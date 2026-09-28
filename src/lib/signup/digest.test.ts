@@ -20,10 +20,12 @@ import {
 type Row = Record<string, unknown>;
 
 /** Enough of the query builder for the digest: filters, order, range and returns. */
-function fakeDb(tables: Record<string, Row[]>, failTable?: string) {
+function fakeDb(tables: Record<string, Row[]>, failTable?: string, onRead?: (table: string) => void) {
   const reads: string[] = [];
+  const signals: Array<AbortSignal | null> = [];
   const from = (table: string) => {
     reads.push(table);
+    let signal: AbortSignal | null = null;
     const filters: Array<(row: Row) => boolean> = [];
     let orderBy: string | null = null;
     let range: [number, number] | null = null;
@@ -39,7 +41,10 @@ function fakeDb(tables: Record<string, Row[]>, failTable?: string) {
     chain.gt = (column: string, value: string) => (filters.push((row) => row[column] != null && compare(row[column], value) > 0), chain);
     chain.order = (column: string) => ((orderBy = column), chain);
     chain.range = (start: number, end: number) => ((range = [start, end]), chain);
+    chain.abortSignal = (value: AbortSignal) => ((signal = value), chain);
     chain.returns = async () => {
+      signals.push(signal);
+      onRead?.(table);
       if (failTable === table) return { data: null, error: { message: 'connection refused' } };
       let rows = (tables[table] ?? []).filter((row) => filters.every((keep) => keep(row)));
       if (orderBy) rows = [...rows].sort((a, b) => compare(a[orderBy as string], b[orderBy as string]));
@@ -48,7 +53,7 @@ function fakeDb(tables: Record<string, Row[]>, failTable?: string) {
     };
     return chain;
   };
-  return { service: { from } as never, reads };
+  return { service: { from } as never, reads, signals };
 }
 
 const BAD_OUTPUT = ['undefined', 'NaN', 'Invalid Date', 'Invalid DateTime', 'null'];
@@ -227,6 +232,34 @@ describe('findSignupDigest', () => {
     const digest = await findSignupDigest(service, NOW);
     expect(signupDigestSize(digest)).toBe(0);
     expect(reads).not.toContain('accounts');
+  });
+
+  it('gives every read the caller\'s signal, and starts no further read once it fires', async () => {
+    const controller = new AbortController();
+    const { service, reads, signals } = fakeDb(
+      {
+        self_serve_signups: [
+          { user_id: 'u1', account_id: null, verified_at: '2026-09-20T10:00:00Z', venue_created_at: null },
+          { user_id: 'o1', account_id: 'a1', verified_at: '2026-09-20T10:00:00Z', venue_created_at: '2026-09-20T10:10:00Z' },
+        ],
+      },
+      undefined,
+      // The deadline passes during the confirmed-logins read.
+      (table) => {
+        if (table === 'self_serve_signups') controller.abort();
+      },
+    );
+
+    await expect(findSignupDigest(service, NOW, { signal: controller.signal })).rejects.toThrow('lookup stopped: the deadline passed');
+    expect(reads).toEqual(['admin_audit', 'self_serve_signups']);
+    expect(signals.every((signal) => signal === controller.signal)).toBe(true);
+  });
+
+  it('reads without a deadline for the daily email', async () => {
+    const { service, signals } = fakeDb({});
+    await findSignupDigest(service, NOW);
+    expect(signals.length).toBeGreaterThan(0);
+    expect(signals.every((signal) => signal !== null && !signal.aborted)).toBe(true);
   });
 
   it('throws when a read fails, so the reminder can say the lists are unavailable', async () => {

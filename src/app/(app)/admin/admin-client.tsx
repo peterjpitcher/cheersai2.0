@@ -20,6 +20,7 @@ import {
   setBrandFeature,
   setSuperAdmin,
 } from '@/app/(app)/admin/actions';
+import { SignupsCardLoader } from '@/features/admin/signups-card-loader';
 import { FEATURE_LABELS, type BrandFeature } from '@/lib/auth/brand-features';
 
 const CARD = 'rounded-lg border p-4';
@@ -671,6 +672,8 @@ export function AdminClient({
       </div>
 
       <BillingCard brands={brands} />
+      {/* Fetches its own data after the page loads, so an admin action's refresh never waits for it. */}
+      <SignupsCardLoader />
       <BrandFeaturesCard brands={brands} />
       <OffboardingCard brands={brands} />
       <BookingKeysCard brands={brands} ingestEndpoint={ingestEndpoint} />

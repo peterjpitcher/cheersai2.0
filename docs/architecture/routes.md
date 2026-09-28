@@ -53,6 +53,7 @@ project: cheersai-2.0
 | `/` | `src/app/page.tsx` | Landing/home page |
 | `/terms` | `src/app/terms/page.tsx` | Terms of service |
 | `/help/[...slug]` | `src/app/help/[[...slug]]/page.tsx` | Help centre |
+| `/help/first-post` | `src/app/help/first-post/page.tsx` | "How to publish your first post"; not found while the self-serve sign-up switch is off |
 | `/auth/login` | `src/app/auth/login/page.tsx` | Permanent redirect to `/login` |
 | `/auth/signup` | `src/app/auth/signup/page.tsx` | Permanent redirect to `/login` |
 | `/auth/forgot-password` | `src/app/auth/forgot-password/page.tsx` | Permanent redirect to `/forgot-password` |
@@ -121,6 +122,7 @@ reconciles the brand's subscription (see `docs/runbooks/stripe-billing.md`).
 | `/api/create/event-artwork` | POST | Session (getCurrentUser, active brand), rate limited per brand | `src/app/api/create/event-artwork/route.ts` |
 | `/api/tournaments/base-image` | POST | Same-origin check, then session (`requireFeatureContext`) | `src/app/api/tournaments/base-image/route.ts` |
 | `/api/planner/activity` | GET | Session | `src/app/api/planner/activity/route.ts` |
+| `/api/admin/signups` | GET | Session, super admins only (401 signed out, 403 otherwise) | `src/app/api/admin/signups/route.ts` (admin Sign-ups card data) |
 | `/api/feed/[tournamentId]` | GET | API key (public feed) | `src/app/api/feed/[tournamentId]/route.ts` |
 | `/api/booking-conversions` | POST | BOOKING_CONVERSION_INGEST_SECRET | `src/app/api/booking-conversions/route.ts` |
 
