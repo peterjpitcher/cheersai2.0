@@ -94,15 +94,20 @@ Form: email and a Turnstile widget only. No name (it would put a stranger's text
 2. Validate the email (lower-cased).
 3. Turnstile siteverify with the secret, the visitor's IP (first `x-forwarded-for` entry, set by Vercel), `action = signup`, and in production `hostname = cheers.orangejelly.co.uk`; 5-second timeout. Missing keys, timeout or failure: refuse.
 4. Rate limits (P8): per email 3 an hour, per IP 10 an hour, and a site-wide 60 an hour that refuses and alerts the operator (it protects the shared Resend sending reputation). Keys are HMAC-SHA256 of the email or IP with `RATE_LIMIT_HMAC_KEY`, so the table holds nothing reversible.
-5. Look up the email in `user_auth_snapshot` (as team invites do), then read the login's confirmation and memberships with the service role:
+5. Every address goes through the same first step, `generateLink({ type: 'invite', email })` with the service role, then the login's memberships are read by its user id. As built in PR 5 (28 September 2026), this replaces the `user_auth_snapshot` lookup first planned here: Supabase checks the address before it looks for a login, and refuses a confirmed login without changing anything, so the answer can never depend on who has a login.
 
 | Case | Action | Email |
 |---|---|---|
-| No login | `generateLink({ type: 'invite', email })`; upsert the sign-up row on `user_id` | "Confirm your email to start your Cheers trial" |
+| No login | `generateLink` makes the login; upsert the sign-up row on `user_id` | "Confirm your email to start your Cheers trial" |
 | Login, unconfirmed, no brand (an earlier abandoned sign-up) | new link; upsert the sign-up row on `user_id` (so it can never be missing) | same |
 | Login, unconfirmed, has a brand (a member invited by the operator or an owner who never accepted) | new link, which replaces the old one; no sign-up row | the normal member invite (`renderInviteEmail`) with their brand names |
-| Login, confirmed | nothing created | "You already have a Cheers login": sign-in and reset links; "to add another venue, email peter@orangejelly.co.uk" (the sending address receives nothing) |
-| Any lookup or `generateLink` error | refuse, alert | none |
+| Login, confirmed (Supabase answers `email_exists`) | nothing created or changed | "You already have a Cheers login": sign-in and reset links; "to add another venue, email peter@orangejelly.co.uk" (the sending address receives nothing) |
+| Address Supabase refuses (400 or 422 `validation_failed` or `email_address_invalid`) | nothing created; no alert; the site-wide limit is not used | none; the form asks for a valid address (the same answer whether or not a login exists) |
+| Any other `generateLink` error (5xx, network, timeout) or membership lookup error | refuse, alert | none |
+
+The site-wide limit is read (not counted) before `generateLink`, so nothing is created once it is reached, and counted only just before an email is sent, so a refused address never uses it up.
+
+Accepted (review of PR #144): two tabs asking for the same new address both succeed, and the second link replaces the first, so only the newest email's link works.
 
 6. The screen always says "Check your email" for the same email, so the form never reveals who has a login. It offers "Send it again" after 60 seconds (the same action and limits; the email stays in the page, never in the URL).
 
@@ -117,6 +122,7 @@ Disposable emails: not blocked (lists go stale and catch real venues); the card-
 - `/auth/confirm` stops verifying on GET. GET shows a page with "Confirm and continue" (no token used, `noindex`, no referrer); the button POSTs, which runs `verifyOtp` and redirects to the fixed `next` (checked by `safeNextPath`). Link scanners that only fetch cannot burn the link. This covers invites and resets too, and old links keep working (Stage 1, PR 2).
 - The email is not shown before the button: that would need the address in the URL, which we avoid. Instead `/signup/venue` says "Signed in as x@y.com. Not you? Sign out" at the top and asks the person to type their email, which must match the login. This defeats someone mailing their own sign-up link to a venue so that the venue sets up its card and Facebook under the sender's login.
 - The link works on any device (a token hash needs no browser state). Expired or used: the existing link error on the login page, then "Send it again" or a new request.
+- `/auth/confirm` cannot keep sign-up links shut while the switch is off (recorded after the review of PR #144): the link's `type` can be edited, and `signup` and `invite` links both verify as a Supabase invite, so a sign-up token also works as an invite link. The gate is `/signup/venue` (PR 6), which checks the switch before anything is created. **The switch must never be turned on before PR 6 is live.**
 - Emails are rendered from fixtures in tests and fail on `undefined`, empty links or `Invalid Date`.
 
 ### 4.4 Venue creation: `/signup/venue`
@@ -125,7 +131,7 @@ For a signed-in, confirmed user (on first load it sets `verified_at`). A user wh
 
 Server action `createSelfServeVenue`: Preview and switch checks; rate limit (per user 10 an hour); validate; the user id comes from `auth.getUser()`, never the form. Set the password and name (`auth.updateUser`, safe to repeat). Then call `public.provision_self_serve_brand(p_user_id, p_venue_name, p_business_type, p_email, p_legal_version)` through the service role: one plpgsql function (`security invoker`, `set search_path = public`), so one transaction:
 
-- `select ... from self_serve_signups where user_id = p_user_id for update`; none: raise;
+- `select ... from self_serve_signups where user_id = p_user_id for update`; none: raise. This is the same row lock `self_serve_login_deletable` takes before the retention cron deletes a stale login (PR 5), so the two can never interleave; provisioning must keep taking it;
 - `account_id` already set: return it (a double submit, refresh or second tab ends here);
 - insert `accounts` (`business_name` and `display_name` = venue name, `email` = sign-up email, Europe/London, `created_by_user_id` and `auth_user_id` = the user; switches and `billing_override` left at their defaults);
 - insert `account_members` (role `owner`, `created_by` the user) and `brand_profile` (`account_id`, `business_type`);
@@ -203,7 +209,7 @@ select count(*) as requested, count(verified_at) as verified, count(venue_create
 from self_serve_signups x where x.requested_at >= now() - interval '30 days';
 ```
 
-- Retention (P6): `run_data_retention` deletes sign-up rows 24 months after `requested_at` and expired `team_invitations`; it also returns the ids of self-serve logins due for deletion (no membership, not an admin, a sign-up row with no venue, and either unconfirmed for 7 days or confirmed for 30), which the cron deletes with `auth.admin.deleteUser` as offboarding does (`src/lib/admin/offboarding.ts:330`), at most 100 a run. Their `user_auth_snapshot` rows go with them (trigger `trg_purge_user_auth_snapshot`).
+- Retention (P6): `run_data_retention` deletes sign-up rows 24 months after `requested_at` and expired `team_invitations`; it also returns the ids of self-serve logins due for deletion (no membership, not an admin, no open team invitation, a sign-up row with no venue, and either unconfirmed 7 days after the last request or confirmed for 30), which the cron deletes with `auth.admin.deleteUser` as offboarding does (`src/lib/admin/offboarding.ts:330`), at most 100 a run. Their `user_auth_snapshot` rows go with them (trigger `trg_purge_user_auth_snapshot`). As built in PR 5: the rule lives in one function, `self_serve_login_is_stale`; just before each delete the cron asks `self_serve_login_deletable`, which locks the sign-up row and applies the whole rule again; a login that cannot be deleted (for example one with `audit_log` rows, whose foreign key has no delete action) is logged, skipped, retried the next day and alerted (kind and count only), and never fails the retention run.
 
 ### 4.11 Rate limits (P8)
 
@@ -242,8 +248,8 @@ Each PR deploys on its own, passes `npm run ci:verify` (London and UTC), targets
 | **Stage 3 (dark until opening)** | | | | |
 | 3 | `feat/front-door-and-legal` | §4.1 landing and pricing, robots, footer, redirects, login link; §4.13 wording, version bump, `legal_version` in Checkout metadata | insert `app_flags ('self_serve_signup', false)` | CTA follows the switch; notice check (§4.13) before merge |
 | 4 | `feat/team-invite-guard` | §4.6 gate, cap, `team_invitations` and accept page, default-brand fix | `team_invitations` with grants; `run_data_retention` restated | before opening |
-| 5 | `feat/signup-request` | §4.2 and §4.3: `/signup`, Turnstile (`NEXT_PUBLIC_TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY` in `src/env.ts`, required in production, Cloudflare test keys in Preview), `requestSignup`, emails, resend, CSP, alerts, Preview refusal, grants SQL check | `self_serve_signups`; `run_data_retention` restated; revoke `increment_rate_limit` from authenticated | switch |
-| 6 | `feat/signup-venue` | §4.4, `/no-access` entry, operator emails, digest lists (§4.9), login clean-up step in the retention cron, Settings email line (P10) | `provision_self_serve_brand` with grants | switch |
+| 5 | `feat/signup-request` | §4.2 and §4.3: `/signup`, Turnstile (`NEXT_PUBLIC_TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY` in `src/env.ts`, required in production, Cloudflare test keys in Preview), `requestSignup`, emails, resend, CSP, alerts (including a browser report when the Turnstile widget cannot load), Preview refusal, grants SQL check; the stale-login clean-up step in the retention cron (§4.10), moved here from PR 6 because this PR creates the logins | `self_serve_signups`; `record_self_serve_signup_request`, `self_serve_login_is_stale`, `self_serve_login_deletable`; `run_data_retention` restated; revoke `increment_rate_limit` from authenticated | switch |
+| 6 | `feat/signup-venue` | §4.4 (the switch gate for confirmed sign-up links, §4.3), `/no-access` entry, operator emails, digest lists (§4.9), Settings email line (P10) | `provision_self_serve_brand` with grants; it takes the sign-up row lock (§4.4) | switch; must be live before the switch is ever turned on |
 | 7 | `feat/trial-card-check` | §4.7 | `trial_card_checks` with grants; `run_data_retention` restated | after PR 3 is live |
 | **Later (P10)** | `feat/signup-admin-card`, `feat/owner-export-closure` | Admin Sign-ups card and first-post help article; owner "Download my data" and "Ask us to close this venue" | none | after opening |
 
