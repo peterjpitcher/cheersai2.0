@@ -16,8 +16,8 @@
 -- off, so the code is safe to deploy before or after this migration.
 --
 -- Grants restate production's shape for app_flags (read 28 September 2026: RLS
--- on, no policies, service_role only, nothing for anon or authenticated) and
--- change nothing there.
+-- on, no policies, every privilege for service_role, nothing for anon or
+-- authenticated) and change nothing there.
 --
 -- Rollback (the app then treats the switch as off):
 --   delete from public.app_flags where name = 'self_serve_signup';
@@ -28,4 +28,4 @@ on conflict (name) do nothing;
 
 alter table public.app_flags enable row level security;
 revoke all on public.app_flags from public, anon, authenticated;
-grant select, insert, update on public.app_flags to service_role;
+grant all on public.app_flags to service_role;

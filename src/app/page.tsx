@@ -35,7 +35,11 @@ const METADATA: Metadata = {
 };
 
 export async function generateMetadata(): Promise<Metadata> {
-  return indexableWhenOpen(METADATA, await getSelfServeSignupSwitch());
+  const state = await getSelfServeSignupSwitch();
+  // A closed front door is only a redirect to /login: its response must carry
+  // nothing new (no title, no price), so it keeps the site-wide metadata.
+  if (!frontDoorVisible(state, currentDeployment())) return {};
+  return indexableWhenOpen(METADATA, state);
 }
 
 async function isSignedIn(): Promise<boolean> {

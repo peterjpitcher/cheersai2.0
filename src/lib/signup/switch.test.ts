@@ -1,8 +1,17 @@
 import { describe, expect, it, vi } from 'vitest';
 
-vi.mock('@/lib/logging', () => ({ createLogger: () => ({ debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }) }));
+const mocks = vi.hoisted(() => ({
+  headers: vi.fn(),
+  client: null as unknown,
+}));
 
-const { readSelfServeSignupSwitch, SELF_SERVE_SIGNUP_FLAG } = await import('@/lib/signup/switch');
+vi.mock('@/lib/logging', () => ({ createLogger: () => ({ debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }) }));
+vi.mock('next/headers', () => ({ headers: () => mocks.headers() }));
+vi.mock('@/lib/supabase/service', () => ({ tryCreateServiceSupabaseClient: () => mocks.client }));
+
+const { getSelfServeSignupSwitch, readSelfServeSignupSwitch, SELF_SERVE_SIGNUP_FLAG } = await import(
+  '@/lib/signup/switch'
+);
 
 function service(result: { data: unknown; error: unknown } | Error) {
   const c: Record<string, unknown> = {};
@@ -36,5 +45,40 @@ describe('readSelfServeSignupSwitch', () => {
       'unavailable',
     );
     expect(await readSelfServeSignupSwitch(null)).toBe('unavailable');
+  });
+});
+
+describe('getSelfServeSignupSwitch', () => {
+  it('reads once per request, however often the page and its metadata ask', async () => {
+    const { client, chain } = service({ data: { enabled: false }, error: null });
+    mocks.client = client;
+    const requestA = new Headers();
+    const requestB = new Headers();
+
+    mocks.headers.mockResolvedValue(requestA);
+    const [first, second] = await Promise.all([getSelfServeSignupSwitch(), getSelfServeSignupSwitch()]);
+    expect([first, second, await getSelfServeSignupSwitch()]).toEqual(['closed', 'closed', 'closed']);
+    expect(chain.maybeSingle).toHaveBeenCalledTimes(1);
+
+    // A new request reads again, so a flip shows on the next visit.
+    mocks.headers.mockResolvedValue(requestB);
+    await getSelfServeSignupSwitch();
+    expect(chain.maybeSingle).toHaveBeenCalledTimes(2);
+  });
+
+  it('reads directly outside a request', async () => {
+    const { client, chain } = service({ data: { enabled: true }, error: null });
+    mocks.client = client;
+    mocks.headers.mockRejectedValue(new Error('headers() was called outside a request scope'));
+
+    expect(await getSelfServeSignupSwitch()).toBe('open');
+    expect(await getSelfServeSignupSwitch()).toBe('open');
+    expect(chain.maybeSingle).toHaveBeenCalledTimes(2);
+  });
+
+  it('is unavailable when the service key is missing', async () => {
+    mocks.client = null;
+    mocks.headers.mockResolvedValue(new Headers());
+    expect(await getSelfServeSignupSwitch()).toBe('unavailable');
   });
 });

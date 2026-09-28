@@ -106,11 +106,13 @@ describe("the self-serve wording (spec §4.13), true while sign-up is closed", (
       "24 months after you asked to sign up.",
       "Deleted if the email address is not confirmed within 7 days, or if no venue is created within 30 days of confirming it.",
       "24 months from the start of the trial.",
-      "Deleted a day after they are accepted or expire.",
       "If you signed up on our website and no subscription starts within 30 days, we may close the account then.",
     ]) {
       expect(text).toContain(period);
     }
+    // Team invitations have no table or retention rule in production yet; the
+    // team-invite PR adds the row when both go live.
+    expect(text).not.toContain("Team invitations");
   });
 
   it("the DPA adds no sub-processor: Cloudflare is not one", () => {

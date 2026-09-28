@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { cache } from 'react';
+import { headers } from 'next/headers';
 
 import { createLogger } from '@/lib/logging';
 import { tryCreateServiceSupabaseClient } from '@/lib/supabase/service';
@@ -48,8 +48,7 @@ export async function readSelfServeSignupSwitch(service: SupabaseClient | null):
   }
 }
 
-/** One read per request, however many server components and metadata calls ask. */
-export const getSelfServeSignupSwitch = cache(async (): Promise<SelfServeSignupSwitch> => {
+function readWithServiceClient(): Promise<SelfServeSignupSwitch> {
   let service: SupabaseClient | null;
   try {
     service = tryCreateServiceSupabaseClient();
@@ -57,4 +56,34 @@ export const getSelfServeSignupSwitch = cache(async (): Promise<SelfServeSignupS
     service = null;
   }
   return readSelfServeSignupSwitch(service);
-});
+}
+
+/**
+ * Reads in flight or done, keyed by the request's headers object. Next hands
+ * the page and its generateMetadata the same object for one request, while
+ * React's cache() is not shared between the two (a hung database cost two
+ * 3-second timeouts on `/`, measured 28 September 2026). Entries go when the
+ * request's headers object is collected.
+ */
+const readsByRequest = new WeakMap<object, Promise<SelfServeSignupSwitch>>();
+
+/**
+ * The switch for the current request, read at most once per request however
+ * many times the page, its metadata or other server components ask. Outside a
+ * request (no headers), it reads directly.
+ */
+export async function getSelfServeSignupSwitch(): Promise<SelfServeSignupSwitch> {
+  let request: object | null;
+  try {
+    request = await headers();
+  } catch {
+    request = null;
+  }
+  if (!request) return readWithServiceClient();
+
+  const existing = readsByRequest.get(request);
+  if (existing) return existing;
+  const read = readWithServiceClient();
+  readsByRequest.set(request, read);
+  return read;
+}

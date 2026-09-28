@@ -29,9 +29,10 @@ const METADATA: Metadata = {
 
 /**
  * Indexable only once the self-serve sign-up switch is on (P11); until then it
- * keeps the site-wide noindex. Revalidated every minute so a flip needs no deploy.
+ * keeps the site-wide noindex. Rendered per request (one small read) so a flip
+ * in either direction shows at once, never a stale cached copy.
  */
-export const revalidate = 60;
+export const dynamic = "force-dynamic";
 
 export async function generateMetadata(): Promise<Metadata> {
   return indexableWhenOpen(METADATA, await getSelfServeSignupSwitch());
@@ -108,7 +109,6 @@ const RETENTION_ROWS = [
     "Deleted if the email address is not confirmed within 7 days, or if no venue is created within 30 days of confirming it.",
   ],
   ["Free trial card codes", "24 months from the start of the trial."],
-  ["Team invitations", "Deleted a day after they are accepted or expire."],
   ["Posts you delete", "Kept in the trash for 7 days, then permanently deleted."],
   [
     "Invoices and payment records",

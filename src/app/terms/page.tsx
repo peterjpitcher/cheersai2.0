@@ -28,9 +28,10 @@ const METADATA: Metadata = {
 
 /**
  * Indexable only once the self-serve sign-up switch is on (P11); until then it
- * keeps the site-wide noindex. Revalidated every minute so a flip needs no deploy.
+ * keeps the site-wide noindex. Rendered per request (one small read) so a flip
+ * in either direction shows at once, never a stale cached copy.
  */
-export const revalidate = 60;
+export const dynamic = "force-dynamic";
 
 export async function generateMetadata(): Promise<Metadata> {
   return indexableWhenOpen(METADATA, await getSelfServeSignupSwitch());

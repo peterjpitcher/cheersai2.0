@@ -91,9 +91,13 @@ describe("/ in production while the sign-up switch is off", () => {
     expect(await redirectOf(() => Home())).toEqual({ path: "/login", status: 307 });
   });
 
-  it("keeps the site-wide noindex", async () => {
-    mocks.switchState.mockResolvedValue("closed");
-    expect((await generateMetadata()).robots).toBeUndefined();
+  it("keeps the site-wide metadata: no new title, no price, still noindex", async () => {
+    for (const state of ["closed", "unavailable"] as const) {
+      mocks.switchState.mockResolvedValue(state);
+      const metadata = await generateMetadata();
+      expect(metadata).toEqual({});
+      expect(JSON.stringify(metadata)).not.toMatch(/£|ex VAT|Social media for hospitality venues/);
+    }
   });
 });
 
@@ -107,9 +111,12 @@ describe("/ in production once the sign-up switch is on", () => {
     expect(hrefs(container)).toContain("/signup");
   });
 
-  it("may be indexed", async () => {
+  it("has its own title and description, and may be indexed", async () => {
     mocks.switchState.mockResolvedValue("open");
-    expect((await generateMetadata()).robots).toEqual({ index: true, follow: true });
+    const metadata = await generateMetadata();
+    expect(metadata.title).toBe("Cheers by Orange Jelly | Social media for hospitality venues");
+    expect(metadata.description).toContain("From £29.99 a month ex VAT, with a 14-day free trial.");
+    expect(metadata.robots).toEqual({ index: true, follow: true });
   });
 });
 
@@ -127,6 +134,13 @@ describe("/ on a Vercel Preview (copy approval) while the switch is off", () => 
     expect(hrefs(container)).not.toContain("/signup");
     expect(html).toContain('href="mailto:peter@orangejelly.co.uk"');
     expect(text).toContain("07990 587315");
+  });
+
+  it("carries the new title for review but stays noindex", async () => {
+    mocks.switchState.mockResolvedValue("closed");
+    const metadata = await generateMetadata();
+    expect(metadata.title).toBe("Cheers by Orange Jelly | Social media for hospitality venues");
+    expect(metadata.robots).toBeUndefined();
   });
 
   it("shows Talk to us when the switch cannot be read", async () => {
