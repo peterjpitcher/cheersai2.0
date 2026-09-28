@@ -244,7 +244,9 @@ export async function startCheckout(
 
     // One free trial per brand: a brand that has subscribed before pays from day one.
     const trial = previous.length === 0;
-    const metadata = { app: CHEERSAI_APP_TAG, account_id: ctx.accountId, plan, interval };
+    // legal_version: the terms and DPA version the owner accepts at the tick box,
+    // readable on the Session and the subscription in Stripe (spec §4.5, §4.13).
+    const metadata = { app: CHEERSAI_APP_TAG, account_id: ctx.accountId, plan, interval, legal_version: LEGAL_VERSION };
     const session = await stripe.checkout.sessions.create(
       {
         mode: 'subscription',

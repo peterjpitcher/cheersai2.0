@@ -31,6 +31,22 @@ const contentSecurityPolicy = [
   "frame-ancestors 'none'",
 ].join('; ');
 
+/**
+ * The pages search engines may index once the self-serve sign-up switch is on
+ * (SPEC-self-serve-signup P11): the home page and the three legal pages. They
+ * never get the X-Robots-Tag header, which a page cannot override. While the
+ * switch is off they stay out of search through the root layout's noindex
+ * meta tag and robots.txt, both of which follow the switch.
+ */
+export const INDEXABLE_PATHS = ['/', '/terms', '/privacy', '/data-processing'] as const;
+
+/**
+ * Every path except INDEXABLE_PATHS. `.+` leaves out `/`; the lookahead leaves
+ * out the three legal pages (with or without a trailing slash) but not paths
+ * below them.
+ */
+const NOT_INDEXABLE_SOURCE = '/:path((?!(?:terms|privacy|data-processing)/?$).+)';
+
 /** Security headers for all routes. Import into next.config.ts headers(). */
 export const securityHeaders: HeaderConfig[] = [
   {
@@ -43,8 +59,11 @@ export const securityHeaders: HeaderConfig[] = [
         key: 'Strict-Transport-Security',
         value: 'max-age=31536000; includeSubDomains',
       },
-      { key: 'X-Robots-Tag', value: 'noindex, nofollow' },
       { key: 'Content-Security-Policy', value: contentSecurityPolicy },
     ],
+  },
+  {
+    source: NOT_INDEXABLE_SOURCE,
+    headers: [{ key: 'X-Robots-Tag', value: 'noindex, nofollow' }],
   },
 ];

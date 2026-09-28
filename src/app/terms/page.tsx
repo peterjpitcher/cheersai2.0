@@ -10,11 +10,13 @@ import {
   LegalTable,
 } from "@/features/legal/legal-page";
 import { COMPANY, LEGAL_DOCUMENTS } from "@/lib/legal/company";
+import { indexableWhenOpen } from "@/lib/signup/front-door";
+import { getSelfServeSignupSwitch } from "@/lib/signup/switch";
 
 const DESCRIPTION =
   "The terms for using Cheers by Orange Jelly: plans, prices, the free trial, renewal, cancellation, refunds and liability.";
 
-export const metadata: Metadata = {
+const METADATA: Metadata = {
   title: "Terms of Service | Cheers",
   description: DESCRIPTION,
   openGraph: {
@@ -23,6 +25,17 @@ export const metadata: Metadata = {
     type: "article",
   },
 };
+
+/**
+ * Indexable only once the self-serve sign-up switch is on (P11); until then it
+ * keeps the site-wide noindex. Rendered per request (one small read) so a flip
+ * in either direction shows at once, never a stale cached copy.
+ */
+export const dynamic = "force-dynamic";
+
+export async function generateMetadata(): Promise<Metadata> {
+  return indexableWhenOpen(METADATA, await getSelfServeSignupSwitch());
+}
 
 const { dpa, privacy } = LEGAL_DOCUMENTS;
 
@@ -69,7 +82,10 @@ export default function TermsPage() {
             not as a consumer.
           </li>
           <li>The person who accepts these terms confirms that they can agree to them for the business.</li>
-          <li>Each business can have one free trial. We may refuse a second trial.</li>
+          <li>
+            Each business can have one free trial. We may refuse a second trial, for example when the card has been
+            used for a trial before.
+          </li>
         </LegalList>
       </LegalSection>
 
@@ -273,6 +289,10 @@ export default function TermsPage() {
             After your subscription ends, you can still sign in to see your content and ask for an export. To close
             your account, an owner can email us. If no new subscription starts within 90 days after the old one ended,
             we may close the account, so ask for your export before then if you want to keep your content.
+          </li>
+          <li>
+            If you sign up on our website and no subscription starts within 30 days of signing up, we may close the
+            account.
           </li>
           <li>
             Before we close your account, we can send you an export: a file of your posts, schedule, brand profile and
