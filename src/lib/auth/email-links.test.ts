@@ -26,8 +26,51 @@ describe('safeNextPath', () => {
     ['//evil.example/x', '/dashboard'],
     ['/\\evil.example', '/dashboard'],
     ['planner', '/dashboard'],
+    ['/\t/evil.example', '/dashboard'],
+    ['/\n/evil.example', '/dashboard'],
+    ['/\r/evil.example', '/dashboard'],
+    ['/\u007f', '/dashboard'],
+    ['javascript:alert(1)', '/dashboard'],
+    ['http:evil.example', '/dashboard'],
+    ['/planner?x=//evil.example', '/planner?x=//evil.example'],
+    ['/planner#//evil.example', '/planner#//evil.example'],
+    ['/' + 'a'.repeat(2048), '/dashboard'],
+    ['/' + 'a'.repeat(2046), '/' + 'a'.repeat(2046)],
   ])('%s -> %s', (input, expected) => {
     expect(safeNextPath(input, '/dashboard')).toBe(expected);
+  });
+});
+
+// The login page does `window.location.href = safeNextPath(searchParams.get('next'), '/dashboard')`
+// after a password sign-in, so these start from the raw query string the browser receives.
+describe('login ?next= redirect target', () => {
+  function loginRedirectTarget(query: string): string {
+    const searchParams = new URL(`/login${query}`, SITE).searchParams;
+    return safeNextPath(searchParams.get('next'), '/dashboard');
+  }
+
+  it.each([
+    ['?next=https%3A%2F%2Fevil.example', '/dashboard'],
+    ['?next=https://evil.example', '/dashboard'],
+    ['?next=//evil', '/dashboard'],
+    ['?next=javascript:alert(1)', '/dashboard'],
+    ['?next=javascript%3Aalert(1)', '/dashboard'],
+    ['?next=/%5Cevil', '/dashboard'],
+    ['?next=/%09/evil.example', '/dashboard'],
+    ['?next=/%0A/evil.example', '/dashboard'],
+    ['', '/dashboard'],
+    ['?next=', '/dashboard'],
+    ['?next=%2Fplanner%3Fx%3D1', '/planner?x=1'],
+  ])('%s -> %s', (query, expected) => {
+    const target = loginRedirectTarget(query);
+    expect(target).toBe(expected);
+    // Whatever comes back must stay on our own origin once the browser resolves it.
+    expect(new URL(target, SITE).origin).toBe(SITE);
+  });
+
+  it('keeps a normal path with its own query string', () => {
+    // `?next=/planner?x=1` unencoded: the second `?` belongs to the next value.
+    expect(loginRedirectTarget('?next=/planner?x=1')).toBe('/planner?x=1');
   });
 });
 

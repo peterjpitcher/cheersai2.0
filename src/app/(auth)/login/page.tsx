@@ -11,6 +11,7 @@ import { Label } from '@/components/ui/label';
 import { Mail } from 'lucide-react';
 
 import { sendMagicLink, signInWithPassword } from '@/lib/auth/actions';
+import { safeNextPath } from '@/lib/auth/email-links';
 
 /** Error codes set by /auth/confirm, /auth/callback and /auth/set-password. */
 const LINK_ERRORS = new Set(['invalid_confirmation', 'confirmation_failed', 'auth_callback_failed', 'link_expired']);
@@ -22,7 +23,8 @@ const LINK_ERRORS = new Set(['invalid_confirmation', 'confirmation_failed', 'aut
  */
 export default function LoginPage() {
   const searchParams = useSearchParams();
-  const nextUrl = searchParams.get('next') ?? '/dashboard';
+  // Same-origin paths only: `?next=` is attacker-controlled (open redirect, `javascript:`).
+  const nextUrl = safeNextPath(searchParams.get('next'), '/dashboard');
   const linkError = LINK_ERRORS.has(searchParams.get('error') ?? '');
 
   const [authMode, setAuthMode] = useState<'magic-link' | 'password'>('password');

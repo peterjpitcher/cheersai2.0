@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { setPassword } from '@/lib/auth/actions';
+import { safeNextPath } from '@/lib/auth/email-links';
 
 export function SetPasswordForm() {
   const [state, action, pending] = useActionState(
@@ -14,7 +15,7 @@ export function SetPasswordForm() {
       const result = await setPassword(formData);
       if (result.success) {
         // Same-origin paths only (the server picks planner or Billing).
-        const next = result.next && result.next.startsWith('/') && !result.next.startsWith('//') ? result.next : '/planner';
+        const next = safeNextPath(result.next, '/planner');
         window.location.href = next;
       }
       return result;
