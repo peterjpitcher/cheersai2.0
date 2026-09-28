@@ -40,16 +40,22 @@ function loadTurnstile(): Promise<TurnstileApi> {
   return scriptPromise;
 }
 
+/** Why the widget could not be used; reported to us (see reportTurnstileWidgetFailure). */
+export type TurnstileWidgetFailure = 'script_load_failed' | 'script_timeout' | 'widget_error';
+
+/** How long Cloudflare's script may take to load and show the widget before we give up. */
+export const TURNSTILE_LOAD_TIMEOUT_MS = 15_000;
+
 interface TurnstileWidgetProps {
   siteKey: string;
   action: string;
   /** A token is ready (true) or has expired or been used (false). */
   onReadyChange: (ready: boolean) => void;
-  /** The widget could not load or could not run. */
-  onError: () => void;
+  /** The widget could not load or could not run; `code` is Cloudflare's error code, when it gives one. */
+  onError: (reason: TurnstileWidgetFailure, code?: string) => void;
 }
 
-export function TurnstileWidget({ siteKey, action, onReadyChange, onError }: TurnstileWidgetProps) {
+export function TurnstileWidget({ siteKey, action, onReadyChange, onError }: TurnstileWidgetProps): React.JSX.Element {
   const containerRef = useRef<HTMLDivElement>(null);
   // Keep the latest callbacks without re-rendering the widget when they change.
   const callbacks = useRef({ onReadyChange, onError });
@@ -60,28 +66,45 @@ export function TurnstileWidget({ siteKey, action, onReadyChange, onError }: Tur
   useEffect(() => {
     let widgetId: string | undefined;
     let cancelled = false;
+    let rendered = false;
+    const fail = (reason: TurnstileWidgetFailure, code?: string): void => {
+      if (cancelled) return;
+      callbacks.current.onReadyChange(false);
+      callbacks.current.onError(reason, code);
+    };
+    // A script that never loads (blocked, or Cloudflare down) calls nothing, so time it out.
+    const timer = window.setTimeout(() => {
+      if (!rendered) fail('script_timeout');
+    }, TURNSTILE_LOAD_TIMEOUT_MS);
+
     loadTurnstile()
       .then((turnstile) => {
         if (cancelled || !containerRef.current) return;
-        widgetId = turnstile.render(containerRef.current, {
-          sitekey: siteKey,
-          action,
-          theme: 'light',
-          'response-field-name': 'cf-turnstile-response',
-          callback: () => callbacks.current.onReadyChange(true),
-          'expired-callback': () => callbacks.current.onReadyChange(false),
-          'timeout-callback': () => callbacks.current.onReadyChange(false),
-          'error-callback': () => {
-            callbacks.current.onReadyChange(false);
-            callbacks.current.onError();
-          },
-        });
+        try {
+          widgetId = turnstile.render(containerRef.current, {
+            sitekey: siteKey,
+            action,
+            theme: 'light',
+            'response-field-name': 'cf-turnstile-response',
+            callback: () => callbacks.current.onReadyChange(true),
+            'expired-callback': () => callbacks.current.onReadyChange(false),
+            'timeout-callback': () => callbacks.current.onReadyChange(false),
+            'error-callback': (code?: unknown) => fail('widget_error', typeof code === 'string' ? code : undefined),
+          });
+          rendered = true;
+          window.clearTimeout(timer);
+        } catch {
+          window.clearTimeout(timer);
+          fail('widget_error');
+        }
       })
       .catch(() => {
-        if (!cancelled) callbacks.current.onError();
+        window.clearTimeout(timer);
+        fail('script_load_failed');
       });
     return () => {
       cancelled = true;
+      window.clearTimeout(timer);
       if (widgetId && window.turnstile) window.turnstile.remove(widgetId);
     };
   }, [siteKey, action]);

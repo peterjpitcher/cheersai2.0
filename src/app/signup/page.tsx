@@ -29,7 +29,7 @@ async function isSignedIn(): Promise<boolean> {
   }
 }
 
-function TalkToUs() {
+function TalkToUs(): React.JSX.Element {
   const linkStyle = { color: 'var(--c-orange)' };
   return (
     <div className="space-y-3 text-center text-sm" style={{ color: 'var(--c-ink-2)' }}>
@@ -66,7 +66,7 @@ function TalkToUs() {
  * form is shown so it can be reviewed, but requestSignup refuses every
  * request there, because Preview writes to the live database.
  */
-export default async function SignupPage() {
+export default async function SignupPage(): Promise<React.JSX.Element> {
   // Signed in already: nothing to sign up for (redirect() throws, so it stays out of the try).
   if (await isSignedIn()) redirect('/planner');
 

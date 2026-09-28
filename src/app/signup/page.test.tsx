@@ -24,9 +24,10 @@ vi.mock('next/navigation', () => ({
   },
 }));
 vi.mock('next/image', () => ({ default: () => null }));
-vi.mock('@/app/signup/actions', () => ({ requestSignup: vi.fn() }));
+vi.mock('@/app/signup/actions', () => ({ requestSignup: vi.fn(), reportTurnstileWidgetFailure: vi.fn() }));
 
 const { default: SignupPage, metadata } = await import('@/app/signup/page');
+const { TurnstileFailureNotice } = await import('@/app/signup/signup-form');
 
 async function render(): Promise<string> {
   return renderToStaticMarkup(await SignupPage());
@@ -80,6 +81,13 @@ describe('/signup', () => {
     const html = await render();
     expect(html).toContain('Sign-up is not available right now');
     expect(html).not.toContain('name="email"');
+  });
+
+  it('tells the visitor when the security check cannot load, with our email address as the way through', () => {
+    const html = renderToStaticMarkup(<TurnstileFailureNotice />);
+    expect(html).toContain('The security check could not load');
+    expect(html).toContain('peter@orangejelly.co.uk');
+    expect(html).toContain('role="alert"');
   });
 
   it('sends someone already signed in to the planner', async () => {

@@ -1,6 +1,6 @@
 'use client';
 
-import { useActionState, useCallback, useEffect, useState } from 'react';
+import { useActionState, useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 
 import { AuthMessage } from '@/components/auth/auth-card';
@@ -9,8 +9,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { CONTACT } from '@/lib/legal/company';
 
-import { requestSignup, type SignupRequestResult } from './actions';
-import { TurnstileWidget } from './turnstile-widget';
+import { reportTurnstileWidgetFailure, requestSignup, type SignupRequestResult } from './actions';
+import { TurnstileWidget, type TurnstileWidgetFailure } from './turnstile-widget';
 
 /** "Send it again" waits this long after each send (spec §4.2 step 6). */
 const RESEND_WAIT_SECONDS = 60;
@@ -26,12 +26,21 @@ interface FormState extends SignupRequestResult {
   email?: string;
 }
 
+/** Shown when the Turnstile check cannot load or run: the visitor still has a way to reach us. */
+export function TurnstileFailureNotice(): React.JSX.Element {
+  return (
+    <AuthMessage tone="error">
+      The security check could not load. Please refresh the page, or email {CONTACT.email}.
+    </AuthMessage>
+  );
+}
+
 /**
  * The sign-up request form and the "Check your email" screen. Every accepted
  * request shows the same screen, whatever the email, so the form never reveals
  * who has a login. The email stays in this component's state, never in the URL.
  */
-export function SignupForm({ siteKey, preview }: SignupFormProps) {
+export function SignupForm({ siteKey, preview }: SignupFormProps): React.JSX.Element {
   const [view, setView] = useState<'form' | 'sent'>('form');
   const [submissions, setSubmissions] = useState(0);
   const [sentAt, setSentAt] = useState<number | null>(null);
@@ -65,7 +74,14 @@ export function SignupForm({ siteKey, preview }: SignupFormProps) {
   }, [sentAt]);
 
   const onReadyChange = useCallback((ready: boolean) => setTokenReady(ready), []);
-  const onWidgetError = useCallback(() => setWidgetFailed(true), []);
+  const reported = useRef(false);
+  const onWidgetError = useCallback((reason: TurnstileWidgetFailure, code?: string) => {
+    setWidgetFailed(true);
+    // Tell us once per page, so a broken widget is never silent on our side.
+    if (reported.current) return;
+    reported.current = true;
+    reportTurnstileWidgetFailure({ reason, code }).catch(() => {});
+  }, []);
 
   const widget = (
     <>
@@ -76,11 +92,7 @@ export function SignupForm({ siteKey, preview }: SignupFormProps) {
         onReadyChange={onReadyChange}
         onError={onWidgetError}
       />
-      {widgetFailed && !tokenReady && (
-        <AuthMessage tone="error">
-          The security check could not load. Please refresh the page, or email {CONTACT.email}.
-        </AuthMessage>
-      )}
+      {widgetFailed && !tokenReady && <TurnstileFailureNotice />}
       <noscript>
         <AuthMessage tone="error">Sign-up needs JavaScript for its security check. Turn it on, or email {CONTACT.email}.</AuthMessage>
       </noscript>
