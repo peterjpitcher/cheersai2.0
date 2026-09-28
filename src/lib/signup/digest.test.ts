@@ -304,6 +304,7 @@ describe('renderSignupDigestSections', () => {
           { kind: 'provisioning', rows: 3, lastAt: '2026-09-27T21:00:00Z' },
           { kind: 'closure_notice', rows: 1, lastAt: '2026-09-27T20:00:00Z' },
           { kind: 'closure_request', rows: 2, lastAt: '2026-09-27T19:00:00Z' },
+          { kind: 'admin_export', rows: 1, lastAt: '2026-09-27T18:00:00Z' },
         ],
       },
       'https://cheers.test',
@@ -314,6 +315,7 @@ describe('renderSignupDigestSections', () => {
     );
     expect(html).toContain('<strong>closure_request</strong>: 2 times, last at 27/09/2026, 20:00:00 (UK time).</li>');
     expect(html).toContain('<strong>provisioning</strong>: 3 times, last at 27/09/2026, 22:00:00 (UK time).</li>');
+    expect(html).toContain('<strong>admin_export</strong>: 1 time, last at 27/09/2026, 19:00:00 (UK time). No customer involved');
     expect(html).not.toContain('Each one was refused');
   });
 

@@ -26,12 +26,19 @@ import { getSelfServeSignupSwitch } from '@/lib/signup/switch';
 //   5. the self-serve sign-up switch is on (unreadable counts as off);
 //   6. fewer than 3 exports for the brand in the current 24-hour window
 //      (peekAuthRateLimit: a read, nothing counted yet);
-//   7. build the export and record it in admin_audit (kind only);
-//   8. count it (consumeAuthRateLimit, atomic). A burst that passed step 6
-//      together is cut off here, so no more than 3 files leave per window;
-//      a refused one leaves only its admin_audit row. Failures before this
-//      point never use up the owner's quota;
-//   9. send it.
+//   7. a per-brand claim (owner_data_export_lock, one per 60 seconds, the
+//      route's time limit), so a burst of presses builds one export; the rest
+//      are told a download is already being prepared. Taking it also counts
+//      a build (owner_data_export_attempt, 10 per brand per 24-hour window),
+//      so exports that keep failing or are cut off by the time limit (and so
+//      are never counted as downloads) stop, and the operator is alerted;
+//   8. build the export;
+//   9. count it as a download (consumeAuthRateLimit, atomic), so no more than
+//      3 files leave per window. Failures before this point never use up the
+//      owner's quota;
+//  10. record it in admin_audit (kind only), only for a file about to be sent,
+//      then send it. If the record fails nothing is sent (that one download
+//      stays counted).
 //
 // A dependency failure shows the owner an error with our email address and
 // alerts the operator (reportSignupFailure). Nothing is sent unless every step
@@ -90,6 +97,21 @@ export async function POST(request: Request): Promise<Response> {
     return failed(503, 'limiter', error, accountId);
   }
 
+  try {
+    const claim = await consumeAuthRateLimit('owner_data_export_lock', subject);
+    if (claim.status === 'limited') return refuse(429, OWNER_DATA_MESSAGES.exportInProgress);
+    const attempt = await consumeAuthRateLimit('owner_data_export_attempt', subject);
+    if (attempt.status === 'limited') {
+      await reportSignupFailure(
+        'owner_export',
+        new Error(`the brand has started 10 exports in this 24-hour window without finishing its downloads (brand ${accountId})`),
+      );
+      return refuse(429, OWNER_DATA_MESSAGES.exportTooManyAttempts);
+    }
+  } catch (error) {
+    return failed(503, 'limiter', error, accountId);
+  }
+
   let file: { json: string; fileName: string };
   try {
     const started = Date.now();
@@ -99,8 +121,16 @@ export async function POST(request: Request): Promise<Response> {
     return failed(500, 'export', error, accountId);
   }
 
-  // Every export is on record before anything leaves (kind only: no names,
-  // emails or content). If it cannot be recorded, nothing is sent.
+  try {
+    const counted = await consumeAuthRateLimit('owner_data_export', subject);
+    if (counted.status === 'limited') return refuse(429, OWNER_DATA_MESSAGES.exportLimited(counted.retryAfterSeconds));
+  } catch (error) {
+    return failed(503, 'limiter', error, accountId);
+  }
+
+  // On record before it leaves (kind only: no names, emails or content), and
+  // only for a file that is about to be sent. If it cannot be recorded, nothing
+  // is sent.
   try {
     await logAdminEvent({
       actorUserId: ctx.user.id,
@@ -110,13 +140,6 @@ export async function POST(request: Request): Promise<Response> {
     });
   } catch (error) {
     return failed(500, 'admin_audit', error, accountId);
-  }
-
-  try {
-    const counted = await consumeAuthRateLimit('owner_data_export', subject);
-    if (counted.status === 'limited') return refuse(429, OWNER_DATA_MESSAGES.exportLimited(counted.retryAfterSeconds));
-  } catch (error) {
-    return failed(503, 'limiter', error, accountId);
   }
 
   return streamJsonDownload(file.json, file.fileName);

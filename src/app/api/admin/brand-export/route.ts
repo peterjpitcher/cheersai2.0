@@ -2,10 +2,13 @@ import { z } from 'zod';
 
 import { logAdminEvent } from '@/lib/admin/audit';
 import { brandExportFile, exportBrandData } from '@/lib/admin/offboarding';
+import { AuthDependencyError } from '@/lib/auth/errors';
 import { requireAuthContext } from '@/lib/auth/server';
+import type { AuthContext } from '@/lib/auth/types';
 import { EXPORT_REQUEST_HEADER } from '@/lib/export/download-request';
 import { exportRefusal, requestedAccountId, streamJsonDownload } from '@/lib/export/stream-response';
 import { createLogger } from '@/lib/logging';
+import { reportSignupFailure } from '@/lib/signup/alerts';
 
 // ---------------------------------------------------------------------------
 // POST /api/admin/brand-export: Admin, Offboarding, "Export data" (spec §4.7,
@@ -20,7 +23,10 @@ import { createLogger } from '@/lib/logging';
 //     brand, no detail), and only then send it; any failure is logged and
 //     answered "The export failed. Try again.", with nothing sent.
 // New for a route: the Settings-style request header, standing in for the
-// Origin check a server action gets, so another site cannot start an export.
+// Origin check a server action gets, so another site cannot start an export;
+// and a failed sign-in lookup (AuthDependencyError) is answered with the same
+// "The export failed. Try again." and alerted (admin_export, the error message
+// only), instead of Next's bare 500. A signed-out visitor is still redirected.
 // ---------------------------------------------------------------------------
 
 export const dynamic = 'force-dynamic';
@@ -34,7 +40,15 @@ const uuid = z.string().uuid();
 export async function POST(request: Request): Promise<Response> {
   if (request.headers.get(EXPORT_REQUEST_HEADER) !== '1') return exportRefusal(403, 'Forbidden.');
 
-  const ctx = await requireAuthContext();
+  let ctx: AuthContext;
+  try {
+    ctx = await requireAuthContext();
+  } catch (error) {
+    if (!(error instanceof AuthDependencyError)) throw error;
+    logger.error('export brand data failed: sign-in lookup', error);
+    await reportSignupFailure('admin_export', new Error(`sign-in lookup: ${error.message}`));
+    return exportRefusal(503, 'The export failed. Try again.');
+  }
   if (!ctx.isSuperAdmin) return exportRefusal(403, 'Forbidden.');
 
   const accountId = await requestedAccountId(request);

@@ -1,15 +1,19 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AuthDependencyError } from '@/lib/auth/errors';
 
 // POST /api/settings/data-export: the owner's "Download my data". Every
 // dependency is stubbed; the file layout is the real brandExportFile, the one
 // the operator's Admin export uses. The limiter is an in-memory stand-in for
-// public.consume_rate_limit, so the quota is checked end to end.
+// public.consume_rate_limit (fixed windows on the faked clock, atomic per
+// call) with the limits in AUTH_RATE_LIMIT_RULES, so the claim, the build cap
+// and the download quota run end to end.
 
 const BRAND = '11111111-1111-4111-8111-111111111111';
 const OTHER_BRAND = '22222222-2222-4222-8222-222222222222';
 const OWNER = '33333333-3333-4333-8333-333333333333';
+const NOW = new Date('2026-09-28T12:00:00Z');
+const A_MINUTE = 61_000;
 
 let ownerRole: string | null = 'owner';
 let ownerLookupError: { message: string } | null = null;
@@ -39,18 +43,35 @@ vi.mock('@/lib/auth/server', () => ({ requireAuthContext: () => mockAuth() }));
 const mockSwitch = vi.fn<() => Promise<'open' | 'closed' | 'unavailable'>>();
 vi.mock('@/lib/signup/switch', () => ({ getSelfServeSignupSwitch: () => mockSwitch() }));
 
-/** Fixed 24-hour windows, 3 per brand, like owner_data_export. */
-const counts = new Map<string, number>();
+const LIMITS: Record<string, { limit: number; windowSeconds: number }> = {
+  owner_data_export: { limit: 3, windowSeconds: 86400 },
+  owner_data_export_lock: { limit: 1, windowSeconds: 60 },
+  owner_data_export_attempt: { limit: 10, windowSeconds: 86400 },
+};
+const windows = new Map<string, { count: number; resetAt: number }>();
 let limiterError: Error | null = null;
-const mockPeek = vi.fn(async (_action: string, subject: { accountId?: string }) => {
+
+function current(action: string, accountId: string): { count: number; resetAt: number } | null {
+  const row = windows.get(`${action}:${accountId}`);
+  return row && row.resetAt > Date.now() ? row : null;
+}
+function answer(action: string, row: { count: number; resetAt: number } | null, counted: boolean) {
+  const rule = LIMITS[action]!;
+  const over = row ? (counted ? row.count > rule.limit : row.count >= rule.limit) : false;
+  return over ? { status: 'limited', retryAfterSeconds: Math.ceil((row!.resetAt - Date.now()) / 1000) } : { status: 'allowed' };
+}
+const mockPeek = vi.fn(async (action: string, subject: { accountId?: string }) => {
   if (limiterError) throw limiterError;
-  return (counts.get(subject.accountId ?? '') ?? 0) >= 3 ? { status: 'limited', retryAfterSeconds: 5 * 3600 - 30 } : { status: 'allowed' };
+  return answer(action, current(action, subject.accountId!), false);
 });
-const mockConsume = vi.fn(async (_action: string, subject: { accountId?: string }) => {
+const mockConsume = vi.fn(async (action: string, subject: { accountId?: string }) => {
   if (limiterError) throw limiterError;
-  const next = (counts.get(subject.accountId ?? '') ?? 0) + 1;
-  counts.set(subject.accountId ?? '', next);
-  return next > 3 ? { status: 'limited', retryAfterSeconds: 5 * 3600 - 30 } : { status: 'allowed' };
+  const rule = LIMITS[action];
+  if (!rule || !subject.accountId) throw new Error(`unexpected limit ${action}`);
+  const row = current(action, subject.accountId);
+  const next = row ? { ...row, count: row.count + 1 } : { count: 1, resetAt: Date.now() + rule.windowSeconds * 1000 };
+  windows.set(`${action}:${subject.accountId}`, next);
+  return answer(action, next, true);
 });
 vi.mock('@/lib/auth/rate-limit', () => ({
   peekAuthRateLimit: (action: string, subject: { accountId?: string }) => mockPeek(action, subject),
@@ -90,8 +111,18 @@ function request(options: { header?: boolean; accountId?: unknown } = {}): Reque
   });
 }
 
+/** A press a minute after the last one, once the previous claim has lapsed. */
+async function pressLater(): Promise<Response> {
+  vi.setSystemTime(new Date(Date.now() + A_MINUTE));
+  return POST(request());
+}
+
 function context(role: 'owner' | 'member' = 'owner', isSuperAdmin = false) {
   return { user: { id: OWNER, email: 'owner@venue.test' }, supabase: SERVICE, accountId: BRAND, role, isSuperAdmin };
+}
+
+function downloads(): number {
+  return current('owner_data_export', BRAND)?.count ?? 0;
 }
 
 async function errorOf(response: Response): Promise<string> {
@@ -99,8 +130,10 @@ async function errorOf(response: Response): Promise<string> {
 }
 
 beforeEach(() => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(NOW);
   vi.clearAllMocks();
-  counts.clear();
+  windows.clear();
   limiterError = null;
   ownerRole = 'owner';
   ownerLookupError = null;
@@ -110,8 +143,12 @@ beforeEach(() => {
   mockAudit.mockResolvedValue(undefined);
 });
 
+afterEach(() => {
+  vi.useRealTimers();
+});
+
 describe('owner export: the download', () => {
-  it("sends the owner the operator's export file for their active brand, recorded, then counted", async () => {
+  it("sends the owner the operator's export file for their active brand, counted and recorded", async () => {
     const response = await POST(request());
 
     expect(response.status).toBe(200);
@@ -121,17 +158,20 @@ describe('owner export: the download', () => {
     expect(await response.text()).toBe(brandExportFile(BRAND, EXPORT).json);
 
     expect(mockExport).toHaveBeenCalledWith(SERVICE, BRAND);
-    expect(mockPeek).toHaveBeenCalledWith('owner_data_export', { email: '', ip: '', accountId: BRAND });
-    expect(mockConsume).toHaveBeenCalledWith('owner_data_export', { email: '', ip: '', accountId: BRAND });
+    const subject = { email: '', ip: '', accountId: BRAND };
+    expect(mockPeek).toHaveBeenCalledWith('owner_data_export', subject);
+    expect(mockConsume.mock.calls.map(([action]) => action)).toEqual(['owner_data_export_lock', 'owner_data_export_attempt', 'owner_data_export']);
     expect(mockAudit).toHaveBeenCalledWith({
       actorUserId: OWNER,
       action: 'export_brand_data',
       targetAccountId: BRAND,
       detail: { kind: 'owner_download' },
     });
-    // Checked first, counted only once the file is built and on record.
-    expect(mockPeek.mock.invocationCallOrder[0]).toBeLessThan(mockExport.mock.invocationCallOrder[0]!);
-    expect(mockAudit.mock.invocationCallOrder[0]).toBeLessThan(mockConsume.mock.invocationCallOrder[0]!);
+    // Claimed before the build; counted, then recorded, only once the file is ready.
+    expect(mockConsume.mock.invocationCallOrder[0]).toBeLessThan(mockExport.mock.invocationCallOrder[0]!);
+    expect(mockExport.mock.invocationCallOrder[0]).toBeLessThan(mockConsume.mock.invocationCallOrder[2]!);
+    expect(mockConsume.mock.invocationCallOrder[2]).toBeLessThan(mockAudit.mock.invocationCallOrder[0]!);
+    expect(downloads()).toBe(1);
     expect(mockAlert).not.toHaveBeenCalled();
   });
 
@@ -150,37 +190,96 @@ describe('owner export: the download', () => {
   });
 });
 
-describe('owner export: the quota (3 per brand per 24-hour window)', () => {
-  it('refuses a fourth export, saying when to try again, without building anything', async () => {
-    for (let i = 0; i < 3; i += 1) expect((await POST(request())).status).toBe(200);
-    mockExport.mockClear();
-    const response = await POST(request());
-    expect(response.status).toBe(429);
-    expect(await errorOf(response)).toBe(
-      'You can download your data 3 times a day. Please try again in 5 hours, or email peter@orangejelly.co.uk.',
+describe('owner export: bursts and the claim', () => {
+  it('30 presses at once build one export, send one file and leave one record', async () => {
+    windows.set(`owner_data_export:${BRAND}`, { count: 2, resetAt: NOW.getTime() + 3600_000 });
+    const responses = await Promise.all(Array.from({ length: 30 }, () => POST(request())));
+
+    expect(mockExport).toHaveBeenCalledTimes(1);
+    expect(mockAudit).toHaveBeenCalledTimes(1);
+    expect(responses.filter((response) => response.headers.get('content-disposition'))).toHaveLength(1);
+    const refused = responses.filter((response) => response.status === 429);
+    expect(refused).toHaveLength(29);
+    expect(await errorOf(refused[0]!)).toBe('A download for this venue is already being prepared. Wait a minute and try again.');
+    expect(downloads()).toBe(3);
+  });
+
+  it('a press while an export is still being built is told to wait, and builds nothing', async () => {
+    let finish: (value: unknown) => void = () => {};
+    mockExport.mockImplementationOnce(() => new Promise((resolve) => (finish = resolve)));
+    const first = POST(request());
+    await vi.waitFor(() => expect(mockExport).toHaveBeenCalledTimes(1));
+
+    const second = await POST(request());
+    expect(second.status).toBe(429);
+    expect(await errorOf(second)).toMatch(/already being prepared/);
+    expect(mockExport).toHaveBeenCalledTimes(1);
+
+    finish(EXPORT);
+    expect((await first).status).toBe(200);
+  });
+
+  it('exports cut off by the time limit are never counted as downloads, cannot run on without end, and alert', async () => {
+    // Each of these builds never finishes, as when Vercel stops the function at 60 seconds.
+    mockExport.mockImplementation(() => new Promise(() => {}));
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      vi.setSystemTime(new Date(NOW.getTime() + attempt * A_MINUTE));
+      void POST(request());
+      await vi.waitFor(() => expect(mockExport).toHaveBeenCalledTimes(attempt + 1));
+      // Within the minute, a retry is held back by the claim.
+      expect((await POST(request())).status).toBe(429);
+    }
+    expect(downloads()).toBe(0);
+    expect(mockAudit).not.toHaveBeenCalled();
+
+    const eleventh = await pressLater();
+    expect(eleventh.status).toBe(429);
+    expect(await errorOf(eleventh)).toBe(
+      'We could not prepare your download after several tries today. Please email peter@orangejelly.co.uk and we will send you a copy.',
     );
+    expect(mockExport).toHaveBeenCalledTimes(10);
+    expect(mockAlert).toHaveBeenCalledWith(
+      'owner_export',
+      expect.objectContaining({ message: expect.stringContaining('started 10 exports in this 24-hour window') }),
+    );
+  });
+});
+
+describe('owner export: the quota (3 per brand per 24-hour window)', () => {
+  it('refuses a fourth download, saying when to try again, without claiming or building anything', async () => {
+    for (let i = 0; i < 3; i += 1) expect((await pressLater()).status).toBe(200);
+    mockExport.mockClear();
+    mockConsume.mockClear();
+    const response = await pressLater();
+    expect(response.status).toBe(429);
+    expect(await errorOf(response)).toMatch(/^You can download your data 3 times a day\. Please try again in \d+ hours?, or email peter@orangejelly\.co\.uk\.$/);
     expect(mockExport).not.toHaveBeenCalled();
+    expect(mockConsume).not.toHaveBeenCalled();
     expect(mockAlert).not.toHaveBeenCalled();
   });
 
   it('failed exports use up none of it: three failures, then the owner still gets three files', async () => {
     mockExport.mockRejectedValue(new Error('statement timeout'));
-    for (let i = 0; i < 3; i += 1) expect((await POST(request())).status).toBe(500);
-    mockExport.mockResolvedValue(EXPORT);
-    mockAudit.mockRejectedValueOnce(new Error('insert failed'));
-    expect((await POST(request())).status).toBe(500);
-    expect(counts.get(BRAND) ?? 0).toBe(0);
+    for (let i = 0; i < 3; i += 1) expect((await pressLater()).status).toBe(500);
+    expect(downloads()).toBe(0);
+    expect(mockAudit).not.toHaveBeenCalled();
 
-    for (let i = 0; i < 3; i += 1) expect((await POST(request())).status).toBe(200);
-    expect((await POST(request())).status).toBe(429);
+    mockExport.mockResolvedValue(EXPORT);
+    for (let i = 0; i < 3; i += 1) expect((await pressLater()).status).toBe(200);
+    expect((await pressLater()).status).toBe(429);
   });
 
-  it('a burst that passes the check together still lets no more than 3 files out', async () => {
-    counts.set(BRAND, 2);
-    const responses = await Promise.all([POST(request()), POST(request()), POST(request())]);
-    const statuses = responses.map((response) => response.status).sort();
-    expect(statuses).toEqual([200, 429, 429]);
-    expect(responses.filter((response) => response.headers.get('content-disposition')).length).toBe(1);
+  it('a file refused at the final count is not recorded or sent', async () => {
+    windows.set(`owner_data_export:${BRAND}`, { count: 2, resetAt: NOW.getTime() + 3600_000 });
+    // Another download is counted while this one is being built.
+    mockExport.mockImplementationOnce(async () => {
+      windows.set(`owner_data_export:${BRAND}`, { count: 3, resetAt: NOW.getTime() + 3600_000 });
+      return EXPORT;
+    });
+    const response = await POST(request());
+    expect(response.status).toBe(429);
+    expect(response.headers.get('content-disposition')).toBeNull();
+    expect(mockAudit).not.toHaveBeenCalled();
   });
 });
 
@@ -192,11 +291,12 @@ describe('owner export: who may download', () => {
     expect(response.status).toBe(403);
     expect(await errorOf(response)).toMatch(/Only an owner of this venue/);
     expect(mockPeek).not.toHaveBeenCalled();
+    expect(mockConsume).not.toHaveBeenCalled();
     expect(mockExport).not.toHaveBeenCalled();
     expect(mockAudit).not.toHaveBeenCalled();
   });
 
-  it("refuses a super-admin with no owner row: the implied owner role does not count (operators use Admin)", async () => {
+  it('refuses a super-admin with no owner row: the implied owner role does not count (operators use Admin)', async () => {
     mockAuth.mockResolvedValue(context('owner', true));
     ownerRole = null;
     const response = await POST(request());
@@ -253,10 +353,7 @@ describe('owner export: each failing dependency shows an error with our address 
     const response = await POST(request());
     expect(response.status).toBe(503);
     expect(await errorOf(response)).toMatch(/could not prepare your download.*peter@orangejelly\.co\.uk/);
-    expect(mockAlert).toHaveBeenCalledWith(
-      'owner_export',
-      expect.objectContaining({ message: 'sign-in lookup: account_members lookup failed' }),
-    );
+    expect(mockAlert).toHaveBeenCalledWith('owner_export', expect.objectContaining({ message: 'sign-in lookup: account_members lookup failed' }));
     expect(mockExport).not.toHaveBeenCalled();
   });
 
@@ -268,7 +365,7 @@ describe('owner export: each failing dependency shows an error with our address 
     expect(mockAlert).toHaveBeenCalledWith('owner_export', expect.objectContaining({ message: expect.stringContaining('owner lookup') }));
   });
 
-  it('the limiter check', async () => {
+  it('the limiter', async () => {
     limiterError = new Error('auth_rate_limits read failed: connection refused');
     const response = await POST(request());
     expect(response.status).toBe(503);
@@ -277,15 +374,29 @@ describe('owner export: each failing dependency shows an error with our address 
     expect(mockExport).not.toHaveBeenCalled();
   });
 
-  it('the limiter count after the build: nothing is sent', async () => {
+  it('the claim', async () => {
     mockConsume.mockRejectedValueOnce(new Error('consume_rate_limit failed: connection refused'));
     const response = await POST(request());
     expect(response.status).toBe(503);
-    expect(response.headers.get('content-disposition')).toBeNull();
     expect(mockAlert).toHaveBeenCalledWith('owner_export', expect.objectContaining({ message: expect.stringContaining('limiter') }));
+    expect(mockExport).not.toHaveBeenCalled();
   });
 
-  it('building the export (a database read or media signing)', async () => {
+  it('the download count after the build: nothing is sent or recorded', async () => {
+    const real = mockConsume.getMockImplementation()!;
+    mockConsume.mockImplementation(async (action, subject) => {
+      if (action === 'owner_data_export') throw new Error('consume_rate_limit failed: connection refused');
+      return real(action, subject);
+    });
+    const response = await POST(request());
+    expect(response.status).toBe(503);
+    expect(response.headers.get('content-disposition')).toBeNull();
+    expect(mockAudit).not.toHaveBeenCalled();
+    expect(mockAlert).toHaveBeenCalledWith('owner_export', expect.objectContaining({ message: expect.stringContaining('limiter') }));
+    mockConsume.mockImplementation(real);
+  });
+
+  it('building the export (a database read or media signing): not counted as a download', async () => {
     mockExport.mockRejectedValue(new Error('media signing failed: Bucket not found'));
     const response = await POST(request());
     expect(response.status).toBe(500);
@@ -295,16 +406,15 @@ describe('owner export: each failing dependency shows an error with our address 
       expect.objectContaining({ message: expect.stringContaining('media signing failed') }),
     );
     expect(mockAudit).not.toHaveBeenCalled();
-    expect(mockConsume).not.toHaveBeenCalled();
+    expect(downloads()).toBe(0);
   });
 
-  it('recording the export: nothing is sent unrecorded, and nothing is counted', async () => {
+  it('recording the export: nothing is sent unrecorded', async () => {
     mockAudit.mockRejectedValue(new Error('insert failed'));
     const response = await POST(request());
     expect(response.status).toBe(500);
     expect(response.headers.get('content-disposition')).toBeNull();
     expect(await errorOf(response)).toContain('peter@orangejelly.co.uk');
     expect(mockAlert).toHaveBeenCalledWith('owner_export', expect.objectContaining({ message: expect.stringContaining('admin_audit') }));
-    expect(mockConsume).not.toHaveBeenCalled();
   });
 });

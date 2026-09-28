@@ -47,6 +47,7 @@ export type SignupFailureKind =
   | 'owner_export'
   | 'closure_request'
   | 'closure_notice'
+  | 'admin_export'
   | 'unexpected';
 
 const WHAT_BROKE: Record<SignupFailureKind, string> = {
@@ -76,16 +77,30 @@ const WHAT_BROKE: Record<SignupFailureKind, string> = {
   venue_notice:
     'A self-serve venue was created, but its new-venue email to you or its admin_audit record (self_serve_venue_created) could not be written. The customer carried on to Billing; the Vercel logs have the venue id.',
   owner_export:
-    "An owner's \"Download my data\" in Settings failed (the export limiter, reading the brand's posts, profile, link-in-bio or media, signing the media links, or recording the export in admin_audit). Nothing was downloaded; the owner was shown an error and our email address, so they may email you for a copy (Admin, Offboarding, Export data). The Vercel logs have the brand id.",
+    "An owner's \"Download my data\" in Settings failed (the sign-in or owner lookup, the export limiter, reading the brand's posts, profile, link-in-bio or media, signing the media links, or recording the export in admin_audit), or the brand has started 10 exports in a 24-hour window without finishing its downloads (exports failing or cut off by the time limit). Nothing was downloaded; the owner was shown an error and our email address, so they may email you for a copy (Admin, Offboarding, Export data). The Vercel logs have the brand id.",
   closure_request:
     'An owner pressed "Ask us to close this venue" in Settings, but Cheers could not check for an earlier request (admin_audit lookup), or OPERATOR_ALERT_EMAIL is not set, or the request email to you could not be sent. Nothing was closed or deleted; the owner was told it failed and asked to try again or email us. The Vercel logs have the brand id.',
   closure_notice:
     "An owner's request from Settings to close their venue was emailed to you, but its admin_audit record (venue_closure_request) could not be written or the owner's confirmation email could not be sent. The owner was told we have the request. The Vercel logs have the brand id.",
+  admin_export:
+    'Admin, Offboarding, Export data failed because Cheers could not look up the signed-in login (a membership, admin or brand lookup failed; Supabase may be down). Nothing was downloaded and the page said the export failed. No customer is affected.',
   unexpected: 'Something unexpected failed while handling a sign-up request (for example the service-role client could not be created). The error below says what.',
 };
 
 /** The owner's Settings actions: same bookkeeping and digest as sign-up, their own subject line. */
 const OWNER_REQUEST_KINDS: ReadonlySet<SignupFailureKind> = new Set(['owner_export', 'closure_request', 'closure_notice']);
+
+function subjectFor(kind: SignupFailureKind): string {
+  if (OWNER_REQUEST_KINDS.has(kind)) return 'Owner request problem';
+  if (kind === 'admin_export') return 'Admin export problem';
+  return 'Sign-up problem';
+}
+
+function whoWasTold(kind: SignupFailureKind): string {
+  if (OWNER_REQUEST_KINDS.has(kind)) return 'The owner is told what happened and given our email address.';
+  if (kind === 'admin_export') return 'The Admin page said the export failed.';
+  return 'Visitors are shown an error and asked to try again or email us.';
+}
 
 const ALERT_WINDOW_SECONDS = 60 * 60;
 const ALERT_TIMEOUT_MS = 3000;
@@ -189,11 +204,11 @@ export async function reportSignupFailure(kind: SignupFailureKind, error: unknow
     await withTimeout(
       sendEmail({
         to,
-        subject: `[Cheers operator] ${OWNER_REQUEST_KINDS.has(kind) ? 'Owner request problem' : 'Sign-up problem'}: ${kind}`,
+        subject: `[Cheers operator] ${subjectFor(kind)}: ${kind}`,
         html: `
 <p>${escapeHtml(WHAT_BROKE[kind])}</p>
 <p>Error: ${escapeHtml(message.slice(0, 500))}</p>
-<p>${OWNER_REQUEST_KINDS.has(kind) ? 'The owner is told what happened and given our email address.' : 'Visitors are shown an error and asked to try again or email us.'} You will not get another email about this kind of problem for an hour; the Vercel logs have every failure, and admin_audit has an operator_signup_alert row for each (up to ${MAX_AUDIT_ROWS_PER_HOUR} an hour).</p>
+<p>${whoWasTold(kind)} You will not get another email about this kind of problem for an hour; the Vercel logs have every failure, and admin_audit has an operator_signup_alert row for each (up to ${MAX_AUDIT_ROWS_PER_HOUR} an hour).</p>
 `.trim(),
         required: true,
       }),

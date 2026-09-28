@@ -389,6 +389,7 @@ const NOT_REFUSED_KINDS: Readonly<Record<string, string>> = {
   closure_notice:
     "Not refused: the owner was told we have their request to close the venue, and the request email reached you; only its admin_audit record or the owner's confirmation email failed.",
   login_cleanup: 'Nobody was refused: the nightly clean-up could not delete some unused sign-up logins and tries again the next day.',
+  admin_export: 'No customer involved: an operator export in Admin failed at the sign-in lookup, and the Admin page said so.',
 };
 
 /** The digest's sections for the operator email; empty lists are left out. Pure, for fixture tests. */

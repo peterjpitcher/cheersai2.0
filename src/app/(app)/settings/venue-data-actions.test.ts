@@ -229,8 +229,7 @@ describe('requestVenueClosure: requests at the same time', () => {
     const second = requestVenueClosure({ accountId: BRAND });
     // The second finishes while the first is still sending: it holds no claim.
     expect(await second).toEqual({
-      error:
-        'A request to close this venue is being sent right now, from another tab or by another owner. Refresh the page in a minute to check it went through.',
+      error: 'Wait a minute and press Send again. If it then says an owner already asked, we have your request.',
     });
     releaseOperatorEmail();
     expect(await first).toEqual({ success: true, requestedAt: NOW.toISOString(), confirmationSent: true });
@@ -261,7 +260,7 @@ describe('requestVenueClosure: requests at the same time', () => {
     mockSendEmail.mockClear();
 
     advance(20_000);
-    expect((await requestVenueClosure({ accountId: BRAND })).error).toMatch(/being sent right now/);
+    expect((await requestVenueClosure({ accountId: BRAND })).error).toMatch(/Wait a minute and press Send again/);
     expect(mockSendEmail).not.toHaveBeenCalled();
 
     advance(45_000);

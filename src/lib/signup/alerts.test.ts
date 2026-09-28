@@ -46,6 +46,16 @@ beforeEach(() => {
 });
 
 describe('reportSignupFailure', () => {
+  it('files a failed Admin export under its own subject, saying no customer is affected', async () => {
+    fakeAlertCounter();
+    await reportSignupFailure('admin_export', new Error('sign-in lookup: app_admins lookup failed'));
+    const sent = mockSendEmail.mock.calls[0]?.[0] as { subject: string; html: string };
+    expect(sent.subject).toBe('[Cheers operator] Admin export problem: admin_export');
+    expect(sent.html).toContain('No customer is affected');
+    expect(sent.html).toContain('The Admin page said the export failed.');
+    expect(sent.html).not.toMatch(/undefined|NaN|Invalid Date/);
+  });
+
   it("files the owner's Settings actions under their own subject, with the same bookkeeping", async () => {
     for (const kind of ['owner_export', 'closure_request', 'closure_notice'] as const) {
       fakeAlertCounter();

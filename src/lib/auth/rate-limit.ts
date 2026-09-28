@@ -26,6 +26,8 @@ export type AuthRateLimitAction =
   | 'signup_widget_report'
   | 'signup_venue'
   | 'owner_data_export'
+  | 'owner_data_export_lock'
+  | 'owner_data_export_attempt'
   | 'venue_closure_lock'
   | 'venue_closure_attempt';
 
@@ -87,8 +89,15 @@ export const AUTH_RATE_LIMIT_RULES: Record<AuthRateLimitAction, readonly LimitRu
   // 3 per brand per 24-hour window, whoever in the brand asks. Each one reads
   // every post and signs every media link, so the cap keeps one brand from
   // loading the database. Checked with peekAuthRateLimit before the export is
-  // built and counted only once it has been built and recorded.
+  // built and counted only once the file is ready to send.
   owner_data_export: [{ scope: 'account', limit: 3, windowSeconds: 24 * 60 * 60 }],
+  // A per-brand claim held while one export is built (60 seconds, the route's
+  // maxDuration), so a burst of presses builds one export, not one each...
+  owner_data_export_lock: [{ scope: 'account', limit: 1, windowSeconds: 60 }],
+  // ...and at most 10 builds per brand per 24-hour window, counted when the
+  // claim is taken, so exports that keep failing or being cut off by the time
+  // limit (and so are never counted as downloads) cannot run on without end.
+  owner_data_export_attempt: [{ scope: 'account', limit: 10, windowSeconds: 24 * 60 * 60 }],
   // "Ask us to close this venue": a per-brand claim held for 60 seconds, so
   // two tabs or two owners pressing Send together send one request...
   venue_closure_lock: [{ scope: 'account', limit: 1, windowSeconds: 60 }],

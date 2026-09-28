@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { AuthDependencyError } from '@/lib/auth/errors';
+
 // POST /api/admin/brand-export: the operator's Admin "Export data", now a
 // streamed download. The checks and the admin_audit record must match the
 // server action it replaces (super-admin only, "Invalid brand.", audit with
@@ -20,6 +22,9 @@ vi.mock('@/lib/admin/offboarding', async (importOriginal) => ({
 
 const mockAudit = vi.fn();
 vi.mock('@/lib/admin/audit', () => ({ logAdminEvent: (...args: unknown[]) => mockAudit(...args) }));
+
+const mockAlert = vi.fn<(...args: unknown[]) => Promise<void>>(async () => {});
+vi.mock('@/lib/signup/alerts', () => ({ reportSignupFailure: (...args: unknown[]) => mockAlert(...args) }));
 
 const mockLogError = vi.fn();
 vi.mock('@/lib/logging', () => ({
@@ -105,6 +110,23 @@ describe('Admin export route', () => {
     expect(await errorOf(response)).toBe('The export failed. Try again.');
     expect(mockLogError).toHaveBeenCalledWith('export brand data failed', expect.any(Error), { accountId: BRAND });
     expect(mockAudit).not.toHaveBeenCalled();
+  });
+
+  it('a failed sign-in lookup (AuthDependencyError) answers the usual error and alerts, with no personal data', async () => {
+    mockAuth.mockRejectedValue(new AuthDependencyError('app_admins lookup failed', { message: 'connection refused' }));
+    const response = await POST(request());
+    expect(response.status).toBe(503);
+    expect(await errorOf(response)).toBe('The export failed. Try again.');
+    expect(mockAlert).toHaveBeenCalledWith('admin_export', expect.objectContaining({ message: 'sign-in lookup: app_admins lookup failed' }));
+    expect(mockExport).not.toHaveBeenCalled();
+    expect(mockAudit).not.toHaveBeenCalled();
+  });
+
+  it('a signed-out visitor is still redirected (the redirect is not swallowed)', async () => {
+    const redirect = Object.assign(new Error('NEXT_REDIRECT'), { digest: 'NEXT_REDIRECT;replace;/auth/login;307;' });
+    mockAuth.mockRejectedValue(redirect);
+    await expect(POST(request())).rejects.toBe(redirect);
+    expect(mockAlert).not.toHaveBeenCalled();
   });
 
   it('an export that cannot be recorded is not sent', async () => {

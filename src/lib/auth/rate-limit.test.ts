@@ -146,6 +146,8 @@ describe('checkAuthRateLimit: allow, block, reset', () => {
       signup_widget_report: [{ scope: 'ip', limit: 3, windowSeconds: 3600 }],
       signup_venue: [{ scope: 'user', limit: 10, windowSeconds: 3600 }],
       owner_data_export: [{ scope: 'account', limit: 3, windowSeconds: 86400 }],
+      owner_data_export_lock: [{ scope: 'account', limit: 1, windowSeconds: 60 }],
+      owner_data_export_attempt: [{ scope: 'account', limit: 10, windowSeconds: 86400 }],
       venue_closure_lock: [{ scope: 'account', limit: 1, windowSeconds: 60 }],
       venue_closure_attempt: [{ scope: 'account', limit: 5, windowSeconds: 86400 }],
     });

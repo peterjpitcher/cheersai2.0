@@ -52,8 +52,9 @@ export const OWNER_DATA_MESSAGES = {
       hours === 1 ? 'hour' : 'hours'
     }, or email ${CONTACT.email}.`;
   },
+  exportInProgress: 'A download for this venue is already being prepared. Wait a minute and try again.',
+  exportTooManyAttempts: `We could not prepare your download after several tries today. Please email ${CONTACT.email} and we will send you a copy.`,
   closureFailed: `We could not send your request. Please try again in a few minutes, or email ${CONTACT.email} to ask us to close this venue.`,
-  closureInProgress:
-    'A request to close this venue is being sent right now, from another tab or by another owner. Refresh the page in a minute to check it went through.',
+  closureInProgress: 'Wait a minute and press Send again. If it then says an owner already asked, we have your request.',
   closureTooManyAttempts: `We could not confirm your request after several tries today. Please email ${CONTACT.email} to ask us to close this venue.`,
 } as const;
