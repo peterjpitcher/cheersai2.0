@@ -23,9 +23,20 @@ export type AuthRateLimitAction =
   | 'password_reset'
   | 'signup_request'
   | 'signup_email_site'
-  | 'signup_widget_report';
+  | 'signup_widget_report'
+  | 'signup_venue';
 
-type LimitScope = 'email_ip' | 'email' | 'ip' | 'site';
+type LimitScope = 'email_ip' | 'email' | 'ip' | 'site' | 'user';
+
+/**
+ * Who an attempt is counted against. userId is the verified session's login id
+ * (never a form value); only the 'user' scope uses it.
+ */
+export interface RateLimitSubject {
+  email: string;
+  ip: string;
+  userId?: string;
+}
 
 interface LimitRule {
   scope: LimitScope;
@@ -64,6 +75,8 @@ export const AUTH_RATE_LIMIT_RULES: Record<AuthRateLimitAction, readonly LimitRu
   // Browser reports that the Turnstile widget failed: a few per IP, so the
   // report cannot be used to flood operator alerts.
   signup_widget_report: [{ scope: 'ip', limit: 3, windowSeconds: 60 * 60 }],
+  // Venue creation at /signup/venue (spec §4.4): 10 an hour per signed-in login.
+  signup_venue: [{ scope: 'user', limit: 10, windowSeconds: 60 * 60 }],
 };
 
 export type AuthRateLimitDecision =
@@ -102,13 +115,16 @@ function rateLimitHmacKey(): Buffer {
   return key;
 }
 
-/** The stored key: purpose and scope in clear, the email and IP only as an HMAC. */
+/** The stored key: purpose and scope in clear, the email, IP and login id only as an HMAC. */
 export function rateLimitKey(
   hmacKey: Buffer,
   action: AuthRateLimitAction,
   scope: LimitScope,
-  subject: { email: string; ip: string },
+  subject: RateLimitSubject,
 ): string {
+  if (scope === 'user' && !subject.userId) {
+    throw new Error(`The ${action} rate limit is per login, but no login id was given.`);
+  }
   const input =
     scope === 'email_ip'
       ? `email_ip\n${subject.email}\n${subject.ip}`
@@ -116,7 +132,9 @@ export function rateLimitKey(
         ? `email\n${subject.email}`
         : scope === 'ip'
           ? `ip\n${subject.ip}`
-          : 'site';
+          : scope === 'user'
+            ? `user\n${subject.userId}`
+            : 'site';
   const digest = crypto.createHmac('sha256', hmacKey).update(input).digest('hex');
   return `${action}:${scope}:${digest}`;
 }
@@ -200,7 +218,7 @@ export type AuthRateLimitAnswer = Exclude<AuthRateLimitDecision, { status: 'unav
  */
 export async function consumeAuthRateLimit(
   action: AuthRateLimitAction,
-  subject: { email: string; ip: string },
+  subject: RateLimitSubject,
 ): Promise<AuthRateLimitAnswer> {
   const rules = AUTH_RATE_LIMIT_RULES[action];
   const hmacKey = rateLimitHmacKey();
@@ -239,7 +257,7 @@ export async function consumeAuthRateLimit(
  */
 export async function peekAuthRateLimit(
   action: AuthRateLimitAction,
-  subject: { email: string; ip: string },
+  subject: RateLimitSubject,
 ): Promise<AuthRateLimitAnswer> {
   const rules = AUTH_RATE_LIMIT_RULES[action];
   const hmacKey = rateLimitHmacKey();
@@ -265,7 +283,7 @@ export async function peekAuthRateLimit(
  */
 export async function checkAuthRateLimit(
   action: AuthRateLimitAction,
-  subject: { email: string; ip: string },
+  subject: RateLimitSubject,
 ): Promise<AuthRateLimitDecision> {
   try {
     return await consumeAuthRateLimit(action, subject);

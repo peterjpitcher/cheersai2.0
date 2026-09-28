@@ -3,12 +3,19 @@
  * calendar days overdue they are, and the rendered email (fixtures must never
  * produce undefined, NaN, Invalid Date or a blank date).
  */
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/env', () => ({ env: { client: { NEXT_PUBLIC_SITE_URL: 'https://cheers.test' }, server: { OPERATOR_ALERT_EMAIL: 'ops@cheers.test' } } }));
 vi.mock('@/lib/email/resend', () => ({ sendEmail: vi.fn() }));
+// The sign-up lists' own reads are tested in src/lib/signup/digest.test.ts; their rendering stays real.
+const mockFindSignupDigest = vi.hoisted(() => vi.fn());
+vi.mock('@/lib/signup/digest', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/signup/digest')>()),
+  findSignupDigest: (...args: unknown[]) => mockFindSignupDigest(...args),
+}));
 
 import { sendEmail } from '@/lib/email/resend';
+import type { SignupDigest } from '@/lib/signup/digest';
 
 import {
   findBrandsDueForDeletion,
@@ -252,6 +259,13 @@ describe('findLapsedBrands', () => {
   });
 });
 
+const EMPTY_DIGEST: SignupDigest = { alerts: [], verifiedWithoutVenue: [], noCheckout: [], trialWithoutConnection: [], neverStarted: [] };
+
+beforeEach(() => {
+  mockFindSignupDigest.mockReset();
+  mockFindSignupDigest.mockResolvedValue(EMPTY_DIGEST);
+});
+
 describe('sendPurgeReminder', () => {
   it('sends nothing when no brand is due or lapsed', async () => {
     vi.mocked(sendEmail).mockClear();
@@ -269,5 +283,61 @@ describe('sendPurgeReminder', () => {
 
     expect(await sendPurgeReminder(service, NOW)).toEqual({ due: 0, lapsed: 1, sent: true });
     expect(sendEmail).toHaveBeenCalledWith(expect.objectContaining({ to: 'ops@cheers.test', required: true, subject: '[Cheers operator] 1 brand has had no subscription for 90 days' }));
+  });
+});
+
+describe('sendPurgeReminder: the self-serve sign-up lists (spec §4.9)', () => {
+  const DIGEST: SignupDigest = {
+    ...EMPTY_DIGEST,
+    alerts: [{ kind: 'provisioning', rows: 2, lastAt: '2026-09-27T01:10:00Z' }],
+    neverStarted: [{ accountId: 'n1', name: 'The Quiet Inn', since: '2026-08-20T10:00:00Z', days: 38 }],
+  };
+
+  it('emails the sign-up lists even when no brand is due or lapsed', async () => {
+    vi.mocked(sendEmail).mockClear();
+    mockFindSignupDigest.mockResolvedValue(DIGEST);
+    const { service } = lapsedService([], []);
+
+    expect(await sendPurgeReminder(service, NOW)).toEqual({ due: 0, lapsed: 0, sent: true, signup: 2 });
+    const message = vi.mocked(sendEmail).mock.calls[0]![0] as { subject: string; html: string };
+    expect(message.subject).toBe('[Cheers operator] 1 kind of sign-up problem, 1 venue never started');
+    expect(message.html).toContain('Sign-up problems in the last 24 hours');
+    expect(message.html).toContain('<strong>provisioning</strong>: 2 times, last at 27/09/2026, 02:10:00 (UK time).');
+    expect(message.html).toContain('<strong>The Quiet Inn</strong>: venue set up 20 August 2026, 38 days ago.');
+    for (const bad of BAD_OUTPUT) expect(message.html).not.toContain(bad);
+  });
+
+  it('adds the sign-up lists to a reminder that already has brands in it', async () => {
+    mockFindSignupDigest.mockResolvedValue(DIGEST);
+    const { subject, html } = renderPurgeReminderEmail(
+      { dueForDeletion: [brand()], lapsed: [], signup: DIGEST },
+      'https://cheers.test',
+    );
+    expect(subject).toBe('[Cheers operator] 1 brand due for deletion, 1 kind of sign-up problem, 1 venue never started');
+    expect(html.indexOf('Due for deletion')).toBeLessThan(html.indexOf('Sign-up problems'));
+  });
+
+  it('when the sign-up lists cannot be read, the email says so and still goes out; the run carries on', async () => {
+    vi.mocked(sendEmail).mockClear();
+    mockFindSignupDigest.mockRejectedValue(new Error('self_serve_signups lookup failed: connection refused'));
+    const { service } = lapsedService([], []);
+
+    expect(await sendPurgeReminder(service, NOW)).toEqual({
+      due: 0,
+      lapsed: 0,
+      sent: true,
+      signupError: 'self_serve_signups lookup failed: connection refused',
+    });
+    const message = vi.mocked(sendEmail).mock.calls[0]![0] as { subject: string; html: string };
+    expect(message.subject).toBe('[Cheers operator] sign-up lists unavailable');
+    expect(message.html).toContain('Sign-up lists unavailable');
+    expect(message.html).toContain('connection refused');
+  });
+
+  it('sends nothing when every list, including the sign-up ones, is empty', async () => {
+    vi.mocked(sendEmail).mockClear();
+    const { service } = lapsedService([], []);
+    expect(await sendPurgeReminder(service, NOW)).toEqual({ due: 0, lapsed: 0, sent: false });
+    expect(sendEmail).not.toHaveBeenCalled();
   });
 });

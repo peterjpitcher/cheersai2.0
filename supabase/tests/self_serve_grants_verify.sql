@@ -10,6 +10,10 @@
 --   it), public.run_data_retention (still service role only after its
 --   restatement) and public.increment_rate_limit (EXECUTE revoked from
 --   authenticated).
+--   PR 6 (migration 20260928190000): public.provision_self_serve_brand
+--   (SECURITY INVOKER: service_role can already write every table it touches)
+--   and its helper public.self_serve_login_confirmation (SECURITY DEFINER: it
+--   reads auth.users, which service_role cannot).
 --
 -- Read-only: it reads the catalogue and nothing else, so it is safe to run on a
 -- local rebuild AND against production after each migration. A clean run ends
@@ -27,12 +31,15 @@ declare
     'public.record_self_serve_signup_request(uuid)',
     'public.delete_stale_self_serve_login(uuid)',
     'public.run_data_retention(boolean)',
-    'public.increment_rate_limit(uuid, text, text, timestamp with time zone, integer)'
+    'public.increment_rate_limit(uuid, text, text, timestamp with time zone, integer)',
+    'public.provision_self_serve_brand(uuid, text, text, text, text)',
+    'public.self_serve_login_confirmation(uuid)'
   ];
   -- SECURITY DEFINER functions this work wrote (they read, or delete from, auth.users): empty search_path.
   v_definer_functions constant text[] := array[
     'public.delete_stale_self_serve_login(uuid)',
-    'public.run_data_retention(boolean)'
+    'public.run_data_retention(boolean)',
+    'public.self_serve_login_confirmation(uuid)'
   ];
   -- Internal functions: only their owner (and so the definer functions above) may run them.
   v_internal_functions constant text[] := array[
@@ -44,7 +51,8 @@ declare
     'public.record_team_invitation(uuid, uuid, text, uuid, integer, integer, boolean)',
     'public.accept_team_invitation(uuid, uuid)',
     'public.record_self_serve_signup_request(uuid)',
-    'public.self_serve_login_is_stale(uuid, timestamp with time zone)'
+    'public.self_serve_login_is_stale(uuid, timestamp with time zone)',
+    'public.provision_self_serve_brand(uuid, text, text, text, text)'
   ];
   -- Tables only service_role may touch, with RLS on.
   v_tables constant text[] := array['public.auth_rate_limits', 'public.team_invitations', 'public.self_serve_signups'];

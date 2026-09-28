@@ -23,6 +23,7 @@ export type AdminAction =
   | 'purge_brand'
   | 'operator_publish_failure_alert'
   | 'operator_signup_alert'
+  | 'self_serve_venue_created'
   | 'team_invite'
   | 'team_remove'
   | 'team_role_change'
