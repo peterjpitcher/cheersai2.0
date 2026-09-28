@@ -12,8 +12,8 @@ import { listTeam, listTeamInvitations } from "@/app/(app)/settings/team-actions
 import { TeamSection } from "@/features/settings/team-section";
 import { BillingSection, type CheckoutReturn } from "@/features/settings/billing-section";
 import { BILLING_TRIAL_DAYS, billingPlanOptions, getBillingOverview } from "@/lib/billing/overview";
-import { CONTACT } from "@/lib/legal/company";
 import { getSelfServeSignupSwitch } from "@/lib/signup/switch";
+import { VenueDataSection } from "@/features/settings/venue-data-section";
 
 interface SettingsPageProps {
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
@@ -49,10 +49,11 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
     getSelfServeSignupSwitch(),
   ]);
 
-  // Decision P10 (28 September 2026): until owners get their own export and
-  // close buttons, Settings tells them how to ask. Shown only while self-serve
-  // sign-up is on, so nothing changes for existing brands before opening.
-  const showDataRequestLine = role === "owner" && signupSwitch === "open";
+  // Owners' "Download my data" and "Ask us to close this venue" (spec section 5,
+  // "Later (P10)"; they replace P10's "email us" line). Shown only while
+  // self-serve sign-up is on, so nothing changes for existing brands before
+  // opening; the export route and the closure action check both again.
+  const showVenueDataSection = role === "owner" && signupSwitch === "open";
 
   // Comped brands (our own venues) only ever see "Included, no
   // billing", so their Billing section sits at the bottom; for everyone else it
@@ -182,14 +183,18 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
 
       {billingFirst ? null : billingSection}
 
-      {showDataRequestLine ? (
-        <p className="text-sm" style={{ color: "var(--c-ink-3)" }}>
-          To close this venue or get a copy of your data, email{" "}
-          <a href={`mailto:${CONTACT.email}`} className="font-semibold underline" style={{ color: "var(--c-orange)" }}>
-            {CONTACT.email}
-          </a>
-          .
-        </p>
+      {showVenueDataSection ? (
+        <section
+          id="your-data"
+          className="rounded-xl p-6 md:p-8"
+          style={{
+            backgroundColor: "var(--c-card)",
+            border: "1px solid var(--c-line)",
+            boxShadow: "var(--sh-sm)",
+          }}
+        >
+          <VenueDataSection accountId={accountId} />
+        </section>
       ) : null}
     </div>
   );
