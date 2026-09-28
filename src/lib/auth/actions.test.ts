@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -21,16 +21,26 @@ vi.mock('@/lib/supabase/server', () => ({
 
 const mockGenerateLink = vi.fn();
 const mockGetUserById = vi.fn();
-/** The service client's `from(table).select(columns).eq(column, value).maybeSingle()` answer. */
-const mockSnapshotLookup = vi.fn<(query: { table: string; columns: string; column: string; value: string }) => unknown>();
+const mockDeleteUser = vi.fn();
+type TableQuery = { table: string; columns: string; column: string; value: string };
+/** `from('user_auth_snapshot').select(columns).eq(column, value).maybeSingle()`. */
+const mockSnapshotLookup = vi.fn<(query: TableQuery) => unknown>();
+/** `from(table).select(columns, { count, head }).eq(column, value)` for any other table: `{ count, error }`. */
+const mockCountLookup = vi.fn<(query: TableQuery) => unknown>(async () => ({ count: 0, error: null }));
 vi.mock('@/lib/supabase/service', () => ({
   createServiceSupabaseClient: vi.fn(() => ({
-    auth: { admin: { generateLink: mockGenerateLink, getUserById: mockGetUserById } },
+    auth: { admin: { generateLink: mockGenerateLink, getUserById: mockGetUserById, deleteUser: mockDeleteUser } },
     from: (table: string) => ({
       select: (columns: string) => ({
-        eq: (column: string, value: string) => ({
-          maybeSingle: async () => mockSnapshotLookup({ table, columns, column, value }),
-        }),
+        eq: (column: string, value: string) => {
+          const query = { table, columns, column, value };
+          const answer = () => (table === 'user_auth_snapshot' ? mockSnapshotLookup(query) : mockCountLookup(query));
+          return {
+            maybeSingle: async () => answer(),
+            then: (resolve: (value: unknown) => unknown, reject: (reason: unknown) => unknown) =>
+              Promise.resolve(answer()).then(resolve, reject),
+          };
+        },
       }),
     }),
   })),
@@ -75,9 +85,16 @@ function form(values: Record<string, string>): FormData {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.unstubAllEnvs();
   mockEnv.client.NEXT_PUBLIC_SITE_URL = 'https://cheers.orangejelly.co.uk';
   mockCheckRateLimit.mockResolvedValue({ status: 'allowed' });
+  mockCountLookup.mockResolvedValue({ count: 0, error: null });
+  mockDeleteUser.mockResolvedValue({ data: {}, error: null });
   vi.spyOn(console, 'error').mockImplementation(() => {});
+});
+
+afterEach(() => {
+  vi.unstubAllEnvs();
 });
 
 // ---------------------------------------------------------------------------
@@ -207,13 +224,22 @@ describe('sendMagicLink', () => {
     expectNothingSent();
   });
 
-  it('fails closed and tells us when the site address is not configured', async () => {
+  it("fails closed in production on env.ts's http://localhost:3000 fallback (NEXT_PUBLIC_SITE_URL unset)", async () => {
     knownConfirmedLogin();
-    mockEnv.client.NEXT_PUBLIC_SITE_URL = undefined;
+    vi.stubEnv('NODE_ENV', 'production');
+    mockEnv.client.NEXT_PUBLIC_SITE_URL = 'http://localhost:3000';
     const result = await sendMagicLink(form({ email: OWNER }));
     expect(result).toEqual({ error: expect.stringMatching(COULD_NOT_FINISH) });
-    expect(reportedError().message).toContain('NEXT_PUBLIC_SITE_URL');
+    expect(reportedError().message).toContain('NEXT_PUBLIC_SITE_URL is missing or not the deployed https address ("http://localhost:3000")');
+    expect(mockSnapshotLookup).not.toHaveBeenCalled();
     expectNothingSent();
+  });
+
+  it('accepts the local dev address outside production, so the dev server still sends links', async () => {
+    knownConfirmedLogin();
+    mockEnv.client.NEXT_PUBLIC_SITE_URL = 'http://localhost:3000';
+    expect(await sendMagicLink(form({ email: OWNER }))).toEqual({ success: true });
+    expect((mockSendEmail.mock.calls[0]?.[0] as { html: string }).html).toContain('http://localhost:3000/auth/confirm?');
   });
 
   it('fails closed and tells us when the address lookup fails', async () => {
@@ -243,15 +269,93 @@ describe('sendMagicLink', () => {
     expect(mockSendEmail).not.toHaveBeenCalled();
   });
 
-  it('never emails a link made for another login, and tells us', async () => {
+  describe('when generateLink answers for another login (the looked-up one was deleted in between)', () => {
+    const STRAY_ID = '9d2f4c1a-7b3e-4a60-8c15-3e7f0b2d6a94';
+
+    function generateLinkMadeANewLogin(overrides: Record<string, unknown> = {}): void {
+      mockGenerateLink.mockResolvedValue({
+        data: {
+          user: {
+            id: STRAY_ID,
+            created_at: new Date(Date.now() - 30_000).toISOString(),
+            email_confirmed_at: null,
+            last_sign_in_at: null,
+            ...overrides,
+          },
+          properties: { hashed_token: 'tok', verification_type: 'signup' },
+        },
+        error: null,
+      });
+    }
+
+    it('never emails the link, removes the stray login, and says so in the alert', async () => {
+      knownConfirmedLogin();
+      generateLinkMadeANewLogin();
+      const result = await sendMagicLink(form({ email: OWNER }));
+
+      expect(result).toEqual({ error: expect.stringMatching(COULD_NOT_FINISH) });
+      expect(mockSendEmail).not.toHaveBeenCalled();
+      expect(mockCountLookup).toHaveBeenCalledWith(expect.objectContaining({ table: 'account_members', column: 'user_id', value: STRAY_ID }));
+      expect(mockCountLookup).toHaveBeenCalledWith(expect.objectContaining({ table: 'team_invitations', column: 'user_id', value: STRAY_ID }));
+      expect(mockDeleteUser).toHaveBeenCalledWith(STRAY_ID);
+      expect(reportedError().message).toContain(`a stray login (${STRAY_ID}) was created and has been removed`);
+    });
+
+    it('says the stray login could not be removed when the delete fails', async () => {
+      knownConfirmedLogin();
+      generateLinkMadeANewLogin();
+      mockDeleteUser.mockResolvedValue({ data: null, error: { message: 'Database error deleting user' } });
+      const result = await sendMagicLink(form({ email: OWNER }));
+
+      expect(result).toEqual({ error: expect.stringMatching(COULD_NOT_FINISH) });
+      expect(mockSendEmail).not.toHaveBeenCalled();
+      expect(reportedError().message).toContain(
+        `a stray login (${STRAY_ID}) was created and could NOT be removed (deleteUser failed: Database error deleting user); delete it in Supabase Auth`,
+      );
+    });
+
+    it('does not delete when it cannot first check the login for access', async () => {
+      knownConfirmedLogin();
+      generateLinkMadeANewLogin();
+      mockCountLookup.mockResolvedValue({ count: null, error: { message: 'connection refused' } });
+      await sendMagicLink(form({ email: OWNER }));
+      expect(mockDeleteUser).not.toHaveBeenCalled();
+      expect(reportedError().message).toContain('could NOT be removed (could not check it before deleting it: connection refused)');
+    });
+
+    it('leaves a login that has brand access or an invitation', async () => {
+      knownConfirmedLogin();
+      generateLinkMadeANewLogin();
+      mockCountLookup.mockResolvedValue({ count: 1, error: null });
+      await sendMagicLink(form({ email: OWNER }));
+      expect(mockDeleteUser).not.toHaveBeenCalled();
+      expect(reportedError().message).toContain(`login ${STRAY_ID} was left in place (it has brand access or an invitation)`);
+    });
+
+    it('leaves a login that was not just created, or is confirmed', async () => {
+      knownConfirmedLogin();
+      generateLinkMadeANewLogin({ created_at: '2026-01-05T09:00:00Z' });
+      await sendMagicLink(form({ email: OWNER }));
+      generateLinkMadeANewLogin({ email_confirmed_at: '2026-09-28T09:00:00Z' });
+      await sendMagicLink(form({ email: OWNER }));
+      expect(mockDeleteUser).not.toHaveBeenCalled();
+      expect(mockSendEmail).not.toHaveBeenCalled();
+      for (const [, error] of mockReport.mock.calls as Array<[string, Error]>) {
+        expect(error.message).toContain(`login ${STRAY_ID} was left in place (not just created, or already confirmed or used)`);
+      }
+    });
+  });
+
+  it('never emails a link for the right login with the wrong type, and deletes nothing', async () => {
     knownConfirmedLogin();
     mockGenerateLink.mockResolvedValue({
-      data: { user: { id: 'a-new-login' }, properties: { hashed_token: 'tok', verification_type: 'signup' } },
+      data: { user: { id: LOGIN_ID }, properties: { hashed_token: 'tok', verification_type: 'signup' } },
       error: null,
     });
     const result = await sendMagicLink(form({ email: OWNER }));
     expect(result).toEqual({ error: expect.stringMatching(COULD_NOT_FINISH) });
-    reportedError();
+    expect(reportedError().message).toContain('verification type signup, not magiclink');
+    expect(mockDeleteUser).not.toHaveBeenCalled();
     expect(mockSendEmail).not.toHaveBeenCalled();
   });
 
@@ -414,6 +518,17 @@ describe('requestPasswordReset', () => {
     expect(result.success).toBeUndefined();
     expect(result.error).toMatch(COULD_NOT_FINISH);
     expect(mockReport).toHaveBeenCalledWith('password_reset', expect.any(Error));
+  });
+
+  it("fails closed in production on env.ts's http://localhost:3000 fallback, without making a link", async () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    mockEnv.client.NEXT_PUBLIC_SITE_URL = 'http://localhost:3000';
+    const result = await requestPasswordReset(form({ email: 'owner@venue.test' }));
+    expect(result).toEqual({ error: expect.stringMatching(COULD_NOT_FINISH) });
+    expect(mockReport).toHaveBeenCalledWith('password_reset', expect.any(Error));
+    expect((mockReport.mock.calls[0]?.[1] as Error).message).toContain('"http://localhost:3000"');
+    expect(mockGenerateLink).not.toHaveBeenCalled();
+    expect(mockSendEmail).not.toHaveBeenCalled();
   });
 
   it('counts the request against the email and the visitor IP', async () => {
