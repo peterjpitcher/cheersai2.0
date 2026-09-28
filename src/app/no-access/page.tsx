@@ -1,7 +1,10 @@
+import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
 import { signOut } from '@/lib/auth/actions';
 import { getCurrentUser } from '@/lib/auth/server';
+import { createServiceSupabaseClient } from '@/lib/supabase/service';
+import { INVITATIONS_PATH, listPendingInvitationsForUser } from '@/lib/team/invitations';
 
 /**
  * Shown to an authenticated user who has not been assigned any brand.
@@ -20,6 +23,15 @@ export default async function NoAccessPage() {
     redirect('/');
   }
 
+  // Someone invited to a brand who has not accepted yet has no brand, so show
+  // the way to their invitations here. A lookup failure just hides the link.
+  let invitationCount = 0;
+  try {
+    invitationCount = (await listPendingInvitationsForUser(createServiceSupabaseClient(), user.id)).length;
+  } catch (error) {
+    console.error('[no-access] team invitations lookup failed', error);
+  }
+
   return (
     <main className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center gap-6 p-6 text-center">
       <div className="space-y-2">
@@ -29,6 +41,15 @@ export default async function NoAccessPage() {
           access, then reload this page.
         </p>
       </div>
+      {invitationCount > 0 ? (
+        <Link
+          href={INVITATIONS_PATH}
+          className="rounded-full px-4 py-2 text-sm font-medium text-white"
+          style={{ backgroundColor: 'var(--c-orange)' }}
+        >
+          {invitationCount === 1 ? 'You have an invitation waiting' : `You have ${invitationCount} invitations waiting`}
+        </Link>
+      ) : null}
       <form action={signOut}>
         <button
           type="submit"

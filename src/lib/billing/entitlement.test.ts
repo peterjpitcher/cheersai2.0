@@ -104,7 +104,7 @@ describe('pastDueGraceEndsAt', () => {
 describe('capability matrix (decision D3)', () => {
   it('paying, trialing, grace and comped brands can do everything', () => {
     for (const state of ['active', 'trialing', 'past_due_grace', 'comped'] as const) {
-      for (const capability of ['read', 'create', 'publish', 'billing', 'export', 'switch_brand'] as const) {
+      for (const capability of ['read', 'create', 'publish', 'billing', 'export', 'switch_brand', 'invite'] as const) {
         expect(can(state, capability)).toBe(true);
       }
     }
@@ -118,11 +118,13 @@ describe('capability matrix (decision D3)', () => {
       expect(can(state, 'switch_brand')).toBe(true);
       expect(can(state, 'create')).toBe(false);
       expect(can(state, 'publish')).toBe(false);
+      expect(can(state, 'invite')).toBe(false);
     }
   });
 
   it('archived brands get nothing', () => {
     expect(can('archived', 'read')).toBe(false);
+    expect(can('archived', 'invite')).toBe(false);
   });
 });
 

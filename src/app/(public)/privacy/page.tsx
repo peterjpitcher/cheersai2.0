@@ -127,6 +127,10 @@ const RETENTION_ROWS = [
     "Expired temporary security records, such as sign-in rate limits and expired sign-in states",
     "Deleted within a day of expiring.",
   ],
+  [
+    "Team invitations (who was invited to a venue, by whom, and whether they accepted)",
+    "Deleted a day after the invitation is accepted, declined, cancelled or expires. Invitations expire 7 days after they are sent.",
+  ],
   ["Hosting logs", "1 day."],
   ["Database logs", "7 days."],
   ["Database backups", "7 days."],

@@ -43,9 +43,10 @@ export async function isSuperAdmin(service: SupabaseClient, userId: string): Pro
 }
 
 /**
- * Load the brands a user can access, ordered by name for a stable default.
- * Super-admins (god-mode) can reach every non-archived brand; everyone else
- * sees only brands they are a member of.
+ * Load the brands a user can access, ordered by name (the switcher's display
+ * order). Super-admins (god-mode) can reach every non-archived brand; everyone
+ * else sees only brands they are a member of. Each brand carries when the user
+ * joined it, which decides the default brand (resolveActiveBrand).
  */
 export async function loadBrands(
   service: SupabaseClient,
@@ -55,6 +56,23 @@ export async function loadBrands(
   let rows: AccountRow[];
   // Super-admins act as owner in every brand (god mode).
   const roleByAccount = new Map<string, BrandRole>();
+  const joinedAtByAccount = new Map<string, string>();
+
+  // The user's own memberships, for everyone: a super-admin's own brands come
+  // before the brands they only see as super-admin when choosing a default.
+  const { data: memberships, error: membershipError } = await service
+    .from('account_members')
+    .select('account_id, role, created_at')
+    .eq('user_id', userId);
+  if (membershipError) throw new AuthDependencyError('account_members lookup failed', membershipError);
+
+  const memberRows = (memberships ?? []) as Array<{ account_id: string; role: string | null; created_at: string | null }>;
+  for (const m of memberRows) {
+    // Anything other than an explicit member role is treated as owner, matching
+    // the column default (D4: every existing membership became an owner).
+    roleByAccount.set(m.account_id, m.role === 'member' ? 'member' : 'owner');
+    if (m.created_at) joinedAtByAccount.set(m.account_id, m.created_at);
+  }
 
   if (superAdmin) {
     const { data, error } = await service
@@ -65,18 +83,6 @@ export async function loadBrands(
     if (error) throw new AuthDependencyError('accounts lookup failed', error);
     rows = (data as AccountRow[] | null) ?? [];
   } else {
-    const { data: memberships, error: membershipError } = await service
-      .from('account_members')
-      .select('account_id, role')
-      .eq('user_id', userId);
-    if (membershipError) throw new AuthDependencyError('account_members lookup failed', membershipError);
-
-    const memberRows = (memberships ?? []) as Array<{ account_id: string; role: string | null }>;
-    for (const m of memberRows) {
-      // Anything other than an explicit member role is treated as owner, matching
-      // the column default (D4: every existing membership became an owner).
-      roleByAccount.set(m.account_id, m.role === 'member' ? 'member' : 'owner');
-    }
     const ids = memberRows.map((m) => m.account_id);
     if (ids.length === 0) return [];
 
@@ -100,13 +106,22 @@ export async function loadBrands(
       managementImport: row.management_import_enabled === true,
     },
     role: superAdmin ? 'owner' : roleByAccount.get(row.id) ?? 'member',
+    joinedAt: joinedAtByAccount.get(row.id) ?? null,
   }));
 }
 
+function joinedTime(brand: BrandSummary): number | null {
+  if (!brand.joinedAt) return null;
+  const time = Date.parse(brand.joinedAt);
+  return Number.isNaN(time) ? null : time;
+}
+
 /**
- * Choose the active brand: the cookie-selected brand if the user is still a
- * member of it, otherwise the first brand by stable order. Null when the user
- * has no accessible brands.
+ * Choose the active brand: the cookie-selected brand if the user can still
+ * reach it; otherwise the brand the user joined first (spec §4.6), so a new
+ * membership never changes anyone's default. A super-admin's own memberships
+ * come before brands they only see as super-admin; with none, the first by
+ * name. Ties keep the name order. Null when the user has no accessible brands.
  */
 export function resolveActiveBrand(
   brands: BrandSummary[],
@@ -117,5 +132,14 @@ export function resolveActiveBrand(
     const match = brands.find((b) => b.accountId === cookieValue);
     if (match) return match;
   }
-  return brands[0];
+  let first: BrandSummary | null = null;
+  let firstTime = Number.POSITIVE_INFINITY;
+  for (const brand of brands) {
+    const time = joinedTime(brand);
+    if (time !== null && time < firstTime) {
+      first = brand;
+      firstTime = time;
+    }
+  }
+  return first ?? brands[0];
 }

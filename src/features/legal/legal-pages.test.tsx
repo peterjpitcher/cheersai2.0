@@ -37,7 +37,7 @@ describe.each(PAGES)("the $name page", ({ Page, title }) => {
     const { container, text } = renderPage();
     expect(container.querySelector("h1")?.textContent).toBe(title);
     expect(text).toContain("Last updated 28 September 2026");
-    expect(text).toContain("Version 2026-09-28");
+    expect(text).toContain("Version 2026-09-28.2");
   });
 
   it("shows the company details and contacts", () => {
@@ -110,9 +110,12 @@ describe("the self-serve wording (spec §4.13), true while sign-up is closed", (
     ]) {
       expect(text).toContain(period);
     }
-    // Team invitations have no table or retention rule in production yet; the
-    // team-invite PR adds the row when both go live.
-    expect(text).not.toContain("Team invitations");
+  });
+
+  it("the privacy notice states how long team invitations are kept, matching the retention job's rule 13", () => {
+    const text = textOf(PrivacyPolicyPage);
+    expect(text).toContain("Team invitations");
+    expect(text).toContain("Deleted a day after the invitation is accepted, declined, cancelled or expires.");
   });
 
   it("the DPA adds no sub-processor: Cloudflare is not one", () => {
