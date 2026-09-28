@@ -13,10 +13,14 @@ export const SET_PASSWORD_PATH = '/auth/set-password';
 /**
  * Accept only same-origin relative paths for post-auth redirects.
  * Rejects absolute URLs, protocol-relative `//host` and backslash tricks.
+ * Also rejects control characters: URL parsers strip tabs and newlines, so
+ * `/\t/evil.example` would otherwise resolve to `//evil.example`.
+ * Safe to call from client components (no server imports).
  */
 export function safeNextPath(next: string | null | undefined, fallback: string): string {
   if (!next) return fallback;
   if (!next.startsWith('/') || next.startsWith('//') || next.includes('\\')) return fallback;
+  if (/[\u0000-\u001f\u007f]/.test(next)) return fallback;
   return next;
 }
 
