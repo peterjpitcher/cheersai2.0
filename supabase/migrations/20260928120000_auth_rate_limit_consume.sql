@@ -42,7 +42,7 @@
 --
 -- Rollback (revert the app first)
 --   drop function if exists public.consume_rate_limit(text, integer, integer);
---   grant all on table public.auth_rate_limits to authenticated;
+--   Leave authenticated's grants on auth_rate_limits revoked: nothing needs them.
 --
 -- Verify
 --   supabase/tests/self_serve_grants_verify.sql  read-only, safe on production

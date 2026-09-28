@@ -15,6 +15,9 @@ declare
   v_role text;
   v_priv text;
   v_proc record;
+  -- MAINTAIN is a table privilege from Postgres 17 (production and the local stack run 17).
+  v_table_privs constant text[] := array['select', 'insert', 'update', 'delete', 'truncate', 'references', 'trigger']
+    || case when current_setting('server_version_num')::int >= 170000 then array['maintain'] else array[]::text[] end;
 begin
   -- The function exists, runs as its caller and pins search_path.
   select p.prosecdef, p.proconfig into v_proc
@@ -34,7 +37,7 @@ begin
     if has_function_privilege(v_role, v_fn, 'execute') then
       raise exception '% can execute %', v_role, v_fn;
     end if;
-    foreach v_priv in array array['select', 'insert', 'update', 'delete', 'truncate', 'references', 'trigger'] loop
+    foreach v_priv in array v_table_privs loop
       if has_table_privilege(v_role, 'public.auth_rate_limits', v_priv) then
         raise exception '% has % on public.auth_rate_limits', v_role, v_priv;
       end if;
