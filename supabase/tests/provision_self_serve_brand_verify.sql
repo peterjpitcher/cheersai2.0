@@ -24,7 +24,14 @@ declare
   v_closed uuid := gen_random_uuid();     -- its venue was made and later deleted
   v_switch uuid := gen_random_uuid();     -- tries while the switch is off
   v_broken uuid := gen_random_uuid();     -- the brand_profile insert fails part-way through
+  v_admin uuid := gen_random_uuid();      -- an app admin: refused
+  v_invited uuid := gen_random_uuid();    -- open invitation to a live brand: refused
+  v_invited_archived uuid := gen_random_uuid(); -- open invitation only to an archived brand: gets a brand
+  v_unconfirmed uuid := gen_random_uuid(); -- email never confirmed: refused
+  v_removed uuid := gen_random_uuid();    -- made a venue, then removed from it: refused, not 'existing'
   v_other_account uuid;
+  v_archived_account uuid;
+  v_removed_account uuid;
   v_account uuid;
   v_result jsonb;
   v_row record;
@@ -42,14 +49,32 @@ begin
       (v_mismatch, 'pssb-mismatch@example.invalid', now() - interval '1 hour', now() - interval '1 hour'),
       (v_closed, 'pssb-closed@example.invalid', now() - interval '1 hour', now() - interval '1 hour'),
       (v_switch, 'pssb-switch@example.invalid', now() - interval '1 hour', now() - interval '1 hour'),
-      (v_broken, 'pssb-broken@example.invalid', now() - interval '1 hour', now() - interval '1 hour');
+      (v_broken, 'pssb-broken@example.invalid', now() - interval '1 hour', now() - interval '1 hour'),
+      (v_admin, 'pssb-admin@example.invalid', now() - interval '1 hour', now() - interval '1 hour'),
+      (v_invited, 'pssb-invited@example.invalid', now() - interval '1 hour', now() - interval '1 hour'),
+      (v_invited_archived, 'pssb-invited-archived@example.invalid', now() - interval '1 hour', now() - interval '1 hour'),
+      (v_unconfirmed, 'pssb-unconfirmed@example.invalid', now() - interval '1 hour', null),
+      (v_removed, 'pssb-removed@example.invalid', now() - interval '1 hour', now() - interval '1 hour');
     insert into public.self_serve_signups (user_id) values
-      (v_owner), (v_member), (v_mismatch), (v_switch), (v_broken);
+      (v_owner), (v_member), (v_mismatch), (v_switch), (v_broken), (v_admin), (v_invited), (v_invited_archived), (v_unconfirmed);
+    insert into public.app_admins (user_id) values (v_admin);
     insert into public.self_serve_signups (user_id, venue_created_at) values (v_closed, now() - interval '40 days');
     insert into public.accounts (business_name, email, auth_user_id)
       values ('Provision verify other venue', 'pssb-other@example.invalid', v_member) returning id into v_other_account;
     insert into public.account_members (account_id, user_id, role) values
       (v_other_account, v_member, 'member'), (v_other_account, v_no_row_member, 'member');
+    insert into public.accounts (business_name, email, auth_user_id, archived_at)
+      values ('Provision verify archived venue', 'pssb-archived@example.invalid', v_member, now() - interval '1 day')
+      returning id into v_archived_account;
+    insert into public.team_invitations (account_id, user_id, role, created_at, expires_at) values
+      (v_other_account, v_invited, 'member', now() - interval '1 hour', now() + interval '6 days'),
+      (v_archived_account, v_invited_archived, 'member', now() - interval '1 hour', now() + interval '6 days');
+    -- A venue this sign-up made, whose only other owner removed the sign-up's login.
+    insert into public.accounts (business_name, email, auth_user_id)
+      values ('Provision verify removed venue', 'pssb-removed@example.invalid', v_removed) returning id into v_removed_account;
+    insert into public.account_members (account_id, user_id, role) values (v_removed_account, v_member, 'owner');
+    insert into public.self_serve_signups (user_id, account_id, verified_at, venue_created_at)
+      values (v_removed, v_removed_account, now() - interval '2 days', now() - interval '2 days');
 
     -- 1. The happy path.
     set local role service_role;
@@ -130,6 +155,17 @@ begin
     if v_result ->> 'status' <> 'email_mismatch' then raise exception 'mismatch: got %', v_result; end if;
     v_result := public.provision_self_serve_brand(v_closed, 'Closed Bar', 'bar', 'pssb-closed@example.invalid', '2026-09-28.3');
     if v_result ->> 'status' <> 'venue_closed' then raise exception 'closed: got %', v_result; end if;
+    v_result := public.provision_self_serve_brand(v_admin, 'Admin Arms', 'pub', 'pssb-admin@example.invalid', '2026-09-28.3');
+    if v_result ->> 'status' <> 'admin' then raise exception 'admin: got %', v_result; end if;
+    v_result := public.provision_self_serve_brand(v_invited, 'Invited Inn', 'pub', 'pssb-invited@example.invalid', '2026-09-28.3');
+    if v_result ->> 'status' <> 'invited' then raise exception 'invited: got %', v_result; end if;
+    v_result := public.provision_self_serve_brand(v_unconfirmed, 'Unconfirmed Cafe', 'cafe', 'pssb-unconfirmed@example.invalid', '2026-09-28.3');
+    if v_result ->> 'status' <> 'unconfirmed' then raise exception 'unconfirmed: got %', v_result; end if;
+    v_result := public.provision_self_serve_brand(v_removed, 'Removed Bar', 'bar', 'pssb-removed@example.invalid', '2026-09-28.3');
+    if v_result ->> 'status' <> 'removed' then raise exception 'removed: expected removed, got %', v_result; end if;
+    -- An invitation to an archived brand cannot be accepted, so it does not block a venue.
+    v_result := public.provision_self_serve_brand(v_invited_archived, 'Archived Invite Hotel', 'hotel', 'pssb-invited-archived@example.invalid', '2026-09-28.3');
+    if v_result ->> 'status' <> 'created' then raise exception 'invited to an archived brand: expected created, got %', v_result; end if;
     set local role postgres;
     update public.app_flags set enabled = false where name = 'self_serve_signup';
     set local role service_role;
@@ -139,11 +175,16 @@ begin
     update public.app_flags set enabled = true where name = 'self_serve_signup';
 
     select count(*) into v_count from public.accounts
-     where auth_user_id in (v_gone, v_mismatch, v_closed, v_switch)
-        or (auth_user_id in (v_member, v_no_row_member) and id <> v_other_account);
+     where auth_user_id in (v_gone, v_mismatch, v_closed, v_switch, v_admin, v_invited, v_unconfirmed)
+        or (auth_user_id in (v_member, v_no_row_member) and id not in (v_other_account, v_archived_account))
+        or (auth_user_id = v_removed and id <> v_removed_account);
     if v_count <> 0 then raise exception 'a refused call created % brands', v_count; end if;
-    select count(*) into v_count from public.account_members where user_id in (v_gone, v_mismatch, v_closed, v_switch);
+    select count(*) into v_count from public.account_members
+     where user_id in (v_gone, v_mismatch, v_closed, v_switch, v_admin, v_invited, v_unconfirmed, v_removed);
     if v_count <> 0 then raise exception 'a refused call created % memberships', v_count; end if;
+    select count(*) into v_count from public.self_serve_signups
+     where user_id in (v_admin, v_invited, v_unconfirmed) and (account_id is not null or venue_created_at is not null);
+    if v_count <> 0 then raise exception 'a refused admin, invited or unconfirmed call filled its sign-up row'; end if;
     select count(*) into v_count from public.self_serve_signups where user_id in (v_no_row_member, v_gone);
     if v_count <> 0 then raise exception 'a refused call left a sign-up row behind'; end if;
     select count(*) into v_count from public.self_serve_signups
@@ -165,6 +206,12 @@ begin
     begin
       perform public.provision_self_serve_brand(v_switch, e'Line\nBreak Bar', 'pub', 'pssb-switch@example.invalid', '2026-09-28.3');
       raise exception 'a venue name with a line break was accepted';
+    exception when invalid_parameter_value then null;
+    end;
+    begin
+      -- U+0085 (next line): a C1 control, refused by the app's \p{Cc} too.
+      perform public.provision_self_serve_brand(v_switch, e'Next\u0085Line Inn', 'pub', 'pssb-switch@example.invalid', '2026-09-28.3');
+      raise exception 'a venue name with U+0085 was accepted';
     exception when invalid_parameter_value then null;
     end;
     begin

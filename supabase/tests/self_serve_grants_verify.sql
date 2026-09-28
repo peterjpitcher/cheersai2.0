@@ -11,7 +11,9 @@
 --   restatement) and public.increment_rate_limit (EXECUTE revoked from
 --   authenticated).
 --   PR 6 (migration 20260928190000): public.provision_self_serve_brand
---   (SECURITY INVOKER: service_role can already write every table it touches).
+--   (SECURITY INVOKER: service_role can already write every table it touches)
+--   and its helper public.self_serve_login_confirmation (SECURITY DEFINER: it
+--   reads auth.users, which service_role cannot).
 --
 -- Read-only: it reads the catalogue and nothing else, so it is safe to run on a
 -- local rebuild AND against production after each migration. A clean run ends
@@ -30,12 +32,14 @@ declare
     'public.delete_stale_self_serve_login(uuid)',
     'public.run_data_retention(boolean)',
     'public.increment_rate_limit(uuid, text, text, timestamp with time zone, integer)',
-    'public.provision_self_serve_brand(uuid, text, text, text, text)'
+    'public.provision_self_serve_brand(uuid, text, text, text, text)',
+    'public.self_serve_login_confirmation(uuid)'
   ];
   -- SECURITY DEFINER functions this work wrote (they read, or delete from, auth.users): empty search_path.
   v_definer_functions constant text[] := array[
     'public.delete_stale_self_serve_login(uuid)',
-    'public.run_data_retention(boolean)'
+    'public.run_data_retention(boolean)',
+    'public.self_serve_login_confirmation(uuid)'
   ];
   -- Internal functions: only their owner (and so the definer functions above) may run them.
   v_internal_functions constant text[] := array[
