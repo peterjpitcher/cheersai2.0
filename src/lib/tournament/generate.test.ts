@@ -75,6 +75,47 @@ describe('computeScheduledFor', () => {
     const result = computeScheduledFor(kickOff, 24, 1);
     expect(result).toEqual(new Date('2026-06-13T19:05:00Z'));
   });
+
+  describe('whole-day leads keep the kick-off clock time across a clock change', () => {
+    it('keeps a normal-day kick-off at the same clock time', () => {
+      // Sat 14 Nov 2026 15:00 GMT, 2 days before -> Thu 12 Nov 15:00 GMT.
+      expect(computeScheduledFor(new Date('2026-11-14T15:00:00Z'), 48, 0).toISOString()).toBe('2026-11-12T15:00:00.000Z');
+    });
+
+    it('posts at 20:00 BST the day before a 20:00 GMT kick-off on 25 Oct 2026', () => {
+      // Clocks go back 25 Oct 2026. Elapsed 24 hours would give 21:00 BST.
+      expect(computeScheduledFor(new Date('2026-10-25T20:00:00Z'), 24, 0).toISOString()).toBe('2026-10-24T19:00:00.000Z');
+    });
+
+    it('posts at 20:00 GMT the day before a 20:00 BST kick-off on 28 Mar 2027', () => {
+      // Clocks go forward 28 Mar 2027. Elapsed 24 hours would give 19:00 GMT.
+      expect(computeScheduledFor(new Date('2027-03-28T19:00:00Z'), 24, 0).toISOString()).toBe('2027-03-27T20:00:00.000Z');
+    });
+
+    it('keeps the clock time for a 7-day lead that crosses 25 Oct 2026', () => {
+      // Fri 30 Oct 20:00 GMT -> Fri 23 Oct 20:00 BST.
+      expect(computeScheduledFor(new Date('2026-10-30T20:00:00Z'), 168, 0).toISOString()).toBe('2026-10-23T19:00:00.000Z');
+    });
+
+    it('adds the stagger as elapsed minutes after the day lead', () => {
+      expect(computeScheduledFor(new Date('2026-10-25T20:00:00Z'), 24, 1).toISOString()).toBe('2026-10-24T19:05:00.000Z');
+    });
+
+    it('keeps a lead that is not whole days as elapsed hours', () => {
+      // 12 hours before Sun 25 Oct 08:00 GMT is Sat 24 Oct 21:00 BST, not 20:00.
+      expect(computeScheduledFor(new Date('2026-10-25T08:00:00Z'), 12, 0).toISOString()).toBe('2026-10-24T20:00:00.000Z');
+    });
+
+    it('moves a post an hour later when its clock time falls in the spring gap', () => {
+      // Mon 29 Mar 2027 01:30 BST kick-off; 01:30 on 28 Mar does not exist, so 02:30 BST.
+      expect(computeScheduledFor(new Date('2027-03-29T00:30:00Z'), 24, 0).toISOString()).toBe('2027-03-28T01:30:00.000Z');
+    });
+
+    it('keeps the kick-off offset when its clock time falls in the repeated autumn hour', () => {
+      // Mon 26 Oct 2026 01:30 GMT kick-off -> Sun 25 Oct 01:30 GMT (the second 01:30).
+      expect(computeScheduledFor(new Date('2026-10-26T01:30:00Z'), 24, 0).toISOString()).toBe('2026-10-25T01:30:00.000Z');
+    });
+  });
 });
 
 const tournament: Pick<Tournament, 'id' | 'name' | 'houseRulesText' | 'postTemplate'> = {
