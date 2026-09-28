@@ -13,7 +13,7 @@ CheersAI is an AI-assisted social media tool for hospitality venues. An owner cr
 - Tests are **Vitest 4** (node environment, `TZ` forced to Europe/London) plus **Playwright** for e2e. Not Jest.
 - No `middleware.ts` or `proxy.ts`. The auth gate is `src/app/(app)/layout.tsx` calling `getCurrentUser()` (redirects to `/auth/login` or `/no-access`); server actions and routes call `requireAuthContext()` from `src/lib/auth/server.ts`.
 - Background work: Vercel Cron (`vercel.json`, region `lhr1`) for scheduling, **Upstash QStash** for publish delivery, and two Supabase edge functions (`publish-queue`, `media-derivatives`) for the legacy and media paths.
-- Logging is **Axiom** via `createLogger()` in `src/lib/logging`. Rate limiting is Upstash Redis (`src/lib/auth/rate-limit.ts`, 5 requests per 60 seconds, skipped when the Upstash vars are unset).
+- Logging is **Axiom** via `createLogger()` in `src/lib/logging`. Auth rate limits live in our own database (`src/lib/auth/rate-limit.ts` calling `public.consume_rate_limit`, keys HMAC'd with a key derived from `TOKEN_VAULT_KEY`); a limiter failure refuses sign-in rather than allowing it.
 - `cheersai.uk` is retired and 307-redirects to the new host (`src/lib/routing/legacy-host-redirects.ts`), browser traffic only.
 
 ## Commands
@@ -64,7 +64,7 @@ tasks/                  SPEC-*.md, PLAN-*.md, ADS-PLAYBOOK-the-anchor.md
 | Meta Marketing API (paid campaigns) | `src/lib/meta/marketing.ts`, `src/lib/campaigns/` | Ads OAuth at `/api/oauth/facebook-ads`; daily `sync-meta-campaigns` and `optimise-meta-campaigns` crons |
 | OpenAI | `src/lib/ai/`, `src/app/actions/ai-generate.ts` | `OPENAI_MODEL` defaults to `gpt-4o-mini` |
 | Resend | `src/lib/email/`, `src/lib/notifications/` | failure and expiring-connection alerts |
-| Upstash QStash and Redis | `src/lib/qstash/client.ts`, `src/lib/auth/rate-limit.ts` | delivery queue; auth rate limiting |
+| Upstash QStash | `src/lib/qstash/client.ts` | delivery queue |
 | Axiom | `src/lib/logging/axiom.ts` | structured logs; silent when `AXIOM_TOKEN` is unset |
 | Supabase edge functions | `supabase/functions/publish-queue`, `media-derivatives` | legacy publish worker; image derivatives via FFmpeg WASM |
 | The Anchor management app | `src/lib/management-app/` | event artwork import; per-account settings in `management_app_connections`; allowed hosts in `MANAGEMENT_ARTWORK_ORIGINS` |
@@ -78,7 +78,7 @@ tasks/                  SPEC-*.md, PLAN-*.md, ADS-PLAYBOOK-the-anchor.md
 - Supabase: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`
 - Token vault: `TOKEN_VAULT_KEY` (exactly 64 hex characters in production), `TOKEN_VAULT_KEY_VERSION`
 - Meta: `NEXT_PUBLIC_FACEBOOK_APP_ID`, `FACEBOOK_APP_SECRET`, `INSTAGRAM_APP_ID`, `INSTAGRAM_APP_SECRET`, `INSTAGRAM_VERIFY_TOKEN`, `META_GRAPH_VERSION`, `NEXT_PUBLIC_META_GRAPH_VERSION`
-- Queues and secrets: `CRON_SECRET`, `ALERTS_SECRET`, `UPSTASH_QSTASH_TOKEN`, `UPSTASH_QSTASH_CURRENT_SIGNING_KEY`, `UPSTASH_QSTASH_NEXT_SIGNING_KEY`, `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`
+- Queues and secrets: `CRON_SECRET`, `ALERTS_SECRET`, `UPSTASH_QSTASH_TOKEN`, `UPSTASH_QSTASH_CURRENT_SIGNING_KEY`, `UPSTASH_QSTASH_NEXT_SIGNING_KEY`
 - Services: `OPENAI_API_KEY` (`OPENAI_MODEL` optional), `RESEND_API_KEY`, `RESEND_FROM`, `AXIOM_TOKEN`, `AXIOM_DATASET`, `NEXT_PUBLIC_SITE_URL` (must be the deployed domain in production)
 - Ingest and flags: `BOOKING_CONVERSION_INGEST_SECRET`, `BOOKING_CONVERSION_ACCOUNT_ID`, `MANAGEMENT_ARTWORK_ORIGINS`, `ENABLE_CONNECTION_DIAGNOSTICS`, plus the three feature flags above
 

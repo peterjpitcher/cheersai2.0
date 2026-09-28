@@ -1,27 +1,62 @@
 'use server';
 
-import { cookies } from 'next/headers';
+import { cookies, headers } from 'next/headers';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { z } from 'zod';
 
 import { env } from '@/env';
 import { ACTIVE_BRAND_COOKIE, activeBrandCookieOptions } from '@/lib/auth/active-brand';
-import { checkAuthRateLimit } from '@/lib/auth/rate-limit';
+import { reportAuthFailure } from '@/lib/auth/alerts';
+import { checkAuthRateLimit, clientIpFromHeaders, type AuthRateLimitAction } from '@/lib/auth/rate-limit';
 import { getCurrentUser } from '@/lib/auth/server';
 import { isUnknownUserOtpError } from '@/lib/auth/otp-errors';
 import { buildAuthConfirmUrl, renderPasswordResetEmail } from '@/lib/auth/email-links';
 import { destinationAfterPasswordSet } from '@/lib/billing/setup-redirect';
 import { sendEmail } from '@/lib/email/resend';
+import { CONTACT } from '@/lib/legal/company';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { createServiceSupabaseClient } from '@/lib/supabase/service';
 
 const emailSchema = z.string().email('Please enter a valid email address');
 const passwordSchema = z.string().min(1, 'Password is required');
 
+/** Shown when a dependency (the rate limiter, Supabase Auth, email) fails: the request is refused, never waved through. */
+const COULD_NOT_FINISH = `We could not finish this. Please try again in a minute, or email ${CONTACT.email}.`;
+
+/**
+ * Count this attempt against the database rate limits (spec §4.11) and turn a
+ * refusal into the message the form shows. Returns null when it may go ahead.
+ * A limiter failure refuses the request (fail closed); the operator has
+ * already been told by checkAuthRateLimit.
+ */
+async function rateLimitRefusal(action: AuthRateLimitAction, email: string): Promise<string | null> {
+  const ip = clientIpFromHeaders(await headers());
+  const decision = await checkAuthRateLimit(action, { email, ip });
+  if (decision.status === 'allowed') return null;
+  if (decision.status === 'unavailable') return COULD_NOT_FINISH;
+  if (action === 'password_sign_in') return 'Too many sign-in attempts. Please wait a minute and try again.';
+  const minutes = Math.max(1, Math.ceil(decision.retryAfterSeconds / 60));
+  return `Too many requests. Please try again in ${minutes} ${minutes === 1 ? 'minute' : 'minutes'}.`;
+}
+
+/**
+ * A wrong email or password (Supabase answers 400). Anything else, such as a
+ * network failure (status 0), Supabase's own rate limit (429) or an outage
+ * (5xx), is a dependency failure: refused and reported, not blamed on the user.
+ */
+function isWrongCredentials(error: { status?: number; code?: string }): boolean {
+  return error.status === 400 || error.code === 'invalid_credentials' || error.code === 'email_not_confirmed';
+}
+
+/** generateLink for an email with no login: Supabase answers 404 user_not_found. Anything else is a failure. */
+function isUnknownUserLinkError(error: { status?: number; code?: string }): boolean {
+  return error.status === 404 || error.code === 'user_not_found';
+}
+
 /**
  * Send a magic link to the given email address.
- * Rate-limited: 5 attempts per 60 seconds per email.
+ * Rate-limited in the database: 3 an hour per email, 10 an hour per IP.
  */
 export async function sendMagicLink(
   formData: FormData,
@@ -35,11 +70,8 @@ export async function sendMagicLink(
 
   const email = emailResult.data.trim().toLowerCase();
 
-  // Rate limit check (AUTH-08)
-  const rateLimit = await checkAuthRateLimit(email);
-  if (!rateLimit.allowed) {
-    return { error: 'Too many attempts. Please try again later.' };
-  }
+  const refusal = await rateLimitRefusal('magic_link', email);
+  if (refusal) return { error: refusal };
 
   try {
     const supabase = await createServerSupabaseClient();
@@ -62,20 +94,20 @@ export async function sendMagicLink(
     }
 
     if (error) {
-      console.error('[auth] sendMagicLink error:', error.message);
-      return { error: 'Failed to send magic link. Please try again.' };
+      await reportAuthFailure('magic_link', new Error(`signInWithOtp: ${error.code ?? error.status ?? ''} ${error.message}`));
+      return { error: COULD_NOT_FINISH };
     }
 
     return { success: true };
   } catch (error) {
-    console.error('[auth] sendMagicLink unexpected error:', error);
-    return { error: 'Failed to send magic link. Please try again.' };
+    await reportAuthFailure('magic_link', error);
+    return { error: COULD_NOT_FINISH };
   }
 }
 
 /**
  * Sign in with email and password.
- * Rate-limited: 5 attempts per 60 seconds per email.
+ * Rate-limited in the database: 5 a minute per email and IP pair, 20 a minute per IP.
  */
 export async function signInWithPassword(
   formData: FormData,
@@ -96,11 +128,8 @@ export async function signInWithPassword(
   const email = emailResult.data.trim().toLowerCase();
   const password = passwordResult.data;
 
-  // Rate limit check (AUTH-08)
-  const rateLimit = await checkAuthRateLimit(email);
-  if (!rateLimit.allowed) {
-    return { error: 'Too many attempts. Please try again later.' };
-  }
+  const refusal = await rateLimitRefusal('password_sign_in', email);
+  if (refusal) return { error: refusal };
 
   try {
     const supabase = await createServerSupabaseClient();
@@ -110,15 +139,19 @@ export async function signInWithPassword(
       password,
     });
 
-    if (error) {
-      console.error('[auth] signInWithPassword error:', error.message);
+    if (error && isWrongCredentials(error)) {
       return { error: 'Invalid email or password.' };
+    }
+
+    if (error) {
+      await reportAuthFailure('sign_in', new Error(`signInWithPassword: ${error.code ?? error.status ?? ''} ${error.message}`));
+      return { error: COULD_NOT_FINISH };
     }
 
     return { success: true };
   } catch (error) {
-    console.error('[auth] signInWithPassword unexpected error:', error);
-    return { error: 'Sign in failed. Please try again.' };
+    await reportAuthFailure('sign_in', error);
+    return { error: COULD_NOT_FINISH };
   }
 }
 
@@ -171,7 +204,9 @@ export async function setPassword(
 /**
  * Email a password reset link. The link is generated server-side and sent
  * through Resend (not the Supabase template), so its format is ours.
- * Unknown emails get the same response as known ones.
+ * Unknown emails get the same response as known ones. Also the way to get a
+ * new link when an invite has expired: a recovery link confirms the login too.
+ * Rate-limited in the database: 3 an hour per email, 10 an hour per IP.
  */
 export async function requestPasswordReset(
   formData: FormData,
@@ -182,24 +217,25 @@ export async function requestPasswordReset(
   }
   const email = emailResult.data.trim().toLowerCase();
 
-  const rateLimit = await checkAuthRateLimit(email);
-  if (!rateLimit.allowed) {
-    return { error: 'Too many attempts. Please try again later.' };
-  }
+  const refusal = await rateLimitRefusal('password_reset', email);
+  if (refusal) return { error: refusal };
 
   const siteUrl = env.client.NEXT_PUBLIC_SITE_URL;
   if (!siteUrl) {
-    console.error('[auth] requestPasswordReset: NEXT_PUBLIC_SITE_URL is not set');
-    return { error: 'We could not send the email. Please try again shortly.' };
+    await reportAuthFailure('password_reset', new Error('NEXT_PUBLIC_SITE_URL is not set'));
+    return { error: COULD_NOT_FINISH };
   }
 
   try {
     const service = createServiceSupabaseClient();
     const { data, error } = await service.auth.admin.generateLink({ type: 'recovery', email });
+    if (error && isUnknownUserLinkError(error)) {
+      // No login for this email: say nothing different.
+      return { success: true };
+    }
     const tokenHash = data?.properties?.hashed_token;
     if (error || !tokenHash) {
-      // Unknown email (or no login): say nothing different.
-      return { success: true };
+      throw new Error(`generateLink: ${error ? `${error.code ?? error.status ?? ''} ${error.message}` : 'no token returned'}`);
     }
 
     const link = buildAuthConfirmUrl({ siteUrl, tokenHash, type: 'recovery' });
@@ -207,8 +243,8 @@ export async function requestPasswordReset(
     await sendEmail({ to: email, subject: message.subject, html: message.html, required: true });
     return { success: true };
   } catch (error) {
-    console.error('[auth] requestPasswordReset failed:', error instanceof Error ? error.message : error);
-    return { error: 'We could not send the email. Please try again shortly.' };
+    await reportAuthFailure('password_reset', error);
+    return { error: COULD_NOT_FINISH };
   }
 }
 

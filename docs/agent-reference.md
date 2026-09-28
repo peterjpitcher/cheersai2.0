@@ -26,7 +26,7 @@ Historical planning residue: `.planning/` (GSD phases, archived 2026-07-03), `do
 | Styling | Tailwind CSS 4 via `@tailwindcss/postcss`, `tailwind-merge` 3, `class-variance-authority` 0.7, `clsx`, `tailwindcss-animate`, Radix UI (dialog, label, separator, slot, tooltip), `lucide-react`, `framer-motion` 12, `@dnd-kit` (core, sortable, utilities), `recharts` 3, `sonner` 2 |
 | Forms and validation | `react-hook-form` 7, `@hookform/resolvers` 5, `zod` 4 |
 | Data | `@supabase/supabase-js` 2.89, `@supabase/ssr` 0.8, `@tanstack/react-query` 5.90 (+ devtools) |
-| Background and infra | `@upstash/qstash` 2, `@upstash/ratelimit` 2, `@upstash/redis` 1, `@axiomhq/js` 1, `p-limit` 7 |
+| Background and infra | `@upstash/qstash` 2, `@axiomhq/js` 1, `p-limit` 7 |
 | External services | `openai` 6.38, `resend` 6.6, `stripe` 22.6 (API version pinned to `2026-08-26.dahlia` in `src/lib/billing/stripe.ts`) |
 | Dates | `luxon` 3.7 (`@types/luxon`) |
 | Images | `sharp` 0.34 (declared in `serverExternalPackages`), `satori` 0.26, `text-to-svg` 3 |
@@ -111,7 +111,6 @@ Route that exists but is not in `vercel.json`: `/api/cron/publish` (a 410 tombst
 | `CRON_SECRET` | Header secret for all `/api/cron/*` routes |
 | `ALERTS_SECRET` | Internal alerts webhook secret |
 | `UPSTASH_QSTASH_TOKEN`, `UPSTASH_QSTASH_CURRENT_SIGNING_KEY`, `UPSTASH_QSTASH_NEXT_SIGNING_KEY` | QStash publishing and webhook signature verification |
-| `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN` | Auth rate limiting (skipped when unset) |
 | `AXIOM_TOKEN`, `AXIOM_DATASET` | Structured logging (silent when unset) |
 | `BOOKING_CONVERSION_INGEST_SECRET`, `BOOKING_CONVERSION_ACCOUNT_ID` | Booking-conversion ingest defaults |
 | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | Stripe billing, server only and optional at build time (billing says "not set up yet" and the webhook answers 503 without them); test and live mode each have their own. In production only a live key (`sk_live_`, `rk_live_`) counts. Setup and rotation: `docs/runbooks/stripe-billing.md` |

@@ -12,9 +12,12 @@ import { Mail } from 'lucide-react';
 
 import { sendMagicLink, signInWithPassword } from '@/lib/auth/actions';
 import { safeNextPath } from '@/lib/auth/email-links';
+import { CONTACT } from '@/lib/legal/company';
 
 /** Error codes set by /auth/confirm, /auth/callback and /auth/set-password. */
 const LINK_ERRORS = new Set(['invalid_confirmation', 'confirmation_failed', 'auth_callback_failed', 'link_expired']);
+/** Set by /auth/confirm when Supabase could not check the link (it is most likely still unused). */
+const LINK_UNAVAILABLE = 'confirmation_unavailable';
 
 /**
  * Login page with email/password as the primary method.
@@ -26,6 +29,7 @@ export default function LoginPage() {
   // Same-origin paths only: `?next=` is attacker-controlled (open redirect, `javascript:`).
   const nextUrl = safeNextPath(searchParams.get('next'), '/dashboard');
   const linkError = LINK_ERRORS.has(searchParams.get('error') ?? '');
+  const linkUnavailable = searchParams.get('error') === LINK_UNAVAILABLE;
 
   const [authMode, setAuthMode] = useState<'magic-link' | 'password'>('password');
 
@@ -117,8 +121,24 @@ export default function LoginPage() {
               >
                 That link has expired or was already used.{' '}
                 <Link href="/forgot-password" className="underline">
-                  Send a new one
+                  Send it again
                 </Link>
+              </div>
+            )}
+
+            {linkUnavailable && (
+              <div
+                role="alert"
+                className="rounded-[var(--r-md)] p-3 text-sm text-center font-medium"
+                style={{
+                  backgroundColor: "var(--c-claret-soft)",
+                  color: "var(--c-claret)",
+                }}
+              >
+                We could not check your link just now. Open it from your email again in a minute, or email{' '}
+                <a href={`mailto:${CONTACT.email}`} className="underline">
+                  {CONTACT.email}
+                </a>
                 .
               </div>
             )}

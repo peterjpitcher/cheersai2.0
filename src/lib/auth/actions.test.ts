@@ -5,11 +5,17 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 // ---------------------------------------------------------------------------
 
 const mockSignInWithOtp = vi.fn();
+const mockSignInWithPassword = vi.fn();
 const mockGetUser = vi.fn();
 const mockUpdateUser = vi.fn();
 vi.mock('@/lib/supabase/server', () => ({
   createServerSupabaseClient: vi.fn(async () => ({
-    auth: { signInWithOtp: mockSignInWithOtp, getUser: mockGetUser, updateUser: mockUpdateUser },
+    auth: {
+      signInWithOtp: mockSignInWithOtp,
+      signInWithPassword: mockSignInWithPassword,
+      getUser: mockGetUser,
+      updateUser: mockUpdateUser,
+    },
   })),
 }));
 
@@ -21,16 +27,29 @@ vi.mock('@/lib/supabase/service', () => ({
 const mockSendEmail = vi.fn();
 vi.mock('@/lib/email/resend', () => ({ sendEmail: (...args: unknown[]) => mockSendEmail(...args) }));
 
-vi.mock('@/lib/auth/rate-limit', () => ({ checkAuthRateLimit: vi.fn(async () => ({ allowed: true })) }));
+type Decision = { status: 'allowed' } | { status: 'limited'; retryAfterSeconds: number } | { status: 'unavailable' };
+const mockCheckRateLimit = vi.fn<(...args: unknown[]) => Promise<Decision>>(async () => ({ status: 'allowed' }));
+vi.mock('@/lib/auth/rate-limit', () => ({
+  checkAuthRateLimit: (...args: unknown[]) => mockCheckRateLimit(...args),
+  clientIpFromHeaders: (headers: Headers) => headers.get('x-forwarded-for') ?? 'unknown',
+}));
+const mockReport = vi.fn<(...args: unknown[]) => Promise<void>>(async () => {});
+vi.mock('@/lib/auth/alerts', () => ({ reportAuthFailure: (...args: unknown[]) => mockReport(...args) }));
+
 vi.mock('@/lib/auth/server', () => ({ getCurrentUser: vi.fn() }));
 const mockDestination = vi.fn(async () => '/planner');
 vi.mock('@/lib/billing/setup-redirect', () => ({ destinationAfterPasswordSet: () => mockDestination() }));
 vi.mock('@/env', () => ({ env: { client: { NEXT_PUBLIC_SITE_URL: 'https://cheers.orangejelly.co.uk' }, server: {} } }));
-vi.mock('next/headers', () => ({ cookies: vi.fn() }));
+vi.mock('next/headers', () => ({
+  cookies: vi.fn(),
+  headers: vi.fn(async () => new Headers({ 'x-forwarded-for': '203.0.113.7' })),
+}));
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
 vi.mock('next/navigation', () => ({ redirect: vi.fn() }));
 
-const { sendMagicLink, setPassword, requestPasswordReset } = await import('@/lib/auth/actions');
+const { sendMagicLink, signInWithPassword, setPassword, requestPasswordReset } = await import('@/lib/auth/actions');
+
+const COULD_NOT_FINISH = /could not finish this.*peter@orangejelly\.co\.uk/i;
 
 function form(values: Record<string, string>): FormData {
   const fd = new FormData();
@@ -40,6 +59,7 @@ function form(values: Record<string, string>): FormData {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mockCheckRateLimit.mockResolvedValue({ status: 'allowed' });
   vi.spyOn(console, 'error').mockImplementation(() => {});
 });
 
@@ -59,9 +79,88 @@ describe('sendMagicLink', () => {
     expect(await sendMagicLink(form({ email: 'stranger@example.test' }))).toEqual({ success: true });
   });
 
-  it('shows an error for any other failure', async () => {
-    mockSignInWithOtp.mockResolvedValue({ error: { code: 'over_email_send_rate_limit', message: 'rate limited' } });
-    expect((await sendMagicLink(form({ email: 'owner@venue.test' }))).error).toBeDefined();
+  it('fails closed and tells us for any other Supabase failure', async () => {
+    mockSignInWithOtp.mockResolvedValue({ error: { code: 'over_email_send_rate_limit', status: 429, message: 'rate limited' } });
+    const result = await sendMagicLink(form({ email: 'owner@venue.test' }));
+    expect(result.success).toBeUndefined();
+    expect(result.error).toMatch(COULD_NOT_FINISH);
+    expect(mockReport).toHaveBeenCalledWith('magic_link', expect.any(Error));
+  });
+
+  it('counts the request against the email and the visitor IP', async () => {
+    mockSignInWithOtp.mockResolvedValue({ error: null });
+    await sendMagicLink(form({ email: 'Owner@Venue.test' }));
+    expect(mockCheckRateLimit).toHaveBeenCalledWith('magic_link', { email: 'owner@venue.test', ip: '203.0.113.7' });
+  });
+
+  it('refuses, without sending, when the limit is reached', async () => {
+    mockCheckRateLimit.mockResolvedValue({ status: 'limited', retryAfterSeconds: 1500 });
+    const result = await sendMagicLink(form({ email: 'owner@venue.test' }));
+    expect(result.error).toBe('Too many requests. Please try again in 25 minutes.');
+    expect(mockSignInWithOtp).not.toHaveBeenCalled();
+  });
+
+  it('fails closed, without sending, when the rate limiter is unavailable', async () => {
+    mockCheckRateLimit.mockResolvedValue({ status: 'unavailable' });
+    const result = await sendMagicLink(form({ email: 'owner@venue.test' }));
+    expect(result.success).toBeUndefined();
+    expect(result.error).toMatch(COULD_NOT_FINISH);
+    expect(mockSignInWithOtp).not.toHaveBeenCalled();
+  });
+});
+
+describe('signInWithPassword', () => {
+  const valid = () => form({ email: 'Owner@Venue.test', password: 'correct-horse-battery' });
+
+  it('signs in and counts the attempt against the email and IP pair', async () => {
+    mockSignInWithPassword.mockResolvedValue({ error: null });
+    expect(await signInWithPassword(valid())).toEqual({ success: true });
+    expect(mockCheckRateLimit).toHaveBeenCalledWith('password_sign_in', { email: 'owner@venue.test', ip: '203.0.113.7' });
+    expect(mockSignInWithPassword).toHaveBeenCalledWith({ email: 'owner@venue.test', password: 'correct-horse-battery' });
+  });
+
+  it('says "Invalid email or password" for wrong credentials, without alerting', async () => {
+    mockSignInWithPassword.mockResolvedValue({
+      error: { status: 400, code: 'invalid_credentials', message: 'Invalid login credentials' },
+    });
+    expect(await signInWithPassword(valid())).toEqual({ error: 'Invalid email or password.' });
+    expect(mockReport).not.toHaveBeenCalled();
+  });
+
+  it('fails closed and tells us when Supabase Auth cannot be reached', async () => {
+    mockSignInWithPassword.mockResolvedValue({ error: { status: 0, message: 'fetch failed' } });
+    const result = await signInWithPassword(valid());
+    expect(result.success).toBeUndefined();
+    expect(result.error).toMatch(COULD_NOT_FINISH);
+    expect(mockReport).toHaveBeenCalledWith('sign_in', expect.any(Error));
+  });
+
+  it('fails closed and tells us when the client throws', async () => {
+    mockSignInWithPassword.mockRejectedValue(new Error('boom'));
+    const result = await signInWithPassword(valid());
+    expect(result.error).toMatch(COULD_NOT_FINISH);
+    expect(mockReport).toHaveBeenCalledWith('sign_in', expect.any(Error));
+  });
+
+  it('refuses, without trying the password, when the limit is reached', async () => {
+    mockCheckRateLimit.mockResolvedValue({ status: 'limited', retryAfterSeconds: 42 });
+    expect(await signInWithPassword(valid())).toEqual({
+      error: 'Too many sign-in attempts. Please wait a minute and try again.',
+    });
+    expect(mockSignInWithPassword).not.toHaveBeenCalled();
+  });
+
+  it('fails closed, without trying the password, when the rate limiter is unavailable', async () => {
+    mockCheckRateLimit.mockResolvedValue({ status: 'unavailable' });
+    const result = await signInWithPassword(valid());
+    expect(result.success).toBeUndefined();
+    expect(result.error).toMatch(COULD_NOT_FINISH);
+    expect(mockSignInWithPassword).not.toHaveBeenCalled();
+  });
+
+  it('validates before counting an attempt', async () => {
+    expect((await signInWithPassword(form({ email: 'not-an-email', password: 'x' }))).error).toBeDefined();
+    expect(mockCheckRateLimit).not.toHaveBeenCalled();
   });
 });
 
@@ -123,16 +222,53 @@ describe('requestPasswordReset', () => {
   });
 
   it('gives the same answer for an unknown email and sends nothing', async () => {
-    mockGenerateLink.mockResolvedValue({ data: null, error: { message: 'User not found' } });
+    mockGenerateLink.mockResolvedValue({
+      data: null,
+      error: { status: 404, code: 'user_not_found', message: 'User with this email not found' },
+    });
     expect(await requestPasswordReset(form({ email: 'stranger@example.test' }))).toEqual({ success: true });
     expect(mockSendEmail).not.toHaveBeenCalled();
+    expect(mockReport).not.toHaveBeenCalled();
   });
 
-  it('fails closed with a visible error when the email cannot be sent', async () => {
+  it('fails closed and tells us when Supabase cannot make the link', async () => {
+    mockGenerateLink.mockResolvedValue({ data: null, error: { status: 500, message: 'Database error' } });
+    const result = await requestPasswordReset(form({ email: 'owner@venue.test' }));
+    expect(result.success).toBeUndefined();
+    expect(result.error).toMatch(COULD_NOT_FINISH);
+    expect(mockSendEmail).not.toHaveBeenCalled();
+    expect(mockReport).toHaveBeenCalledWith('password_reset', expect.any(Error));
+  });
+
+  it('fails closed with a visible error, and tells us, when the email cannot be sent', async () => {
     mockGenerateLink.mockResolvedValue({ data: { properties: { hashed_token: 'tok' } }, error: null });
     mockSendEmail.mockRejectedValue(new Error('Resend down'));
     const result = await requestPasswordReset(form({ email: 'owner@venue.test' }));
     expect(result.success).toBeUndefined();
-    expect(result.error).toMatch(/could not send/i);
+    expect(result.error).toMatch(COULD_NOT_FINISH);
+    expect(mockReport).toHaveBeenCalledWith('password_reset', expect.any(Error));
+  });
+
+  it('counts the request against the email and the visitor IP', async () => {
+    mockGenerateLink.mockResolvedValue({ data: { properties: { hashed_token: 'tok' } }, error: null });
+    await requestPasswordReset(form({ email: 'Owner@Venue.test' }));
+    expect(mockCheckRateLimit).toHaveBeenCalledWith('password_reset', { email: 'owner@venue.test', ip: '203.0.113.7' });
+  });
+
+  it('refuses, without making a link, when the limit is reached', async () => {
+    mockCheckRateLimit.mockResolvedValue({ status: 'limited', retryAfterSeconds: 30 });
+    expect(await requestPasswordReset(form({ email: 'owner@venue.test' }))).toEqual({
+      error: 'Too many requests. Please try again in 1 minute.',
+    });
+    expect(mockGenerateLink).not.toHaveBeenCalled();
+  });
+
+  it('fails closed, without making a link, when the rate limiter is unavailable', async () => {
+    mockCheckRateLimit.mockResolvedValue({ status: 'unavailable' });
+    const result = await requestPasswordReset(form({ email: 'owner@venue.test' }));
+    expect(result.success).toBeUndefined();
+    expect(result.error).toMatch(COULD_NOT_FINISH);
+    expect(mockGenerateLink).not.toHaveBeenCalled();
+    expect(mockSendEmail).not.toHaveBeenCalled();
   });
 });

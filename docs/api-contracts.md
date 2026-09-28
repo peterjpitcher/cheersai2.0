@@ -3,14 +3,20 @@
 Draft definitions of primary server actions/endpoints. Adjust naming and payloads during implementation.
 
 ## 1. Authentication
-### `POST /api/auth/login`
-- Input: `{ email: string, password: string }`
-- Output: `{ success: boolean, error?: string }`
-- Notes: wraps Supabase auth signIn; rate-limit to prevent brute force.
+Sign-in runs through server actions in `src/lib/auth/actions.ts`; there are no `/api/auth/*` routes.
 
-### `POST /api/auth/logout`
+### `signInWithPassword` / `sendMagicLink` / `requestPasswordReset` (Server Actions)
+- Input: `FormData` with `email` (and `password` for sign-in)
+- Output: `{ success?: boolean; error?: string }`
+- Notes: rate-limited in the database (`public.consume_rate_limit`); a limiter or Supabase failure refuses the request with a visible error (fail closed).
+
+### `signOut` (Server Action)
 - Input: none
-- Output: `{ success: true }`
+- Output: signs out, clears the active-brand cookie, redirects to `/login`
+
+### `/auth/confirm` (page and `confirmEmailLink` Server Action)
+- GET shows "Confirm and continue" for invite and password-reset links; nothing is verified.
+- The button POST verifies the one-time token and redirects to the safe `next` path.
 
 ## 2. Settings
 ### `updateBrandProfile` (Server Action)

@@ -36,7 +36,6 @@ AI-powered social media management platform for hospitality venues. Owners creat
 | `api/cron/*` | CRON_SECRET header | Scheduled background jobs |
 | `api/webhooks/*` | QStash signature | Publish pipeline callbacks |
 | `api/oauth/*` | OAuth state | Social platform callbacks |
-| `api/auth/*` | Supabase session | Login, magic link |
 | `api/*` (other) | Mixed (session / secret) | Content, planner, feeds |
 
 ## Database Tables (27)
