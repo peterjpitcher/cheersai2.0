@@ -2,17 +2,22 @@
 
 Spec: `tasks/SPEC-self-serve-signup.md` §4.4, §4.3 (switch gate), §4.9, §4.10, P10; branch `feat/signup-venue`.
 
-- [ ] Read-only check of production's accounts, account_members, brand_profile, self_serve_signups
-      constraints, triggers and grants
-- [ ] Migration: `provision_self_serve_brand` (service role only, invoker, empty search_path, takes
-      the sign-up row lock, re-checks under it)
-- [ ] `/signup/venue` page and `createSelfServeVenue`; switch, Preview, session, limiter, email match
-- [ ] `/no-access` entry (switch on only); operator new-venue email; admin_audit record
-- [ ] Daily operator email: sign-up alerts, stuck sign-ups, never started
-- [ ] Settings email line (P10), behind the switch
-- [ ] Tests (each failing dependency), grants SQL, migration twice on the local stack
-- [ ] Browser run of the section 7 journeys on the local stack
-- [ ] ci:verify (London and UTC), PR, CI green
+- [x] Read-only check of production's accounts, account_members, brand_profile, self_serve_signups
+      constraints, triggers and grants (id has a default now; email not unique; auth_user_id NOT NULL)
+- [x] Migration `20260928190000_provision_self_serve_brand.sql` (service role only, invoker, empty
+      search_path, takes the sign-up row lock, re-checks under it; refusals write nothing)
+- [x] `/signup/venue` page and `createSelfServeVenue`; switch, Preview, session, limiter, email match
+- [x] `/no-access` entry (switch on only, writes nothing); operator new-venue email; admin_audit record
+- [x] Daily operator email: sign-up alerts, stuck sign-ups, never started (London calendar days)
+- [x] Settings email line (P10), owners, behind the switch
+- [x] Tests for each failing dependency; grants SQL; behaviour SQL; lock race script (both orders);
+      migration applied twice on the local stack; `supabase db lint` clean
+- [x] Browser run on the local stack: sign-up link to a brand; switch off mid-journey; /no-access
+      start; two tabs plus a double submit gave one brand; lock held (waited 5.5 s); clean-up first
+      (no brand, signed out); provisioning database failure (error, alert, retry works); keyboard;
+      375 px width. Local test data removed and the function dropped afterwards.
+- [ ] ci:verify, PR, CI green
+- [ ] Peter's answers to the PR 6 questions; migration to production with his yes, before the app
 
 # Planner post page actions (2026-09-27)
 
