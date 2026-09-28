@@ -11,14 +11,25 @@ const mockEnv = { server: { TOKEN_VAULT_KEY: VAULT_KEY }, client: {} };
 vi.mock('@/env', () => ({ env: mockEnv }));
 
 const mockRpc = vi.fn();
-const mockCreateService = vi.fn(() => ({ rpc: mockRpc }));
+const mockSelectIn = vi.fn();
+const mockCreateService = vi.fn(() => ({
+  rpc: mockRpc,
+  from: () => ({ select: () => ({ in: (...args: unknown[]) => mockSelectIn(...args) }) }),
+}));
 vi.mock('@/lib/supabase/service', () => ({ createServiceSupabaseClient: () => mockCreateService() }));
 
 const mockReport = vi.fn<(...args: unknown[]) => Promise<void>>(async () => {});
 vi.mock('@/lib/auth/alerts', () => ({ reportAuthFailure: (...args: unknown[]) => mockReport(...args) }));
 
-const { checkAuthRateLimit, consumeAuthRateLimit, clientIpFromHeaders, normaliseIp, rateLimitKey, AUTH_RATE_LIMIT_RULES } =
-  await import('@/lib/auth/rate-limit');
+const {
+  checkAuthRateLimit,
+  consumeAuthRateLimit,
+  peekAuthRateLimit,
+  clientIpFromHeaders,
+  normaliseIp,
+  rateLimitKey,
+  AUTH_RATE_LIMIT_RULES,
+} = await import('@/lib/auth/rate-limit');
 
 type RpcArgs = { p_key: string; p_limit: number; p_window_seconds: number };
 
@@ -132,6 +143,7 @@ describe('checkAuthRateLimit: allow, block, reset', () => {
         { scope: 'ip', limit: 10, windowSeconds: 3600 },
       ],
       signup_email_site: [{ scope: 'site', limit: 60, windowSeconds: 3600 }],
+      signup_widget_report: [{ scope: 'ip', limit: 3, windowSeconds: 3600 }],
     });
   });
 });
@@ -168,6 +180,32 @@ describe('sign-up limits (spec §4.2 step 4)', () => {
     expect(key).toMatch(/^signup_email_site:site:[0-9a-f]{64}$/);
     const other = rateLimitKey(Buffer.alloc(32, 1), 'signup_email_site', 'site', { email: 'a@b.test', ip: '192.0.2.1' });
     expect(other).toBe(rateLimitKey(Buffer.alloc(32, 1), 'signup_email_site', 'site', { email: 'c@d.test', ip: '192.0.2.2' }));
+  });
+
+  it('peeks at the site-wide ceiling without counting anything', async () => {
+    const limiter = fakeLimiter();
+    mockSelectIn.mockImplementation(async (_column: string, keys: string[]) => ({
+      data: keys.flatMap((k) => {
+        const row = limiter.rows.get(k);
+        return row ? [{ key: k, count: row.count, reset_at: new Date(row.resetAt).toISOString() }] : [];
+      }),
+      error: null,
+    }));
+
+    expect(await peekAuthRateLimit('signup_email_site', PETER)).toEqual({ status: 'allowed' });
+    for (let i = 0; i < 60; i += 1) await consumeAuthRateLimit('signup_email_site', PETER);
+    const rpcCalls = mockRpc.mock.calls.length;
+    const peeked = await peekAuthRateLimit('signup_email_site', PETER);
+    expect(peeked.status).toBe('limited');
+    expect(mockRpc.mock.calls.length).toBe(rpcCalls);
+
+    limiter.advance(3601);
+    expect(await peekAuthRateLimit('signup_email_site', PETER)).toEqual({ status: 'allowed' });
+  });
+
+  it('peek throws when the counters cannot be read, so the caller refuses', async () => {
+    mockSelectIn.mockResolvedValue({ data: null, error: { message: 'connection refused' } });
+    await expect(peekAuthRateLimit('signup_email_site', PETER)).rejects.toThrow(/auth_rate_limits read failed/);
   });
 
   it('throws instead of reporting, so the sign-up can raise its own alert', async () => {

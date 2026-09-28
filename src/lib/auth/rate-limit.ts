@@ -22,7 +22,8 @@ export type AuthRateLimitAction =
   | 'magic_link'
   | 'password_reset'
   | 'signup_request'
-  | 'signup_email_site';
+  | 'signup_email_site'
+  | 'signup_widget_report';
 
 type LimitScope = 'email_ip' | 'email' | 'ip' | 'site';
 
@@ -60,6 +61,9 @@ export const AUTH_RATE_LIMIT_RULES: Record<AuthRateLimitAction, readonly LimitRu
   // protects the shared Resend sender (auth.orangejelly.co.uk). Counted only
   // after a request has passed the per-email and per-IP limits.
   signup_email_site: [{ scope: 'site', limit: 60, windowSeconds: 60 * 60 }],
+  // Browser reports that the Turnstile widget failed: a few per IP, so the
+  // report cannot be used to flood operator alerts.
+  signup_widget_report: [{ scope: 'ip', limit: 3, windowSeconds: 60 * 60 }],
 };
 
 export type AuthRateLimitDecision =
@@ -224,6 +228,35 @@ export async function consumeAuthRateLimit(
     return Number.isFinite(seconds) ? Math.min(Math.max(seconds, 1), rule.windowSeconds) : rule.windowSeconds;
   });
   return { status: 'limited', retryAfterSeconds: Math.max(...waits) };
+}
+
+/**
+ * Whether consumeAuthRateLimit would refuse right now, without counting
+ * anything: a plain read of the counters. The sign-up uses it for the
+ * site-wide email ceiling, which it checks before creating anything and
+ * counts only once the address is known to be one Supabase accepts. Throws on
+ * any error, like consumeAuthRateLimit.
+ */
+export async function peekAuthRateLimit(
+  action: AuthRateLimitAction,
+  subject: { email: string; ip: string },
+): Promise<AuthRateLimitAnswer> {
+  const rules = AUTH_RATE_LIMIT_RULES[action];
+  const hmacKey = rateLimitHmacKey();
+  const service = createServiceSupabaseClient();
+  const keys = rules.map((rule) => rateLimitKey(hmacKey, action, rule.scope, subject));
+  const { data, error } = await service.from('auth_rate_limits').select('key, count, reset_at').in('key', keys);
+  if (error) throw new Error(`auth_rate_limits read failed: ${error.message}`);
+
+  const now = Date.now();
+  const rows = (data ?? []) as Array<{ key: string; count: number; reset_at: string }>;
+  const waits = rules.flatMap((rule, index) => {
+    const row = rows.find((candidate) => candidate.key === keys[index]);
+    const resetsAt = row ? Date.parse(row.reset_at) : Number.NaN;
+    if (!row || !Number.isFinite(resetsAt) || resetsAt <= now || row.count < rule.limit) return [];
+    return [Math.min(Math.max(Math.ceil((resetsAt - now) / 1000), 1), rule.windowSeconds)];
+  });
+  return waits.length === 0 ? { status: 'allowed' } : { status: 'limited', retryAfterSeconds: Math.max(...waits) };
 }
 
 /**
