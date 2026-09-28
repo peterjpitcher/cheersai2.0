@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition, type ReactNode } from "react";
+import { useState, useTransition, type ReactElement, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
 import { requestVenueClosure } from "@/app/(app)/settings/venue-data-actions";
@@ -28,7 +28,7 @@ type ClosureState =
   | { step: "confirming" }
   | { step: "sent"; requestedAt: string; alreadyRequested: boolean; confirmationSent: boolean };
 
-function NoticeBox({ notice }: { notice: Notice }) {
+function NoticeBox({ notice }: { notice: Notice }): ReactElement | null {
   if (!notice) return null;
   const style =
     notice.tone === "error"
@@ -41,7 +41,7 @@ function NoticeBox({ notice }: { notice: Notice }) {
   );
 }
 
-function Muted({ children }: { children: ReactNode }) {
+function Muted({ children }: { children: ReactNode }): ReactElement {
   return (
     <p className="text-sm" style={{ color: "var(--c-ink-3)" }}>
       {children}
@@ -49,7 +49,7 @@ function Muted({ children }: { children: ReactNode }) {
   );
 }
 
-function ClosureSteps() {
+function ClosureSteps(): ReactElement {
   return (
     <ol className="list-decimal space-y-1 pl-5 text-sm" style={{ color: "var(--c-ink)" }}>
       {CLOSURE_STEPS.map((step) => (
@@ -62,14 +62,14 @@ function ClosureSteps() {
 function sentMessage(state: Extract<ClosureState, { step: "sent" }>): string {
   const when = formatUkDateTime(state.requestedAt);
   if (state.alreadyRequested) {
-    return `You already asked us to close this venue${when ? ` on ${when}` : ""}. We have your request, so we have not sent another email. To change your mind, email ${CONTACT.email}.`;
+    return `An owner of this venue asked us to close it${when ? ` on ${when}` : ""}. We have that request, so we have not sent another email. To change your mind, email ${CONTACT.email}.`;
   }
   return state.confirmationSent
     ? "We have your request and have emailed you a confirmation. Nothing changes until we close the venue."
     : `We have your request, but we could not email you a confirmation. Nothing changes until we close the venue. To check, email ${CONTACT.email}.`;
 }
 
-export function VenueDataSection({ accountId }: VenueDataSectionProps) {
+export function VenueDataSection({ accountId }: VenueDataSectionProps): ReactElement {
   const [isExporting, startExport] = useTransition();
   const [isSending, startSending] = useTransition();
   const [exportNotice, setExportNotice] = useState<Notice>(null);

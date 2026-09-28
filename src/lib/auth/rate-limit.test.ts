@@ -146,6 +146,8 @@ describe('checkAuthRateLimit: allow, block, reset', () => {
       signup_widget_report: [{ scope: 'ip', limit: 3, windowSeconds: 3600 }],
       signup_venue: [{ scope: 'user', limit: 10, windowSeconds: 3600 }],
       owner_data_export: [{ scope: 'account', limit: 3, windowSeconds: 86400 }],
+      venue_closure_lock: [{ scope: 'account', limit: 1, windowSeconds: 60 }],
+      venue_closure_attempt: [{ scope: 'account', limit: 5, windowSeconds: 86400 }],
     });
   });
 });
@@ -153,7 +155,7 @@ describe('checkAuthRateLimit: allow, block, reset', () => {
 describe('owner data export limit (spec section 5, Later (P10))', () => {
   const BRAND = '55555555-5555-4555-8555-555555555555';
 
-  it('allows three exports a day per brand, whoever asks, then refuses until the day has passed', async () => {
+  it('allows three exports per brand per 24-hour window, whoever asks, then refuses until the window has passed', async () => {
     const limiter = fakeLimiter();
     for (let i = 0; i < 3; i += 1) {
       expect((await consumeAuthRateLimit('owner_data_export', { email: '', ip: '', accountId: BRAND })).status).toBe('allowed');

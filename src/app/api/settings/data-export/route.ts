@@ -1,11 +1,10 @@
 import { logAdminEvent } from '@/lib/admin/audit';
 import { brandExportFile, exportBrandData } from '@/lib/admin/offboarding';
-import { consumeAuthRateLimit } from '@/lib/auth/rate-limit';
-import { isOwner } from '@/lib/auth/roles';
-import { requireAuthContext } from '@/lib/auth/server';
+import { consumeAuthRateLimit, peekAuthRateLimit } from '@/lib/auth/rate-limit';
 import { EXPORT_REQUEST_HEADER } from '@/lib/export/download-request';
 import { exportRefusal as refuse, requestedAccountId, streamJsonDownload } from '@/lib/export/stream-response';
 import { createLogger } from '@/lib/logging';
+import { isBrandOwnerMember, ownerActionContext } from '@/lib/settings/owner-access';
 import { OWNER_DATA_MESSAGES } from '@/lib/settings/owner-data';
 import { reportSignupFailure } from '@/lib/signup/alerts';
 import { getSelfServeSignupSwitch } from '@/lib/signup/switch';
@@ -19,12 +18,20 @@ import { getSelfServeSignupSwitch } from '@/lib/signup/switch';
 // content in the same layout. Each step fails closed:
 //
 //   1. only from the Settings page (a custom header no other site can send);
-//   2. a signed-in login with an active brand (requireAuthContext);
+//   2. a signed-in login with an active brand (requireAuthContext; a failed
+//      membership lookup is an error with our address and an alert);
 //   3. the brand the page was rendered for is still the active brand;
-//   4. an owner of that brand;
+//   4. a real owner of that brand: an account_members row with role owner (a
+//      super-admin's implied owner role does not count; operators use Admin);
 //   5. the self-serve sign-up switch is on (unreadable counts as off);
-//   6. 3 exports a day per brand (database limiter; a limiter error refuses);
-//   7. build the export, record it in admin_audit (kind only), then send it.
+//   6. fewer than 3 exports for the brand in the current 24-hour window
+//      (peekAuthRateLimit: a read, nothing counted yet);
+//   7. build the export and record it in admin_audit (kind only);
+//   8. count it (consumeAuthRateLimit, atomic). A burst that passed step 6
+//      together is cut off here, so no more than 3 files leave per window;
+//      a refused one leaves only its admin_audit row. Failures before this
+//      point never use up the owner's quota;
+//   9. send it.
 //
 // A dependency failure shows the owner an error with our email address and
 // alerts the operator (reportSignupFailure). Nothing is sent unless every step
@@ -45,13 +52,28 @@ export const maxDuration = 60;
 
 const logger = createLogger('owner-export');
 
+function messageOf(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+async function failed(status: number, what: string, error: unknown, accountId: string | null): Promise<Response> {
+  await reportSignupFailure('owner_export', new Error(`${what}: ${messageOf(error)}${accountId ? ` (brand ${accountId})` : ''}`));
+  return refuse(status, OWNER_DATA_MESSAGES.exportFailed);
+}
+
 export async function POST(request: Request): Promise<Response> {
   if (request.headers.get(EXPORT_REQUEST_HEADER) !== '1') return refuse(403, OWNER_DATA_MESSAGES.exportFailed);
 
-  const ctx = await requireAuthContext();
+  const ctx = await ownerActionContext();
+  if ('unavailable' in ctx) return failed(503, 'sign-in lookup', ctx.unavailable, null);
   const accountId = ctx.accountId;
   if ((await requestedAccountId(request)) !== accountId) return refuse(409, OWNER_DATA_MESSAGES.brandSwitched);
-  if (!isOwner(ctx)) return refuse(403, OWNER_DATA_MESSAGES.ownersOnly);
+
+  try {
+    if (!(await isBrandOwnerMember(ctx.supabase, accountId, ctx.user.id))) return refuse(403, OWNER_DATA_MESSAGES.ownersOnly);
+  } catch (error) {
+    return failed(503, 'owner lookup', error, accountId);
+  }
 
   const signupSwitch = await getSelfServeSignupSwitch();
   if (signupSwitch === 'unavailable') {
@@ -60,12 +82,12 @@ export async function POST(request: Request): Promise<Response> {
   }
   if (signupSwitch !== 'open') return refuse(404, OWNER_DATA_MESSAGES.notAvailable);
 
+  const subject = { email: '', ip: '', accountId };
   try {
-    const limit = await consumeAuthRateLimit('owner_data_export', { email: '', ip: '', accountId });
+    const limit = await peekAuthRateLimit('owner_data_export', subject);
     if (limit.status === 'limited') return refuse(429, OWNER_DATA_MESSAGES.exportLimited(limit.retryAfterSeconds));
   } catch (error) {
-    await reportSignupFailure('owner_export', new Error(`limiter: ${error instanceof Error ? error.message : String(error)} (brand ${accountId})`));
-    return refuse(503, OWNER_DATA_MESSAGES.exportFailed);
+    return failed(503, 'limiter', error, accountId);
   }
 
   let file: { json: string; fileName: string };
@@ -74,8 +96,7 @@ export async function POST(request: Request): Promise<Response> {
     file = brandExportFile(accountId, await exportBrandData(ctx.supabase, accountId));
     logger.info('owner export built', { accountId, bytes: file.json.length, ms: Date.now() - started });
   } catch (error) {
-    await reportSignupFailure('owner_export', new Error(`export: ${error instanceof Error ? error.message : String(error)} (brand ${accountId})`));
-    return refuse(500, OWNER_DATA_MESSAGES.exportFailed);
+    return failed(500, 'export', error, accountId);
   }
 
   // Every export is on record before anything leaves (kind only: no names,
@@ -88,8 +109,14 @@ export async function POST(request: Request): Promise<Response> {
       detail: { kind: 'owner_download' },
     });
   } catch (error) {
-    await reportSignupFailure('owner_export', new Error(`admin_audit: ${error instanceof Error ? error.message : String(error)} (brand ${accountId})`));
-    return refuse(500, OWNER_DATA_MESSAGES.exportFailed);
+    return failed(500, 'admin_audit', error, accountId);
+  }
+
+  try {
+    const counted = await consumeAuthRateLimit('owner_data_export', subject);
+    if (counted.status === 'limited') return refuse(429, OWNER_DATA_MESSAGES.exportLimited(counted.retryAfterSeconds));
+  } catch (error) {
+    return failed(503, 'limiter', error, accountId);
   }
 
   return streamJsonDownload(file.json, file.fileName);

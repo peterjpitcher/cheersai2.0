@@ -10,7 +10,7 @@ import { CONTACT } from '@/lib/legal/company';
  * route, the closure action and the emails, so they all say the same thing.
  */
 
-/** Downloads per brand per rolling day (owner_data_export in src/lib/auth/rate-limit.ts). */
+/** Downloads per brand per 24-hour window (owner_data_export in src/lib/auth/rate-limit.ts). */
 export const OWNER_EXPORTS_PER_DAY = 3;
 
 /** A second closure request for a venue within this many hours sends no email. */
@@ -53,4 +53,7 @@ export const OWNER_DATA_MESSAGES = {
     }, or email ${CONTACT.email}.`;
   },
   closureFailed: `We could not send your request. Please try again in a few minutes, or email ${CONTACT.email} to ask us to close this venue.`,
+  closureInProgress:
+    'A request to close this venue is being sent right now, from another tab or by another owner. Refresh the page in a minute to check it went through.',
+  closureTooManyAttempts: `We could not confirm your request after several tries today. Please email ${CONTACT.email} to ask us to close this venue.`,
 } as const;

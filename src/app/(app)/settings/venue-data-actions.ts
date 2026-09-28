@@ -2,8 +2,7 @@
 
 import { env } from '@/env';
 import { logAdminEvent } from '@/lib/admin/audit';
-import { isOwner } from '@/lib/auth/roles';
-import { requireAuthContext } from '@/lib/auth/server';
+import { consumeAuthRateLimit } from '@/lib/auth/rate-limit';
 import { sendEmail } from '@/lib/email/resend';
 import { CONTACT } from '@/lib/legal/company';
 import { createLogger } from '@/lib/logging';
@@ -13,6 +12,7 @@ import {
   renderClosureConfirmationEmail,
   renderClosureRequestOperatorEmail,
 } from '@/lib/settings/closure-request';
+import { isBrandOwnerMember, ownerActionContext } from '@/lib/settings/owner-access';
 import { OWNER_DATA_MESSAGES } from '@/lib/settings/owner-data';
 import { reportSignupFailure } from '@/lib/signup/alerts';
 import { getSelfServeSignupSwitch } from '@/lib/signup/switch';
@@ -22,15 +22,24 @@ import { getSelfServeSignupSwitch } from '@/lib/signup/switch';
 // (tasks/SPEC-self-serve-signup.md, section 5, "Later (P10)"). Decision D5
 // keeps closing with the operator, so this deletes and stops nothing.
 //
-//   1. a signed-in owner of the active brand, which must be the brand the page
-//      was rendered for; the self-serve sign-up switch must be on;
+//   1. a signed-in login whose active brand is the brand the page was
+//      rendered for, with a real owner membership row for it (a super-admin's
+//      implied owner role does not count), and the sign-up switch on;
 //   2. an earlier request for this brand in the last 24 hours (admin_audit)
-//      means no email is sent again: the owner is shown when they asked;
-//   3. email the operator (required: if it cannot be sent the owner is told
+//      means nothing is sent again: the owner is shown when it was made;
+//   3. a per-brand claim (venue_closure_lock: one per 60 seconds, atomic in
+//      the database limiter), so two tabs or two owners pressing Send
+//      together send one request, and a send that timed out but was delivered
+//      is not repeated straight away. The claim is never released early;
+//   4. at most 5 sends per brand per 24-hour window (venue_closure_attempt),
+//      so a request that keeps failing to be recorded cannot flood the
+//      operator's inbox;
+//   5. admin_audit is read again under the claim;
+//   6. email the operator (required: if it cannot be sent the owner is told
 //      it failed, with our address, and the operator is alerted);
-//   4. record venue_closure_request in admin_audit (ids and kind only);
-//   5. email the owner a confirmation listing what happens next.
-// Steps 4 and 5 run once the operator has the request: a failure there is
+//   7. record venue_closure_request in admin_audit (ids and kind only);
+//   8. email the owner a confirmation listing what happens next.
+// Steps 7 and 8 run once the operator has the request: a failure there is
 // logged and alerted, and the owner is still told we have it.
 // ---------------------------------------------------------------------------
 
@@ -66,11 +75,22 @@ function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+async function failed(what: string, error: unknown, accountId: string | null): Promise<ClosureRequestResult> {
+  await reportSignupFailure('closure_request', new Error(`${what}: ${messageOf(error)}${accountId ? ` (brand ${accountId})` : ''}`));
+  return { error: OWNER_DATA_MESSAGES.closureFailed };
+}
+
 export async function requestVenueClosure(input: { accountId: string }): Promise<ClosureRequestResult> {
-  const ctx = await requireAuthContext();
+  const ctx = await ownerActionContext();
+  if ('unavailable' in ctx) return failed('sign-in lookup', ctx.unavailable, null);
   const accountId = ctx.accountId;
   if (typeof input?.accountId !== 'string' || input.accountId !== accountId) return { error: OWNER_DATA_MESSAGES.brandSwitched };
-  if (!isOwner(ctx)) return { error: OWNER_DATA_MESSAGES.ownersOnly };
+
+  try {
+    if (!(await isBrandOwnerMember(ctx.supabase, accountId, ctx.user.id))) return { error: OWNER_DATA_MESSAGES.ownersOnly };
+  } catch (error) {
+    return failed('owner lookup', error, accountId);
+  }
 
   const signupSwitch = await getSelfServeSignupSwitch();
   if (signupSwitch === 'unavailable') {
@@ -79,18 +99,36 @@ export async function requestVenueClosure(input: { accountId: string }): Promise
   }
   if (signupSwitch !== 'open') return { error: OWNER_DATA_MESSAGES.notAvailable };
 
-  const now = new Date();
+  // Step 2: the quick answer for a repeat.
   try {
-    const earlier = await findRecentClosureRequest(ctx.supabase, accountId, now);
+    const earlier = await findRecentClosureRequest(ctx.supabase, accountId, new Date());
     if (earlier) return { success: true, alreadyRequested: true, requestedAt: earlier };
   } catch (error) {
-    await reportSignupFailure('closure_request', new Error(`${messageOf(error)} (brand ${accountId})`));
-    return { error: OWNER_DATA_MESSAGES.closureFailed };
+    return failed('admin_audit lookup', error, accountId);
   }
 
+  // Steps 3 to 5: the claim, the daily cap, then the record again under the claim.
+  const subject = { email: '', ip: '', accountId };
+  try {
+    const claim = await consumeAuthRateLimit('venue_closure_lock', subject);
+    if (claim.status === 'limited') {
+      const justMade = await findRecentClosureRequest(ctx.supabase, accountId, new Date());
+      return justMade
+        ? { success: true, alreadyRequested: true, requestedAt: justMade }
+        : { error: OWNER_DATA_MESSAGES.closureInProgress };
+    }
+    const attempt = await consumeAuthRateLimit('venue_closure_attempt', subject);
+    if (attempt.status === 'limited') return { error: OWNER_DATA_MESSAGES.closureTooManyAttempts };
+    const earlier = await findRecentClosureRequest(ctx.supabase, accountId, new Date());
+    if (earlier) return { success: true, alreadyRequested: true, requestedAt: earlier };
+  } catch (error) {
+    return failed('claim', error, accountId);
+  }
+
+  const now = new Date();
   const venueName = ctx.user.businessName?.trim() || 'Your venue';
 
-  // Step 3: the operator must have the request, or the owner is told it failed.
+  // Step 6: the operator must have the request, or the owner is told it failed.
   try {
     const to = env.server.OPERATOR_ALERT_EMAIL;
     if (!to) throw new Error('OPERATOR_ALERT_EMAIL is not set');
@@ -103,11 +141,10 @@ export async function requestVenueClosure(input: { accountId: string }): Promise
     });
     await withTimeout(sendEmail({ to, subject: message.subject, html: message.html, required: true }), EMAIL_TIMEOUT_MS, 'the closure request email');
   } catch (error) {
-    await reportSignupFailure('closure_request', new Error(`operator email: ${messageOf(error)} (brand ${accountId})`));
-    return { error: OWNER_DATA_MESSAGES.closureFailed };
+    return failed('operator email', error, accountId);
   }
 
-  // Step 4: the record that makes a second request today send nothing.
+  // Step 7: the record that makes a second request today send nothing.
   try {
     await logAdminEvent({
       actorUserId: ctx.user.id,
@@ -121,7 +158,7 @@ export async function requestVenueClosure(input: { accountId: string }): Promise
     await reportSignupFailure('closure_notice', new Error(`admin_audit: ${messageOf(error)} (brand ${accountId})`));
   }
 
-  // Step 5: the owner's confirmation, to the signed-in login's own address.
+  // Step 8: the owner's confirmation, to the signed-in login's own address.
   let confirmationSent = true;
   try {
     const message = renderClosureConfirmationEmail({ venueName, requestedAt: now, contactEmail: CONTACT.email });

@@ -14,6 +14,7 @@ import { BillingSection, type CheckoutReturn } from "@/features/settings/billing
 import { BILLING_TRIAL_DAYS, billingPlanOptions, getBillingOverview } from "@/lib/billing/overview";
 import { getSelfServeSignupSwitch } from "@/lib/signup/switch";
 import { VenueDataSection } from "@/features/settings/venue-data-section";
+import { isBrandOwnerMember } from "@/lib/settings/owner-access";
 
 interface SettingsPageProps {
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
@@ -25,7 +26,7 @@ function readCheckoutReturn(value: string | string[] | undefined): CheckoutRetur
 
 export default async function SettingsPage({ searchParams }: SettingsPageProps) {
   // The management-app import is a per-brand switch, off by default.
-  const { features, role, supabase, accountId } = await requireAuthContext();
+  const { features, role, supabase, accountId, user } = await requireAuthContext();
   const params = searchParams ? await searchParams : {};
   const [settings, managementConnection, linkInBioData, mediaAssets, team, invitations, billing, signupSwitch] = await Promise.all([
     getOwnerSettings(),
@@ -52,8 +53,17 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
   // Owners' "Download my data" and "Ask us to close this venue" (spec section 5,
   // "Later (P10)"; they replace P10's "email us" line). Shown only while
   // self-serve sign-up is on, so nothing changes for existing brands before
-  // opening; the export route and the closure action check both again.
-  const showVenueDataSection = role === "owner" && signupSwitch === "open";
+  // opening, and only to a real owner: an account_members row with role owner,
+  // not a super-admin's implied owner role (operators export from Admin). The
+  // export route and the closure action check both again. A failed lookup
+  // hides the section.
+  const showVenueDataSection =
+    role === "owner" &&
+    signupSwitch === "open" &&
+    (await isBrandOwnerMember(supabase, accountId, user.id).catch((error: unknown) => {
+      console.error("[settings] owner membership lookup failed", error);
+      return false;
+    }));
 
   // Comped brands (our own venues) only ever see "Included, no
   // billing", so their Billing section sits at the bottom; for everyone else it

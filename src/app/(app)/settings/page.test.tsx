@@ -9,8 +9,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mockSwitch = vi.fn<() => Promise<'open' | 'closed' | 'unavailable'>>(async () => 'open');
 vi.mock('@/lib/signup/switch', () => ({ getSelfServeSignupSwitch: () => mockSwitch() }));
 
-const mockAuth = vi.fn(async () => ({ features: { managementImport: false }, role: 'owner', supabase: {}, accountId: 'a1' }));
+const OWNER_CTX = { features: { managementImport: false }, role: 'owner', supabase: {}, accountId: 'a1', user: { id: 'u1' }, isSuperAdmin: false };
+const mockAuth = vi.fn(async (): Promise<Record<string, unknown>> => OWNER_CTX);
 vi.mock('@/lib/auth/server', () => ({ requireAuthContext: () => mockAuth() }));
+
+// A real owner row (account_members, role owner) for the active brand.
+const mockOwnerRow = vi.fn<(...args: unknown[]) => Promise<boolean>>(async () => true);
+vi.mock('@/lib/settings/owner-access', () => ({ isBrandOwnerMember: (...args: unknown[]) => mockOwnerRow(...args) }));
 
 vi.mock('@/components/layout/PageHeader', () => ({ PageHeader: () => null }));
 vi.mock('@/features/settings/brand-voice-form', () => ({ BrandVoiceForm: () => null }));
@@ -43,7 +48,8 @@ const OLD_LINE = 'To close this venue or get a copy of your data, email';
 beforeEach(() => {
   vi.clearAllMocks();
   mockSwitch.mockResolvedValue('open');
-  mockAuth.mockResolvedValue({ features: { managementImport: false }, role: 'owner', supabase: {}, accountId: 'a1' });
+  mockAuth.mockResolvedValue(OWNER_CTX);
+  mockOwnerRow.mockResolvedValue(true);
 });
 
 describe('Settings: the owner data section (spec section 5, Later (P10))', () => {
@@ -67,10 +73,30 @@ describe('Settings: the owner data section (spec section 5, Later (P10))', () =>
     }
   });
 
+  it('checks the owner row for the active brand and the signed-in login', async () => {
+    await render();
+    expect(mockOwnerRow).toHaveBeenCalledWith({}, 'a1', 'u1');
+  });
+
   it('is not shown to a member (owners handle closing and exports, D4)', async () => {
-    mockAuth.mockResolvedValue({ features: { managementImport: false }, role: 'member', supabase: {}, accountId: 'a1' });
+    mockAuth.mockResolvedValue({ ...OWNER_CTX, role: 'member' });
     const html = await render();
     expect(html).not.toContain(SECTION);
     expect(html).not.toContain('Download my data');
+  });
+
+  it('is not shown to a super-admin without an owner row (operators export from Admin)', async () => {
+    mockAuth.mockResolvedValue({ ...OWNER_CTX, isSuperAdmin: true });
+    mockOwnerRow.mockResolvedValue(false);
+    const html = await render();
+    expect(html).not.toContain(SECTION);
+    expect(html).not.toContain('Ask us to close this venue');
+  });
+
+  it('is hidden, not broken, when the owner row cannot be read', async () => {
+    mockOwnerRow.mockRejectedValue(new Error('account_members lookup failed'));
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const html = await render();
+    expect(html).not.toContain(SECTION);
   });
 });

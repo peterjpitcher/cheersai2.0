@@ -25,7 +25,9 @@ export type AuthRateLimitAction =
   | 'signup_email_site'
   | 'signup_widget_report'
   | 'signup_venue'
-  | 'owner_data_export';
+  | 'owner_data_export'
+  | 'venue_closure_lock'
+  | 'venue_closure_attempt';
 
 type LimitScope = 'email_ip' | 'email' | 'ip' | 'site' | 'user' | 'account';
 
@@ -82,9 +84,17 @@ export const AUTH_RATE_LIMIT_RULES: Record<AuthRateLimitAction, readonly LimitRu
   // Venue creation at /signup/venue (spec §4.4): 10 an hour per signed-in login.
   signup_venue: [{ scope: 'user', limit: 10, windowSeconds: 60 * 60 }],
   // An owner's "Download my data" in Settings (spec section 5, "Later (P10)"):
-  // 3 a day per brand, whoever in the brand asks. Each one reads every post and
-  // signs every media link, so the cap keeps one brand from loading the database.
+  // 3 per brand per 24-hour window, whoever in the brand asks. Each one reads
+  // every post and signs every media link, so the cap keeps one brand from
+  // loading the database. Checked with peekAuthRateLimit before the export is
+  // built and counted only once it has been built and recorded.
   owner_data_export: [{ scope: 'account', limit: 3, windowSeconds: 24 * 60 * 60 }],
+  // "Ask us to close this venue": a per-brand claim held for 60 seconds, so
+  // two tabs or two owners pressing Send together send one request...
+  venue_closure_lock: [{ scope: 'account', limit: 1, windowSeconds: 60 }],
+  // ...and at most 5 sends per brand per 24-hour window, so a request that
+  // keeps failing to be recorded cannot flood the operator's inbox.
+  venue_closure_attempt: [{ scope: 'account', limit: 5, windowSeconds: 24 * 60 * 60 }],
 };
 
 export type AuthRateLimitDecision =
