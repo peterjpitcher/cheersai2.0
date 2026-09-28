@@ -95,7 +95,7 @@ Route that exists but is not in `vercel.json`: `/api/cron/publish` (a 410 tombst
 
 ## 6. Environment variables
 
-`src/env.ts` is the canonical, Zod-validated list. In production it throws when required variables are missing, when `TOKEN_VAULT_KEY` is not exactly 64 hex characters, or when `NEXT_PUBLIC_SITE_URL` is unset. `SKIP_ENV_VALIDATION=1` bypasses the check.
+`src/env.ts` is the canonical, Zod-validated list. In production it throws when required variables are missing, when `TOKEN_VAULT_KEY` is not exactly 64 hex characters, when `NEXT_PUBLIC_SITE_URL` is unset, or when `VERCEL_ENV` is `production` and a Turnstile key is one of Cloudflare's test keys. `SKIP_ENV_VALIDATION=1` bypasses the check.
 
 | Variable | Purpose |
 |---|---|
@@ -116,7 +116,8 @@ Route that exists but is not in `vercel.json`: `/api/cron/publish` (a 410 tombst
 | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | Stripe billing, server only and optional at build time (billing says "not set up yet" and the webhook answers 503 without them); test and live mode each have their own. In production only a live key (`sk_live_`, `rk_live_`) counts. Setup and rotation: `docs/runbooks/stripe-billing.md` |
 | `STRIPE_PRICE_STARTER_MONTHLY`, `STRIPE_PRICE_STARTER_ANNUAL`, `STRIPE_PRICE_PROFESSIONAL_MONTHLY`, `STRIPE_PRICE_PROFESSIONAL_ANNUAL` | Stripe price ids; mapped to plans only in `src/lib/billing/plans.ts` |
 | `STRIPE_PORTAL_CONFIGURATION_ID` | CheersAI's own customer portal configuration (the Stripe account is shared with the management app, whose portal is the account default) |
-| `VERCEL_ENV` | Set by Vercel (`production`, `preview`, `development`); billing refuses a test-mode Stripe key when it is `production` |
+| `VERCEL_ENV` | Set by Vercel (`production`, `preview`, `development`); billing refuses a test-mode Stripe key when it is `production`; self-serve sign-up refuses every request when it is `preview` |
+| `NEXT_PUBLIC_TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY` | Cloudflare Turnstile on `/signup`, checked by the server (`src/lib/signup/turnstile.ts`). Required in production builds: Production has the real keys for `cheers.orangejelly.co.uk`, Preview Cloudflare's always-pass test keys (`1x00000000000000000000AA`, `1x0000000000000000000000000000000AA`) |
 | `MANAGEMENT_ARTWORK_ORIGINS` | Allowed hosts for management-app artwork fetches |
 | `ENABLE_CONNECTION_DIAGNOSTICS` | Verbose integration logging |
 | `FOOD_OPTIMISATION_ENABLED`, `FOOD_AUTO_MATERIALISE_ENABLED`, `NEXT_PUBLIC_ENABLE_FOOD_BOOKING` | Feature flags, default off |

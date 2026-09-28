@@ -19,15 +19,18 @@ interface HeaderConfig {
  * Content Security Policy directive.
  * Uses unsafe-inline for styles (required by Tailwind CSS).
  * Uses unsafe-eval for scripts (required by Next.js dev mode).
+ * challenges.cloudflare.com serves the Cloudflare Turnstile script and its
+ * iframe on the /signup form (SPEC-self-serve-signup §4.12); Cloudflare's
+ * Turnstile CSP guide asks for exactly script-src and frame-src.
  */
 const contentSecurityPolicy = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-eval' 'unsafe-inline' https://vercel.live",
+  "script-src 'self' 'unsafe-eval' 'unsafe-inline' https://vercel.live https://challenges.cloudflare.com",
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob: https:",
   "font-src 'self'",
   "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.axiom.co https://*.vercel.app https://*.vercel-scripts.com https://*.vercel-insights.com https://*.vercel-analytics.com",
-  "frame-src 'self' https://vercel.live",
+  "frame-src 'self' https://vercel.live https://challenges.cloudflare.com",
   "frame-ancestors 'none'",
 ].join('; ');
 
