@@ -93,7 +93,7 @@ Form: email and a Turnstile widget only. No name (it would put a stranger's text
 1. Environment: refuse on Vercel Preview (`VERCEL_ENV=preview`), because Preview writes to the production database (F16). Switch: read `app_flags.self_serve_signup`; an error counts as off ("Sign-up is not open yet. Talk to us.").
 2. Validate the email (lower-cased).
 3. Turnstile siteverify with the secret, the visitor's IP (first `x-forwarded-for` entry, set by Vercel), `action = signup`, and in production `hostname = cheers.orangejelly.co.uk`; 5-second timeout. Missing keys, timeout or failure: refuse.
-4. Rate limits (P8): per email 3 an hour, per IP 10 an hour, and a site-wide 60 an hour that refuses and alerts the operator (it protects the shared Resend sending reputation). Keys are HMAC-SHA256 of the email or IP with `RATE_LIMIT_HMAC_KEY`, so the table holds nothing reversible.
+4. Rate limits (P8): per email 3 an hour, per IP 10 an hour, and a site-wide 60 an hour that refuses and alerts the operator (it protects the shared Resend sending reputation). Keys are HMAC-SHA256 of the email or IP with a key derived from `TOKEN_VAULT_KEY` (§4.11), so the table holds nothing reversible.
 5. Every address goes through the same first step, `generateLink({ type: 'invite', email })` with the service role, then the login's memberships are read by its user id. As built in PR 5 (28 September 2026), this replaces the `user_auth_snapshot` lookup first planned here: Supabase checks the address before it looks for a login, and refuses a confirmed login without changing anything, so the answer can never depend on who has a login.
 
 | Case | Action | Email |
@@ -240,10 +240,10 @@ from self_serve_signups x where x.requested_at >= now() - interval '30 days';
 
 ### 4.11 Rate limits (P8)
 
-- `public.consume_rate_limit(p_key text, p_limit int, p_window_seconds int)`: one atomic upsert on `auth_rate_limits` that resets an expired window and returns whether the call is allowed and when the window resets. Keys are `<purpose>:<hmac>` with `RATE_LIMIT_HMAC_KEY` (required in Production and Preview).
+- `public.consume_rate_limit(p_key text, p_limit int, p_window_seconds int)`: one atomic upsert on `auth_rate_limits` that resets an expired window and returns whether the call is allowed and when the window resets. Keys are `<purpose>:<hmac>`. As built (PR 1), the HMAC key is derived from `TOKEN_VAULT_KEY` with HKDF-SHA256 and a fixed label (`src/lib/auth/rate-limit.ts`), so there is no `RATE_LIMIT_HMAC_KEY` to set: `TOKEN_VAULT_KEY` is already required, as 64 hex characters, in every production-mode build (Production and Preview), and rotating it only restarts the counters.
 - Sign-in: 5 a minute per email and IP pair, 20 a minute per IP. Keying on the pair means nobody can lock The Anchor's login by failing from elsewhere; distributed guessing against one email is left to the 12-character password rule.
 - Magic link and reset: 3 an hour per email, 10 an hour per IP. Sign-up and invites as in §4.2, §4.4 and §4.6.
-- A limiter error refuses the action with a visible error (fail closed). So the migration must be applied, and the key set, before the code deploys, or nobody can sign in (§5).
+- A limiter error refuses the action with a visible error (fail closed). So the migration must be applied before the code deploys, or nobody can sign in (§5). The key needs no step of its own: it comes from `TOKEN_VAULT_KEY`.
 
 ### 4.12 Abuse and security
 
@@ -270,7 +270,7 @@ Each PR deploys on its own, passes `npm run ci:verify` (London and UTC), targets
 | # | Branch | What | Migration | Gate |
 |---|---|---|---|---|
 | **Stage 1 (P1: can ship now)** | | | | |
-| 1 | `fix/auth-rate-limits` | Database limiter replacing the Upstash no-op on sign-in, magic link and reset (§4.11); delete `/api/auth/login`; remove `@upstash/ratelimit` and `@upstash/redis`; `config.toml` `[auth] enable_signup = false`, `[auth.email] enable_confirmations = true` (now matching live) | `consume_rate_limit` with explicit grants | Order: migration, then `RATE_LIMIT_HMAC_KEY` in Production and Preview, then deploy; then sign in as Peter |
+| 1 | `fix/auth-rate-limits` | Database limiter replacing the Upstash no-op on sign-in, magic link and reset (§4.11); delete `/api/auth/login`; remove `@upstash/ratelimit` and `@upstash/redis`; `config.toml` `[auth] enable_signup = false`, `[auth.email] enable_confirmations = true` (now matching live) | `consume_rate_limit` with explicit grants | Order: migration, then deploy; then sign in as Peter (the HMAC key comes from `TOKEN_VAULT_KEY`, §4.11) |
 | 2 | `fix/auth-confirm-button` | `/auth/confirm` GET shows "Confirm and continue", POST verifies (§4.3) | none | none |
 | **Stage 3 (dark until opening)** | | | | |
 | 3 | `feat/front-door-and-legal` | §4.1 landing and pricing, robots, footer, redirects, login link; §4.13 wording, version bump, `legal_version` in Checkout metadata | insert `app_flags ('self_serve_signup', false)` | CTA follows the switch; notice check (§4.13) before merge |
@@ -300,7 +300,7 @@ As built in `feat/owner-export-closure` (Later, P10; no migration): Settings gai
 | When | What | Who |
 |---|---|---|
 | Done 28 Sep | Supabase: public sign-up off, confirm email on (S1). | Peter |
-| Before PR 1 deploys | `RATE_LIMIT_HMAC_KEY` (64 hex characters) in Vercel Production and Preview. | Peter, or Claude with his yes |
+| Before PR 1 deploys | Nothing to set: the limiter's HMAC key is derived from `TOKEN_VAULT_KEY` (§4.11), which Production and Preview already require. There is no `RATE_LIMIT_HMAC_KEY`. | Nobody |
 | Before PR 5 deploys | Cloudflare Turnstile widget for `cheers.orangejelly.co.uk` (managed); real keys in Production, Cloudflare's test keys in Preview. | Peter |
 | Before PR 7 deploys | Stripe: PaymentMethods read and Subscriptions write on the "CheersAI production" restricted key; `TRIAL_CARD_HASH_KEY` (64 hex characters) in Production. | Peter |
 | Before opening | Meta: App Review approved and the D7 gate passed (runbook §7). | Peter |
@@ -322,7 +322,7 @@ Self-serve Group plan and second venues for existing members; paid ads, tourname
 | Risk | Handling |
 |---|---|
 | Meta approval is slow or rejects `business_management` | Sign-up stays closed (P2); assisted launch with testers continues. |
-| PR 1 deployed before its migration or key | Build fails without the key (required in production); runbook order puts the migration first; sign in as Peter straight after deploy. |
+| PR 1 deployed before its migration | A limiter error refuses sign-in, so the runbook order puts the migration first; sign in as Peter straight after deploy. The HMAC key needs no step: it comes from `TOKEN_VAULT_KEY`, without which a production build fails. |
 | Preview writes to the production database | Sign-up actions refuse on Preview (§4.2). |
 | Wallet cards bypass the card check | Accepted; the operator sees every refusal. |
 | Resend reputation hit by abuse | Turnstile, per-IP and site-wide limits, the invite gate and cap, the venue-name rule. |
