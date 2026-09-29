@@ -159,8 +159,8 @@ describe("the self-serve wording (spec §4.13), true while sign-up is closed", (
 describe("legal page indexing follows the sign-up switch (P11)", () => {
   const METADATA = [termsMetadata, privacyMetadata, dpaMetadata];
 
-  it("keeps the site-wide noindex while the switch is off or unreadable", async () => {
-    for (const state of ["closed", "unavailable"]) {
+  it("keeps the site-wide noindex while the switch is off, unreadable or on without billing enforcement", async () => {
+    for (const state of ["closed", "enforcement_off", "unavailable"]) {
       switchState.mockResolvedValue(state);
       for (const generate of METADATA) expect((await generate()).robots).toBeUndefined();
     }

@@ -98,6 +98,35 @@ describe('reportSignupFailure', () => {
     expect(sent.html).not.toMatch(/undefined|NaN|Invalid Date/);
   });
 
+  it('alerts the switch on without billing enforcement once an hour, saying sign-up stayed closed and how to fix it', async () => {
+    fakeAlertCounter();
+    const error = new Error('app_flags.self_serve_signup is on but app_flags.billing_enforcement is off');
+    await reportSignupFailure('signup_without_enforcement', error);
+    await reportSignupFailure('signup_without_enforcement', error);
+
+    expect(mockRpc).toHaveBeenCalledWith('consume_rate_limit', {
+      p_key: 'signup_alert:kind:signup_without_enforcement',
+      p_limit: 1,
+      p_window_seconds: 3600,
+    });
+    expect(mockLogAdminEvent).toHaveBeenCalledTimes(2);
+    expect(mockLogAdminEvent.mock.calls[0]?.[0]).toEqual({
+      actorUserId: null,
+      action: 'operator_signup_alert',
+      detail: { kind: 'signup_without_enforcement', count: 1 },
+      result: 'failure',
+    });
+    expect(mockSendEmail).toHaveBeenCalledTimes(1);
+    const sent = mockSendEmail.mock.calls[0]?.[0] as { subject: string; html: string };
+    expect(sent.subject).toBe('[Cheers operator] Sign-up problem: signup_without_enforcement');
+    expect(sent.html).toContain('app_flags.billing_enforcement');
+    expect(sent.html).toContain('keeps sign-up closed');
+    expect(sent.html).toContain('billing_enforcement first, then self_serve_signup');
+    expect(sent.html).toContain('/signup says sign-up is not open yet. Nobody is shown an error.');
+    expect(sent.html).not.toContain('Visitors are shown an error');
+    expect(sent.html).not.toMatch(/undefined|NaN|Invalid Date/);
+  });
+
   it('emails once per kind per hour across servers, but records every failure', async () => {
     fakeAlertCounter();
     await reportSignupFailure('email', new Error('one'));

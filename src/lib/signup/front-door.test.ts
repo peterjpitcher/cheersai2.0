@@ -7,8 +7,8 @@ const PREVIEW = { vercelEnv: 'preview', nodeEnv: 'production' };
 const LOCAL_DEV = { vercelEnv: undefined, nodeEnv: 'development' };
 
 describe('robots.txt', () => {
-  it('disallows everything while the switch is off or unreadable, as before', () => {
-    for (const state of ['closed', 'unavailable'] as const) {
+  it('disallows everything while the switch is off, unreadable or on without billing enforcement, as before', () => {
+    for (const state of ['closed', 'enforcement_off', 'unavailable'] as const) {
       expect(robotsFor(state)).toEqual({ rules: [{ userAgent: '*', disallow: '/' }] });
     }
   });
@@ -25,6 +25,7 @@ describe('who sees the landing page', () => {
     expect(frontDoorVisible('open', PRODUCTION)).toBe(true);
     expect(frontDoorVisible('closed', PRODUCTION)).toBe(false);
     expect(frontDoorVisible('unavailable', PRODUCTION)).toBe(false);
+    expect(frontDoorVisible('enforcement_off', PRODUCTION)).toBe(false);
     // Off Vercel with a production build (for example `next start`): closed stays closed.
     expect(frontDoorVisible('closed', { nodeEnv: 'production' })).toBe(false);
   });
@@ -40,6 +41,7 @@ describe('the call to action', () => {
     expect(frontDoorCta('open')).toBe('trial');
     expect(frontDoorCta('closed')).toBe('talk');
     expect(frontDoorCta('unavailable')).toBe('talk');
+    expect(frontDoorCta('enforcement_off')).toBe('talk');
   });
 });
 
@@ -50,5 +52,6 @@ describe('page indexing', () => {
     expect(indexableWhenOpen(base, 'open')).toEqual({ ...base, robots: { index: true, follow: true } });
     expect(indexableWhenOpen(base, 'closed')).toEqual(base);
     expect(indexableWhenOpen(base, 'unavailable')).toEqual(base);
+    expect(indexableWhenOpen(base, 'enforcement_off')).toEqual(base);
   });
 });

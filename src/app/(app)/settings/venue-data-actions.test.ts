@@ -67,7 +67,7 @@ vi.mock('@/env', () => ({ env: mockEnv }));
 const mockAuth = vi.fn();
 vi.mock('@/lib/auth/server', () => ({ requireAuthContext: () => mockAuth() }));
 
-const mockSwitch = vi.fn<() => Promise<'open' | 'closed' | 'unavailable'>>();
+const mockSwitch = vi.fn<() => Promise<'open' | 'closed' | 'enforcement_off' | 'unavailable'>>();
 vi.mock('@/lib/signup/switch', () => ({ getSelfServeSignupSwitch: () => mockSwitch() }));
 
 /** Fixed windows keyed by action and brand, with the limits in AUTH_RATE_LIMIT_RULES. */
@@ -311,9 +311,11 @@ describe('requestVenueClosure: who may ask', () => {
     expect((await requestVenueClosure({ accountId: BRAND })).success).toBe(true);
   });
 
-  it('refuses while the sign-up switch is off, with no alert', async () => {
-    mockSwitch.mockResolvedValue('closed');
-    expect((await requestVenueClosure({ accountId: BRAND })).error).toMatch(/not available yet/);
+  it('refuses while the sign-up switch is off, or on without billing enforcement, with no alert', async () => {
+    for (const state of ['closed', 'enforcement_off'] as const) {
+      mockSwitch.mockResolvedValue(state);
+      expect((await requestVenueClosure({ accountId: BRAND })).error, state).toMatch(/not available yet/);
+    }
     expect(mockSendEmail).not.toHaveBeenCalled();
     expect(mockAlert).not.toHaveBeenCalled();
   });

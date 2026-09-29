@@ -9,6 +9,7 @@ import {
   STUCK_VERIFIED_DAYS,
 } from '@/lib/signup/digest';
 import type { SignupFunnelCounts } from '@/lib/signup/funnel';
+import type { SelfServeSignupSwitch } from '@/lib/signup/switch';
 import { formatUkDateTime, formatUkLongDate } from '@/lib/utils/date';
 
 // ---------------------------------------------------------------------------
@@ -87,13 +88,21 @@ function Note({ children }: { children: ReactNode }) {
   );
 }
 
-function SwitchLine({ signupSwitch }: { signupSwitch: 'open' | 'closed' | 'unavailable' }) {
-  const text =
-    signupSwitch === 'open'
-      ? 'Sign-up is open.'
-      : signupSwitch === 'closed'
-        ? 'Sign-up is closed (the self_serve_signup switch is off), so these figures stay at zero until it opens.'
-        : 'The sign-up switch could not be read just now, so customers are treated as if sign-up is closed.';
+function switchText(signupSwitch: SelfServeSignupSwitch): string {
+  switch (signupSwitch) {
+    case 'open':
+      return 'Sign-up is open.';
+    case 'closed':
+      return 'Sign-up is closed (the self_serve_signup switch is off), so these figures stay at zero until it opens.';
+    case 'enforcement_off':
+      return 'Sign-up switch on, but billing enforcement is off: sign-up stays closed.';
+    default:
+      return 'The sign-up switch could not be read just now, so customers are treated as if sign-up is closed.';
+  }
+}
+
+function SwitchLine({ signupSwitch }: { signupSwitch: SelfServeSignupSwitch }) {
+  const text = switchText(signupSwitch);
   return (
     <p className="mb-3 text-xs" style={{ color: 'var(--c-ink-2)' }}>
       {text}

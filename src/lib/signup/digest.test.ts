@@ -319,6 +319,18 @@ describe('renderSignupDigestSections', () => {
     expect(html).not.toContain('Each one was refused');
   });
 
+  it('says the switch on without billing enforcement refused nobody: sign-up simply stayed closed', () => {
+    const html = renderSignupDigestSections(
+      { ...DIGEST, alerts: [{ kind: 'signup_without_enforcement', rows: 4, lastAt: '2026-09-27T21:00:00Z' }] },
+      'https://cheers.test',
+    ).join('\n');
+    expect(html).toContain(
+      '<strong>signup_without_enforcement</strong>: 4 times, last at 27/09/2026, 22:00:00 (UK time). Nobody was shown an error: the sign-up switch was on while billing_enforcement was off, so sign-up stayed closed',
+    );
+    expect(html).toContain('Counted a few times an hour at most, not per visitor.');
+    for (const bad of BAD_OUTPUT) expect(html).not.toContain(bad);
+  });
+
   it('leaves empty lists out entirely', () => {
     expect(
       renderSignupDigestSections({ alerts: [], verifiedWithoutVenue: [], noCheckout: [], trialWithoutConnection: [], neverStarted: [] }, 'https://cheers.test'),

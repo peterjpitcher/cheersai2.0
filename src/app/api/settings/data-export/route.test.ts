@@ -40,7 +40,7 @@ const SERVICE = {
 const mockAuth = vi.fn();
 vi.mock('@/lib/auth/server', () => ({ requireAuthContext: () => mockAuth() }));
 
-const mockSwitch = vi.fn<() => Promise<'open' | 'closed' | 'unavailable'>>();
+const mockSwitch = vi.fn<() => Promise<'open' | 'closed' | 'enforcement_off' | 'unavailable'>>();
 vi.mock('@/lib/signup/switch', () => ({ getSelfServeSignupSwitch: () => mockSwitch() }));
 
 const LIMITS: Record<string, { limit: number; windowSeconds: number }> = {
@@ -305,11 +305,13 @@ describe('owner export: who may download', () => {
     expect(mockExport).not.toHaveBeenCalled();
   });
 
-  it('refuses while the sign-up switch is off, with no alert', async () => {
-    mockSwitch.mockResolvedValue('closed');
-    const response = await POST(request());
-    expect(response.status).toBe(404);
-    expect(await errorOf(response)).toMatch(/not available yet.*peter@orangejelly\.co\.uk/);
+  it('refuses while the sign-up switch is off, or on without billing enforcement, with no alert', async () => {
+    for (const state of ['closed', 'enforcement_off'] as const) {
+      mockSwitch.mockResolvedValue(state);
+      const response = await POST(request());
+      expect(response.status, state).toBe(404);
+      expect(await errorOf(response)).toMatch(/not available yet.*peter@orangejelly\.co\.uk/);
+    }
     expect(mockExport).not.toHaveBeenCalled();
     expect(mockAlert).not.toHaveBeenCalled();
   });

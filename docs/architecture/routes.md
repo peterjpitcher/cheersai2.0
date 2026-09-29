@@ -53,7 +53,7 @@ project: cheersai-2.0
 | `/` | `src/app/page.tsx` | Landing/home page |
 | `/terms` | `src/app/terms/page.tsx` | Terms of service |
 | `/help/[...slug]` | `src/app/help/[[...slug]]/page.tsx` | Help centre |
-| `/help/first-post` | `src/app/help/first-post/page.tsx` | "How to publish your first post"; not found while the self-serve sign-up switch is off |
+| `/help/first-post` | `src/app/help/first-post/page.tsx` | "How to publish your first post"; not found unless self-serve sign-up is open (the switch and billing enforcement both on) |
 | `/auth/login` | `src/app/auth/login/page.tsx` | Permanent redirect to `/login` |
 | `/auth/signup` | `src/app/auth/signup/page.tsx` | Permanent redirect to `/login` |
 | `/auth/forgot-password` | `src/app/auth/forgot-password/page.tsx` | Permanent redirect to `/forgot-password` |
