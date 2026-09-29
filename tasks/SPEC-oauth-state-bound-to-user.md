@@ -1,6 +1,6 @@
 # SPEC: A connection can only be finished by the person who started it
 
-Status: requested by Peter on 29 September 2026; branch `fix/oauth-state-bound-to-user`. Not merged or deployed. Complexity 3 (M): four source files and their tests, no schema, no environment variables, no Meta setting.
+Status: requested by Peter on 29 September 2026; PR #171, branch `fix/oauth-state-bound-to-user`. Not merged or deployed. Complexity 3 (M): four source files and their tests, no schema, no environment variables, no Meta setting.
 
 ## Why
 
@@ -47,6 +47,8 @@ Mocked Supabase (the in-memory database with production's constraints) and Meta;
 - `completeOAuthConnect`: the starter finishes; another owner of the same brand is refused for a Facebook, Instagram and Change Page login, the state stays unused and the starter can still finish; a null `created_by` is refused; a signed-out visitor touches nothing; a failed lookup or mark-used fails closed.
 - Page chooser: the hand-off row carries `created_by`; another user, a null `created_by`, or a row and payload that disagree are refused; a claim only succeeds on the starter's row; a signed-out visitor touches nothing; a failed lookup or claim fails closed.
 - Ads callback: the starter finishes; another signed-in user, no session and a null `created_by` get `invalid_state` with the state unused and Meta not called; a failed sign-in check and a failed lookup fail closed; only the starter is told a state was already used.
+
+Local run (29 September 2026): a dev server against the local Supabase stack, one throwaway brand with two owners, real session cookies, no Meta call. The real `initiateOAuthConnect` and `startAdsOAuth` wrote `created_by`; the second owner, a signed-out visitor and a row without `created_by` were refused on both callbacks and on the chooser (page and pick), with the state left unused and ids-only warnings. The first owner's Ads cancel used the state up and a replay got `state_already_used`. A full connect with a real Meta login was not run.
 
 ## Deploy order and rollback
 

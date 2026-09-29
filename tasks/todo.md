@@ -8,8 +8,12 @@ Spec: `tasks/SPEC-oauth-state-bound-to-user.md`; branch `fix/oauth-state-bound-t
       claimPageChoice, the Facebook Ads callback (now reads the cookie session)
 - [x] Tests per path: happy path, another signed-in user, no session, null created_by, failing dependency;
       in-memory database refuses a non-uuid created_by
-- [ ] lint, typecheck, tests in London and UTC, build (`npm run ci:verify`)
-- [ ] Commit, push, open the PR; no merge, no deploy, no database writes
+- [x] lint, typecheck, 4,171 tests in London and UTC, build with CI's placeholder env; mutation check (each binding
+      switched off makes the new tests fail)
+- [x] Local run (dev server on the local Supabase stack, throwaway brand, two owners, real cookies): created_by
+      written by the real start paths; owner B, signed out and a row without created_by refused on both callbacks
+      and the chooser, state left unused, ids-only logs, no Meta call; the full Meta connect was not run
+- [x] Commit, push, PR #171; no merge, no deploy, no production database writes
 
 # Homepage: a bigger logo and "made for hospitality" (2026-09-29)
 
