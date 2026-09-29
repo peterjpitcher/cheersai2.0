@@ -36,19 +36,34 @@ const contentSecurityPolicy = [
 
 /**
  * The pages search engines may index once the self-serve sign-up switch is on
- * (SPEC-self-serve-signup P11): the home page and the three legal pages. They
- * never get the X-Robots-Tag header, which a page cannot override. While the
- * switch is off they stay out of search through the root layout's noindex
- * meta tag and robots.txt, both of which follow the switch.
+ * (SPEC-self-serve-signup P11, SPEC-homepage-and-guides): the home page, the
+ * three legal pages and the guides index. They never get the X-Robots-Tag
+ * header, which a page cannot override. While the switch is off they stay out
+ * of search through the root layout's noindex meta tag (the guides are not
+ * found at all in production) and robots.txt, both of which follow the switch.
  */
-export const INDEXABLE_PATHS = ['/', '/terms', '/privacy', '/data-processing'] as const;
+export const INDEXABLE_PATHS = ['/', '/terms', '/privacy', '/data-processing', '/guides'] as const;
 
 /**
- * Every path except INDEXABLE_PATHS. `.+` leaves out `/`; the lookahead leaves
- * out the three legal pages (with or without a trailing slash) but not paths
- * below them.
+ * Sections whose pages one level down may be indexed too: each guide at
+ * /guides/<slug>. Deeper paths keep the header.
  */
-const NOT_INDEXABLE_SOURCE = '/:path((?!(?:terms|privacy|data-processing)/?$).+)';
+export const INDEXABLE_SECTIONS = ['/guides'] as const;
+
+/**
+ * Every path except INDEXABLE_PATHS, the pages one level inside
+ * INDEXABLE_SECTIONS, and the images the structured data names, which
+ * Google's Organization and Article guidelines require to be crawlable and
+ * indexable: the logo (a file directly in /brand) and the share images (/og
+ * and /og/guides/<slug>). The share images answer 404 while the switch is off;
+ * the static /brand files stay out of search through robots.txt until then.
+ *
+ * `.+` leaves out `/`; the lookahead leaves out the legal pages, /guides,
+ * /guides/<slug>, /brand/<file>, /og and /og/guides/<slug> (each with or
+ * without a trailing slash), but not paths below those.
+ */
+const NOT_INDEXABLE_SOURCE =
+  '/:path((?!(?:terms|privacy|data-processing|guides(?:/[^/]+)?|brand/[^/]+|og(?:/guides/[^/]+)?)/?$).+)';
 
 /** Security headers for all routes. Import into next.config.ts headers(). */
 export const securityHeaders: HeaderConfig[] = [

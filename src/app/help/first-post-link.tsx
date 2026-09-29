@@ -15,7 +15,7 @@ export async function FirstPostHelpLink(): Promise<React.JSX.Element | null> {
     <Link
       href={href}
       className="inline-flex items-center gap-1 text-sm font-semibold hover:underline"
-      style={{ color: 'var(--c-orange)' }}
+      style={{ color: 'var(--c-orange-hi)' }}
     >
       How to publish your first post
     </Link>
