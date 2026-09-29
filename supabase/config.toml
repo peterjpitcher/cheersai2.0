@@ -1,17 +1,28 @@
 project_id = "cheersai"
 
+# Edge functions are deployed by name only (`npx supabase functions deploy publish-queue`),
+# never with a bare deploy-all. The verify_jwt values below match the live project
+# (nbkjciurhvkfpcpatbnt, list_edge_functions on 29 September 2026), so no deploy, deploy-all
+# or Supabase GitHub integration run changes them. Change a live value on purpose, here first.
+
 # B1: JWT verification enabled -- service-role key satisfies this check.
 # publish-queue is invoked by tournament publishing (src/app/actions/tournament.ts)
 # and by the publish-scheduler legacy bridge (src/app/api/cron/publish-scheduler/route.ts),
 # both through the service-role client and only while publish_jobs lacks a platform column.
-# media-derivatives runs only on demand, from scripts/ops/regenerate-story-derivatives.ts
-# (service-role client) and scripts/ops/invoke-function.ts (npm run ops:invoke), both of
-# which pass the service-role key as the Authorization header. Library uploads build
-# their derivatives in the browser and do not call it.
 [functions."publish-queue"]
   verify_jwt = true
 
+# media-derivatives runs with verify_jwt = false live, and has since at least 27 July 2026. This
+# file said true until 29 September 2026, so a deploy-all or the GitHub integration would have
+# switched verification on, which earlier notes warned breaks its on-demand callers
+# (tasks/SPEC-domain-migration-cheers-orangejelly.md). It runs only on demand, from
+# scripts/ops/regenerate-story-derivatives.ts (service-role client) and
+# scripts/ops/invoke-function.ts (npm run ops:invoke), both of which pass the service-role key
+# as the Authorization header; nothing in src/, tests/ or CI calls it, and library uploads build
+# their derivatives in the browser. The function checks no caller itself, so turning
+# verification on is a separate change: deploy it by name with Peter's yes, then re-run both
+# scripts.
 [functions."media-derivatives"]
-  verify_jwt = true
+  verify_jwt = false
 
 # NOTE: There are no Supabase-side schedules (no pg_cron or pg_net); scheduling is Vercel Cron, see vercel.json.
