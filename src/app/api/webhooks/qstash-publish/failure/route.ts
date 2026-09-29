@@ -6,10 +6,9 @@
 
 import { NextResponse } from 'next/server';
 import { verifyQStashSignature } from '@/lib/qstash/client';
-import { getPlainEnglishError } from '@/lib/publishing/error-messages';
+import { publishFailureText } from '@/lib/publishing/failure-messages';
 import { sendEmail } from '@/lib/email/resend';
 import { createServiceSupabaseClient } from '@/lib/supabase/service';
-import { ErrorClassification } from '@/lib/providers/errors';
 import { env } from '@/env';
 import { createLogger } from '@/lib/logging';
 
@@ -29,7 +28,10 @@ type PublishJobRow = {
   id: string;
   content_item_id: string;
   platform: string;
+  placement: string | null;
+  /** Meta's own text or the handler's, never shown to the owner. */
   error_message: string | null;
+  last_error: string | null;
   error_code: string | null;
 };
 
@@ -81,7 +83,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     // Load publish job
     const { data: job, error: jobError } = await db
       .from('publish_jobs')
-      .select('id, content_item_id, platform, error_message, error_code')
+      .select('id, content_item_id, platform, placement, error_message, last_error, error_code')
       .eq('id', jobId)
       .single<PublishJobRow>();
 
@@ -146,18 +148,19 @@ export async function POST(request: Request): Promise<NextResponse> {
     const plannerUrl = `${env.client.NEXT_PUBLIC_SITE_URL}/planner`;
     const greeting = account.display_name ? `Hi ${account.display_name},` : 'Hi,';
 
-    // Get plain-English explanation if error_code maps to a classification
-    let plainEnglishHtml = '';
-    if (job.error_code && Object.values(ErrorClassification).includes(job.error_code as ErrorClassification)) {
-      const pe = getPlainEnglishError(job.error_code as ErrorClassification);
-      plainEnglishHtml = `<p><strong>${escapeHtml(pe.title)}:</strong> ${escapeHtml(pe.description)}</p>`;
-    }
+    // Plain words for the owner. Meta's own text stays on the publish_jobs
+    // row for support (tasks/SPEC-plain-publish-failures.md).
+    const failureText = publishFailureText({
+      error: job.error_message ?? job.last_error,
+      platform: job.platform,
+      placement: job.placement,
+      errorCode: job.error_code,
+    });
 
     const html = `
 <p>${escapeHtml(greeting)}</p>
 <p>We were unable to publish your post to <strong>${escapeHtml(platformLabel)}</strong> after multiple attempts.</p>
-${job.error_message ? `<p><strong>Error details:</strong><br>${escapeHtml(job.error_message)}</p>` : ''}
-${plainEnglishHtml}
+${failureText ? `<p>${escapeHtml(failureText)}</p>` : ''}
 <p>
   Please visit your <a href="${plannerUrl}">Planner</a> to review and retry the post.
 </p>

@@ -18,6 +18,7 @@ import { getPlannerContentDetail } from "@/lib/planner/data";
 import { listMediaAssets } from "@/lib/library/data";
 import { getOwnerSettings } from "@/lib/settings/data";
 import { canTransition } from "@/lib/publishing/state-machine";
+import { publishFailureText } from "@/lib/publishing/failure-messages";
 import { DEFAULT_TIMEZONE } from "@/lib/constants";
 import { Status } from "@/components/ui/status";
 import type { DesignStatus } from "@/components/ui/status";
@@ -102,6 +103,13 @@ export default async function PlannerContentPage({
 
   const designStatus = toDesignStatus(detail.status);
   const isFailed = detail.status === "failed" || Boolean(detail.lastError);
+  // Plain words for the owner; Meta's own text stays in publish_jobs.last_error
+  // for support (tasks/SPEC-plain-publish-failures.md).
+  const failureText = publishFailureText({
+    error: detail.lastError,
+    platform: detail.platform,
+    placement: detail.placement,
+  });
   const providerResponse = detail.providerResponse ? JSON.stringify(detail.providerResponse, null, 2) : null;
   const lastAttemptedLabel = detail.lastAttemptedAt ? formatUkDateTime(detail.lastAttemptedAt) : null;
   const countdown = scheduledLocal && scheduledLocal > DateTime.now() ? relativeCountdown(scheduledLocal) : null;
@@ -189,9 +197,8 @@ export default async function PlannerContentPage({
                 {formatPlatformLabel(detail.platform)} couldn&apos;t accept this post.
               </h2>
               <p className="text-[15px]" style={{ color: "var(--c-ink-2)" }}>
-                {detail.lastError
-                  ? detail.lastError
-                  : "Something went wrong when we tried to publish. You can reconnect the platform or try publishing again."}
+                {failureText ??
+                  "Something went wrong when we tried to publish. You can reconnect the platform or try publishing again."}
               </p>
             </div>
 

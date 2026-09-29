@@ -1,4 +1,5 @@
 import type { ReactElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { redirect } from 'next/navigation';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -154,6 +155,32 @@ describe('PlannerPage attention lookups', () => {
     lookup().mockRejectedValue(signal);
 
     await expect(PlannerPage({ searchParams: Promise.resolve({ status: 'failed' }) })).rejects.toBe(signal);
+  });
+
+  it('shows plain words in the failed-post list, never Meta\'s own text', async () => {
+    // Stored by the publish-queue edge function (live format, trace id replaced).
+    const metaText =
+      "[instagram_create_container] status=400 OAuthException: The aspect ratio is not supported. (code 36003, subcode 2207009) trace=AbC123";
+    mocks.listActiveFailedPosts.mockResolvedValue([
+      {
+        id: 'content-1',
+        platform: 'instagram',
+        placement: 'feed',
+        scheduledFor: '2026-10-03T11:00:00.000Z',
+        lastError: metaText,
+        lastAttemptedAt: '2026-10-03T11:01:00.000Z',
+      },
+    ]);
+
+    const page = await PlannerPage({ searchParams: Promise.resolve({ status: 'failed' }) });
+    const list = findComponent(page, 'FailedPostsList');
+    expect(list).not.toBeNull();
+    const html = renderToStaticMarkup(list!);
+
+    expect(html).toContain('Instagram could not use the image on this post.');
+    expect(html).not.toContain('OAuthException');
+    expect(html).not.toContain('36003');
+    expect(html).not.toContain('trace=');
   });
 
   it('still falls back quietly when a lookup fails for any other reason', async () => {

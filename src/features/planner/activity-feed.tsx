@@ -8,6 +8,7 @@ import type { ComponentType, SVGProps } from "react";
 import { DismissNotificationButton } from "@/features/planner/dismiss-notification-button";
 import { useRealtimeFeed } from "@/hooks/use-realtime-feed";
 import { formatUkDateTime } from "@/lib/utils/date";
+import { connectionFailureText, publishFailureText } from "@/lib/publishing/failure-messages";
 import type { FeedEvent, FeedEventType } from "@/types/notifications";
 
 /* Tone styles use inline CSS vars set on the article element */
@@ -194,8 +195,9 @@ export function resolvePresenter(item: PlannerActivityItem): Presenter {
       if (Number.isFinite(Number(metadata.attempt))) {
         detailParts.push(`Attempt ${Number(metadata.attempt)}`);
       }
-      if (typeof metadata.error === "string" && metadata.error.length) {
-        detailParts.push(metadata.error);
+      const failureText = plainFailureDetail(metadata);
+      if (failureText) {
+        detailParts.push(failureText);
       }
       return {
         tone: WARNING_TONE,
@@ -217,8 +219,9 @@ export function resolvePresenter(item: PlannerActivityItem): Presenter {
       if (Number.isFinite(Number(metadata.attempt))) {
         detailParts.push(`Attempt ${Number(metadata.attempt)}`);
       }
-      if (typeof metadata.error === "string" && metadata.error.length) {
-        detailParts.push(metadata.error);
+      const failureText = plainFailureDetail(metadata);
+      if (failureText) {
+        detailParts.push(failureText);
       }
       return {
         tone: WARNING_TONE,
@@ -237,8 +240,9 @@ export function resolvePresenter(item: PlannerActivityItem): Presenter {
       if (Number.isFinite(Number(metadata.attempt))) {
         detailParts.push(`Attempt ${Number(metadata.attempt)}`);
       }
-      if (typeof metadata.error === "string" && metadata.error.length) {
-        detailParts.push(metadata.error);
+      const failureText = plainFailureDetail(metadata);
+      if (failureText) {
+        detailParts.push(failureText);
       }
       return {
         tone: ERROR_TONE,
@@ -257,8 +261,9 @@ export function resolvePresenter(item: PlannerActivityItem): Presenter {
       if (Number.isFinite(Number(metadata.attempt))) {
         detailParts.push(`Attempt ${Number(metadata.attempt)}`);
       }
-      if (typeof metadata.error === "string" && metadata.error.length) {
-        detailParts.push(metadata.error);
+      const failureText = plainFailureDetail(metadata);
+      if (failureText) {
+        detailParts.push(failureText);
       }
       return {
         tone: ERROR_TONE,
@@ -340,7 +345,6 @@ export function resolvePresenter(item: PlannerActivityItem): Presenter {
       const metadata = (item.metadata ?? {}) as Record<string, unknown>;
       const provider = typeof metadata.provider === "string" ? metadata.provider : undefined;
       const providerLabel = provider ? PROVIDER_LABELS[provider] ?? provider : "Connection";
-      const reason = typeof metadata.reason === "string" ? metadata.reason : undefined;
       return {
         tone: ERROR_TONE,
         Icon: AlertTriangle,
@@ -348,7 +352,9 @@ export function resolvePresenter(item: PlannerActivityItem): Presenter {
         iconFg: "#FFFFFF",
         badge: `${providerLabel} needs attention`,
         message: item.message,
-        details: reason,
+        // Plain words; Meta's own text stays in metadata.reason (tasks/SPEC-plain-publish-failures.md).
+        details:
+          connectionFailureText(typeof metadata.reason === "string" ? metadata.reason : null, provider) ?? undefined,
         action: { href: "/connections", label: "Reconnect" },
       };
     }
@@ -381,6 +387,20 @@ export function resolvePresenter(item: PlannerActivityItem): Presenter {
     default:
       return defaultPresenter;
   }
+}
+
+/**
+ * The publish worker stores Meta's own error text in metadata.error. Owners
+ * see plain words instead; the stored text stays for support
+ * (tasks/SPEC-plain-publish-failures.md).
+ */
+function plainFailureDetail(metadata: Record<string, unknown>): string | null {
+  if (typeof metadata.error !== "string" || !metadata.error.length) return null;
+  return publishFailureText({
+    error: metadata.error,
+    platform: typeof metadata.platform === "string" ? metadata.platform : null,
+    placement: typeof metadata.placement === "string" ? metadata.placement : null,
+  });
 }
 
 function buildContentAction(metadata: Record<string, unknown> | null | undefined, label: string) {

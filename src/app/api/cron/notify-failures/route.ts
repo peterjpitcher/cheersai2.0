@@ -4,6 +4,7 @@ import { env } from "@/env";
 import { sendEmail } from "@/lib/email/resend";
 import { insertNotification } from "@/lib/notifications/insert";
 import { alertRepeatedPublishFailures } from "@/lib/notifications/operator-alerts";
+import { publishFailureText } from "@/lib/publishing/failure-messages";
 import { tryCreateServiceSupabaseClient } from "@/lib/supabase/service";
 import { verifyCronAuth } from "@/lib/security/cron-auth";
 
@@ -21,6 +22,9 @@ const FAILURE_WINDOW_HOURS = 2;
 // DB row shapes returned by the queries below
 type FailedJobRow = {
   id: string;
+  /** What the publish-queue edge function writes: Meta's own text, never shown to the owner. */
+  last_error: string | null;
+  /** What the Next.js publish path and the worker's refusals write. */
   error_message: string | null;
   error_code: string | null;
   content_item_id: string;
@@ -31,6 +35,7 @@ type FailedJobRow = {
 type ContentItemRow = {
   account_id: string;
   platform: string;
+  placement: string | null;
 };
 
 type AccountRow = {
@@ -66,7 +71,7 @@ async function notifyFailures(): Promise<{
   // Fetch recently-failed publish jobs
   const { data: failedJobs, error: jobsError } = await service
     .from("publish_jobs")
-    .select("id, error_message, error_code, content_item_id, updated_at")
+    .select("id, last_error, error_message, error_code, content_item_id, updated_at")
     .eq("status", "failed")
     // An archived or auto-resolved failure needs no email; archiving also
     // bumps updated_at, which would otherwise look like a new failure.
@@ -117,7 +122,7 @@ async function notifyFailures(): Promise<{
       // ── Resolve content item → account ───────────────────────────────────
       const { data: contentItem, error: ciError } = await service
         .from("content_items")
-        .select("account_id, platform")
+        .select("account_id, platform, placement")
         .eq("id", job.content_item_id)
         .single<ContentItemRow>();
 
@@ -165,15 +170,19 @@ async function notifyFailures(): Promise<{
       const platformLabel = contentItem.platform.charAt(0).toUpperCase() + contentItem.platform.slice(1);
       const plannerUrl = `${env.client.NEXT_PUBLIC_SITE_URL}/planner`;
       const greeting = account.display_name ? `Hi ${account.display_name},` : "Hi,";
+      // Plain words for the owner. Meta's own text stays on the publish_jobs
+      // row for support (tasks/SPEC-plain-publish-failures.md).
+      const failureText = publishFailureText({
+        error: job.last_error ?? job.error_message,
+        platform: contentItem.platform,
+        placement: contentItem.placement,
+        errorCode: job.error_code,
+      });
 
       const html = `
-<p>${greeting}</p>
-<p>We were unable to publish one of your posts to <strong>${platformLabel}</strong>.</p>
-${
-  job.error_message
-    ? `<p><strong>Error details:</strong><br>${job.error_code ? `[${escapeHtml(job.error_code)}] ` : ""}${escapeHtml(job.error_message)}</p>`
-    : ""
-}
+<p>${escapeHtml(greeting)}</p>
+<p>We were unable to publish one of your posts to <strong>${escapeHtml(platformLabel)}</strong>.</p>
+${failureText ? `<p>${escapeHtml(failureText)}</p>` : ""}
 <p>
   Please visit your <a href="${plannerUrl}">Planner</a> to review and reschedule the post.
 </p>
@@ -208,9 +217,7 @@ ${
         accountId: contentItem.account_id,
         category: "publish_failed",
         title: `${platformLabel} post failed to publish`,
-        body: job.error_message
-          ? (job.error_code ? `[${job.error_code}] ${job.error_message}` : job.error_message)
-          : "Publishing failed. Please check the Planner for details.",
+        body: failureText ?? "Publishing failed. Please check the Planner for details.",
         resourceType: "content_item",
         resourceId: job.content_item_id,
       });
