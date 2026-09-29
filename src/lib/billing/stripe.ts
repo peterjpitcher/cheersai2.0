@@ -23,6 +23,16 @@ export const STRIPE_API_VERSION = '2026-08-26.dahlia' as const;
 /** Metadata tag on every CheersAI customer, Checkout Session and subscription. */
 export const CHEERSAI_APP_TAG = 'cheersai';
 
+/**
+ * Subscription metadata that only CheersAI's own Checkout sets
+ * (subscription_data.metadata in startCheckout). app=cheersai says a
+ * subscription belongs to CheersAI and may be added by hand; this says
+ * CheersAI's Checkout made it. The repeat free-trial check (spec §4.7) checks
+ * only subscriptions carrying it, so a trial made by hand in the Stripe
+ * Dashboard is never refused or cancelled.
+ */
+export const CHEERSAI_CHECKOUT_MARKER = { created_by: 'cheersai_checkout' } as const;
+
 export const BILLING_NOT_CONFIGURED_MESSAGE = 'Billing is not set up yet. Please contact Cheers support.';
 
 type ServerEnvKey = keyof typeof env.server;

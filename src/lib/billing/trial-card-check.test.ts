@@ -25,9 +25,15 @@ vi.mock('@/lib/admin/audit', () => ({ logAdminEvent: (...args: unknown[]) => moc
 const { reconcileBrandFromStripe } = await import('./reconcile');
 const { processStripeEvent } = await import('./webhook');
 const { BillingNotConfiguredError } = await import('./stripe');
-const { NO_CARD_HASH, REFUSAL_TAKEOVER_AFTER_MS, TRIAL_CARD_CHECK_STARTS_AT, TrialCardCheckError, trialBeganAtCreation, trialCardHash } = await import(
-  './trial-card-check'
-);
+const {
+  NO_CARD_HASH,
+  REFUSAL_TAKEOVER_AFTER_MS,
+  TRIAL_CARD_CHECK_STARTS_AT,
+  TrialCardCheckError,
+  startedByCheersCheckout,
+  trialBeganAtCreation,
+  trialCardHash,
+} = await import('./trial-card-check');
 const { getBrandEntitlement } = await import('./entitlement-server');
 
 const FIRST = '1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d';
@@ -37,6 +43,8 @@ const CUSTOMER = { [FIRST]: 'cus_first', [SECOND]: 'cus_second', [COMPED]: 'cus_
 const SHARED_CARD = 'fp_shared_card_4242';
 const NOW = new Date('2026-10-01T10:00:00.000Z');
 const minutes = (count: number): Date => new Date(NOW.getTime() + count * 60 * 1000);
+/** What startCheckout puts on the subscription it makes (billing-actions.ts), trimmed to the keys the check reads. */
+const CHECKOUT_METADATA = { app: 'cheersai', created_by: 'cheersai_checkout' };
 
 let db: InMemoryBillingDb;
 let fake: FakeStripe;
@@ -60,6 +68,7 @@ function trial(accountId: keyof typeof CUSTOMER, id: string, extra: Partial<Fake
     currentPeriodStart: '2026-10-01T09:59:00Z',
     currentPeriodEnd: '2026-10-15T09:59:00Z',
     paymentMethod: { fingerprint: SHARED_CARD },
+    metadata: CHECKOUT_METADATA,
     ...extra,
   });
 }
@@ -190,6 +199,7 @@ describe('trial card check: first trials', () => {
         id: 'sub_paid_given_free_month',
         customer: CUSTOMER[SECOND],
         status: 'trialing',
+        metadata: CHECKOUT_METADATA,
         created: '2026-08-01T09:00:00Z',
         trialStart: '2026-10-01T09:30:00Z',
         trialEnd: '2026-11-01T09:30:00Z',
@@ -213,6 +223,59 @@ describe('trial card check: first trials', () => {
     const other = 'f'.repeat(64);
     expect(trialCardHash(SHARED_CARD, serverEnv.TRIAL_CARD_HASH_KEY)).not.toBe(trialCardHash(SHARED_CARD, other));
     expect(trialCardHash(SHARED_CARD, other)).toBe(trialCardHash(SHARED_CARD, other));
+  });
+});
+
+describe('trial card check: only trials CheersAI Checkout started', () => {
+  it('knows a Checkout subscription by its created_by marker, never by app=cheersai alone', () => {
+    expect(startedByCheersCheckout({ metadata: CHECKOUT_METADATA })).toBe(true);
+    expect(startedByCheersCheckout({ metadata: { created_by: 'cheersai_checkout' } })).toBe(true);
+    expect(startedByCheersCheckout({ metadata: { app: 'cheersai' } })).toBe(false);
+    expect(startedByCheersCheckout({ metadata: { app: 'cheersai', account_id: SECOND, plan: 'starter', interval: 'month' } })).toBe(false);
+    expect(startedByCheersCheckout({ metadata: { created_by: 'someone_else' } })).toBe(false);
+    expect(startedByCheersCheckout({ metadata: {} })).toBe(false);
+  });
+
+  it.each([
+    ['no metadata (found by its CheersAI price)', {}],
+    ['app=cheersai typed in by hand', { app: 'cheersai', account_id: SECOND }],
+  ])('leaves alone a trial made by hand in the Stripe Dashboard with %s, even on a card that had a first trial', async (_label, metadata) => {
+    await firstBrandHadATrial();
+    fake.subscriptions.push(trial(SECOND, 'sub_dashboard_favour', { metadata }));
+
+    const result = await reconcile(SECOND);
+
+    expect(result).toMatchObject({ subscriptionId: 'sub_dashboard_favour', status: 'trialing', state: 'trialing', trialRefused: false });
+    expect(stored('sub_dashboard_favour')?.status).toBe('trialing');
+    expect(check('sub_dashboard_favour')).toBeUndefined();
+    expect(db.rows('trial_card_checks')).toHaveLength(1);
+    expect(fake.subscriptionsRetrieve).not.toHaveBeenCalled();
+    expect(fake.subscriptionsCancel).not.toHaveBeenCalled();
+    expect(refusalAudits()).toHaveLength(0);
+    expect(mockSendEmail).not.toHaveBeenCalled();
+  });
+
+  it('leaves alone a Dashboard trial with no card too: nothing recorded, no operator email', async () => {
+    fake.subscriptions.push(trial(SECOND, 'sub_dashboard_no_card', { metadata: {}, paymentMethod: null }));
+
+    const result = await reconcile(SECOND);
+
+    expect(result).toMatchObject({ state: 'trialing', trialRefused: false });
+    expect(db.rows('trial_card_checks')).toHaveLength(0);
+    expect(fake.subscriptionsRetrieve).not.toHaveBeenCalled();
+    expect(mockSendEmail).not.toHaveBeenCalled();
+  });
+
+  it('still checks a trial CheersAI Checkout started: the same card on another brand is refused', async () => {
+    await firstBrandHadATrial();
+    fake.subscriptions.push(trial(SECOND, 'sub_checkout_repeat'));
+
+    const result = await reconcile(SECOND);
+
+    expect(result).toMatchObject({ subscriptionId: 'sub_checkout_repeat', status: 'canceled', trialRefused: true });
+    expect(check('sub_checkout_repeat')?.outcome).toBe('repeat_refused');
+    expect(fake.subscriptionsCancel).toHaveBeenCalledTimes(1);
+    expect(fake.subscriptionsCancel).toHaveBeenCalledWith('sub_checkout_repeat', { invoice_now: false, prorate: false });
   });
 });
 
@@ -526,7 +589,7 @@ describe('trial card check: failures throw, and the refusal is finished on a lat
       { stripe_subscription_id: 'sub_refused', account_id: SECOND, card_hash: 'c'.repeat(64), outcome: 'repeat_refused', created_at: minutes(-30).toISOString() },
     ]);
     fake.subscriptions.push(
-      fakeSubscription({ id: 'sub_refused', customer: CUSTOMER[SECOND], status: 'canceled', created: minutes(-31).toISOString(), trialEnd: '2026-10-15T09:29:00Z', canceledAt: minutes(-30).toISOString() }),
+      fakeSubscription({ id: 'sub_refused', customer: CUSTOMER[SECOND], status: 'canceled', created: minutes(-31).toISOString(), trialEnd: '2026-10-15T09:29:00Z', canceledAt: minutes(-30).toISOString(), metadata: CHECKOUT_METADATA }),
       fakeSubscription({ id: 'sub_paid', customer: CUSTOMER[SECOND], status: 'active', created: minutes(-5).toISOString(), currentPeriodEnd: '2026-11-01T09:55:00Z' }),
     );
 
@@ -548,7 +611,7 @@ describe('trial card check: failures throw, and the refusal is finished on a lat
       { stripe_subscription_id: 'sub_refused', account_id: SECOND, card_hash: 'c'.repeat(64), outcome: 'repeat_refused', created_at: minutes(-30).toISOString() },
     ]);
     fake.subscriptions.push(
-      fakeSubscription({ id: 'sub_refused', customer: CUSTOMER[SECOND], status: 'trialing', created: minutes(-31).toISOString(), trialEnd: '2026-10-15T09:29:00Z' }),
+      fakeSubscription({ id: 'sub_refused', customer: CUSTOMER[SECOND], status: 'trialing', created: minutes(-31).toISOString(), trialEnd: '2026-10-15T09:29:00Z', metadata: CHECKOUT_METADATA }),
       fakeSubscription({ id: 'sub_paid', customer: CUSTOMER[SECOND], status: 'active', created: minutes(-5).toISOString(), currentPeriodEnd: '2026-11-01T09:55:00Z' }),
     );
 

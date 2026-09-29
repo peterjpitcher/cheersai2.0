@@ -3,7 +3,7 @@ import { createHmac } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type Stripe from 'stripe';
 
-import { BillingNotConfiguredError, usableTrialCardHashKey } from '@/lib/billing/stripe';
+import { BillingNotConfiguredError, CHEERSAI_CHECKOUT_MARKER, usableTrialCardHashKey } from '@/lib/billing/stripe';
 import { createLogger } from '@/lib/logging';
 import {
   alertRefusedTrialNotOnCustomer,
@@ -17,12 +17,14 @@ import {
  *
  * Runs inside reconcileBrandFromStripe after the current subscription row is
  * written and before finish(), so the webhook, "Check again" and the admin
- * re-sync all share it. Only a free trial that started with its subscription
- * (the trial CheersAI's Checkout gives) is checked: a subscription moved into a
- * trial later (for example a free month given in the Stripe Dashboard) is left
- * alone and nothing is recorded. Anything else costs one or two database reads
- * and no Stripe call, so brands with no trial (every comped brand today) are
- * unaffected.
+ * re-sync all share it. Only the free trial CheersAI's own Checkout gives is
+ * checked: the subscription must carry CHEERSAI_CHECKOUT_MARKER (set only by
+ * startCheckout) and its trial must have started with it. A trial made by hand
+ * in the Stripe Dashboard (no marker, even on a card that had a trial) and a
+ * subscription moved into a trial later (a free month given in the Dashboard)
+ * are left alone and nothing is recorded. Anything else costs one or two
+ * database reads and no Stripe call, so brands with no trial (every comped
+ * brand today) are unaffected.
  *
  * The decision, race-safe because Stripe's events for one Checkout arrive
  * together and reconcile concurrently:
@@ -77,6 +79,16 @@ export const TRIAL_CARD_CHECK_STARTS_AT = new Date('2026-09-28T12:00:00.000Z');
  */
 export const TRIAL_FROM_CREATION_TOLERANCE_SECONDS = 60;
 
+/**
+ * True when CheersAI's own Checkout made the subscription (its metadata carries
+ * CHEERSAI_CHECKOUT_MARKER). A subscription made in the Stripe Dashboard has
+ * no such metadata unless someone types it in, and app=cheersai alone is not
+ * enough: it only says the subscription belongs to CheersAI.
+ */
+export function startedByCheersCheckout(subscription: Pick<Stripe.Subscription, 'metadata'>): boolean {
+  return subscription.metadata?.created_by === CHEERSAI_CHECKOUT_MARKER.created_by;
+}
+
 /** True when the subscription's trial began when the subscription was created. */
 export function trialBeganAtCreation(subscription: Pick<Stripe.Subscription, 'trial_start' | 'created' | 'start_date'>): boolean {
   const trialStart = subscription.trial_start;
@@ -116,7 +128,7 @@ export class TrialCardCheckError extends Error {
 }
 
 export interface TrialCardCheckResult {
-  /** The current subscription's recorded outcome, or null when it has none (not a trial, a trial added after creation, or grandfathered). */
+  /** The current subscription's recorded outcome, or null when it has none (not a trial, not made by CheersAI's Checkout, a trial added after creation, or grandfathered). */
   outcome: TrialCardOutcome | null;
   /** The current subscription is a refused trial (already cancelled in Stripe when this returns). */
   refused: boolean;
@@ -293,6 +305,17 @@ async function decide(input: TrialCardCheckInput): Promise<Decision> {
   // Already decided (a later event for the same trial): no Stripe call.
   const existing = await readCheck(service, accountId, current.id);
   if (existing) return { outcome: existing.outcome, inserted: false };
+
+  // Only a trial CheersAI's own Checkout started is checked. A trial made by
+  // hand in the Stripe Dashboard (a favour to a customer, say) is the
+  // operator's choice: record nothing, refuse nothing, ask Stripe nothing.
+  if (!startedByCheersCheckout(current)) {
+    logger.info('a trial that CheersAI Checkout did not start is not checked', {
+      accountId,
+      subscriptionId: current.id,
+    });
+    return { outcome: null, inserted: false };
+  }
 
   // Only the trial a subscription started with is a free trial CheersAI gave.
   // A paid subscription moved into a trial later (a free month given in the
