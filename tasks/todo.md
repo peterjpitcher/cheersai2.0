@@ -1,3 +1,16 @@
+# media-derivatives caller check (2026-09-29)
+
+Spec: `tasks/SPEC-media-derivatives-caller-check.md`; branch `fix/media-derivatives-caller-check`.
+
+- [x] Diff live v7 against the repo copy (only the aspect-class work differs)
+- [x] Live schema check for every column and table the repo copy touches (all present, compatible)
+- [x] Key parity: the app's service-role key and the injected one match (edge log signatures)
+- [x] Live function probe: 503 BOOT_ERROR, `createFFmpeg` missing from `@ffmpeg/ffmpeg@0.12.6`
+- [x] `caller-auth.ts` and the check at the top of the handler; config comment
+- [x] Vitest: the check and the entry point (no header, wrong key, empty key, right key)
+- [x] lint:ci, typecheck, test:ci, test:utc, build (CI's placeholder env)
+- [ ] Review and merge; deploy by name only after the start-up failure is fixed or with Peter's yes
+
 # Self-serve sign-up PR 6: venue creation (2026-09-28)
 
 Spec: `tasks/SPEC-self-serve-signup.md` §4.4, §4.3 (switch gate), §4.9, §4.10, P10; branch `feat/signup-venue`.
