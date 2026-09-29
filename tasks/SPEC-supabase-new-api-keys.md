@@ -50,7 +50,7 @@ From the sources at the end, read 29 September 2026:
 
 No database migration is needed.
 
-## Inventory (29 September 2026, origin/main at `455e0c5e`)
+## Inventory (29 September 2026, origin/main at `a6ff44e9`)
 
 ### App (Next.js)
 
@@ -76,13 +76,14 @@ Nothing in `src/` calls Supabase REST, Storage or Functions with its own `apikey
 | `supabase/functions/publish-queue/index.ts` | no caller check; `leadWindowMinutes` from the body | 1, 2, 10 |
 | `supabase/functions/publish-queue/worker.ts` | `createDefaultConfig()` reads `SUPABASE_SERVICE_ROLE_KEY` for its own client (database and Storage signed URLs) | 7, 10 |
 | `supabase/config.toml` | `publish-queue` `verify_jwt = true` | 3 |
-| `supabase/functions/media-derivatives/index.ts` | reads `SUPABASE_SERVICE_ROLE_KEY`; `verify_jwt = false`; no caller check; the live copy cannot start (closed PR #164) | retired separately on branch `chore/retire-media-derivatives`; see step 11 |
+
+`publish-queue` is the only edge function. `media-derivatives` was retired on 29 September 2026 (PR #166, `tasks/SPEC-retire-media-derivatives.md`): its code, its config block and `scripts/ops/regenerate-story-derivatives.ts` are gone from main, and `supabase/config.toml` records the live copy as deleted.
 
 ### Scripts
 
 | File | Uses | Step |
 |---|---|---|
-| The 15 scripts in `scripts/ops/` (archive-planner-failures, backfill-connections, backfill-event-overlays, backfill-link-in-bio-url, backfill-opt-in-overlays, bootstrap-super-admin, cleanup-banner-storage, diagnose-publishing, invoke-function, link-auth-user, regenerate-story-derivatives, remove-slot-language, repair-hidden-media-references, search-meta-interests, seed-world-cup-2026) and `scripts/export-social-copy-csv.mjs` | `SUPABASE_SERVICE_ROLE_KEY` from `.env.local`, which points at production | 4, 10 |
+| The 14 scripts in `scripts/ops/` (archive-planner-failures, backfill-connections, backfill-event-overlays, backfill-link-in-bio-url, backfill-opt-in-overlays, bootstrap-super-admin, cleanup-banner-storage, diagnose-publishing, invoke-function, link-auth-user, remove-slot-language, repair-hidden-media-references, search-meta-interests, seed-world-cup-2026) and `scripts/export-social-copy-csv.mjs` | `SUPABASE_SERVICE_ROLE_KEY` from `.env.local`, which points at production | 4, 10 |
 | `scripts/ops/invoke-function.ts` | a raw `fetch` that sends the key only as `Authorization: Bearer` | 4 |
 
 ### Tests and CI
@@ -110,7 +111,7 @@ The Supabase CLI (`db push`, `functions deploy`) and the Supabase MCP server sig
 
 ### Documents
 
-Updated in steps 4 and 10: `CLAUDE.md` (environment list), `docs/agent-reference.md` section 6, `docs/architecture/relationships.md`, `docs/runbooks/credential-rotation.md` (its service role section describes regenerating a key that the legacy scheme cannot regenerate on its own), `docs/runbook.md` section 11, `README.md`, `.env.example`, `Obsidian/OJ-CheersAI2.0/Architecture/Overview.md`, and the comments in `supabase/config.toml`.
+Updated in steps 4 and 10: `CLAUDE.md` (environment list), `docs/agent-reference.md` section 6, `docs/architecture/relationships.md`, `docs/runbooks/credential-rotation.md` (its service role section describes regenerating a key that the legacy scheme cannot regenerate on its own), `README.md`, `.env.example`, `Obsidian/OJ-CheersAI2.0/Architecture/Overview.md`, and the comments in `supabase/config.toml`.
 
 Left as historical records: `HANDOFF.md`, `.planning/`, `docs/redesign-plan/`, `docs/publishing-consultant-report.md`, `docs/plans/`, `docs/superpowers/plans/`, `tasks/codex-qa-review/`, `tasks/banner-orchestration/`, `tasks/PLAN-multi-brand-PR1-foundation.md`, `tasks/SPEC-magic-link-resend.md`, `tasks/tournament-module-patterns.md`.
 
@@ -189,7 +190,7 @@ What:
 - `src/env.ts`: the publishable key is `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, else `NEXT_PUBLIC_SUPABASE_ANON_KEY`, else the server-only `SUPABASE_ANON_KEY`, each read by its literal name so Next.js inlines it. The server key is `SUPABASE_SECRET_KEY`, else `SUPABASE_SERVICE_ROLE_KEY`. An empty value counts as unset. Production requires one server key.
 - Two guards fail the build and the start in every environment, whatever `SKIP_ENV_VALIDATION` says: an `sb_secret_` value in a public variable (it would ship to every browser), and an `sb_publishable_` value in the server variable (the service client would run as `anon`, RLS would quietly return nothing, and the scheduler would find no jobs).
 - `client.ts`, `server.ts`, `route.ts` and `service.ts` read `env.client.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` and `env.server.SUPABASE_SECRET_KEY`; `src/app/auth/callback/route.ts` reads `env.ts` instead of `process.env`.
-- One small helper for the ops scripts reads `SUPABASE_SECRET_KEY`, else `SUPABASE_SERVICE_ROLE_KEY`, and all 16 scripts use it (the `.mjs` file inlines the same fallback).
+- One small helper for the ops scripts reads `SUPABASE_SECRET_KEY`, else `SUPABASE_SERVICE_ROLE_KEY`, and all 15 scripts use it (the `.mjs` file inlines the same fallback).
 - `invoke-function.ts` sends the key on `apikey` as well as `Authorization` (the same value, as `supabase-js` does) and gains `--check`: a GET that reports accepted (405) or refused (401) without running the function or printing the key.
 - `.env.example` and `docs/agent-reference.md` name the new variables first and the legacy ones as fallbacks until step 10.
 - Tests for the resolution order and both guards. Existing tests keep passing through the fallback.
@@ -258,7 +259,7 @@ Rollback: revert. Peter re-adds the legacy variables (the legacy keys are still 
 
 ### Step 11. Quiet period, two weeks, read only
 
-Checks: publish-queue's function edge logs show every accepted call carrying a new key; the last-used indicator for the legacy keys on the API Keys page, if shown, has not moved since step 10; Supabase logs show no failures from unknown callers; media-derivatives is retired, or still unable to start, so switching its key off changes nothing.
+Checks: publish-queue's function edge logs show every accepted call carrying a new key; the last-used indicator for the legacy keys on the API Keys page, if shown, has not moved since step 10; Supabase logs show no failures from unknown callers; `list_edge_functions` (read only) still shows `publish-queue` as the only function.
 
 ### Step 12. Peter deactivates the legacy keys
 
@@ -304,7 +305,6 @@ The order matters more than the dates. The dates avoid Fridays, the weekday food
 ## Not in scope
 
 - JWT signing keys: a separate, later migration. After this plan the legacy JWT secret still signs user sessions and Storage signed URLs, and anyone holding it could still mint a service role token.
-- media-derivatives: retired separately. If it is kept instead, its key read needs the step 7 change before step 12.
 - The workspace's other Supabase projects, such as the management app's, face the same deadline under their own plans.
 
 ## Sources, read 29 September 2026
