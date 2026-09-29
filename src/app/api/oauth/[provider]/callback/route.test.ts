@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { NextRequest } from "next/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -28,6 +29,21 @@ import { GET } from "@/app/api/oauth/[provider]/callback/route";
 
 const ACCOUNT = "11111111-1111-4111-8111-111111111111";
 const CHOICE_REFERENCE = "C".repeat(43);
+
+/**
+ * Next's redirect() throws; its digest carries the path and the status code.
+ * Next's route handler wrapper turns that throw into the redirect response.
+ */
+async function redirectOf(run: () => Promise<unknown>): Promise<{ path: string; status: number }> {
+  try {
+    await run();
+  } catch (error) {
+    const parts = ((error as { digest?: string }).digest ?? "").split(";");
+    if (parts[0] === "NEXT_REDIRECT") return { path: parts[2], status: Number(parts[3]) };
+    throw error;
+  }
+  throw new Error("expected a redirect, but the route returned a response");
+}
 
 describe("GET /api/oauth/[provider]/callback", () => {
   let db: InMemoryConnectionsDb;
@@ -96,6 +112,38 @@ describe("GET /api/oauth/[provider]/callback", () => {
     expect(location.searchParams.get("oauth")).toBe("error");
     expect(location.searchParams.get("provider")).toBe("facebook");
     expect(location.searchParams.get("message")).toBe("No Facebook pages were found.");
+  });
+
+  it.each([
+    ["signed out", "/auth/login"],
+    ["signed in with no brand", "/no-access"],
+  ])("sends an owner who is %s to %s, not to /connections with NEXT_REDIRECT", async (_state, path) => {
+    // requireOwnerContext() inside the connect step redirects by throwing, as it does live.
+    completeOAuthConnectMock.mockImplementationOnce(async () => redirect(path));
+
+    const outcome = await redirectOf(() =>
+      GET(
+        new NextRequest("https://app.test/api/oauth/facebook/callback?code=code-1&state=state-1"),
+        { params: Promise.resolve({ provider: "facebook" }) },
+      ),
+    );
+
+    expect(outcome).toEqual({ path, status: 307 });
+  });
+
+  it("still redirects to /connections with the message when the connect step throws a real error", async () => {
+    completeOAuthConnectMock.mockRejectedValueOnce(new Error("OAuth token exchange failed"));
+
+    const response = await GET(
+      new NextRequest("https://app.test/api/oauth/facebook/callback?code=code-1&state=state-1"),
+      { params: Promise.resolve({ provider: "facebook" }) },
+    );
+
+    const location = new URL(response.headers.get("location") ?? "");
+    expect(location.pathname).toBe("/connections");
+    expect(location.searchParams.get("oauth")).toBe("error");
+    expect(location.searchParams.get("provider")).toBe("facebook");
+    expect(location.searchParams.get("message")).toBe("OAuth token exchange failed");
   });
 
   it("does not show success when the provider returns an OAuth error, and marks the state failed", async () => {
