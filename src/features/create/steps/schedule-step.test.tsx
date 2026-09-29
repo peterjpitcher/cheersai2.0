@@ -131,8 +131,9 @@ function eventBrief(eventDate: string, eventTime: string): ContentBrief {
   } as ContentBrief;
 }
 
-function offerBrief(endDate: string): ContentBrief {
+function offerBrief(endDate: string, startDate?: string): ContentBrief {
   return {
+    ...(startDate === undefined ? {} : { startDate }),
     contentType: "promotion",
     title: "Two for one",
     prompt: "",
@@ -346,5 +347,55 @@ describe("<ScheduleStep /> offer suggestions", () => {
       expect.objectContaining({ date: "2026-10-24", time: "12:00", label: "Launch", source: "suggestion" }),
       expect.objectContaining({ date: "2026-10-25", time: "12:00", label: "Last chance", source: "suggestion" }),
     ]);
+  });
+
+  it("launches an offer that starts next week on its start date, not today", async () => {
+    // Monday 12 October 2026, 09:00 BST; the offer runs from Monday 19 October
+    // to Thursday 29 October, over the clock change on Sunday 25 October.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-12T08:00:00.000Z"));
+    const onSlotsChange = vi.fn();
+
+    render(<EventScheduleHarness brief={offerBrief("2026-10-29", "2026-10-19")} onSlotsChange={onSlotsChange} />);
+    await plannerLoaded();
+
+    expect(suggestedSlots()).toEqual(["Launch · 12:00", "Mid-run reminder · 12:00", "Last chance · 12:00"]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Add suggested slot · Launch · 12:00" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add suggested slot · Mid-run reminder · 12:00" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add suggested slot · Last chance · 12:00" }));
+
+    expect(onSlotsChange).toHaveBeenLastCalledWith([
+      expect.objectContaining({ date: "2026-10-19", time: "12:00", label: "Launch", source: "suggestion" }),
+      expect.objectContaining({ date: "2026-10-24", time: "12:00", label: "Mid-run reminder", source: "suggestion" }),
+      expect.objectContaining({ date: "2026-10-29", time: "12:00", label: "Last chance", source: "suggestion" }),
+    ]);
+  });
+
+  it("launches today when the offer's start date is blank", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-12T08:00:00.000Z"));
+    const onSlotsChange = vi.fn();
+
+    render(<EventScheduleHarness brief={offerBrief("2026-10-13", "")} onSlotsChange={onSlotsChange} />);
+    await plannerLoaded();
+
+    fireEvent.click(screen.getByRole("button", { name: "Add suggested slot · Launch · 12:00" }));
+
+    expect(onSlotsChange).toHaveBeenLastCalledWith([
+      expect.objectContaining({ date: "2026-10-12", time: "12:00", label: "Launch", source: "suggestion" }),
+    ]);
+  });
+
+  it("suggests nothing for an offer that has already ended", async () => {
+    // Monday 12 October 2026, 09:00 BST; the offer ended yesterday. A draft
+    // saved before its end date passed can still reach this step.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-12T08:00:00.000Z"));
+
+    render(<EventScheduleHarness brief={offerBrief("2026-10-11")} onSlotsChange={vi.fn()} />);
+    await plannerLoaded();
+
+    expect(screen.queryAllByRole("button", { name: /^Add suggested slot · / })).toEqual([]);
   });
 });

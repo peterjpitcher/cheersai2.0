@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { afterEach, describe, it, expect, vi } from 'vitest';
 
 import {
   instantPostBriefSchema,
@@ -6,6 +6,8 @@ import {
   promotionBriefSchema,
   weeklyCampaignBriefSchema,
   contentBriefSchema,
+  contentBriefSubmissionSchema,
+  OFFER_DATE_MESSAGES,
 } from './content-schemas';
 
 describe('Content Zod Schemas', () => {
@@ -116,6 +118,99 @@ describe('Content Zod Schemas', () => {
       };
       const result = promotionBriefSchema.safeParse(input);
       expect(result.success).toBe(true);
+    });
+  });
+
+  describe('offer start and end dates', () => {
+    const offer = {
+      ...baseFields,
+      contentType: 'promotion' as const,
+      offerSummary: '2-for-1 cocktails',
+    };
+
+    /** Tuesday 29 September 2026, 09:00 BST. */
+    const TUESDAY_MORNING = '2026-09-29T08:00:00.000Z';
+
+    function pinClock(iso: string): void {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(new Date(iso));
+    }
+
+    function issues(schema: typeof contentBriefSchema, input: Record<string, unknown>) {
+      const result = schema.safeParse(input);
+      return result.success ? [] : result.error.issues.map((issue) => ({ path: issue.path.join('.'), message: issue.message }));
+    }
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('refuses a start date after the end date, on the start date field', () => {
+      const input = { ...offer, startDate: '2026-10-20', endDate: '2026-10-09' };
+
+      expect(issues(contentBriefSchema, input)).toEqual([
+        { path: 'startDate', message: OFFER_DATE_MESSAGES.startAfterEnd },
+      ]);
+      expect(promotionBriefSchema.safeParse(input).success).toBe(false);
+    });
+
+    it('accepts a start date on the end date, before it, blank or missing', () => {
+      for (const startDate of ['2026-10-09', '2026-10-01', '', undefined]) {
+        expect(issues(contentBriefSchema, { ...offer, startDate, endDate: '2026-10-09' })).toEqual([]);
+      }
+    });
+
+    it('leaves the stored-brief schema free of today\'s date, so an old brief still parses', () => {
+      pinClock(TUESDAY_MORNING);
+      expect(issues(contentBriefSchema, { ...offer, endDate: '2026-09-28' })).toEqual([]);
+    });
+
+    it('refuses an end date that has passed when the brief is submitted', () => {
+      pinClock(TUESDAY_MORNING);
+
+      expect(issues(contentBriefSubmissionSchema, { ...offer, endDate: '2026-09-28' })).toEqual([
+        { path: 'endDate', message: OFFER_DATE_MESSAGES.endDatePassed },
+      ]);
+      expect(OFFER_DATE_MESSAGES.endDatePassed).toBe('The offer end date has passed. Choose today or a later date.');
+    });
+
+    it('accepts an end date of today or later when the brief is submitted', () => {
+      pinClock(TUESDAY_MORNING);
+
+      expect(issues(contentBriefSubmissionSchema, { ...offer, endDate: '2026-09-29' })).toEqual([]);
+      expect(issues(contentBriefSubmissionSchema, { ...offer, startDate: '2026-10-05', endDate: '2026-10-15' })).toEqual([]);
+    });
+
+    it('refuses a start date after the end date when the brief is submitted', () => {
+      pinClock(TUESDAY_MORNING);
+
+      expect(issues(contentBriefSubmissionSchema, { ...offer, startDate: '2026-10-20', endDate: '2026-10-09' })).toEqual([
+        { path: 'startDate', message: OFFER_DATE_MESSAGES.startAfterEnd },
+      ]);
+    });
+
+    it('reports a passed end date alongside the other problems in the brief', () => {
+      pinClock(TUESDAY_MORNING);
+
+      expect(issues(contentBriefSubmissionSchema, { ...offer, offerSummary: '', endDate: '2026-09-28' })).toEqual([
+        { path: 'offerSummary', message: 'Describe the offer' },
+        { path: 'endDate', message: OFFER_DATE_MESSAGES.endDatePassed },
+      ]);
+    });
+
+    it('uses the London date around the clock change, not the UTC date', () => {
+      // 23:30 UTC on Saturday 24 October is 00:30 BST on Sunday 25 October in
+      // London: an offer that ended on the 24th has ended, although the UTC
+      // date is still the 24th.
+      pinClock('2026-10-24T23:30:00.000Z');
+      expect(issues(contentBriefSubmissionSchema, { ...offer, endDate: '2026-10-24' })).toEqual([
+        { path: 'endDate', message: OFFER_DATE_MESSAGES.endDatePassed },
+      ]);
+      expect(issues(contentBriefSubmissionSchema, { ...offer, endDate: '2026-10-25' })).toEqual([]);
+
+      // 23:30 GMT on Sunday 25 October, after the clocks went back: still the 25th.
+      pinClock('2026-10-25T23:30:00.000Z');
+      expect(issues(contentBriefSubmissionSchema, { ...offer, endDate: '2026-10-25' })).toEqual([]);
     });
   });
 

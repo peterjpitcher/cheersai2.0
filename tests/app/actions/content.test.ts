@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { afterEach, describe, it, expect, vi, beforeEach } from 'vitest';
 
 // ---------------------------------------------------------------------------
 // Module mocks — must be declared before any import that triggers the modules
@@ -114,6 +114,150 @@ describe('createScheduledBatch', () => {
     role: 'owner',
       user: { id: 'user-1', email: 'test@test.com', accountId: 'acc-1', activeAccountId: 'acc-1', businessName: 'Test', timezone: 'Europe/London', brands: [{ accountId: 'acc-1', name: 'Test', timezone: 'Europe/London', features: { paidAds: false, tournaments: false, managementImport: false }, role: 'owner', joinedAt: null }], isSuperAdmin: false } as never,
     });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  /**
+   * The offer fixtures below run in May 2026, and the server refuses an offer
+   * whose end date has passed, so those tests pin the clock to the offer's
+   * first day (Friday 1 May 2026, 09:00 BST). Only Date is faked.
+   */
+  function pinClockBeforeOfferEnds(): void {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-05-01T08:00:00.000Z'));
+  }
+
+  it('refuses an offer whose end date has passed, before writing anything', async () => {
+    // Tuesday 29 September 2026, 09:00 BST; the offer ended yesterday.
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-09-29T08:00:00.000Z'));
+
+    const { createScheduledBatch } = await import('@/app/actions/content');
+
+    const result = await createScheduledBatch({
+      draftContentId: 'draft-1',
+      contentType: 'promotion',
+      brief: {
+        title: 'Two for one',
+        offerSummary: 'Two for one on all cocktails.',
+        endDate: '2026-09-28',
+        platforms: ['facebook'],
+        placements: ['feed'],
+      },
+      selectedMediaIds: [],
+      slotCopies: [
+        {
+          slotKey: 'slot-1',
+          scheduledAt: '2026-09-29T11:00:00.000Z',
+          label: 'Launch',
+          copy: { facebook: { body: 'FB promo' }, instagram: { body: 'IG promo' } },
+        },
+      ],
+      platforms: ['facebook'],
+      mode: 'schedule',
+    });
+
+    expect(result).toEqual({ error: 'The offer end date has passed. Choose today or a later date.' });
+    expect(supabaseMock.calls.some((call) => call.method === 'insert')).toBe(false);
+    expect(enqueueAndDispatch).not.toHaveBeenCalled();
+  });
+
+  it('refuses an offer whose start date is after its end date, before writing anything', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-09-29T08:00:00.000Z'));
+
+    const { createScheduledBatch } = await import('@/app/actions/content');
+
+    const result = await createScheduledBatch({
+      draftContentId: 'draft-1',
+      contentType: 'promotion',
+      brief: {
+        title: 'Two for one',
+        offerSummary: 'Two for one on all cocktails.',
+        startDate: '2026-10-20',
+        endDate: '2026-10-09',
+        platforms: ['facebook'],
+        placements: ['feed'],
+      },
+      selectedMediaIds: [],
+      slotCopies: [
+        {
+          slotKey: 'slot-1',
+          scheduledAt: '2026-10-01T11:00:00.000Z',
+          label: 'Launch',
+          copy: { facebook: { body: 'FB promo' }, instagram: { body: 'IG promo' } },
+        },
+      ],
+      platforms: ['facebook'],
+      mode: 'schedule',
+    });
+
+    expect(result).toEqual({
+      error: 'The offer start date is after the end date. Choose a start date on or before the end date.',
+    });
+    expect(supabaseMock.calls.some((call) => call.method === 'insert')).toBe(false);
+    expect(enqueueAndDispatch).not.toHaveBeenCalled();
+  });
+
+  it('refuses to save a draft of an offer whose end date has passed', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-09-29T08:00:00.000Z'));
+
+    const { createDraft } = await import('@/app/actions/content');
+
+    const result = await createDraft({
+      contentType: 'promotion',
+      title: 'Two for one',
+      offerSummary: 'Two for one on all cocktails.',
+      endDate: '2026-09-28',
+      platforms: ['facebook'],
+    });
+
+    expect(result).toEqual({ error: 'The offer end date has passed. Choose today or a later date.' });
+    expect(supabaseMock.calls.some((call) => call.method === 'insert')).toBe(false);
+  });
+
+  it('refuses to save a draft of an offer whose start date is after its end date', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-09-29T08:00:00.000Z'));
+
+    const { createDraft } = await import('@/app/actions/content');
+
+    const result = await createDraft({
+      contentType: 'promotion',
+      title: 'Two for one',
+      offerSummary: 'Two for one on all cocktails.',
+      startDate: '2026-10-20',
+      endDate: '2026-10-09',
+      platforms: ['facebook'],
+    });
+
+    expect(result).toEqual({
+      error: 'The offer start date is after the end date. Choose a start date on or before the end date.',
+    });
+    expect(supabaseMock.calls.some((call) => call.method === 'insert')).toBe(false);
+  });
+
+  it('saves a draft of an offer that ends today', async () => {
+    // Tuesday 29 September 2026, 09:00 BST; the offer's last day is today.
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-09-29T08:00:00.000Z'));
+    supabaseMock.enqueueResult({ data: { id: 'draft-9' }, error: null }); // content_items insert
+
+    const { createDraft } = await import('@/app/actions/content');
+
+    const result = await createDraft({
+      contentType: 'promotion',
+      title: 'Two for one',
+      offerSummary: 'Two for one on all cocktails.',
+      endDate: '2026-09-29',
+      platforms: ['facebook'],
+    });
+
+    expect(result).toEqual({ success: true, id: 'draft-9' });
   });
 
   it('creates publish_jobs for every content item in schedule mode', async () => {
@@ -242,6 +386,7 @@ describe('createScheduledBatch', () => {
   });
 
   it('keeps promotion feed and story placements on the same campaign timing', async () => {
+    pinClockBeforeOfferEnds();
     supabaseMock.enqueueResult({ data: { id: 'draft-1' }, error: null }); // draft lookup
     supabaseMock.enqueueResult({ data: [{ id: 'media-1' }], error: null }); // media ownership
     supabaseMock.enqueueResult({
@@ -1076,6 +1221,7 @@ describe('createScheduledBatch', () => {
   });
 
   it('gives the feed variant every image and the story variant only the first', async () => {
+    pinClockBeforeOfferEnds();
     supabaseMock.enqueueResult({ data: { id: 'draft-1' }, error: null }); // draft lookup
     supabaseMock.enqueueResult({ data: [{ id: 'media-1' }, { id: 'media-2' }], error: null }); // ownership
     supabaseMock.enqueueResult({
@@ -1161,6 +1307,7 @@ describe('createScheduledBatch', () => {
   });
 
   it('rejects a mixed batch whose first asset is a video', async () => {
+    pinClockBeforeOfferEnds();
     supabaseMock.enqueueResult({ data: { id: 'draft-1' }, error: null }); // draft lookup
     supabaseMock.enqueueResult({ data: [{ id: 'video-1' }, { id: 'media-2' }], error: null }); // ownership
     supabaseMock.enqueueResult({
@@ -1198,6 +1345,7 @@ describe('createScheduledBatch', () => {
   });
 
   it('rejects a mixed batch whose first asset has no story derivative', async () => {
+    pinClockBeforeOfferEnds();
     supabaseMock.enqueueResult({ data: { id: 'draft-1' }, error: null }); // draft lookup
     supabaseMock.enqueueResult({ data: [{ id: 'media-1' }, { id: 'media-2' }], error: null }); // ownership
     supabaseMock.enqueueResult({

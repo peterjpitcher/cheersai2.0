@@ -277,3 +277,182 @@ describe("buildPromotionSuggestions", () => {
     ]);
   });
 });
+
+describe("buildPromotionSuggestions with the offer's start and end dates", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  function asRows(slots: SuggestedSlotDisplay[]): string[][] {
+    return slots.map((slot) => [slot.label, slot.date, slot.time]);
+  }
+
+  /** Tuesday 29 September 2026, 09:00 BST. */
+  const TUESDAY_MORNING = "2026-09-29T08:00:00.000Z";
+
+  it.each([
+    {
+      name: "starts next week: launches on the start date and spaces the reminder from it",
+      now: TUESDAY_MORNING,
+      startDate: "2026-10-05",
+      endDate: "2026-10-15",
+      expected: [
+        ["Launch", "2026-10-05", "12:00"],
+        ["Mid-run reminder", "2026-10-10", "12:00"],
+        ["Last chance", "2026-10-15", "12:00"],
+      ],
+    },
+    {
+      name: "starts today: launches today, as with no start date",
+      now: TUESDAY_MORNING,
+      startDate: "2026-09-29",
+      endDate: "2026-10-09",
+      expected: [
+        ["Launch", "2026-09-29", "12:00"],
+        ["Mid-run reminder", "2026-10-04", "12:00"],
+        ["Last chance", "2026-10-09", "12:00"],
+      ],
+    },
+    {
+      name: "has no start date: launches today",
+      now: TUESDAY_MORNING,
+      startDate: undefined,
+      endDate: "2026-10-09",
+      expected: [
+        ["Launch", "2026-09-29", "12:00"],
+        ["Mid-run reminder", "2026-10-04", "12:00"],
+        ["Last chance", "2026-10-09", "12:00"],
+      ],
+    },
+    {
+      // The form sends a blank start date as "".
+      name: "has a blank start date: launches today",
+      now: TUESDAY_MORNING,
+      startDate: "",
+      endDate: "2026-10-09",
+      expected: [
+        ["Launch", "2026-09-29", "12:00"],
+        ["Mid-run reminder", "2026-10-04", "12:00"],
+        ["Last chance", "2026-10-09", "12:00"],
+      ],
+    },
+    {
+      name: "started last week and is still running: launches today",
+      now: TUESDAY_MORNING,
+      startDate: "2026-09-22",
+      endDate: "2026-10-09",
+      expected: [
+        ["Launch", "2026-09-29", "12:00"],
+        ["Mid-run reminder", "2026-10-04", "12:00"],
+        ["Last chance", "2026-10-09", "12:00"],
+      ],
+    },
+    {
+      // The form and the server refuse this brief; a draft saved before that
+      // rule falls back to launching today rather than after the offer ends.
+      name: "has a start date after the end date: ignores the start date",
+      now: TUESDAY_MORNING,
+      startDate: "2026-10-20",
+      endDate: "2026-10-09",
+      expected: [
+        ["Launch", "2026-09-29", "12:00"],
+        ["Mid-run reminder", "2026-10-04", "12:00"],
+        ["Last chance", "2026-10-09", "12:00"],
+      ],
+    },
+    {
+      name: "starts and ends on the same day next week: one launch post",
+      now: TUESDAY_MORNING,
+      startDate: "2026-10-06",
+      endDate: "2026-10-06",
+      expected: [["Launch", "2026-10-06", "12:00"]],
+    },
+    {
+      name: "starts tomorrow and ends the day after: launch and last chance",
+      now: TUESDAY_MORNING,
+      startDate: "2026-09-30",
+      endDate: "2026-10-01",
+      expected: [
+        ["Launch", "2026-09-30", "12:00"],
+        ["Last chance", "2026-10-01", "12:00"],
+      ],
+    },
+    {
+      name: "ended yesterday: no suggestions",
+      now: TUESDAY_MORNING,
+      startDate: undefined,
+      endDate: "2026-09-28",
+      expected: [],
+    },
+    {
+      name: "ends today: launches today",
+      now: TUESDAY_MORNING,
+      startDate: undefined,
+      endDate: "2026-09-29",
+      expected: [["Launch", "2026-09-29", "12:00"]],
+    },
+    {
+      // 12:30 BST: today's 12:00 is inside the 15-minute rule, so nothing is left.
+      name: "ends today and it is past noon: no suggestions",
+      now: "2026-09-29T11:30:00.000Z",
+      startDate: undefined,
+      endDate: "2026-09-29",
+      expected: [],
+    },
+    {
+      // Mon 19 Oct, 09:00 BST. Starts Sat 24 Oct (BST), ends Wed 28 Oct (GMT).
+      name: "starts before the clock change and ends after it",
+      now: "2026-10-19T08:00:00.000Z",
+      startDate: "2026-10-24",
+      endDate: "2026-10-28",
+      expected: [
+        ["Launch", "2026-10-24", "12:00"],
+        ["Mid-run reminder", "2026-10-26", "12:00"],
+        ["Last chance", "2026-10-28", "12:00"],
+      ],
+    },
+    {
+      // Tue 20 Oct, 09:00 BST. Starts Sun 25 Oct, the day the clocks go back.
+      name: "starts on the day the clocks go back",
+      now: "2026-10-20T08:00:00.000Z",
+      startDate: "2026-10-25",
+      endDate: "2026-10-27",
+      expected: [
+        ["Launch", "2026-10-25", "12:00"],
+        ["Mid-run reminder", "2026-10-26", "12:00"],
+        ["Last chance", "2026-10-27", "12:00"],
+      ],
+    },
+    {
+      // 23:30 UTC on Sat 24 Oct is 00:30 BST on Sun 25 Oct in London, so an
+      // offer that ended on the 24th has ended, although the UTC date is the 24th.
+      name: "ended on the Saturday, just after midnight on the night the clocks go back",
+      now: "2026-10-24T23:30:00.000Z",
+      startDate: undefined,
+      endDate: "2026-10-24",
+      expected: [],
+    },
+  ])("offers the right posts when the offer $name", ({ now, startDate, endDate, expected }) => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(now));
+
+    const built = buildPromotionSuggestions({ startDate, endDate, timezone: TZ });
+
+    expect(asRows(built)).toEqual(expected);
+    const keys = built.map((slot) => `${slot.date}T${slot.time}`);
+    expect(new Set(keys).size).toBe(keys.length);
+  });
+
+  it("puts the launch at 12:00 London on a start date either side of the clock change", () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-19T08:00:00.000Z")); // Mon 19 Oct, 09:00 BST
+
+    const launchAt = (startDate: string) => {
+      const [launch] = buildPromotionSuggestions({ startDate, endDate: "2026-10-30", timezone: TZ });
+      return DateTime.fromISO(`${launch.date}T${launch.time}`, { zone: TZ }).toUTC().toISO();
+    };
+
+    expect(launchAt("2026-10-24")).toBe("2026-10-24T11:00:00.000Z"); // 12:00 BST
+    expect(launchAt("2026-10-25")).toBe("2026-10-25T12:00:00.000Z"); // 12:00 GMT
+  });
+});

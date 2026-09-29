@@ -156,6 +156,7 @@ export function ScheduleStep({
     }
     if (contentBrief.contentType === 'promotion') {
       return buildPromotionSuggestions({
+        startDate: contentBrief.startDate,
         endDate: contentBrief.endDate,
         timezone,
       });

@@ -5,7 +5,7 @@ import { unstable_rethrow } from 'next/navigation';
 import { DateTime } from 'luxon';
 
 import { requireAuthContext } from '@/lib/auth/server';
-import { contentBriefSchema } from '@/features/create/schemas/content-schemas';
+import { contentBriefSubmissionSchema } from '@/features/create/schemas/content-schemas';
 import { resolvePreviewCandidates } from '@/lib/library/data';
 import { getContentForCalendar } from '@/lib/content/queries';
 import { buildGenerationTemporalContext } from '@/lib/create/temporal-context';
@@ -119,7 +119,7 @@ function platformsForPlacement(
 
 /**
  * Create a new content draft from a content brief.
- * Validates input with contentBriefSchema, inserts into content_items.
+ * Validates input with contentBriefSubmissionSchema (which refuses an offer that has already ended), inserts into content_items.
  */
 export async function createDraft(
   formData: unknown,
@@ -127,7 +127,7 @@ export async function createDraft(
   try {
     const { supabase, accountId } = await requireEntitledContext('create');
 
-    const parsed = contentBriefSchema.safeParse(formData);
+    const parsed = contentBriefSubmissionSchema.safeParse(formData);
     if (!parsed.success) {
       return { error: parsed.error.issues[0]?.message ?? 'Invalid input' };
     }
@@ -738,8 +738,9 @@ export async function createScheduledBatch(
     // and must not rely on the client having validated. The discriminated union
     // keys off contentType (passed as a sibling field), so inject it. We keep
     // the original brief object (downstream reads several fields by key) and
-    // only reject when it is not a well-formed content brief.
-    const briefValidation = contentBriefSchema.safeParse({ ...brief, contentType });
+    // only reject when it is not a well-formed content brief, or is an offer
+    // whose dates cannot work (ended, or starting after it ends).
+    const briefValidation = contentBriefSubmissionSchema.safeParse({ ...brief, contentType });
     if (!briefValidation.success) {
       return { error: briefValidation.error.issues[0]?.message ?? 'Invalid content brief' };
     }

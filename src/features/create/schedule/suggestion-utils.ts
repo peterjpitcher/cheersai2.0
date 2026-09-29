@@ -11,6 +11,8 @@ interface EventSuggestionInput {
 }
 
 interface PromotionSuggestionInput {
+  /** The offer's first day (YYYY-MM-DD), when the owner set one; blank means none. */
+  startDate?: string;
   endDate: string | undefined;
   timezone: string;
 }
@@ -174,12 +176,29 @@ export function deconflictSuggestions(
   return result;
 }
 
+/**
+ * "Launch", "Mid-run reminder" and "Last chance" for an offer, each at
+ * DEFAULT_POST_TIME on its London day. The run starts on the offer's start date
+ * when that is still to come (and not after the end date), otherwise today; the
+ * reminder sits halfway between the start and the end. An offer whose end date
+ * has passed gets no suggestions.
+ */
 export function buildPromotionSuggestions({
+  startDate,
   endDate,
   timezone,
 }: PromotionSuggestionInput): SuggestedSlotDisplay[] {
-  const start = DateTime.now().setZone(timezone).startOf("day");
-  const end = parseDate(endDate, timezone).set({ hour: 17, minute: 0 });
+  const today = DateTime.now().setZone(timezone).startOf("day");
+  const endDay = parseDate(endDate, timezone);
+  // Compared as London days: just after midnight in BST the UTC date is
+  // still yesterday's.
+  if (endDay < today) return [];
+
+  // A start date after the end date is refused by the form and the server; a
+  // draft saved before that rule launches today rather than after the end.
+  const startDay = startDate ? DateTime.fromISO(startDate, { zone: timezone }).startOf("day") : null;
+  const start = startDay?.isValid && startDay > today && startDay <= endDay ? startDay : today;
+  const end = endDay.set({ hour: 17, minute: 0 });
   const minimumSlot = DateTime.now().setZone(timezone).plus({ minutes: 15 }).startOf("minute");
 
   const duration = Math.max(0, end.diff(start, "hours").hours ?? 0);
