@@ -1,5 +1,7 @@
 'use server';
 
+import { unstable_rethrow } from 'next/navigation';
+
 import { requireAuthContext } from '@/lib/auth/server';
 import {
   getPostAnalytics,
@@ -30,6 +32,7 @@ export async function getAnalyticsData(
     const data = await getPostAnalytics(accountId, dateRange);
     return { data };
   } catch (err) {
+    unstable_rethrow(err);
     console.error('[analytics-action] getAnalyticsData error:', err);
     return { error: 'Failed to load analytics data' };
   }
@@ -46,6 +49,7 @@ export async function getPlatformComparison(
     const data = await getEngagementByPlatform(accountId, dateRange);
     return { data };
   } catch (err) {
+    unstable_rethrow(err);
     console.error('[analytics-action] getPlatformComparison error:', err);
     return { error: 'Failed to load platform comparison' };
   }
@@ -62,6 +66,7 @@ export async function getContentTypeComparison(
     const data = await getEngagementByContentType(accountId, dateRange);
     return { data };
   } catch (err) {
+    unstable_rethrow(err);
     console.error('[analytics-action] getContentTypeComparison error:', err);
     return { error: 'Failed to load content type comparison' };
   }
@@ -76,6 +81,7 @@ export async function getBestTimes(): Promise<{ data?: BestTimeSlot[]; error?: s
     const data = await getBestDayTimeSlots(accountId);
     return { data };
   } catch (err) {
+    unstable_rethrow(err);
     console.error('[analytics-action] getBestTimes error:', err);
     return { error: 'Failed to load best posting times' };
   }

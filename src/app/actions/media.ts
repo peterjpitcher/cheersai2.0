@@ -1,6 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { unstable_rethrow } from 'next/navigation';
 
 import { requireAuthContext } from '@/lib/auth/server';
 import { MEDIA_BUCKET } from '@/lib/constants';
@@ -111,6 +112,7 @@ export async function uploadMediaAction(
 
     return { data: mapMediaRow(data as Record<string, unknown>) };
   } catch (err) {
+    unstable_rethrow(err);
     return { error: err instanceof Error ? err.message : String(err) };
   }
 }
@@ -183,6 +185,7 @@ export async function deleteMediaAction(
 
     return { success: true };
   } catch (err) {
+    unstable_rethrow(err);
     return { error: err instanceof Error ? err.message : String(err) };
   }
 }
@@ -219,6 +222,7 @@ export async function updateMediaTags(
 
     return { success: true };
   } catch (err) {
+    unstable_rethrow(err);
     return { error: err instanceof Error ? err.message : String(err) };
   }
 }
@@ -305,6 +309,7 @@ export async function attachMediaToContent(
 
     return { success: true };
   } catch (err) {
+    unstable_rethrow(err);
     return { error: err instanceof Error ? err.message : String(err) };
   }
 }

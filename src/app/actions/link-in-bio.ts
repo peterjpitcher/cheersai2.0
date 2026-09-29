@@ -6,6 +6,7 @@
  */
 
 import { revalidatePath } from 'next/cache';
+import { unstable_rethrow } from 'next/navigation';
 
 import { requireAuthContext } from '@/lib/auth/server';
 import {
@@ -27,6 +28,7 @@ export async function getProfileWithTiles(): Promise<LinkInBioProfileWithTiles> 
   try {
     return await getLinkInBioProfileWithTiles();
   } catch (error) {
+    unstable_rethrow(error);
     console.error('[link-in-bio] getProfileWithTiles error:', error);
     return { profile: null, tiles: [] };
   }
@@ -43,6 +45,7 @@ export async function saveProfile(
     revalidatePath(`/l/${result.slug}`);
     return { success: true };
   } catch (error) {
+    unstable_rethrow(error);
     console.error('[link-in-bio] saveProfile error:', error);
     return { error: 'Failed to save profile' };
   }
@@ -56,6 +59,7 @@ export async function publishPage(
     revalidatePath(`/l/${slug}`);
     return { success: true };
   } catch (error) {
+    unstable_rethrow(error);
     console.error('[link-in-bio] publishPage error:', error);
     return { error: 'Failed to publish page' };
   }
@@ -69,6 +73,7 @@ export async function unpublishPage(
     revalidatePath(`/l/${slug}`);
     return { success: true };
   } catch (error) {
+    unstable_rethrow(error);
     console.error('[link-in-bio] unpublishPage error:', error);
     return { error: 'Failed to unpublish page' };
   }
@@ -95,6 +100,7 @@ export async function checkSlugAvailability(
 
     return { available: !data };
   } catch (error) {
+    unstable_rethrow(error);
     console.error('[link-in-bio] checkSlugAvailability error:', error);
     return { available: false };
   }
@@ -115,6 +121,7 @@ export async function saveTile(
     }
     return { success: true };
   } catch (error) {
+    unstable_rethrow(error);
     console.error('[link-in-bio] saveTile error:', error);
     return { error: 'Failed to save tile' };
   }
@@ -131,6 +138,7 @@ export async function deleteTile(
     }
     return { success: true };
   } catch (error) {
+    unstable_rethrow(error);
     console.error('[link-in-bio] deleteTile error:', error);
     return { error: 'Failed to delete tile' };
   }
@@ -147,6 +155,7 @@ export async function reorderTiles(
     }
     return { success: true };
   } catch (error) {
+    unstable_rethrow(error);
     console.error('[link-in-bio] reorderTiles error:', error);
     return { error: 'Failed to reorder tiles' };
   }

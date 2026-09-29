@@ -1,6 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { unstable_rethrow } from 'next/navigation';
 
 import { requireFeatureContext } from '@/lib/auth/features';
 import { createServiceSupabaseClient } from '@/lib/supabase/service';
@@ -128,6 +129,7 @@ export async function createTournament(
 
     return { success: true, tournamentId: data.id };
   } catch (err) {
+    unstable_rethrow(err);
     return { success: false, error: err instanceof Error ? err.message : String(err) };
   }
 }
@@ -175,6 +177,7 @@ export async function updateTournament(
 
     return { success: true };
   } catch (err) {
+    unstable_rethrow(err);
     return { success: false, error: err instanceof Error ? err.message : String(err) };
   }
 }
@@ -206,6 +209,7 @@ export async function updateTournamentStatus(
 
     return { success: true };
   } catch (err) {
+    unstable_rethrow(err);
     return { success: false, error: err instanceof Error ? err.message : String(err) };
   }
 }
@@ -260,6 +264,7 @@ export async function createFixture(
 
     return { success: true, fixtureId: data.id };
   } catch (err) {
+    unstable_rethrow(err);
     return { success: false, error: err instanceof Error ? err.message : String(err) };
   }
 }
@@ -297,6 +302,7 @@ export async function deleteFixture(
 
     return { success: true };
   } catch (err) {
+    unstable_rethrow(err);
     return { success: false, error: err instanceof Error ? err.message : String(err) };
   }
 }
@@ -364,6 +370,7 @@ export async function updateFixture(
 
     return { success: true };
   } catch (err) {
+    unstable_rethrow(err);
     return { success: false, error: err instanceof Error ? err.message : String(err) };
   }
 }
@@ -465,6 +472,7 @@ export async function saveAndGenerateFixture(
 
     return { success: true };
   } catch (err) {
+    unstable_rethrow(err);
     return { success: false, error: err instanceof Error ? err.message : String(err) };
   }
 }
@@ -551,6 +559,7 @@ export async function bulkGenerateAction(
       errors: result.errors,
     };
   } catch (err) {
+    unstable_rethrow(err);
     tournamentDebugError('action.bulk-generate.unhandled-error', err, {
       tournamentId: redactId(tournamentId),
     });
@@ -735,6 +744,7 @@ export async function publishNowFixture(
 
     return { success: true, enqueuedCount };
   } catch (err) {
+    unstable_rethrow(err);
     return { success: false, error: err instanceof Error ? err.message : String(err) };
   }
 }
@@ -798,6 +808,7 @@ export async function toggleFixtureShowing(
 
     return { success: true };
   } catch (err) {
+    unstable_rethrow(err);
     return { success: false, error: err instanceof Error ? err.message : String(err) };
   }
 }
@@ -834,6 +845,7 @@ export async function deleteTournament(
 
     return { success: true };
   } catch (err) {
+    unstable_rethrow(err);
     return { success: false, error: err instanceof Error ? err.message : String(err) };
   }
 }
@@ -936,6 +948,7 @@ export async function getFixturePreview(
 
     return { success: true, items };
   } catch (err) {
+    unstable_rethrow(err);
     return { success: false, error: err instanceof Error ? err.message : String(err) };
   }
 }
@@ -1023,6 +1036,7 @@ export async function importFixtures(
           imported++;
         }
       } catch (err) {
+        unstable_rethrow(err);
         errors.push({ row: i + 1, error: err instanceof Error ? err.message : String(err) });
       }
     }
@@ -1031,6 +1045,7 @@ export async function importFixtures(
 
     return { success: true, imported, skipped, errors };
   } catch (err) {
+    unstable_rethrow(err);
     return { success: false, imported: 0, skipped: 0, errors: [{ row: 0, error: err instanceof Error ? err.message : String(err) }] };
   }
 }
@@ -1063,6 +1078,7 @@ export async function regenerateFeedApiKey(
     revalidatePath(`/tournaments/${tournamentId}`);
     return { success: true, apiKey };
   } catch (err) {
+    unstable_rethrow(err);
     return { success: false, error: err instanceof Error ? err.message : String(err) };
   }
 }
@@ -1092,6 +1108,7 @@ export async function disableFeedApiKey(
     revalidatePath(`/tournaments/${tournamentId}`);
     return { success: true };
   } catch (err) {
+    unstable_rethrow(err);
     return { success: false, error: err instanceof Error ? err.message : String(err) };
   }
 }
@@ -1104,5 +1121,8 @@ export async function getFixtureScreeningPreview(tournamentId: string, input: un
     const parsed = fixtureCreateSchema.parse(input);
     const [result] = await projectTournamentFixtures(supabase, tournament, [{ ...parsed, id: '', tournamentId, teamsConfirmed: parsed.teamsConfirmed ?? false, bookingUrl: parsed.bookingUrl || null } as TournamentFixture]);
     return { success: true, screening: result.screening };
-  } catch (error) { return { success: false, error: error instanceof Error ? error.message : 'Preview unavailable' }; }
+  } catch (error) {
+    unstable_rethrow(error);
+    return { success: false, error: error instanceof Error ? error.message : 'Preview unavailable' };
+  }
 }

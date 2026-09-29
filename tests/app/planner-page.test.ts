@@ -1,4 +1,5 @@
 import type { ReactElement } from 'react';
+import { redirect } from 'next/navigation';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // The planner page must resolve the active brand itself before any query. The
@@ -120,5 +121,47 @@ describe('PlannerPage brand resolution', () => {
     });
     expect(mocks.getSetupProgress).toHaveBeenCalledWith(expect.anything(), ACCOUNT_ID);
     expect(mocks.getCurrentUser).not.toHaveBeenCalled();
+  });
+});
+
+describe('PlannerPage attention lookups', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.requireAuthContext.mockResolvedValue({ accountId: ACCOUNT_ID, role: 'owner' });
+    mocks.getFailedPublishCount.mockResolvedValue(3);
+    mocks.listPlannerNotifications.mockResolvedValue([]);
+    mocks.listActiveFailedPosts.mockResolvedValue([]);
+    mocks.getSetupProgress.mockResolvedValue(null);
+    mocks.createServiceSupabaseClient.mockReturnValue({});
+  });
+
+  /** What requireAuthContext() throws when the session has ended: Next's real redirect signal. */
+  function signInRedirect(): unknown {
+    try {
+      redirect('/auth/login');
+    } catch (error) {
+      return error;
+    }
+    throw new Error('redirect() did not throw');
+  }
+
+  it.each([
+    ['the failed-post count', () => mocks.getFailedPublishCount],
+    ['the notifications feed', () => mocks.listPlannerNotifications],
+    ['the failed-post list', () => mocks.listActiveFailedPosts],
+  ])('lets a sign-in redirect from %s through instead of falling back', async (_lookup, lookup) => {
+    const signal = signInRedirect();
+    lookup().mockRejectedValue(signal);
+
+    await expect(PlannerPage({ searchParams: Promise.resolve({ status: 'failed' }) })).rejects.toBe(signal);
+  });
+
+  it('still falls back quietly when a lookup fails for any other reason', async () => {
+    mocks.getFailedPublishCount.mockRejectedValue(new Error('publish_jobs lookup failed'));
+    mocks.listPlannerNotifications.mockRejectedValue(new Error('notifications lookup failed'));
+
+    const page = await PlannerPage({});
+
+    expect(findComponent(page, 'AttentionNeededBanner')?.props.initialCount).toBe(0);
   });
 });

@@ -1,3 +1,5 @@
+import { unstable_rethrow } from "next/navigation";
+
 import { PageHeader } from "@/components/layout/PageHeader";
 import { BrandVoiceForm } from "@/features/settings/brand-voice-form";
 import { PostingDefaultsForm } from "@/features/settings/posting-defaults-form";
@@ -37,6 +39,7 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
     // Owners only. A failed read shows a note in the Team section, not a broken page.
     role === "owner"
       ? listTeamInvitations().catch((error: unknown) => {
+          unstable_rethrow(error);
           console.error("[settings] team invitations lookup failed", error);
           return null;
         })

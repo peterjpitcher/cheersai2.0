@@ -1,3 +1,4 @@
+import { redirect } from 'next/navigation';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -29,7 +30,8 @@ vi.mock('@/lib/link-in-bio/profile', () => ({ getLinkInBioProfileWithTiles: asyn
 vi.mock('@/lib/library/data', () => ({ listMediaAssets: async () => [] }));
 vi.mock('@/lib/management-app/data', () => ({ getManagementConnectionSummary: async () => null }));
 vi.mock('@/lib/settings/data', () => ({ getOwnerSettings: async () => ({ brand: {}, posting: {} }) }));
-vi.mock('@/app/(app)/settings/team-actions', () => ({ listTeam: async () => [], listTeamInvitations: async () => [] }));
+const mockInvitations = vi.fn<() => Promise<unknown[]>>(async () => []);
+vi.mock('@/app/(app)/settings/team-actions', () => ({ listTeam: async () => [], listTeamInvitations: () => mockInvitations() }));
 vi.mock('@/lib/billing/overview', () => ({
   BILLING_TRIAL_DAYS: 14,
   billingPlanOptions: () => [],
@@ -50,6 +52,28 @@ beforeEach(() => {
   mockSwitch.mockResolvedValue('open');
   mockAuth.mockResolvedValue(OWNER_CTX);
   mockOwnerRow.mockResolvedValue(true);
+  mockInvitations.mockResolvedValue([]);
+});
+
+describe('Settings: the team invitations lookup', () => {
+  it('lets a sign-in redirect through (the session ended while the page loaded)', async () => {
+    let signInRedirect: unknown;
+    try {
+      redirect('/auth/login');
+    } catch (error) {
+      signInRedirect = error;
+    }
+    mockInvitations.mockRejectedValue(signInRedirect);
+
+    await expect(SettingsPage({})).rejects.toBe(signInRedirect);
+  });
+
+  it('still shows the page when the lookup fails for any other reason', async () => {
+    mockInvitations.mockRejectedValue(new Error('team_invitations lookup failed'));
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    expect(await render()).toContain(SECTION);
+  });
 });
 
 describe('Settings: the owner data section (spec section 5, Later (P10))', () => {

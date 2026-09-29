@@ -1,6 +1,6 @@
 import { ReactNode } from 'react';
 import Link from 'next/link';
-import { redirect } from 'next/navigation';
+import { redirect, unstable_rethrow } from 'next/navigation';
 
 import { AppShell } from '@/components/layout/app-shell';
 import { AuthProvider } from '@/components/providers/auth-provider';
@@ -43,7 +43,9 @@ export default async function AppLayout({ children }: AppLayoutProps) {
   let healthSummaries: ConnectionHealthSummary[] = [];
   try {
     healthSummaries = await getConnectionHealthSummaries();
-  } catch {
+  } catch (error) {
+    // A sign-in redirect still goes through; anything else falls back silently.
+    unstable_rethrow(error);
     // Silent fallback — no health dots or toast if query fails
   }
 
@@ -64,7 +66,8 @@ export default async function AppLayout({ children }: AppLayoutProps) {
   let notificationCount = 0;
   try {
     notificationCount = await getUnreadNotificationCount();
-  } catch {
+  } catch (error) {
+    unstable_rethrow(error);
     // Silent fallback — badge shows 0 if query fails
   }
 

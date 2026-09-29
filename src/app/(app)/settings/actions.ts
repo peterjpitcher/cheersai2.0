@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { unstable_rethrow } from "next/navigation";
 
 import {
   brandProfileFormSchema,
@@ -213,6 +214,7 @@ export async function testManagementConnectionSettings() {
       summary,
     };
   } catch (error) {
+    unstable_rethrow(error);
     const message = describeManagementConnectionError(error);
 
     try {
@@ -220,7 +222,8 @@ export async function testManagementConnectionSettings() {
         status: "error",
         message,
       });
-    } catch {
+    } catch (recordError) {
+      unstable_rethrow(recordError);
       // Ignore if the connection row has not been created yet.
     }
 

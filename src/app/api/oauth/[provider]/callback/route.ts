@@ -1,3 +1,4 @@
+import { unstable_rethrow } from "next/navigation";
 import { NextRequest, NextResponse } from "next/server";
 
 import { completeOAuthConnect } from "@/app/(app)/connections/actions";
@@ -61,6 +62,9 @@ export async function GET(
       return NextResponse.redirect(chooserUrl);
     }
   } catch (error) {
+    // A signed-out owner is sent to sign in (requireOwnerContext redirects by
+    // throwing), not to /connections with "NEXT_REDIRECT" as the message.
+    unstable_rethrow(error);
     const message = error instanceof Error ? error.message : "Could not finish the OAuth connection.";
     return redirectToConnections(base, {
       oauth: "error",

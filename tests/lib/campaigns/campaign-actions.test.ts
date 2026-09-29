@@ -1,3 +1,4 @@
+import { redirect } from 'next/navigation';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // Meta Ads tokens come from encrypted storage (src/lib/meta/ad-account-tokens.ts,
@@ -1122,6 +1123,33 @@ describe('applyOptimisationRecommendation', () => {
     expect(mockSupabase.insert).toHaveBeenCalledWith(expect.objectContaining({
       operation_type: 'optimisation_rewrite_apply_failed',
     }));
+  });
+
+  it('hands the recommendation back and sends the owner to sign in when the session ends mid-apply', async () => {
+    queueLiveApplyReads();
+    mockSingle.mockResolvedValueOnce({ data: { storage_path: 'media/weekday.jpg' }, error: null });
+    // The click-link step re-checks sign-in (requireFeatureContext), which redirects by throwing.
+    let signInRedirect: unknown;
+    try {
+      redirect('/auth/login');
+    } catch (error) {
+      signInRedirect = error;
+    }
+    vi.mocked(getManagementConnectionConfig).mockRejectedValueOnce(signInRedirect);
+
+    await expect(applyOptimisationRecommendation('action-safe')).rejects.toBe(signInRedirect);
+
+    expect(mockSupabase.update).toHaveBeenCalledWith(expect.objectContaining({
+      status: 'planned',
+      applied_at: null,
+      error: expect.stringContaining('Sign in and apply it again'),
+    }));
+    expect(mockSupabase.update).not.toHaveBeenCalledWith(expect.objectContaining({ status: 'failed' }));
+    expect(mockSupabase.update).not.toHaveBeenCalledWith(expect.objectContaining({ error: 'NEXT_REDIRECT' }));
+    expect(insertedReplacementRow()).toBeUndefined();
+    expect(createManagementMetaAdsLink).not.toHaveBeenCalled();
+    expect(uploadMetaImage).not.toHaveBeenCalled();
+    expect(createMetaAd).not.toHaveBeenCalled();
   });
 
   it('stops a second overlapping apply, so two replacements cannot share a key', async () => {

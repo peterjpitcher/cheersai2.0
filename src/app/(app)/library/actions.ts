@@ -2,6 +2,7 @@
 
 import crypto from "node:crypto";
 import { revalidatePath } from "next/cache";
+import { unstable_rethrow } from "next/navigation";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -404,6 +405,7 @@ export async function autoNameAndTagMediaAsset(assetId: string): Promise<MediaAs
 
     return await updateMediaAsset({ assetId, fileName, tags });
   } catch (error) {
+    unstable_rethrow(error);
     console.error("[library] auto name/tag failed", error);
     return null;
   }

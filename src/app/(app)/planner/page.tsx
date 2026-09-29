@@ -1,4 +1,5 @@
 import { Suspense } from 'react';
+import { unstable_rethrow } from 'next/navigation';
 import { DateTime } from 'luxon';
 
 import { DEFAULT_TIMEZONE } from '@/lib/constants';
@@ -48,11 +49,23 @@ export default async function PlannerPage({ searchParams }: PlannerPageProps) {
   const effectiveMonth = referenceMonth.isValid ? referenceMonth : now;
   const dayLine = now.toFormat("cccc d LLLL");
 
-  // Fetch attention banner count and initial feed events in parallel
+  // Fetch attention banner count and initial feed events in parallel. These
+  // lookups fall back quietly, but a sign-in redirect from them still goes through.
   const [failedCount, notifications, activeFailedPosts, setupProgress, helpHref] = await Promise.all([
-    getFailedPublishCount().catch(() => 0),
-    listPlannerNotifications(20).catch(() => []),
-    failedFilterActive ? listActiveFailedPosts(100).catch(() => []) : Promise.resolve([]),
+    getFailedPublishCount().catch((error: unknown) => {
+      unstable_rethrow(error);
+      return 0;
+    }),
+    listPlannerNotifications(20).catch((error: unknown) => {
+      unstable_rethrow(error);
+      return [];
+    }),
+    failedFilterActive
+      ? listActiveFailedPosts(100).catch((error: unknown) => {
+          unstable_rethrow(error);
+          return [];
+        })
+      : Promise.resolve([]),
     // A lookup failure just hides the checklist; it is guidance, not a gate.
     getSetupProgress(createServiceSupabaseClient(), accountId).catch(() => null),
     // The first-post article link follows the sign-up switch (null while it is off or unreadable).

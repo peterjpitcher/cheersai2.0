@@ -1,6 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { unstable_rethrow } from 'next/navigation';
 
 import { requireFeatureContext } from '@/lib/auth/features';
 import { requireAuthContext } from '@/lib/auth/server';
@@ -861,6 +862,8 @@ export async function publishCampaign(
         .update({ source_snapshot: trackedSourceSnapshot })
         .eq('id', campaignId);
     } catch (error) {
+      // A sign-in redirect goes through without being saved as the publish error.
+      unstable_rethrow(error);
       const message = error instanceof Error ? error.message : 'Failed to create central campaign click links.';
       await setPublishError(message);
       return { error: message };
@@ -1418,6 +1421,7 @@ export async function syncCampaignPerformance(
     revalidatePath(`/campaigns/${campaignId}`);
     return { success: true };
   } catch (err) {
+    unstable_rethrow(err);
     return { error: err instanceof Error ? err.message : String(err) };
   }
 }
