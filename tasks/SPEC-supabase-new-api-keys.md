@@ -1,6 +1,6 @@
 # SPEC: move CheersAI to Supabase's publishable and secret API keys
 
-Status: plan only. Peter approved writing it on 29 September 2026. Nothing has been built, no key has been created, and no Supabase, Vercel or database setting has changed. Every step that deploys, changes a setting or handles a key needs Peter's yes at the time. Claude never enters, reads or prints a key value; Peter adds and removes every key himself.
+Status: Peter approved writing it on 29 September 2026, and the same day approved building and deploying the caller check: report-only first (step 1), then enforced (step 2) after a clean day of logs. Step 1 is built on branch `fix/publish-queue-caller-check-report-only` and waits for its deploy. No key has been created, and no Supabase, Vercel or database setting has changed. Every step that deploys, changes a setting or handles a key needs Peter's yes at the time. Claude never enters, reads or prints a key value; Peter adds and removes every key himself.
 
 ## Why
 
@@ -90,7 +90,7 @@ Nothing in `src/` calls Supabase REST, Storage or Functions with its own `apikey
 
 | File | Uses | Step |
 |---|---|---|
-| `tests/setup.ts` | sets `NEXT_PUBLIC_SUPABASE_ANON_KEY`; its Deno stub returns `SUPABASE_SERVICE_ROLE_KEY` | 1, 7, 10 |
+| `tests/setup.ts` | sets `NEXT_PUBLIC_SUPABASE_ANON_KEY`; its Deno stub returns `SUPABASE_SERVICE_ROLE_KEY` | 7, 10 (step 1's tests stub `Deno` themselves) |
 | `tests/lib/env-site-url.test.ts`, `tests/lib/env-turnstile.test.ts` | production environment fixtures with the legacy names | 4, 10 |
 | `tests/connectionDiagnostics.test.ts`, `tests/lib/campaigns/actions-ads.test.ts`, `tests/lib/campaigns/oauth.test.ts`, `tests/mediaAssetsData.test.ts`, `tests/plannerActivity.test.ts`, `tests/tokenExchange.test.ts` | set the legacy names in `process.env` | 10 |
 | `.github/workflows/ci.yml` | `NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder-key` in the build and e2e jobs (three places); `migration-check` starts only the database and uses no key | 10 |
@@ -163,6 +163,16 @@ What:
 - `index.ts` runs the check before the method check and before reading the body. In this step it only logs the verdict (accepted or refused, which kind of key, which header matched, never any part of a key) and then carries on exactly as today.
 - Vitest, including `index.ts` under a stubbed Deno global: the legacy key on either header, a secret key from the JSON, the local single key, the anon key, a publishable-looking key, no header, wrong and truncated keys, malformed JSON and an empty configuration.
 - Before the deploy, compare the live source (`get_edge_function`, read only) with main, so the deploy carries only this change. Any other difference goes to Peter first.
+
+As built (29 September 2026):
+- `caller-auth.ts` reads the environment on every request, so secret keys the platform adds at step 5 are accepted without a deploy (risk 10). A `SUPABASE_SECRET_KEYS` value that is not a JSON object of non-empty strings adds no key at all and logs an error; `{}` or a blank value is simply no secret keys. Allowed and presented keys are trimmed. `Authorization` is read only as `Bearer <token>` (scheme in any case); a raw key or another scheme counts as no credential.
+- Both callers send the legacy key on both headers. They call `functions.invoke('publish-queue')` on the service client (`createServiceSupabaseClient()`; tournament publishing gets it from `requireAuthContext()`), which has `persistSession: false` and no session, so supabase-js 2.89 sends `apikey: <SUPABASE_SERVICE_ROLE_KEY>`, `Authorization: Bearer <SUPABASE_SERVICE_ROLE_KEY>`, `Content-Type: application/json` and `X-Client-Info: supabase-js-node/2.89.0`. `tests/publish-queue-index.test.ts` captures that request from the real client and feeds it to `index.ts`.
+- With `verify_jwt` on, a request without a valid project JWT never reaches the function, so any refused line in this step comes from a caller holding the anon key or a signed-in user's session token (any user of any brand passes the platform check too).
+- One log line per request, on a single line, before the method check: `[publish-queue] caller accepted {...}` (info) or `[publish-queue] caller refused {...}` (warning, or error when no allowed key is configured). The JSON holds only `reason`, `keyKind`, `matchedHeader`, `presented`, `method`, `enforced`, `legacyServiceRoleKeyConfigured` and `secretKeysConfigured`; never any part of a key or token. The scheduler's line is `[publish-queue] caller accepted {"reason":"matched","keyKind":"legacy_service_role","matchedHeader":"both","presented":"both","method":"POST","enforced":false,"legacyServiceRoleKeyConfigured":true,"secretKeysConfigured":0}`. These land in the `function_logs` source, one per `function_edge_logs` POST.
+- Step 2 is one line: `export const CALLER_CHECK_ENFORCED = false;` becomes `true` in `caller-auth.ts`. `index.ts` already returns `new Response(null, { status: 401 })` when the flag is on and the caller is refused, before the method check and the body. The enforced behaviour is already tested through a module mock of that flag.
+- `tests/setup.ts` did not need to change: the new tests stub `Deno` themselves.
+- Baseline before the deploy (`function_edge_logs`, 15:00 to 16:55 UTC on 29 September 2026): 95 POSTs, all 200, all with a `service_role` JWT, none with a new-key `apikey` prefix, no other callers.
+- A local Deno run of this branch fetched `supabase-js@2.117.1` from esm.sh for the worker (risk 9); the deploy will bring in whatever 2.x esm.sh serves that day.
 
 Checks: at least 24 hours of logs, including a weekend. Every scheduler call, and any tournament call, is logged as accepted with the legacy key. Any refused call is listed for Peter (scanners, or the misuse described in Findings). Heartbeat and publishing are unchanged.
 
