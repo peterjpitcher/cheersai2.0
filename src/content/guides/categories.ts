@@ -8,33 +8,39 @@ export interface GuideCategory {
 
 /**
  * Guide categories, in the order /guides lists them. A category with no
- * guides is not shown. The keyword plan may rename or reorder these.
+ * guides is not shown. They follow the keyword plan's topic groups
+ * (29 September 2026).
  */
 export const GUIDE_CATEGORIES: readonly GuideCategory[] = [
   {
-    id: 'getting-started',
-    label: 'Getting started',
-    description: 'Setting up Facebook and Instagram for your venue.',
+    id: 'planning',
+    label: 'Planning and scheduling',
+    description: 'What to post, when to post it and how to schedule it.',
   },
   {
-    id: 'planning',
-    label: 'Planning your posts',
-    description: 'What to post, how often and when.',
+    id: 'ideas',
+    label: 'Ideas for your venue',
+    description: 'Post ideas for pubs, restaurants, cafes, bars and hotels.',
+  },
+  {
+    id: 'events',
+    label: 'Events and seasons',
+    description: 'Filling quiz nights, match days, Christmas and the rest of the year.',
   },
   {
     id: 'writing',
-    label: 'Writing posts',
-    description: 'Captions, tone of voice and giving people a reason to visit.',
+    label: 'Captions, hashtags and replies',
+    description: 'Words that make people want to visit, and how to answer reviews.',
   },
   {
     id: 'photos',
     label: 'Photos and video',
-    description: 'Pictures and clips that show your venue at its best.',
+    description: 'Pictures and Reels that show your venue at its best.',
   },
   {
-    id: 'events',
-    label: 'Events and busy days',
-    description: 'Filling quiz nights, match days, bank holidays and Christmas.',
+    id: 'tools',
+    label: 'Tools and AI',
+    description: 'Scheduling tools, AI writing help and link-in-bio pages.',
   },
 ];
 

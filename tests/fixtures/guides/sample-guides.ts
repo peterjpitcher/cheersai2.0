@@ -20,6 +20,10 @@ export const planningGuide = defineGuide({
   updated: '2026-09-29',
   summary:
     'Pick the few things worth telling people this week, give each one a day and write the posts in one sitting. Here is a way to do it that fits around a busy Monday.',
+  intro: [
+    'A week of posts takes about an hour once you have a routine: list what is happening, give each thing a day, then write and schedule the lot.',
+    ['If you are short of ideas, start with ', { text: 'our stories routine', href: '/guides/instagram-stories-for-restaurants' }, '.'],
+  ],
   sections: [
     {
       heading: "Start with what's actually happening",
@@ -59,6 +63,16 @@ export const planningGuide = defineGuide({
             'Leave the weekend for photos of the pub at its busiest.',
           ],
         },
+        {
+          type: 'table',
+          caption: 'A sample week of posts',
+          head: ['Day', 'Post', 'Its job'],
+          rows: [
+            ['Monday', 'What is on this week', 'Give people plans'],
+            ['Thursday', ['The weekend, with ', { strong: 'booking details' }], 'Ask for the booking'],
+            ['Sunday', '', ''],
+          ],
+        },
       ],
     },
     {
@@ -71,6 +85,11 @@ export const planningGuide = defineGuide({
         {
           type: 'paragraph',
           text: 'Facebook suits the details: times, prices and how to book.',
+        },
+        {
+          type: 'example',
+          label: 'Facebook post',
+          lines: ['Quiz night is back on Thursday from 8pm.', 'Teams of up to six. Book a table through the link.'],
         },
         {
           type: 'subheading',

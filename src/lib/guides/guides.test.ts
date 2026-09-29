@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import type { GuideInput } from '@/content/guides/types';
+import type { GuideBlock, GuideInput } from '@/content/guides/types';
 import {
   countWords,
   defineGuide,
@@ -142,6 +142,55 @@ describe('defineGuide', () => {
       );
       expect(problems, href).toEqual([]);
     }
+  });
+
+  it('checks examples and tables, and allows empty table cells', () => {
+    type TableBlock = Extract<GuideBlock, { type: 'table' }>;
+    const table = (overrides: Partial<TableBlock> = {}): TableBlock => ({
+      type: 'table',
+      caption: 'A week',
+      head: ['Day', 'Post'],
+      rows: [['Monday', '']],
+      ...overrides,
+    });
+    const problems = (...blocks: GuideBlock[]): string[] =>
+      guideProblems(input({ sections: [{ heading: 'Plan', blocks }] }));
+
+    expect(problems(table())).toEqual([]);
+    expect(problems(table({ rows: [['Monday']] }))).toContain('a table in "Plan" has a row that does not match its header');
+    expect(problems(table({ rows: [] }))).toContain('a table in "Plan" has no rows');
+    expect(problems(table({ head: [], rows: [[]] }))).toContain('a table in "Plan" has no header');
+    expect(problems(table({ caption: ' ' }))).toContain('"Plan" has an empty table');
+    expect(problems(table({ rows: [['Monday', [{ text: 'x', href: 'javascript:alert(1)' }]]] }))).toContain(
+      '"Plan" links to "javascript:alert(1)", which is not allowed',
+    );
+    expect(problems({ type: 'example', lines: [] })).toContain('an example in "Plan" has no lines');
+    expect(problems({ type: 'example', label: 'Prompt', lines: [' '] })).toContain('"Plan" has an empty example');
+    expect(problems({ type: 'example', label: 'Prompt', lines: ['Write a post.'] })).toEqual([]);
+  });
+
+  it('checks the intro and counts its words, the table and the example with the rest', () => {
+    expect(guideProblems(input({ intro: [' '] }))).toContain('the intro has an empty paragraph');
+    expect(guideProblems(input({ intro: [[{ text: 'x', href: 'http://example.com' }]] }))).toContain(
+      'the intro links to "http://example.com", which is not allowed',
+    );
+    const guide = defineGuide(
+      input({
+        summary: 'One.',
+        intro: ['Two three.'],
+        sections: [
+          {
+            heading: 'Four',
+            blocks: [
+              { type: 'table', caption: 'Five', head: ['Six'], rows: [['Seven eight']] },
+              { type: 'example', label: 'Nine', lines: ['Ten.'] },
+            ],
+          },
+        ],
+        closing: { heading: 'Eleven', text: 'Twelve.' },
+      }),
+    );
+    expect(guide.wordCount).toBe(12);
   });
 
   it('makes anchors that are safe in a URL', () => {

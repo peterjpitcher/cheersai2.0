@@ -30,6 +30,8 @@ const ALLOWED: Record<string, string> = {
   'src/lib/link-in-bio/public.ts': 'management events fallback (managementImport switch)',
   'src/app/api/booking-conversions/route.ts': 'server-only booking ingest default',
   'src/env.ts': 'comments on server-only settings',
+  'src/content/guides/best-social-media-scheduling-tools.ts':
+    "competitor comparison: names Google Business Profile among other tools' networks and says Cheers does not post there",
 };
 
 function listSourceFiles(dir: string): string[] {
