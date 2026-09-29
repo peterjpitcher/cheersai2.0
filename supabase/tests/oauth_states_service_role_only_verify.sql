@@ -1,5 +1,5 @@
 -- Check that public.oauth_states is reachable by the service role only
--- (migration 20260929113055_oauth_states_service_role_only).
+-- (migration 20260929115219_oauth_states_service_role_only).
 --
 -- The table holds OAuth handshakes in flight and, with the Facebook Page chooser,
 -- an encrypted Meta user token. Every app path uses the service-role client, so:

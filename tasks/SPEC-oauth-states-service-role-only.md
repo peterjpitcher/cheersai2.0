@@ -1,12 +1,14 @@
 # SPEC: oauth_states reachable by the service role only
 
+Status: applied to production on 29 September 2026 through the Supabase MCP, recorded as version `20260929115219` (the file is renamed to match; the stored SQL equals the file minus its final newline, sha256 `d44fa114a23b9176c6ec8bd9e5f8d5e1ee9ee25a3f23faacd13df1b5f6e24790`). `supabase/tests/oauth_states_service_role_only_verify.sql` passes on production.
+
 ## Why
 
 `public.oauth_states` holds OAuth handshakes in flight and, with the Facebook Page chooser (PR #158), an encrypted Meta user token waiting for the owner's Page choice. The app only ever reaches it with the service-role client, but production still lets a signed-in user in: three row level security policies let them insert rows directly (for any `account_id`) and read and update rows carrying their own `created_by`, and `authenticated` holds every table privilege, TRUNCATE included, which row level security does not govern. Peter approved removing that access on 29 September 2026 ("remove unused database permissions that let signed-in users write sign-in records directly").
 
 ## What changes
 
-- Migration `supabase/migrations/20260929113055_oauth_states_service_role_only.sql`: drops `oauth_states_select`, `oauth_states_insert` and `oauth_states_update`; revokes every table privilege from PUBLIC, anon and authenticated; restates `grant all ... to service_role`; then raises (rolling itself back) if anything is still open. Row level security stays on. No row changes.
+- Migration `supabase/migrations/20260929115219_oauth_states_service_role_only.sql`: drops `oauth_states_select`, `oauth_states_insert` and `oauth_states_update`; revokes every table privilege from PUBLIC, anon and authenticated; restates `grant all ... to service_role`; then raises (rolling itself back) if anything is still open. Row level security stays on. No row changes.
 - Check `supabase/tests/oauth_states_service_role_only_verify.sql`: read-only, safe on production. Fails if PUBLIC, anon or authenticated hold any table or column privilege, if any policy other than the service-role one applies to them, if a SELECT as anon or authenticated is not refused, if row level security is off, or if service_role lost select, insert, update or delete.
 - No app code changes.
 
