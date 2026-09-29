@@ -21,7 +21,8 @@ export function ConnectionOAuthHandler() {
 
     if (oauthStatus === "success" && provider) {
       startTransition(async () => {
-        toast.success(`Connected ${provider} successfully`);
+        // A Page choice can add a note, for example that Instagram moved with Facebook.
+        toast.success(`Connected ${provider} successfully`, message ? { description: message } : undefined);
         router.replace("/connections");
       });
       return;

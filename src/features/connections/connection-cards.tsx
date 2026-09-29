@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { ChangePageButton } from "@/features/connections/change-page-button";
 import { ConnectionDisconnectButton } from "@/features/connections/connection-disconnect-button";
 import { ConnectionMetadataForm } from "@/features/connections/connection-metadata-form";
 import { ConnectionOAuthButton } from "@/features/connections/connection-oauth-button";
@@ -45,10 +46,17 @@ const METADATA_FIELDS = {
 interface ConnectionCardsProps {
   /** Owners only (decision D4); the server action enforces it too. */
   canDisconnect: boolean;
+  /** Owners only (decision D4): Change Page runs the Page chooser. */
+  canChangePage?: boolean;
 }
 
-export async function ConnectionCards({ canDisconnect }: ConnectionCardsProps) {
+export async function ConnectionCards({ canDisconnect, canChangePage = false }: ConnectionCardsProps) {
   const connections = await listConnectionSummaries();
+  // Facebook is the anchor: while it is connected, Instagram uses its Page and
+  // the Page is changed from the Facebook card only.
+  const facebookConnected = connections.some(
+    (connection) => connection.provider === "facebook" && connection.hasAccessToken,
+  );
 
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -67,6 +75,8 @@ export async function ConnectionCards({ canDisconnect }: ConnectionCardsProps) {
           : metadataConfig.helper;
         const blockingIssues = connection.issues.filter((issue) => issue.severity === "error");
         const warningIssues = connection.issues.filter((issue) => issue.severity === "warning");
+        const followsFacebookPage = connection.provider === "instagram" && facebookConnected;
+        const showChangePage = canChangePage && connection.hasAccessToken && !followsFacebookPage;
 
         return (
           <article
@@ -78,6 +88,11 @@ export async function ConnectionCards({ canDisconnect }: ConnectionCardsProps) {
             </span>
             <h3 className="mt-4 text-lg font-semibold text-slate-900">{providerLabel}</h3>
             <p className="text-sm text-slate-600">{connection.displayName}</p>
+            {followsFacebookPage ? (
+              <p className="mt-1 text-xs text-slate-500">
+                Uses the Page connected to Facebook. To change it, use Change Page on the Facebook card.
+              </p>
+            ) : null}
 
             {blockingIssues.length || warningIssues.length ? (
               <div className="mt-3 space-y-2">
@@ -138,6 +153,7 @@ export async function ConnectionCards({ canDisconnect }: ConnectionCardsProps) {
                 status={connection.status}
                 hasAccessToken={connection.hasAccessToken}
               />
+              {showChangePage ? <ChangePageButton provider={connection.provider} /> : null}
               {canDisconnect && connection.hasAccessToken ? (
                 <ConnectionDisconnectButton provider={connection.provider} />
               ) : null}
