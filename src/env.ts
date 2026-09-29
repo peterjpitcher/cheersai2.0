@@ -109,6 +109,14 @@ const serverEnv = {
   // CheersAI's own customer portal configuration. Always passed explicitly:
   // the Stripe account is shared and its default portal belongs to another app.
   STRIPE_PORTAL_CONFIGURATION_ID: readOptionalEnv("STRIPE_PORTAL_CONFIGURATION_ID"),
+  // Key for the repeat free-trial check (SPEC-self-serve-signup §4.7): the
+  // HMAC-SHA256 key, exactly 64 hex characters, that turns a card's Stripe
+  // fingerprint into the code stored in trial_card_checks. Part of the billing
+  // group: Checkout, reconcile and the webhook treat a missing or malformed key
+  // as "billing not set up" (the webhook answers 503 and Stripe retries), so it
+  // never breaks a build. Preview has no Stripe keys, so it needs none. Never
+  // rotate it casually: a new key makes every stored code unmatchable.
+  TRIAL_CARD_HASH_KEY: readOptionalEnv("TRIAL_CARD_HASH_KEY"),
   // Set by Vercel: "production", "preview" or "development". In production
   // billing only accepts a live-mode STRIPE_SECRET_KEY (src/lib/billing/stripe.ts),
   // so a test key can never write test customers into the production database.
@@ -192,8 +200,10 @@ function validateProductionEnv() {
     throw new Error("Cloudflare's Turnstile test keys cannot be used in Production: set the real site key and secret");
   }
 
+  // One backslash per dot: in a regex literal `\\.` means a literal backslash
+  // then any character, which let http://127.0.0.1 through.
   const siteUrl = clientEnv.NEXT_PUBLIC_SITE_URL;
-  if (!siteUrl || /localhost|127\\.0\\.0\\.1/.test(siteUrl)) {
+  if (!siteUrl || /localhost|127\.0\.0\.1/.test(siteUrl)) {
     throw new Error("NEXT_PUBLIC_SITE_URL must be set to the deployed domain in production");
   }
 }

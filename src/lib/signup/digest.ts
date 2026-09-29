@@ -46,7 +46,8 @@ export const VENUE_WINDOW_DAYS = 90;
 export const DIGEST_LIST_LIMIT = 50;
 
 const PAGE = 1000;
-const ID_CHUNK = 100;
+/** Ids per .in() lookup, so a request URL stays short. Shared with the funnel (./funnel.ts). */
+export const ID_CHUNK = 100;
 
 export interface SignupAlertSummary {
   kind: string;
@@ -108,17 +109,34 @@ export function londonDaysCutoff(now: Date, days: number): string {
     .toISO() as string;
 }
 
-function chunk<T>(items: T[], size: number): T[][] {
+export function chunk<T>(items: T[], size: number): T[][] {
   const chunks: T[][] = [];
   for (let index = 0; index < items.length; index += size) chunks.push(items.slice(index, index + size));
   return chunks;
 }
 
-type PagedQuery<T> = (from: number, to: number) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>;
+export type PagedQuery<T> = (from: number, to: number) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>;
 
-async function readAll<T>(label: string, query: PagedQuery<T>): Promise<T[]> {
+/** A signal that never fires, for callers with no deadline (the daily email). */
+export function noDeadline(): AbortSignal {
+  return new AbortController().signal;
+}
+
+/** Throws once the caller's deadline has passed, so no further page or lookup is started. */
+export function throwIfStopped(label: string, signal: AbortSignal): void {
+  if (signal.aborted) throw new Error(`${label} lookup stopped: the deadline passed`);
+}
+
+/**
+ * Reads every page of a query (PostgREST caps a response at 1,000 rows); the
+ * query must have a stable order. Stops before the next page once the signal
+ * fires (the query itself should also carry the signal, to cancel the request
+ * in flight).
+ */
+export async function readAll<T>(label: string, query: PagedQuery<T>, signal: AbortSignal = noDeadline()): Promise<T[]> {
   const rows: T[] = [];
   for (let offset = 0; ; offset += PAGE) {
+    throwIfStopped(label, signal);
     const { data, error } = await query(offset, offset + PAGE - 1);
     if (error) throw new Error(`${label} lookup failed: ${error.message}`);
     const page = data ?? [];
@@ -127,17 +145,21 @@ async function readAll<T>(label: string, query: PagedQuery<T>): Promise<T[]> {
   }
 }
 
-async function findSignupAlerts(service: SupabaseClient, now: Date): Promise<SignupAlertSummary[]> {
+async function findSignupAlerts(service: SupabaseClient, now: Date, signal: AbortSignal): Promise<SignupAlertSummary[]> {
   const since = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
-  const rows = await readAll<{ detail: { kind?: unknown } | null; created_at: string }>('admin_audit', (from, to) =>
-    service
-      .from('admin_audit')
-      .select('detail, created_at')
-      .eq('action', 'operator_signup_alert')
-      .gte('created_at', since)
-      .order('created_at', { ascending: true })
-      .range(from, to)
-      .returns<Array<{ detail: { kind?: unknown } | null; created_at: string }>>(),
+  const rows = await readAll<{ detail: { kind?: unknown } | null; created_at: string }>(
+    'admin_audit',
+    (from, to) =>
+      service
+        .from('admin_audit')
+        .select('detail, created_at')
+        .eq('action', 'operator_signup_alert')
+        .gte('created_at', since)
+        .order('created_at', { ascending: true })
+        .range(from, to)
+        .abortSignal(signal)
+        .returns<Array<{ detail: { kind?: unknown } | null; created_at: string }>>(),
+    signal,
   );
   const byKind = new Map<string, SignupAlertSummary>();
   for (const row of rows) {
@@ -164,23 +186,37 @@ interface SubscriptionRow {
   created_at: string;
 }
 
-export async function findSignupDigest(service: SupabaseClient, now: Date = new Date()): Promise<SignupDigest> {
-  const alerts = await findSignupAlerts(service, now);
+export interface SignupReadOptions {
+  /** Stops every read (in flight and not yet started) once it fires: the admin card's deadline. */
+  signal?: AbortSignal;
+}
+
+export async function findSignupDigest(
+  service: SupabaseClient,
+  now: Date = new Date(),
+  options: SignupReadOptions = {},
+): Promise<SignupDigest> {
+  const signal = options.signal ?? noDeadline();
+  const alerts = await findSignupAlerts(service, now, signal);
 
   const verifiedCutoff = londonDaysCutoff(now, STUCK_VERIFIED_DAYS);
   const verifiedWindowStart = londonDaysCutoff(now, VERIFIED_WINDOW_DAYS);
-  const verified = await readAll<{ user_id: string; verified_at: string }>('self_serve_signups', (from, to) =>
-    service
-      .from('self_serve_signups')
-      .select('user_id, verified_at')
-      .not('user_id', 'is', null)
-      .not('verified_at', 'is', null)
-      .is('venue_created_at', null)
-      .lt('verified_at', verifiedCutoff)
-      .gte('verified_at', verifiedWindowStart)
-      .order('verified_at', { ascending: true })
-      .range(from, to)
-      .returns<Array<{ user_id: string; verified_at: string }>>(),
+  const verified = await readAll<{ user_id: string; verified_at: string }>(
+    'self_serve_signups',
+    (from, to) =>
+      service
+        .from('self_serve_signups')
+        .select('user_id, verified_at')
+        .not('user_id', 'is', null)
+        .not('verified_at', 'is', null)
+        .is('venue_created_at', null)
+        .lt('verified_at', verifiedCutoff)
+        .gte('verified_at', verifiedWindowStart)
+        .order('verified_at', { ascending: true })
+        .range(from, to)
+        .abortSignal(signal)
+        .returns<Array<{ user_id: string; verified_at: string }>>(),
+    signal,
   );
   // Someone who has since joined a brand or been invited to one is not stuck.
   const settled = new Set<string>();
@@ -189,8 +225,14 @@ export async function findSignupDigest(service: SupabaseClient, now: Date = new 
     verified.map((row) => row.user_id),
     ID_CHUNK,
   )) {
+    throwIfStopped('account_members', signal);
     const [members, invitations] = await Promise.all([
-      service.from('account_members').select('user_id').in('user_id', ids).returns<Array<{ user_id: string }>>(),
+      service
+        .from('account_members')
+        .select('user_id')
+        .in('user_id', ids)
+        .abortSignal(signal)
+        .returns<Array<{ user_id: string }>>(),
       service
         .from('team_invitations')
         .select('user_id')
@@ -199,6 +241,7 @@ export async function findSignupDigest(service: SupabaseClient, now: Date = new 
         .is('declined_at', null)
         .is('cancelled_at', null)
         .gt('expires_at', nowIso)
+        .abortSignal(signal)
         .returns<Array<{ user_id: string }>>(),
     ]);
     if (members.error) throw new Error(`account_members lookup failed: ${members.error.message}`);
@@ -216,16 +259,20 @@ export async function findSignupDigest(service: SupabaseClient, now: Date = new 
   // Self-serve venues old enough for any venue list (3 days or more) and still inside the window.
   const venueCutoff = londonDaysCutoff(now, Math.min(STUCK_NO_CHECKOUT_DAYS, STUCK_NO_CONNECTION_DAYS));
   const venueWindowStart = londonDaysCutoff(now, VENUE_WINDOW_DAYS);
-  const venues = await readAll<{ account_id: string; venue_created_at: string }>('self_serve_signups', (from, to) =>
-    service
-      .from('self_serve_signups')
-      .select('account_id, venue_created_at')
-      .not('account_id', 'is', null)
-      .lt('venue_created_at', venueCutoff)
-      .gte('venue_created_at', venueWindowStart)
-      .order('venue_created_at', { ascending: true })
-      .range(from, to)
-      .returns<Array<{ account_id: string; venue_created_at: string }>>(),
+  const venues = await readAll<{ account_id: string; venue_created_at: string }>(
+    'self_serve_signups',
+    (from, to) =>
+      service
+        .from('self_serve_signups')
+        .select('account_id, venue_created_at')
+        .not('account_id', 'is', null)
+        .lt('venue_created_at', venueCutoff)
+        .gte('venue_created_at', venueWindowStart)
+        .order('venue_created_at', { ascending: true })
+        .range(from, to)
+        .abortSignal(signal)
+        .returns<Array<{ account_id: string; venue_created_at: string }>>(),
+    signal,
   );
   if (venues.length === 0) {
     return { alerts, verifiedWithoutVenue, noCheckout: [], trialWithoutConnection: [], neverStarted: [] };
@@ -238,18 +285,26 @@ export async function findSignupDigest(service: SupabaseClient, now: Date = new 
     venues.map((venue) => venue.account_id),
     ID_CHUNK,
   )) {
+    throwIfStopped('accounts', signal);
     const [accountRows, subscriptionRows, connectionRows] = await Promise.all([
       service
         .from('accounts')
         .select('id, business_name, archived_at, offboarded_at, billing_override')
         .in('id', ids)
+        .abortSignal(signal)
         .returns<AccountRow[]>(),
-      service.from('subscriptions').select('account_id, status, created_at').in('account_id', ids).returns<SubscriptionRow[]>(),
+      service
+        .from('subscriptions')
+        .select('account_id, status, created_at')
+        .in('account_id', ids)
+        .abortSignal(signal)
+        .returns<SubscriptionRow[]>(),
       service
         .from('social_connections')
         .select('account_id')
         .in('account_id', ids)
         .in('status', ['active', 'expiring'])
+        .abortSignal(signal)
         .returns<Array<{ account_id: string }>>(),
     ]);
     if (accountRows.error) throw new Error(`accounts lookup failed: ${accountRows.error.message}`);
@@ -324,6 +379,19 @@ function listItems<T>(items: T[], render: (item: T) => string): string {
   return `<ul>\n${shown.join('\n')}\n</ul>`;
 }
 
+/**
+ * Alert kinds where nobody was refused (src/lib/signup/alerts.ts), and what
+ * happened instead. Every other kind refused the person with an error and our
+ * email address.
+ */
+const NOT_REFUSED_KINDS: Readonly<Record<string, string>> = {
+  venue_notice: 'Not refused: the venue was created and the owner went on to Billing; only its new-venue email to you or its admin_audit record failed.',
+  closure_notice:
+    "Not refused: the owner was told we have their request to close the venue, and the request email reached you; only its admin_audit record or the owner's confirmation email failed.",
+  login_cleanup: 'Nobody was refused: the nightly clean-up could not delete some unused sign-up logins and tries again the next day.',
+  admin_export: 'No customer involved: an operator export in Admin failed at the sign-in lookup, and the Admin page said so.',
+};
+
 /** The digest's sections for the operator email; empty lists are left out. Pure, for fixture tests. */
 export function renderSignupDigestSections(digest: SignupDigest, siteUrl: string): string[] {
   const adminUrl = escapeHtml(`${siteUrl.replace(/\/+$/, '')}/admin#offboarding`);
@@ -332,10 +400,11 @@ export function renderSignupDigestSections(digest: SignupDigest, siteUrl: string
   if (digest.alerts.length > 0) {
     sections.push(`
 <h3>Sign-up problems in the last 24 hours</h3>
-<p>Failures recorded in admin_audit (operator_signup_alert), by kind. Each one was refused with an error and our email address. The Vercel logs have the detail.</p>
+<p>Failures recorded in admin_audit (operator_signup_alert), by kind. Unless a line says otherwise, each one was refused with an error and our email address. The Vercel logs have the detail.</p>
 ${listItems(digest.alerts, (alert) => {
   if (!Number.isFinite(alert.rows)) throw new Error('Cannot render an alert count in the sign-up digest.');
-  return `<strong>${escapeHtml(alert.kind)}</strong>: ${alert.rows === 1 ? '1 time' : `${alert.rows} times`}, last at ${dateTime(alert.lastAt)} (UK time).`;
+  const note = Object.hasOwn(NOT_REFUSED_KINDS, alert.kind) ? ` ${escapeHtml(NOT_REFUSED_KINDS[alert.kind] ?? '')}` : '';
+  return `<strong>${escapeHtml(alert.kind)}</strong>: ${alert.rows === 1 ? '1 time' : `${alert.rows} times`}, last at ${dateTime(alert.lastAt)} (UK time).${note}`;
 })}`);
   }
 

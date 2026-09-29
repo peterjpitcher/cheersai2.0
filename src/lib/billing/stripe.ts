@@ -27,15 +27,45 @@ export const BILLING_NOT_CONFIGURED_MESSAGE = 'Billing is not set up yet. Please
 
 type ServerEnvKey = keyof typeof env.server;
 
-export type BillingPurpose = 'checkout' | 'portal' | 'reconcile' | 'webhook';
+export type BillingPurpose = 'checkout' | 'portal' | 'reconcile' | 'webhook' | 'lookup';
 
 const REQUIRED_ENV: Record<BillingPurpose, readonly ServerEnvKey[]> = {
-  checkout: ['STRIPE_SECRET_KEY', ...ALL_STRIPE_PRICE_ENV_KEYS],
+  // Checkout needs the trial card key too: a trial that starts must be
+  // checkable by the webhook (spec §4.7), so no Checkout starts without it.
+  checkout: ['STRIPE_SECRET_KEY', 'TRIAL_CARD_HASH_KEY', ...ALL_STRIPE_PRICE_ENV_KEYS],
   portal: ['STRIPE_SECRET_KEY', 'STRIPE_PORTAL_CONFIGURATION_ID'],
-  // Reconcile maps Stripe prices back to plans, so it needs the price ids too.
-  reconcile: ['STRIPE_SECRET_KEY', ...ALL_STRIPE_PRICE_ENV_KEYS],
-  webhook: ['STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET', ...ALL_STRIPE_PRICE_ENV_KEYS],
+  // Reconcile maps Stripe prices back to plans, so it needs the price ids too,
+  // and runs the repeat free-trial check, so it needs the card key.
+  reconcile: ['STRIPE_SECRET_KEY', 'TRIAL_CARD_HASH_KEY', ...ALL_STRIPE_PRICE_ENV_KEYS],
+  webhook: ['STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET', 'TRIAL_CARD_HASH_KEY', ...ALL_STRIPE_PRICE_ENV_KEYS],
+  // Read-only listing of a customer's subscriptions (hasLiveCheersSubscription):
+  // no card check, so no card key.
+  lookup: ['STRIPE_SECRET_KEY', ...ALL_STRIPE_PRICE_ENV_KEYS],
 };
+
+/** TRIAL_CARD_HASH_KEY must be exactly 64 hex characters (32 bytes). */
+const TRIAL_CARD_HASH_KEY_PATTERN = /^[0-9a-f]{64}$/i;
+
+let reportedMalformedCardKey = false;
+
+/**
+ * The trial card key, or null when it is missing or malformed. A malformed key
+ * counts as missing ("billing not set up") and is logged once, without any of
+ * the key itself, so a typo in Vercel is visible rather than silently hashing
+ * with the wrong key.
+ */
+export function usableTrialCardHashKey(): string | null {
+  const key = env.server.TRIAL_CARD_HASH_KEY;
+  if (!key) return null;
+  if (!TRIAL_CARD_HASH_KEY_PATTERN.test(key)) {
+    if (!reportedMalformedCardKey) {
+      reportedMalformedCardKey = true;
+      logger.error('TRIAL_CARD_HASH_KEY is not 64 hex characters; billing is treated as not set up', new Error('trial_card_key_malformed'));
+    }
+    return null;
+  }
+  return key;
+}
 
 const logger = createLogger('billing');
 
@@ -70,7 +100,11 @@ function usableSecretKey(): string | null {
 
 /** Names of the env vars a billing path needs but does not have (empty when ready). */
 export function missingBillingEnv(purpose: BillingPurpose): string[] {
-  return REQUIRED_ENV[purpose].filter((key) => (key === 'STRIPE_SECRET_KEY' ? !usableSecretKey() : !env.server[key]));
+  return REQUIRED_ENV[purpose].filter((key) => {
+    if (key === 'STRIPE_SECRET_KEY') return !usableSecretKey();
+    if (key === 'TRIAL_CARD_HASH_KEY') return !usableTrialCardHashKey();
+    return !env.server[key];
+  });
 }
 
 export class BillingNotConfiguredError extends Error {

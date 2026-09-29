@@ -7,11 +7,17 @@ import { z } from 'zod';
 
 import { env } from '@/env';
 import { ACTIVE_BRAND_COOKIE, activeBrandCookieOptions } from '@/lib/auth/active-brand';
-import { reportAuthFailure } from '@/lib/auth/alerts';
+import { reportAuthFailure, type AuthFailureKind } from '@/lib/auth/alerts';
 import { checkAuthRateLimit, clientIpFromHeaders, type AuthRateLimitAction } from '@/lib/auth/rate-limit';
 import { getCurrentUser } from '@/lib/auth/server';
-import { isUnknownUserOtpError } from '@/lib/auth/otp-errors';
-import { buildAuthConfirmUrl, renderPasswordResetEmail } from '@/lib/auth/email-links';
+import {
+  buildAuthConfirmUrl,
+  DEFAULT_SIGNED_IN_PATH,
+  renderMagicLinkEmail,
+  isUsableAuthLinkSiteUrl,
+  renderPasswordResetEmail,
+  safeNextPath,
+} from '@/lib/auth/email-links';
 import { destinationAfterPasswordSet } from '@/lib/billing/setup-redirect';
 import { sendEmail } from '@/lib/email/resend';
 import { CONTACT } from '@/lib/legal/company';
@@ -49,55 +55,168 @@ function isWrongCredentials(error: { status?: number; code?: string }): boolean 
   return error.status === 400 || error.code === 'invalid_credentials' || error.code === 'email_not_confirmed';
 }
 
-/** generateLink for an email with no login: Supabase answers 404 user_not_found. Anything else is a failure. */
-function isUnknownUserLinkError(error: { status?: number; code?: string }): boolean {
+/**
+ * Supabase Auth's answer for a login that does not exist (generateLink
+ * recovery or getUserById): 404 user_not_found. Anything else is a failure.
+ */
+function isUnknownUserError(error: { status?: number; code?: string }): boolean {
   return error.status === 404 || error.code === 'user_not_found';
 }
 
+function describeAuthError(error: { status?: number; code?: string; message: string }): string {
+  return `${error.code ?? error.status ?? ''} ${error.message}`;
+}
+
+type ServiceClient = ReturnType<typeof createServiceSupabaseClient>;
+
 /**
- * Send a magic link to the given email address.
+ * The site address emailed links are built on, or null after alerting the
+ * operator. env.ts falls back to http://localhost:3000 when
+ * NEXT_PUBLIC_SITE_URL is unset, so in production a localhost, loopback or
+ * non-https address means it is missing or wrong and every link would lead
+ * nowhere: refuse (fail closed) instead of sending it.
+ */
+async function authLinkSiteUrl(kind: Extract<AuthFailureKind, 'magic_link' | 'password_reset'>): Promise<string | null> {
+  const siteUrl = env.client.NEXT_PUBLIC_SITE_URL;
+  if (isUsableAuthLinkSiteUrl(siteUrl, process.env.NODE_ENV === 'production')) return siteUrl;
+  await reportAuthFailure(
+    kind,
+    new Error(`NEXT_PUBLIC_SITE_URL is missing or not the deployed https address (${JSON.stringify(siteUrl ?? '')})`),
+  );
+  return null;
+}
+
+/** A login generateLink has just created is at most this old. */
+const STRAY_LOGIN_MAX_AGE_MS = 10 * 60 * 1000;
+
+interface GeneratedLinkUser {
+  id: string;
+  created_at?: string;
+  email_confirmed_at?: string | null;
+  last_sign_in_at?: string | null;
+}
+
+/**
+ * generateLink answered for a login other than the one looked up. That only
+ * happens when the looked-up login was deleted in the moment between the two
+ * calls, and Supabase then created a new, unconfirmed login for the address.
+ * Left behind, it would block later magic links and a reset would confirm it,
+ * so it is deleted when it is plainly that stray: created in the last few
+ * minutes, never confirmed or used, and no brand access or invitation (the
+ * same checks as the team-invite clean-up). Never throws; says what happened,
+ * for the operator alert (a user id, never the email address).
+ */
+async function removeStrayLogin(service: ServiceClient, user: GeneratedLinkUser | null | undefined): Promise<string> {
+  if (!user?.id) return 'it returned no login';
+  const createdAt = user.created_at ? Date.parse(user.created_at) : Number.NaN;
+  const isNew = Number.isFinite(createdAt) && Date.now() - createdAt <= STRAY_LOGIN_MAX_AGE_MS;
+  if (!isNew || user.email_confirmed_at || user.last_sign_in_at) {
+    return `login ${user.id} was left in place (not just created, or already confirmed or used)`;
+  }
+  try {
+    const [memberships, invitations] = await Promise.all([
+      service.from('account_members').select('user_id', { count: 'exact', head: true }).eq('user_id', user.id),
+      service.from('team_invitations').select('id', { count: 'exact', head: true }).eq('user_id', user.id),
+    ]);
+    const lookupError = memberships.error ?? invitations.error;
+    if (lookupError) throw new Error(`could not check it before deleting it: ${lookupError.message}`);
+    if ((memberships.count ?? 0) > 0 || (invitations.count ?? 0) > 0) {
+      return `login ${user.id} was left in place (it has brand access or an invitation)`;
+    }
+    const { error } = await service.auth.admin.deleteUser(user.id);
+    if (error) throw new Error(`deleteUser failed: ${error.message}`);
+    return `a stray login (${user.id}) was created and has been removed`;
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    return `a stray login (${user.id}) was created and could NOT be removed (${reason}); delete it in Supabase Auth`;
+  }
+}
+
+/**
+ * The login a magic link may go to: one whose email is exactly this address
+ * and confirmed. Null for an unknown address and for an unconfirmed login (a
+ * pending invite or sign-up, which must go through its own link). Asked first
+ * because generateLink type 'magiclink' creates a login for an unknown
+ * address. The address is looked up in public.user_auth_snapshot, the
+ * trigger-kept mirror of auth.users that team invites use, and the login's
+ * confirmation comes from the Auth admin API (service role cannot read
+ * auth.users). Throws when either lookup fails.
+ */
+async function magicLinkLoginId(service: ServiceClient, email: string): Promise<string | null> {
+  const { data: snapshot, error: snapshotError } = await service
+    .from('user_auth_snapshot')
+    .select('user_id')
+    .eq('email', email)
+    .maybeSingle<{ user_id: string }>();
+  if (snapshotError) throw new Error(`user_auth_snapshot lookup failed: ${snapshotError.message}`);
+  if (!snapshot) return null;
+
+  const { data, error } = await service.auth.admin.getUserById(snapshot.user_id);
+  // A snapshot row that outlived its login: nobody to send to.
+  if (error && isUnknownUserError(error)) return null;
+  if (error || !data?.user) throw new Error(`getUserById: ${error ? describeAuthError(error) : 'no user returned'}`);
+
+  const user = data.user;
+  if (user.email?.toLowerCase() !== email || !user.email_confirmed_at) return null;
+  return user.id;
+}
+
+/**
+ * Email a magic link. The link is generated server-side and sent through
+ * Resend (not Supabase's mailer or template), like resets and invites, and
+ * lands on /auth/confirm, whose button signs the person in.
+ *
+ * A link is only made for an existing, confirmed login: an unknown address or
+ * an unconfirmed login gets nothing, and the same answer as a known one, so
+ * the form does not reveal who has an account. If that login is deleted in the
+ * instant before generateLink, Supabase creates a new one; nothing is sent, it
+ * is removed and the operator is told (removeStrayLogin). As with resets, a
+ * known address takes longer to answer because an email is sent; the rate
+ * limits bound what that shows.
  * Rate-limited in the database: 3 an hour per email, 10 an hour per IP.
  */
 export async function sendMagicLink(
   formData: FormData,
 ): Promise<{ success?: boolean; error?: string }> {
-  const rawEmail = formData.get('email');
-  const emailResult = emailSchema.safeParse(rawEmail);
-
+  const emailResult = emailSchema.safeParse(formData.get('email'));
   if (!emailResult.success) {
     return { error: emailResult.error.issues[0]?.message ?? 'Invalid email address' };
   }
-
   const email = emailResult.data.trim().toLowerCase();
+  const rawNext = formData.get('next');
+  const next = safeNextPath(typeof rawNext === 'string' ? rawNext : null, DEFAULT_SIGNED_IN_PATH);
 
   const refusal = await rateLimitRefusal('magic_link', email);
   if (refusal) return { error: refusal };
 
+  const siteUrl = await authLinkSiteUrl('magic_link');
+  if (!siteUrl) return { error: COULD_NOT_FINISH };
+
   try {
-    const supabase = await createServerSupabaseClient();
-    const siteUrl = env.client.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
+    const service = createServiceSupabaseClient();
+    const loginId = await magicLinkLoginId(service, email);
+    // Unknown address or unconfirmed login: send nothing, say nothing different.
+    if (!loginId) return { success: true };
 
-    // shouldCreateUser: false -- logins are only created by invite (and, later,
-    // by the sign-up flow). Without it any email address would get a login with
-    // no brand. An unknown email gets the same response as a known one so the
-    // form does not reveal who has an account.
-    const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: {
-        emailRedirectTo: `${siteUrl}/auth/callback`,
-        shouldCreateUser: false,
-      },
-    });
-
-    if (error && isUnknownUserOtpError(error)) {
-      return { success: true };
+    const { data, error } = await service.auth.admin.generateLink({ type: 'magiclink', email });
+    const tokenHash = data?.properties?.hashed_token;
+    if (error || !tokenHash) {
+      throw new Error(`generateLink: ${error ? describeAuthError(error) : 'no token returned'}`);
+    }
+    // Only the login checked above; another appears only if that login was
+    // deleted in the moment between the two calls. Never email that link, and
+    // remove the login Supabase has just created for it.
+    if (data.user?.id !== loginId) {
+      const cleanup = await removeStrayLogin(service, data.user);
+      throw new Error(`generateLink answered for another login (verification type ${data.properties.verification_type}); ${cleanup}`);
+    }
+    if (data.properties.verification_type !== 'magiclink') {
+      throw new Error(`generateLink answered with verification type ${data.properties.verification_type}, not magiclink`);
     }
 
-    if (error) {
-      await reportAuthFailure('magic_link', new Error(`signInWithOtp: ${error.code ?? error.status ?? ''} ${error.message}`));
-      return { error: COULD_NOT_FINISH };
-    }
-
+    const link = buildAuthConfirmUrl({ siteUrl, tokenHash, type: 'magiclink', next });
+    const message = renderMagicLinkEmail({ link });
+    await sendEmail({ to: email, subject: message.subject, html: message.html, required: true });
     return { success: true };
   } catch (error) {
     await reportAuthFailure('magic_link', error);
@@ -220,16 +339,13 @@ export async function requestPasswordReset(
   const refusal = await rateLimitRefusal('password_reset', email);
   if (refusal) return { error: refusal };
 
-  const siteUrl = env.client.NEXT_PUBLIC_SITE_URL;
-  if (!siteUrl) {
-    await reportAuthFailure('password_reset', new Error('NEXT_PUBLIC_SITE_URL is not set'));
-    return { error: COULD_NOT_FINISH };
-  }
+  const siteUrl = await authLinkSiteUrl('password_reset');
+  if (!siteUrl) return { error: COULD_NOT_FINISH };
 
   try {
     const service = createServiceSupabaseClient();
     const { data, error } = await service.auth.admin.generateLink({ type: 'recovery', email });
-    if (error && isUnknownUserLinkError(error)) {
+    if (error && isUnknownUserError(error)) {
       // No login for this email: say nothing different.
       return { success: true };
     }

@@ -12,6 +12,7 @@ import { getBrandEntitlement } from '@/lib/billing/entitlement-server';
 import { planForStripePrice, type BillingInterval, type SelfServePlanId } from '@/lib/billing/plans';
 import { releaseHeldPublishJobs } from '@/lib/billing/publish-hold';
 import { assertBillingConfigured, CHEERSAI_APP_TAG, getStripe, missingBillingEnv, stripeId } from '@/lib/billing/stripe';
+import { runTrialCardCheck } from '@/lib/billing/trial-card-check';
 import { createLogger } from '@/lib/logging';
 import { alertPossibleDoubleBilling } from '@/lib/notifications/operator-alerts';
 import { createServiceSupabaseClient } from '@/lib/supabase/service';
@@ -29,6 +30,11 @@ import { createServiceSupabaseClient } from '@/lib/supabase/service';
  * time the state was read from Stripe (stripe_state_at) and only replaces a
  * row holding an older state, so a slow, older reconcile never overwrites a
  * newer one.
+ *
+ * One exception writes to Stripe: the repeat free-trial check
+ * (trial-card-check.ts, spec §4.7) cancels a new trial whose card has already
+ * had a Cheers trial, records it in trial_card_checks and admin_audit, and
+ * stores the cancelled subscription before finish() works out the state.
  */
 
 const logger = createLogger('billing');
@@ -43,13 +49,22 @@ export interface ReconcileResult {
   /** Held posts put back in the queue because the brand may publish again. */
   released: number;
   stillHeld: number;
+  /**
+   * The current subscription is a free trial refused because its card has had
+   * a Cheers trial before (spec §4.7); it is cancelled in Stripe by now.
+   */
+  trialRefused: boolean;
 }
 
 export interface ReconcileDeps {
   service?: SupabaseClient;
   stripe?: Stripe;
   now?: () => Date;
+  /** How the repeat-trial check waits for a parallel reconcile (tests pass a fast one). */
+  sleep?: (ms: number) => Promise<void>;
 }
+
+const defaultSleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
 /** A subscription that cannot be stored safely (unknown price or status, wrong brand). */
 export class ReconcileError extends Error {
@@ -175,16 +190,32 @@ export function mapStripeSubscription(
 
 type WriteOutcome = 'written' | 'stale' | 'absent';
 
-/** Replace the row only if it holds an older state; insert it when missing (if allowed). */
-async function writeSubscriptionRow(service: SupabaseClient, row: SubscriptionRow, insertIfMissing: boolean): Promise<WriteOutcome> {
+/** Statuses Stripe never moves on from. */
+const FINAL_STATUSES: ReadonlySet<StripeSubscriptionStatus> = new Set<StripeSubscriptionStatus>(['canceled', 'incomplete_expired']);
+
+/**
+ * Replace the row only if it holds an older state; insert it when missing (if
+ * allowed). With replaceSameStamp, a final (cancelled) state may also replace
+ * a row holding the very same stamp: nothing can follow a cancellation, so no
+ * state read at that moment can be newer.
+ */
+async function writeSubscriptionRow(
+  service: SupabaseClient,
+  row: SubscriptionRow,
+  insertIfMissing: boolean,
+  options: { replaceSameStamp?: boolean } = {},
+): Promise<WriteOutcome> {
+  const sameStampAllowed = options.replaceSameStamp === true && FINAL_STATUSES.has(row.status);
   const conditionalUpdate = async (): Promise<boolean> => {
-    const { data, error } = await service
+    const query = service
       .from('subscriptions')
       .update(row)
       .eq('stripe_subscription_id', row.stripe_subscription_id)
-      .eq('account_id', row.account_id)
-      .lt('stripe_state_at', row.stripe_state_at)
-      .select('stripe_subscription_id');
+      .eq('account_id', row.account_id);
+    const { data, error } = await (sameStampAllowed
+      ? query.lte('stripe_state_at', row.stripe_state_at)
+      : query.lt('stripe_state_at', row.stripe_state_at)
+    ).select('stripe_subscription_id');
     if (error) throw new Error(`subscriptions update failed: ${error.message}`);
     return (data?.length ?? 0) > 0;
   };
@@ -239,7 +270,8 @@ export async function listCheersSubscriptions(stripe: Stripe, customerId: string
  * Whether the brand may still be billed by a CheersAI subscription: a stored
  * row in a live status, or (when Stripe is configured and the brand has a
  * customer) a live one Stripe lists now. Every lookup is scoped to the brand
- * and throws on failure, so callers can fail closed.
+ * and throws on failure, so callers can fail closed. It only lists, so it
+ * needs the Stripe key and prices but not the trial card key ('lookup').
  */
 export async function hasLiveCheersSubscription(
   service: SupabaseClient,
@@ -255,7 +287,7 @@ export async function hasLiveCheersSubscription(
   if (error) throw new Error(`subscriptions lookup failed: ${error.message}`);
   if ((data?.length ?? 0) > 0) return true;
 
-  if (missingBillingEnv('reconcile').length) return false;
+  if (missingBillingEnv('lookup').length) return false;
   const customerId = await loadCustomerId(service, accountId);
   if (!customerId) return false;
   const subscriptions = await listCheersSubscriptions(deps.stripe ?? getStripe(), customerId);
@@ -331,7 +363,7 @@ async function finish(
   service: SupabaseClient,
   accountId: string,
   now: Date,
-  partial: Pick<ReconcileResult, 'outcome' | 'subscriptionId' | 'status'>,
+  partial: Pick<ReconcileResult, 'outcome' | 'subscriptionId' | 'status' | 'trialRefused'>,
 ): Promise<ReconcileResult> {
   const state = await getBrandEntitlement(service, accountId, now);
   let released = 0;
@@ -350,7 +382,7 @@ export async function reconcileBrandFromStripe(accountId: string, deps: Reconcil
 
   const customerId = await loadCustomerId(service, accountId);
   if (!customerId) {
-    return finish(service, accountId, clock(), { outcome: 'no_customer', subscriptionId: null, status: null });
+    return finish(service, accountId, clock(), { outcome: 'no_customer', subscriptionId: null, status: null, trialRefused: false });
   }
 
   // The state read below is at least as new as this moment.
@@ -362,7 +394,7 @@ export async function reconcileBrandFromStripe(accountId: string, deps: Reconcil
   if (!current) {
     // Nothing in Stripe any more: stored live rows must stop granting access.
     await cancelRowsStripeNoLongerLists(service, accountId, listedIds, stateAt, clock());
-    return finish(service, accountId, clock(), { outcome: 'no_subscription', subscriptionId: null, status: null });
+    return finish(service, accountId, clock(), { outcome: 'no_subscription', subscriptionId: null, status: null, trialRefused: false });
   }
 
   const now = clock();
@@ -389,10 +421,44 @@ export async function reconcileBrandFromStripe(accountId: string, deps: Reconcil
   }
   await cancelRowsStripeNoLongerLists(service, accountId, listedIds, olderStateAt, now);
 
-  logger.info('reconciled brand from Stripe', { accountId, subscriptionId: current.id, status: row.status, outcome });
-  return finish(service, accountId, now, {
+  // Repeat free trials, checked by card (spec §4.7): after the current row is
+  // written, before finish(), so a refused trial is stored cancelled first.
+  const trialCard = await runTrialCardCheck({
+    service,
+    stripe,
+    accountId,
+    customerId,
+    current,
+    listed: subscriptions,
+    clock,
+    sleep: deps.sleep ?? defaultSleep,
+    storeCancelledSubscription: async (cancelled) => {
+      if (cancelled.id === current.id) {
+        // The refused trial is the brand's current subscription. Cancelled is
+        // final in Stripe, so the time after Stripe answered is a safe
+        // stripe_state_at: any read that still saw the trial began before the
+        // cancellation, so it can never replace this row.
+        const cancelledAt = new Date(Math.max(clock().getTime(), stateAt.getTime() + 1));
+        const cancelledRow = mapStripeSubscription(cancelled, { accountId, customerId, stateAt: cancelledAt, now: clock() });
+        await writeSubscriptionRow(service, cancelledRow, true);
+        return;
+      }
+      // An older refusal finished late (for example after the owner started a
+      // paid plan): stored one millisecond older than the current row, like
+      // every other subscription above, so the brand's state still comes from
+      // its current subscription. It may replace the row the loop above wrote
+      // at that same stamp, because cancelled is final.
+      const olderRow = mapStripeSubscription(cancelled, { accountId, customerId, stateAt: olderStateAt, now: clock() });
+      await writeSubscriptionRow(service, olderRow, true, { replaceSameStamp: true });
+    },
+  });
+
+  const status = trialCard.refused ? 'canceled' : row.status;
+  logger.info('reconciled brand from Stripe', { accountId, subscriptionId: current.id, status, outcome, trialCard: trialCard.outcome });
+  return finish(service, accountId, clock(), {
     outcome: outcome === 'written' ? 'synced' : 'stale',
     subscriptionId: current.id,
-    status: row.status,
+    status,
+    trialRefused: trialCard.refused,
   });
 }

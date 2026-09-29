@@ -19,7 +19,7 @@ const WHAT_BROKE: Record<AuthFailureKind, string> = {
   rate_limiter:
     'Cheers could not check its sign-in rate limits, so password sign-in, magic links and password resets are being refused until it recovers. Check that migration 20260928120000 (consume_rate_limit) is applied and that Supabase is up.',
   sign_in: 'A password sign-in failed for a reason other than a wrong password (Supabase Auth error or outage).',
-  magic_link: 'Cheers could not send a magic link (Supabase Auth or its email sending failed).',
+  magic_link: 'Cheers could not send a magic link (the login lookup, Supabase Auth or Resend failed).',
   password_reset: 'Cheers could not create or send a password reset link (Supabase Auth or Resend failed).',
   email_link:
     'Cheers could not check an invite, reset or sign-in link after the visitor pressed "Confirm and continue" (Supabase Auth error or outage). The link is probably still unused.',
@@ -41,6 +41,29 @@ function escapeHtml(text: string): string {
 }
 
 /**
+ * Anything shaped like an email address, written plainly or URL-encoded
+ * (`owner%40venue.test`). A dependency's error text (Resend's, say) could
+ * quote the visitor's address, so it is replaced before the failure is logged
+ * or emailed. Neither half may contain "/", and the domain must end in a
+ * dotted label that starts with a letter, so stack-trace paths such as
+ * `node_modules/@supabase/auth-js` or `@supabase+auth-js@2.89.0` are kept.
+ */
+const EMAIL_ADDRESS_PATTERN = /[a-z0-9._%+-]+(?:@|%40)(?:[a-z0-9-]+\.)+[a-z][a-z0-9-]*/gi;
+
+function withoutEmailAddresses(text: string): string {
+  return text.replace(EMAIL_ADDRESS_PATTERN, '[email address]');
+}
+
+/** The error as logged: same name, message and stack, with any email address replaced. */
+function redactedError(error: unknown, message: string): Error | undefined {
+  if (!(error instanceof Error)) return undefined;
+  const redacted = new Error(message);
+  redacted.name = error.name;
+  if (error.stack) redacted.stack = withoutEmailAddresses(error.stack);
+  return redacted;
+}
+
+/**
  * Make an auth dependency failure visible on our side (workspace rule: public
  * write paths fail closed and raise something we can see). Every failure is
  * logged; the operator gets an email at most once per kind per server instance
@@ -49,8 +72,8 @@ function escapeHtml(text: string): string {
  * three seconds, and never includes the visitor's email or IP address.
  */
 export async function reportAuthFailure(kind: AuthFailureKind, error: unknown): Promise<void> {
-  const message = error instanceof Error ? error.message : String(error);
-  logger.error(`${kind} dependency failed`, error instanceof Error ? error : undefined, { kind, message });
+  const message = withoutEmailAddresses(error instanceof Error ? error.message : String(error));
+  logger.error(`${kind} dependency failed`, redactedError(error, message), { kind, message });
 
   const now = Date.now();
   const last = lastAlertAt.get(kind);

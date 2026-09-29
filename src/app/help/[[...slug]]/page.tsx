@@ -1,10 +1,18 @@
 import Link from "next/link";
 import type { Metadata } from "next";
 import { permanentRedirect } from "next/navigation";
+import { Suspense } from "react";
+
+import { FirstPostHelpLink } from "@/app/help/first-post-link";
 
 interface LegacyHelpPageProps {
   params: Promise<{ slug?: string[] }>;
 }
+
+// Rendered per request: the first-post link follows the sign-up switch, which
+// must never be baked in at build time. Only that link waits on the switch
+// read (its own Suspense boundary); the rest of the page does not.
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "Help | Cheers",
@@ -15,7 +23,7 @@ export const metadata: Metadata = {
   },
 };
 
-export default async function LegacyHelpPage({ params }: LegacyHelpPageProps) {
+export default async function LegacyHelpPage({ params }: LegacyHelpPageProps): Promise<React.JSX.Element> {
   const { slug = [] } = await params;
 
   if (slug.length > 0) {
@@ -97,7 +105,11 @@ export default async function LegacyHelpPage({ params }: LegacyHelpPageProps) {
               settings. If you need help getting started, the Orange Jelly team
               can walk you through your first post.
             </p>
-            <div className="mt-4">
+            <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2">
+              {/* Listed only while the self-serve sign-up switch is open (src/lib/help/first-post.ts). */}
+              <Suspense fallback={null}>
+                <FirstPostHelpLink />
+              </Suspense>
               <Link
                 href="/login"
                 className="inline-flex items-center gap-1 text-sm font-semibold hover:underline"

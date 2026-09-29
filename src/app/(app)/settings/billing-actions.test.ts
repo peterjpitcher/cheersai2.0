@@ -38,7 +38,7 @@ const NOT_SET_UP = 'Billing is not set up yet. Please contact Cheers support.';
 const BRAND_SWITCHED = 'You switched brand in another tab. Refresh the page and try again.';
 const TERMS_ACCEPTANCE =
   'I agree to the [Terms of Service](https://cheers.orangejelly.co.uk/terms) and the ' +
-  '[Data Processing Agreement](https://cheers.orangejelly.co.uk/data-processing) (version 2026-09-28.3), ' +
+  '[Data Processing Agreement](https://cheers.orangejelly.co.uk/data-processing) (version 2026-09-28.4), ' +
   'and I am buying for my business.';
 
 let db: InMemoryBillingDb;
@@ -154,7 +154,7 @@ describe('startCheckout: the Checkout Session', () => {
 
     const [params, options] = fake.sessionsCreate.mock.calls[0] as [Record<string, unknown>, { idempotencyKey: string }];
     // legal_version records which terms and DPA the owner accepted at the tick box (spec §4.13).
-    const metadata = { app: 'cheersai', account_id: BRAND, plan: 'starter', interval: 'month', legal_version: '2026-09-28.3' };
+    const metadata = { app: 'cheersai', account_id: BRAND, plan: 'starter', interval: 'month', legal_version: '2026-09-28.4' };
     expect(params).toEqual({
       mode: 'subscription',
       customer: 'cus_test_new',
@@ -184,7 +184,7 @@ describe('startCheckout: the Checkout Session', () => {
         .terms_of_service_acceptance;
       expect(message).toContain('(https://cheers.orangejelly.co.uk/terms)');
       expect(message).toContain('(https://cheers.orangejelly.co.uk/data-processing)');
-      expect(message).toContain('version 2026-09-28.3');
+      expect(message).toContain('version 2026-09-28.4');
       // Stripe's limit for this text.
       expect(message.length).toBeLessThanOrEqual(1200);
     }
@@ -198,8 +198,8 @@ describe('startCheckout: the Checkout Session', () => {
     const sessionMetadata = params.metadata as Record<string, string>;
     const subscriptionMetadata = (params.subscription_data as { metadata: Record<string, string> }).metadata;
 
-    expect(sessionMetadata.legal_version).toBe('2026-09-28.3');
-    expect(subscriptionMetadata.legal_version).toBe('2026-09-28.3');
+    expect(sessionMetadata.legal_version).toBe('2026-09-28.4');
+    expect(subscriptionMetadata.legal_version).toBe('2026-09-28.4');
     expect(message).toContain(`version ${sessionMetadata.legal_version}`);
   });
 
@@ -219,6 +219,17 @@ describe('startCheckout: the Checkout Session', () => {
     expect(params.subscription_data).not.toHaveProperty('trial_period_days');
   });
 
+  it('offers "Start your plan today" with no trial after a trial refused for a repeat card (spec §4.7)', async () => {
+    // The refused trial is cancelled in Stripe, so the brand has subscribed before.
+    db.seed('billing_customers', [{ account_id: BRAND, stripe_customer_id: 'cus_test_refused' }]);
+    fake.subscriptions.push(fakeSubscription({ id: 'sub_refused', customer: 'cus_test_refused', status: 'canceled', trialEnd: '2026-10-15T09:00:00Z' }));
+    const result = await startCheckout({ plan: 'starter', interval: 'month', accountId: BRAND });
+    expect(result.success).toBe(true);
+    const [params] = fake.sessionsCreate.mock.calls[0] as [{ subscription_data: Record<string, unknown>; payment_method_collection: string }];
+    expect(params.subscription_data).not.toHaveProperty('trial_period_days');
+    expect(params.payment_method_collection).toBe('always');
+  });
+
   it('expires an unfinished CheersAI Checkout first so only one can complete', async () => {
     db.seed('billing_customers', [{ account_id: BRAND, stripe_customer_id: 'cus_test_existing' }]);
     fake.openSessions.push({ id: 'cs_test_old', metadata: { app: 'cheersai' } }, { id: 'cs_test_other_app', metadata: {} });
@@ -236,6 +247,18 @@ describe('startCheckout: failures reach the owner', () => {
     delete serverEnv.STRIPE_PRICE_STARTER_ANNUAL;
     expect(await startCheckout({ plan: 'starter', interval: 'month', accountId: BRAND })).toEqual({ error: NOT_SET_UP });
     expect(fake.sessionsCreate).not.toHaveBeenCalled();
+  });
+
+  it('starts no Checkout without the trial card key, so every trial can be checked (spec §4.7)', async () => {
+    delete serverEnv.TRIAL_CARD_HASH_KEY;
+    expect(await startCheckout({ plan: 'starter', interval: 'month', accountId: BRAND })).toEqual({ error: NOT_SET_UP });
+    expect(await checkBillingAgain({ accountId: BRAND })).toEqual({ error: NOT_SET_UP });
+    expect(fake.customersCreate).not.toHaveBeenCalled();
+    expect(fake.sessionsCreate).not.toHaveBeenCalled();
+    expect(mockReconcile).not.toHaveBeenCalled();
+    // The portal does not need it: an owner can still manage an existing plan.
+    db.seed('billing_customers', [{ account_id: BRAND, stripe_customer_id: 'cus_test_existing' }]);
+    expect((await openBillingPortal({ accountId: BRAND })).success).toBe(true);
   });
 
   it('shows an error when Stripe is down', async () => {
@@ -296,6 +319,11 @@ describe('checkBillingAgain', () => {
     mockReconcile.mockResolvedValue({ outcome: 'synced', state: 'trialing' });
     expect(await checkBillingAgain({ accountId: BRAND })).toEqual({ success: true, state: 'trialing' });
     expect(mockReconcile).toHaveBeenCalledWith(BRAND, expect.objectContaining({ service: expect.anything() }));
+  });
+
+  it('says when the trial was refused for a repeat card, so the page shows no "not confirmed" toast', async () => {
+    mockReconcile.mockResolvedValue({ outcome: 'synced', state: 'lapsed', trialRefused: true });
+    expect(await checkBillingAgain({ accountId: BRAND })).toEqual({ success: true, state: 'lapsed', trialRefused: true });
   });
 
   it('shows an error when Stripe or the database is down', async () => {

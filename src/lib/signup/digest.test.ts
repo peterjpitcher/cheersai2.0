@@ -20,10 +20,12 @@ import {
 type Row = Record<string, unknown>;
 
 /** Enough of the query builder for the digest: filters, order, range and returns. */
-function fakeDb(tables: Record<string, Row[]>, failTable?: string) {
+function fakeDb(tables: Record<string, Row[]>, failTable?: string, onRead?: (table: string) => void) {
   const reads: string[] = [];
+  const signals: Array<AbortSignal | null> = [];
   const from = (table: string) => {
     reads.push(table);
+    let signal: AbortSignal | null = null;
     const filters: Array<(row: Row) => boolean> = [];
     let orderBy: string | null = null;
     let range: [number, number] | null = null;
@@ -39,7 +41,10 @@ function fakeDb(tables: Record<string, Row[]>, failTable?: string) {
     chain.gt = (column: string, value: string) => (filters.push((row) => row[column] != null && compare(row[column], value) > 0), chain);
     chain.order = (column: string) => ((orderBy = column), chain);
     chain.range = (start: number, end: number) => ((range = [start, end]), chain);
+    chain.abortSignal = (value: AbortSignal) => ((signal = value), chain);
     chain.returns = async () => {
+      signals.push(signal);
+      onRead?.(table);
       if (failTable === table) return { data: null, error: { message: 'connection refused' } };
       let rows = (tables[table] ?? []).filter((row) => filters.every((keep) => keep(row)));
       if (orderBy) rows = [...rows].sort((a, b) => compare(a[orderBy as string], b[orderBy as string]));
@@ -48,7 +53,7 @@ function fakeDb(tables: Record<string, Row[]>, failTable?: string) {
     };
     return chain;
   };
-  return { service: { from } as never, reads };
+  return { service: { from } as never, reads, signals };
 }
 
 const BAD_OUTPUT = ['undefined', 'NaN', 'Invalid Date', 'Invalid DateTime', 'null'];
@@ -229,6 +234,34 @@ describe('findSignupDigest', () => {
     expect(reads).not.toContain('accounts');
   });
 
+  it('gives every read the caller\'s signal, and starts no further read once it fires', async () => {
+    const controller = new AbortController();
+    const { service, reads, signals } = fakeDb(
+      {
+        self_serve_signups: [
+          { user_id: 'u1', account_id: null, verified_at: '2026-09-20T10:00:00Z', venue_created_at: null },
+          { user_id: 'o1', account_id: 'a1', verified_at: '2026-09-20T10:00:00Z', venue_created_at: '2026-09-20T10:10:00Z' },
+        ],
+      },
+      undefined,
+      // The deadline passes during the confirmed-logins read.
+      (table) => {
+        if (table === 'self_serve_signups') controller.abort();
+      },
+    );
+
+    await expect(findSignupDigest(service, NOW, { signal: controller.signal })).rejects.toThrow('lookup stopped: the deadline passed');
+    expect(reads).toEqual(['admin_audit', 'self_serve_signups']);
+    expect(signals.every((signal) => signal === controller.signal)).toBe(true);
+  });
+
+  it('reads without a deadline for the daily email', async () => {
+    const { service, signals } = fakeDb({});
+    await findSignupDigest(service, NOW);
+    expect(signals.length).toBeGreaterThan(0);
+    expect(signals.every((signal) => signal !== null && !signal.aborted)).toBe(true);
+  });
+
   it('throws when a read fails, so the reminder can say the lists are unavailable', async () => {
     await expect(findSignupDigest(fakeDb({}, 'admin_audit').service, NOW)).rejects.toThrow(/admin_audit lookup failed/);
     await expect(
@@ -261,6 +294,29 @@ describe('renderSignupDigestSections', () => {
     expect(html).toContain('<strong>The Quiet Inn</strong>: venue set up 20 August 2026, 39 days ago.');
     expect(html).toContain('href="https://cheers.test/admin#offboarding"');
     for (const bad of BAD_OUTPUT) expect(html).not.toContain(bad);
+  });
+
+  it('says which kinds refused nobody, so a closure_notice is not described as a refusal', () => {
+    const html = renderSignupDigestSections(
+      {
+        ...DIGEST,
+        alerts: [
+          { kind: 'provisioning', rows: 3, lastAt: '2026-09-27T21:00:00Z' },
+          { kind: 'closure_notice', rows: 1, lastAt: '2026-09-27T20:00:00Z' },
+          { kind: 'closure_request', rows: 2, lastAt: '2026-09-27T19:00:00Z' },
+          { kind: 'admin_export', rows: 1, lastAt: '2026-09-27T18:00:00Z' },
+        ],
+      },
+      'https://cheers.test',
+    ).join('\n');
+    expect(html).toContain('Unless a line says otherwise, each one was refused with an error and our email address.');
+    expect(html).toContain(
+      "<strong>closure_notice</strong>: 1 time, last at 27/09/2026, 21:00:00 (UK time). Not refused: the owner was told we have their request to close the venue",
+    );
+    expect(html).toContain('<strong>closure_request</strong>: 2 times, last at 27/09/2026, 20:00:00 (UK time).</li>');
+    expect(html).toContain('<strong>provisioning</strong>: 3 times, last at 27/09/2026, 22:00:00 (UK time).</li>');
+    expect(html).toContain('<strong>admin_export</strong>: 1 time, last at 27/09/2026, 19:00:00 (UK time). No customer involved');
+    expect(html).not.toContain('Each one was refused');
   });
 
   it('leaves empty lists out entirely', () => {

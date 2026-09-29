@@ -43,7 +43,7 @@ const { terms, privacy } = LEGAL_DOCUMENTS;
 const RETENTION_ROWS = [
   [
     "Your content, media, brand details and team members' details",
-    "While your account is open. Deleted within 30 days after the account closes, and gone from backups within a further 7 days.",
+    "While your account is open. When the account closes, kept for 30 days and then deleted, and gone from backups within a further 7 days.",
   ],
   ["Posts you delete", "Kept in the trash for 7 days, then permanently deleted."],
   ["Publishing history", "24 months."],

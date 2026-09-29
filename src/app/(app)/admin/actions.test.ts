@@ -25,7 +25,6 @@ const mockPurge = vi.fn();
 vi.mock('@/lib/admin/offboarding', () => ({
   offboardBrand: (...a: unknown[]) => mockOffboard(...a),
   purgeBrand: (...a: unknown[]) => mockPurge(...a),
-  exportBrandData: vi.fn(async () => ({ posts: [] })),
 }));
 vi.mock('@/lib/billing/publish-hold', () => ({ releaseHeldPublishJobs: (...a: unknown[]) => mockReleaseHeld(...a) }));
 const mockReconcile = vi.fn();
@@ -433,10 +432,9 @@ describe('offboarding actions', () => {
 
   it('are super-admin only', async () => {
     mockRequireAuthContext.mockResolvedValue({ ...SUPER_ADMIN_CTX, isSuperAdmin: false, supabase: buildSupabase() });
-    const { offboardBrandAction, purgeBrandAction, exportBrandDataAction } = await import('./actions');
+    const { offboardBrandAction, purgeBrandAction } = await import('./actions');
     expect(await offboardBrandAction(A_BRAND, 'The New Venue')).toEqual({ error: 'Forbidden.' });
     expect(await purgeBrandAction(A_BRAND, 'The New Venue')).toEqual({ error: 'Forbidden.' });
-    expect(await exportBrandDataAction(A_BRAND)).toEqual({ error: 'Forbidden.' });
     expect(mockOffboard).not.toHaveBeenCalled();
     expect(mockPurge).not.toHaveBeenCalled();
   });

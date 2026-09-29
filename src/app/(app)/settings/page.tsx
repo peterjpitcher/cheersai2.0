@@ -12,8 +12,9 @@ import { listTeam, listTeamInvitations } from "@/app/(app)/settings/team-actions
 import { TeamSection } from "@/features/settings/team-section";
 import { BillingSection, type CheckoutReturn } from "@/features/settings/billing-section";
 import { BILLING_TRIAL_DAYS, billingPlanOptions, getBillingOverview } from "@/lib/billing/overview";
-import { CONTACT } from "@/lib/legal/company";
 import { getSelfServeSignupSwitch } from "@/lib/signup/switch";
+import { VenueDataSection } from "@/features/settings/venue-data-section";
+import { isBrandOwnerMember } from "@/lib/settings/owner-access";
 
 interface SettingsPageProps {
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
@@ -25,7 +26,7 @@ function readCheckoutReturn(value: string | string[] | undefined): CheckoutRetur
 
 export default async function SettingsPage({ searchParams }: SettingsPageProps) {
   // The management-app import is a per-brand switch, off by default.
-  const { features, role, supabase, accountId } = await requireAuthContext();
+  const { features, role, supabase, accountId, user } = await requireAuthContext();
   const params = searchParams ? await searchParams : {};
   const [settings, managementConnection, linkInBioData, mediaAssets, team, invitations, billing, signupSwitch] = await Promise.all([
     getOwnerSettings(),
@@ -49,10 +50,20 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
     getSelfServeSignupSwitch(),
   ]);
 
-  // Decision P10 (28 September 2026): until owners get their own export and
-  // close buttons, Settings tells them how to ask. Shown only while self-serve
-  // sign-up is on, so nothing changes for existing brands before opening.
-  const showDataRequestLine = role === "owner" && signupSwitch === "open";
+  // Owners' "Download my data" and "Ask us to close this venue" (spec section 5,
+  // "Later (P10)"; they replace P10's "email us" line). Shown only while
+  // self-serve sign-up is on, so nothing changes for existing brands before
+  // opening, and only to a real owner: an account_members row with role owner,
+  // not a super-admin's implied owner role (operators export from Admin). The
+  // export route and the closure action check both again. A failed lookup
+  // hides the section.
+  const showVenueDataSection =
+    role === "owner" &&
+    signupSwitch === "open" &&
+    (await isBrandOwnerMember(supabase, accountId, user.id).catch((error: unknown) => {
+      console.error("[settings] owner membership lookup failed", error);
+      return false;
+    }));
 
   // Comped brands (our own venues) only ever see "Included, no
   // billing", so their Billing section sits at the bottom; for everyone else it
@@ -182,14 +193,18 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
 
       {billingFirst ? null : billingSection}
 
-      {showDataRequestLine ? (
-        <p className="text-sm" style={{ color: "var(--c-ink-3)" }}>
-          To close this venue or get a copy of your data, email{" "}
-          <a href={`mailto:${CONTACT.email}`} className="font-semibold underline" style={{ color: "var(--c-orange)" }}>
-            {CONTACT.email}
-          </a>
-          .
-        </p>
+      {showVenueDataSection ? (
+        <section
+          id="your-data"
+          className="rounded-xl p-6 md:p-8"
+          style={{
+            backgroundColor: "var(--c-card)",
+            border: "1px solid var(--c-line)",
+            boxShadow: "var(--sh-sm)",
+          }}
+        >
+          <VenueDataSection accountId={accountId} />
+        </section>
       ) : null}
     </div>
   );

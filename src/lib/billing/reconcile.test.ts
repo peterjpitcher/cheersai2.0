@@ -8,7 +8,12 @@ vi.mock('@/env', () => ({ env: { server: serverEnv, client: { NEXT_PUBLIC_SITE_U
 const logger = vi.hoisted(() => ({ debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }));
 vi.mock('@/lib/logging', () => ({ createLogger: () => logger }));
 const mockDoubleBillingAlert = vi.fn();
-vi.mock('@/lib/notifications/operator-alerts', () => ({ alertPossibleDoubleBilling: (...args: unknown[]) => mockDoubleBillingAlert(...args) }));
+vi.mock('@/lib/notifications/operator-alerts', () => ({
+  alertPossibleDoubleBilling: (...args: unknown[]) => mockDoubleBillingAlert(...args),
+  // The repeat-trial check's alerts; exercised in trial-card-check.test.ts.
+  alertTrialRefusedRepeatCard: vi.fn(async () => undefined),
+  alertTrialStartedWithoutCard: vi.fn(async () => undefined),
+}));
 
 const { hasLiveCheersSubscription, reconcileBrandFromStripe, ReconcileError } = await import('./reconcile');
 const { BillingNotConfiguredError } = await import('./stripe');
@@ -442,6 +447,13 @@ describe('hasLiveCheersSubscription', () => {
     ]);
     fake.subscriptions.push(fakeSubscription({ customer: CUSTOMER, status: 'canceled' }), fakeSubscription({ customer: 'cus_other', status: 'active' }));
     expect(await check()).toBe(false);
+  });
+
+  it('still asks Stripe without the trial card key: a lookup runs no card check', async () => {
+    delete serverEnv.TRIAL_CARD_HASH_KEY;
+    fake.subscriptions.push(fakeSubscription({ customer: CUSTOMER, status: 'active' }));
+    expect(await check()).toBe(true);
+    expect(fake.subscriptionsList).toHaveBeenCalledTimes(1);
   });
 
   it('uses the stored rows only when Stripe is not configured', async () => {

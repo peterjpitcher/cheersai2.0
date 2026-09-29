@@ -24,18 +24,26 @@ export type AuthRateLimitAction =
   | 'signup_request'
   | 'signup_email_site'
   | 'signup_widget_report'
-  | 'signup_venue';
+  | 'signup_venue'
+  | 'owner_data_export'
+  | 'owner_data_export_lock'
+  | 'owner_data_export_attempt'
+  | 'venue_closure_lock'
+  | 'venue_closure_attempt';
 
-type LimitScope = 'email_ip' | 'email' | 'ip' | 'site' | 'user';
+type LimitScope = 'email_ip' | 'email' | 'ip' | 'site' | 'user' | 'account';
 
 /**
  * Who an attempt is counted against. userId is the verified session's login id
- * (never a form value); only the 'user' scope uses it.
+ * (never a form value); only the 'user' scope uses it. accountId is the
+ * signed-in owner's active brand (never a form value); only the 'account'
+ * scope uses it.
  */
 export interface RateLimitSubject {
   email: string;
   ip: string;
   userId?: string;
+  accountId?: string;
 }
 
 interface LimitRule {
@@ -77,6 +85,25 @@ export const AUTH_RATE_LIMIT_RULES: Record<AuthRateLimitAction, readonly LimitRu
   signup_widget_report: [{ scope: 'ip', limit: 3, windowSeconds: 60 * 60 }],
   // Venue creation at /signup/venue (spec §4.4): 10 an hour per signed-in login.
   signup_venue: [{ scope: 'user', limit: 10, windowSeconds: 60 * 60 }],
+  // An owner's "Download my data" in Settings (spec section 5, "Later (P10)"):
+  // 3 per brand per 24-hour window, whoever in the brand asks. Each one reads
+  // every post and signs every media link, so the cap keeps one brand from
+  // loading the database. Checked with peekAuthRateLimit before the export is
+  // built and counted only once the file is ready to send.
+  owner_data_export: [{ scope: 'account', limit: 3, windowSeconds: 24 * 60 * 60 }],
+  // A per-brand claim held while one export is built (60 seconds, the route's
+  // maxDuration), so a burst of presses builds one export, not one each...
+  owner_data_export_lock: [{ scope: 'account', limit: 1, windowSeconds: 60 }],
+  // ...and at most 10 builds per brand per 24-hour window, counted when the
+  // claim is taken, so exports that keep failing or being cut off by the time
+  // limit (and so are never counted as downloads) cannot run on without end.
+  owner_data_export_attempt: [{ scope: 'account', limit: 10, windowSeconds: 24 * 60 * 60 }],
+  // "Ask us to close this venue": a per-brand claim held for 60 seconds, so
+  // two tabs or two owners pressing Send together send one request...
+  venue_closure_lock: [{ scope: 'account', limit: 1, windowSeconds: 60 }],
+  // ...and at most 5 sends per brand per 24-hour window, so a request that
+  // keeps failing to be recorded cannot flood the operator's inbox.
+  venue_closure_attempt: [{ scope: 'account', limit: 5, windowSeconds: 24 * 60 * 60 }],
 };
 
 export type AuthRateLimitDecision =
@@ -115,7 +142,7 @@ function rateLimitHmacKey(): Buffer {
   return key;
 }
 
-/** The stored key: purpose and scope in clear, the email, IP and login id only as an HMAC. */
+/** The stored key: purpose and scope in clear, the email, IP, login id and brand id only as an HMAC. */
 export function rateLimitKey(
   hmacKey: Buffer,
   action: AuthRateLimitAction,
@@ -124,6 +151,9 @@ export function rateLimitKey(
 ): string {
   if (scope === 'user' && !subject.userId) {
     throw new Error(`The ${action} rate limit is per login, but no login id was given.`);
+  }
+  if (scope === 'account' && !subject.accountId) {
+    throw new Error(`The ${action} rate limit is per brand, but no brand id was given.`);
   }
   const input =
     scope === 'email_ip'
@@ -134,7 +164,9 @@ export function rateLimitKey(
           ? `ip\n${subject.ip}`
           : scope === 'user'
             ? `user\n${subject.userId}`
-            : 'site';
+            : scope === 'account'
+              ? `account\n${subject.accountId}`
+              : 'site';
   const digest = crypto.createHmac('sha256', hmacKey).update(input).digest('hex');
   return `${action}:${scope}:${digest}`;
 }

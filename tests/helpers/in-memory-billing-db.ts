@@ -15,8 +15,8 @@ import type { SupabaseClient } from '@supabase/supabase-js';
  *
  * Supports the builder calls the billing code uses: select (with count/head),
  * insert, update, delete, eq, neq, lt, lte, gt, gte, in, is, order, limit,
- * maybeSingle, single, returns. Failures can be injected per table and
- * operation to simulate an outage.
+ * maybeSingle, single, returns, and rpc('consume_rate_limit'). Failures can be
+ * injected per table and operation to simulate an outage.
  */
 
 type Row = Record<string, unknown>;
@@ -34,6 +34,10 @@ interface TableSpec {
   columns: Record<string, ColumnSpec>;
   primaryKey: string[];
   unique?: string[][];
+  /** Partial unique indexes: unique on `columns` among rows where `where(row)` holds. */
+  partialUnique?: Array<{ name: string; columns: string[]; where: (row: Row) => boolean }>;
+  /** Table-level CHECK constraints over the whole row. */
+  rowChecks?: Array<{ name: string; holds: (row: Row) => boolean }>;
   foreignKeys?: Array<{ column: string; table: string; references: string }>;
 }
 
@@ -155,6 +159,30 @@ export const BILLING_SCHEMA: Record<string, TableSpec> = {
     },
     primaryKey: ['id'],
   },
+  // supabase/migrations/20260928200000_trial_card_checks.sql (checked on the
+  // local stack; not yet applied in production when this was written).
+  trial_card_checks: {
+    columns: {
+      stripe_subscription_id: { type: 'text', notNull: true },
+      account_id: { type: 'uuid', notNull: true },
+      card_hash: { type: 'text', notNull: true },
+      outcome: { type: 'text', notNull: true, check: ['first_trial', 'repeat_refused', 'no_card'] },
+      cancelled_at: { type: 'timestamptz' },
+      created_at: { type: 'timestamptz', notNull: true, default: now },
+    },
+    primaryKey: ['stripe_subscription_id'],
+    partialUnique: [
+      { name: 'trial_card_checks_first_trial_card', columns: ['card_hash'], where: (row) => row.outcome === 'first_trial' },
+    ],
+    rowChecks: [
+      {
+        name: 'trial_card_checks_card_hash_format',
+        holds: (row) =>
+          /^[0-9a-f]{64}$/.test(String(row.card_hash)) || (row.outcome === 'no_card' && row.card_hash === 'none'),
+      },
+    ],
+    foreignKeys: [{ column: 'account_id', table: 'accounts', references: 'id' }],
+  },
 };
 
 export interface DbError {
@@ -194,9 +222,20 @@ export class InMemoryBillingDb {
     return this.tables[table].map((row) => ({ ...row }));
   }
 
-  /** Make the next `times` calls of `op` on `table` fail like an outage. */
-  fail(table: string, op: Op, times = Number.POSITIVE_INFINITY, message = 'connection refused'): void {
-    this.failures.push({ table, op, error: dbError('08006', message), times });
+  /** The database's now() for rpc calls; tests set it to match their clock. */
+  now: () => Date = () => new Date();
+  /** public.consume_rate_limit windows by key (auth_rate_limits). */
+  rateLimits = new Map<string, { count: number; resetAt: number }>();
+  /** Every rpc call, in order. */
+  rpcCalls: Array<{ fn: string; params: Record<string, unknown> }> = [];
+
+  /**
+   * Make the next `times` calls of `op` on `table` fail like an outage, or with
+   * another Postgres error code (23505 for a unique violation, say). Use the
+   * table name 'rpc:<function>' to fail an rpc call.
+   */
+  fail(table: string, op: Op, times = Number.POSITIVE_INFINITY, message = 'connection refused', code = '08006'): void {
+    this.failures.push({ table, op, error: dbError(code, message), times });
   }
 
   takeFailure(table: string, op: Op): DbError | null {
@@ -206,8 +245,28 @@ export class InMemoryBillingDb {
     return failure.error;
   }
 
+  /** The rpc functions the billing code calls, with the live semantics. */
+  private async rpc(fn: string, params: Record<string, unknown>): Promise<{ data: unknown; error: DbError | null }> {
+    this.rpcCalls.push({ fn, params });
+    const failure = this.takeFailure(`rpc:${fn}`, 'select');
+    if (failure) return { data: null, error: failure };
+    if (fn !== 'consume_rate_limit') throw new Error(`in-memory db: unknown rpc ${fn}`);
+    // public.consume_rate_limit (migration 20260928120000): one fixed window per key.
+    const key = String(params.p_key);
+    const limit = Number(params.p_limit);
+    const windowMs = Number(params.p_window_seconds) * 1000;
+    const nowMs = this.now().getTime();
+    const existing = this.rateLimits.get(key);
+    const next = !existing || existing.resetAt <= nowMs ? { count: 1, resetAt: nowMs + windowMs } : { count: existing.count + 1, resetAt: existing.resetAt };
+    this.rateLimits.set(key, next);
+    return { data: [{ allowed: next.count <= limit, hits: next.count, resets_at: new Date(next.resetAt).toISOString() }], error: null };
+  }
+
   client(): SupabaseClient {
-    return { from: (table: string) => new Query(this, table) } as unknown as SupabaseClient;
+    return {
+      from: (table: string) => new Query(this, table),
+      rpc: (fn: string, params: Record<string, unknown>) => this.rpc(fn, params ?? {}),
+    } as unknown as SupabaseClient;
   }
 
   spec(table: string): TableSpec {
@@ -237,6 +296,9 @@ export class InMemoryBillingDb {
         return dbError('22P02', `invalid input syntax for type boolean: "${String(value)}"`);
       }
     }
+    for (const check of spec.rowChecks ?? []) {
+      if (!check.holds(row)) return dbError('23514', `new row for relation "${table}" violates check constraint "${check.name}"`);
+    }
     for (const fk of spec.foreignKeys ?? []) {
       const value = row[fk.column];
       if (value === null || value === undefined) continue;
@@ -252,6 +314,13 @@ export class InMemoryBillingDb {
     for (const key of [spec.primaryKey, ...(spec.unique ?? [])]) {
       const clash = this.tables[table].some((other) => other !== ignore && key.every((column) => other[column] === row[column]));
       if (clash) return dbError('23505', `duplicate key value violates unique constraint "${table}_${key.join('_')}_key"`);
+    }
+    for (const index of spec.partialUnique ?? []) {
+      if (!index.where(row)) continue;
+      const clash = this.tables[table].some(
+        (other) => other !== ignore && index.where(other) && index.columns.every((column) => other[column] === row[column]),
+      );
+      if (clash) return dbError('23505', `duplicate key value violates unique constraint "${index.name}"`);
     }
     return null;
   }
