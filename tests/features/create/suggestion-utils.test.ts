@@ -1,6 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { buildEventSuggestions, deconflictSuggestions } from "@/features/create/schedule/suggestion-utils";
+import { DateTime } from "luxon";
+
+import {
+  buildEventSuggestions,
+  buildPromotionSuggestions,
+  deconflictSuggestions,
+} from "@/features/create/schedule/suggestion-utils";
 import type { SuggestedSlotDisplay } from "@/features/create/schedule/schedule-calendar";
 
 const TZ = "Europe/London";
@@ -146,5 +152,128 @@ describe("deconflictSuggestions (Issue 2 regression)", () => {
 
     expect(result).toHaveLength(4);
     expect(result.map((s) => s.id)).toEqual(["a", "b", "c", "d"]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Offer (promotion) suggestions: one per London day, planner empty or not
+// ---------------------------------------------------------------------------
+
+describe("buildPromotionSuggestions", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  /** An unrelated post, on a day none of the cases below suggests. */
+  const UNRELATED_POST = [{ date: "2026-12-01" }];
+
+  function asRows(slots: SuggestedSlotDisplay[]): string[][] {
+    return slots.map((slot) => [slot.label, slot.date, slot.time]);
+  }
+
+  it.each([
+    {
+      name: "ends today",
+      now: "2026-10-12T08:00:00.000Z", // Mon 12 Oct, 09:00 BST
+      endDate: "2026-10-12",
+      expected: [["Launch", "2026-10-12", "12:00"]],
+    },
+    {
+      name: "ends tomorrow",
+      now: "2026-10-12T08:00:00.000Z",
+      endDate: "2026-10-13",
+      expected: [
+        ["Launch", "2026-10-12", "12:00"],
+        ["Last chance", "2026-10-13", "12:00"],
+      ],
+    },
+    {
+      name: "ends in 3 days",
+      now: "2026-10-12T08:00:00.000Z",
+      endDate: "2026-10-15",
+      expected: [
+        ["Launch", "2026-10-12", "12:00"],
+        ["Mid-run reminder", "2026-10-13", "12:00"],
+        ["Last chance", "2026-10-15", "12:00"],
+      ],
+    },
+    {
+      name: "ends in 10 days",
+      now: "2026-10-12T08:00:00.000Z",
+      endDate: "2026-10-22",
+      expected: [
+        ["Launch", "2026-10-12", "12:00"],
+        ["Mid-run reminder", "2026-10-17", "12:00"],
+        ["Last chance", "2026-10-22", "12:00"],
+      ],
+    },
+    {
+      name: "ends in 30 days, across the clock change",
+      now: "2026-10-12T08:00:00.000Z",
+      endDate: "2026-11-11",
+      expected: [
+        ["Launch", "2026-10-12", "12:00"],
+        ["Mid-run reminder", "2026-10-27", "12:00"],
+        ["Last chance", "2026-11-11", "12:00"],
+      ],
+    },
+    {
+      // Sat 24 Oct, 09:00 BST; the offer ends on Sun 25 Oct, when the clocks go back.
+      name: "ends on the day the clocks go back",
+      now: "2026-10-24T08:00:00.000Z",
+      endDate: "2026-10-25",
+      expected: [
+        ["Launch", "2026-10-24", "12:00"],
+        ["Last chance", "2026-10-25", "12:00"],
+      ],
+    },
+    {
+      // Sun 25 Oct, 09:00 GMT: launched on the day the clocks go back.
+      name: "starts on the day the clocks go back",
+      now: "2026-10-25T09:00:00.000Z",
+      endDate: "2026-10-26",
+      expected: [
+        ["Launch", "2026-10-25", "12:00"],
+        ["Last chance", "2026-10-26", "12:00"],
+      ],
+    },
+    {
+      // Fri 23 Oct, 09:00 BST; three days that span the clock change.
+      name: "runs over the clock change",
+      now: "2026-10-23T08:00:00.000Z",
+      endDate: "2026-10-26",
+      expected: [
+        ["Launch", "2026-10-23", "12:00"],
+        ["Mid-run reminder", "2026-10-24", "12:00"],
+        ["Last chance", "2026-10-26", "12:00"],
+      ],
+    },
+  ])("offers one suggestion per day when the offer $name", ({ now, endDate, expected }) => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(now));
+
+    const built = buildPromotionSuggestions({ endDate, timezone: TZ });
+
+    expect(asRows(built)).toEqual(expected);
+    // No two suggestions share a London date and time.
+    const keys = built.map((slot) => `${slot.date}T${slot.time}`);
+    expect(new Set(keys).size).toBe(keys.length);
+    // The wizard shows these as built on an empty planner and deconflicts them
+    // against a planner with posts: an unrelated post must change nothing.
+    expect(deconflictSuggestions(built, UNRELATED_POST, TZ)).toEqual(built);
+  });
+
+  it("puts each suggestion at 12:00 London on its day, in BST and in GMT", () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-24T08:00:00.000Z")); // Sat 24 Oct, 09:00 BST
+
+    const built = buildPromotionSuggestions({ endDate: "2026-10-25", timezone: TZ });
+
+    expect(
+      built.map((slot) => DateTime.fromISO(`${slot.date}T${slot.time}`, { zone: TZ }).toUTC().toISO()),
+    ).toEqual([
+      "2026-10-24T11:00:00.000Z", // 12:00 BST
+      "2026-10-25T12:00:00.000Z", // 12:00 GMT
+    ]);
   });
 });

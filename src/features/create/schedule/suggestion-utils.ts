@@ -199,6 +199,12 @@ export function buildPromotionSuggestions({
     { id: "last", label: "Last chance", occurs: toMorning(lastChance) },
   ];
 
+  // A run that ends today or tomorrow puts two or three beats on the same
+  // London day, all at DEFAULT_POST_TIME. Keep the first on each day: the
+  // wizard shows these as built on an empty planner (it skips
+  // deconflictSuggestions), and deconflictSuggestions also keeps the first
+  // suggestion per day, so both paths offer the same slots.
+  const seenDates = new Set<string>();
   return slots
     .filter((slot) => slot.occurs.isValid && slot.occurs >= minimumSlot)
     .map((slot) => ({
@@ -206,5 +212,10 @@ export function buildPromotionSuggestions({
       date: safeIsoDate(slot.occurs) ?? slot.occurs.toFormat("yyyy-LL-dd"),
       time: slot.occurs.toFormat("HH:mm"),
       label: slot.label,
-    } satisfies SuggestedSlotDisplay));
+    } satisfies SuggestedSlotDisplay))
+    .filter((suggestion) => {
+      if (seenDates.has(suggestion.date)) return false;
+      seenDates.add(suggestion.date);
+      return true;
+    });
 }
