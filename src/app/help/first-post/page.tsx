@@ -74,7 +74,7 @@ export default async function FirstPostHelpPage(): Promise<React.JSX.Element> {
           <ul className="list-disc space-y-2 pl-5">
             <li>
               Connect Facebook, Instagram or both on the{' '}
-              <Link href="/connections" className="font-semibold hover:underline" style={{ color: 'var(--c-orange)' }}>
+              <Link href="/connections" className="font-semibold hover:underline" style={{ color: 'var(--c-orange-hi)' }}>
                 Connections
               </Link>{' '}
               page. One of the two is enough. Only an owner of the venue can connect them.
@@ -162,7 +162,7 @@ export default async function FirstPostHelpPage(): Promise<React.JSX.Element> {
             <a
               href={`mailto:${CONTACT.email}`}
               className="font-semibold hover:underline"
-              style={{ color: 'var(--c-orange)' }}
+              style={{ color: 'var(--c-orange-hi)' }}
             >
               {CONTACT.email}
             </a>{' '}

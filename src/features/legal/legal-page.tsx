@@ -16,7 +16,7 @@ import {
  * details the law requires on the site are written once.
  */
 
-const linkStyle = { color: "var(--c-orange)" } as const;
+const linkStyle = { color: "var(--c-orange-hi)" } as const;
 const headingStyle = { color: "var(--c-ink)" } as const;
 const mutedStyle = { color: "var(--c-ink-3)" } as const;
 
