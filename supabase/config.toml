@@ -12,18 +12,10 @@ project_id = "cheersai"
 [functions."publish-queue"]
   verify_jwt = true
 
-# media-derivatives runs with verify_jwt = false live, and has since at least 27 July 2026. This
-# file said true until 29 September 2026, so a deploy-all or the GitHub integration would have
-# switched verification on, which earlier notes warned breaks its on-demand callers
-# (tasks/SPEC-domain-migration-cheers-orangejelly.md). It runs only on demand, from
-# scripts/ops/regenerate-story-derivatives.ts (service-role client) and
-# scripts/ops/invoke-function.ts (npm run ops:invoke), both of which pass the service-role key
-# as the Authorization header; nothing in src/, tests/ or CI calls it, and library uploads build
-# their derivatives in the browser. The function checks no caller itself, so turning
-# verification on is a separate change: deploy it by name with Peter's yes, then re-run both
-# scripts. Any deploy changes its behaviour as well: the live copy was last deployed on
-# 8 October 2025 from an older checkout and lacks this repo's aspect_class write.
-[functions."media-derivatives"]
-  verify_jwt = false
+# media-derivatives (image sizes via FFmpeg WASM) was retired on 29 September 2026: nothing in the
+# app called it, it had failed to start on every call for about a year, and library uploads build
+# their image sizes in the browser. The live copy is deleted by name
+# (npx supabase functions delete media-derivatives); the code is in git history
+# (tasks/SPEC-retire-media-derivatives.md).
 
 # NOTE: There are no Supabase-side schedules (no pg_cron or pg_net); scheduling is Vercel Cron, see vercel.json.

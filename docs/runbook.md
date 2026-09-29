@@ -28,9 +28,9 @@ Provide procedures for monitoring, incident response, and routine maintenance of
 3. Run health check script to validate posting capability before resuming scheduled jobs.
 
 ### 4.3 Media Processing Failures
-1. Review failed assets flagged in logs.
-2. Trigger reprocessing job (`npm run ops:invoke -- media-derivatives '{"assetId":"<id>"}'`).
-3. If recurring to specific format, inspect FFmpeg worker config; adjust transcoding parameters.
+1. Find the affected images: `media_assets` rows with `processed_status = 'failed'` (an image saved without a story size).
+2. Replace each one from its library card with "Replace image" (`src/features/library/media-replace-button.tsx`). It builds the sizes in the browser again and moves the posts that use the old image onto the new one.
+3. If one format keeps failing, ask the uploader for the browser console line "derivative generation failed" and check the canvas code in `src/lib/library/client-derivatives.ts`. There is no server-side reprocessing: the `media-derivatives` edge function was retired on 29 September 2026 (section 12).
 
 ### 4.4 Queue Backlog
 1. If `queued` jobs > threshold or next_attempt_at far in past, inspect worker status.
@@ -54,10 +54,9 @@ Provide procedures for monitoring, incident response, and routine maintenance of
 - In catastrophic failure, restore latest snapshot, rehydrate media from backup, re-run queued jobs as needed.
 
 ## 8. Tooling & Scripts
-- `npm run ops:backfill-connections` – hydrates missing connection metadata (pageId/igBusinessId/locationId) using live provider APIs.
-- `npm run ops:link-auth-user -- --email you@example.com --account <uuid>` – sets the Supabase auth `user_metadata.account_id`, ensures the `accounts` row exists, and seeds posting defaults for a new operator.
-- `npm run ops:invoke -- publish-queue '{"leadWindowMinutes":5}'` – trigger the publish worker immediately (payload optional).
-- `npm run ops:invoke -- media-derivatives '{"assetId":"<uuid>"}'` – force reprocessing for a specific media asset.
+- `npm run ops:backfill-connections`: hydrates missing connection metadata (pageId/igBusinessId/locationId) using live provider APIs.
+- `npm run ops:link-auth-user -- --email you@example.com --account <uuid>`: sets the Supabase auth `user_metadata.account_id`, ensures the `accounts` row exists, and seeds posting defaults for a new operator.
+- `npm run ops:invoke -- publish-queue '{"leadWindowMinutes":5}'`: trigger the publish worker immediately (payload optional).
 
 ## 9. Communication Plan
 - For incidents lasting >30 minutes, send status email describing issue, impact, mitigation steps, and ETA.
@@ -72,17 +71,17 @@ Provide procedures for monitoring, incident response, and routine maintenance of
 - **All scheduled work runs on Vercel Cron**, defined in `vercel.json` (region `lhr1`, schedules evaluated in UTC). Every route checks `CRON_SECRET` through `verifyCronAuth()`. The full route table is in `docs/agent-reference.md` section 5.
 - **Publishing**: `/api/cron/publish-scheduler` runs every minute. It promotes due `publish_jobs` to `queued` and dispatches them to QStash, which delivers each job to `/api/webhooks/qstash-publish`. It calls the Supabase `publish-queue` edge function instead only while `publish_jobs` lacks a `platform` column (the legacy bridge).
 - `/api/cron/publish` is a 410 tombstone and is not in `vercel.json`. Do not schedule it.
-- **There are no Supabase-side schedules.** The live project (`nbkjciurhvkfpcpatbnt`) has neither `pg_cron` nor `pg_net` installed (checked 2026-09-26), so nothing calls the edge functions on a timer:
+- **There are no Supabase-side schedules.** The live project (`nbkjciurhvkfpcpatbnt`) has neither `pg_cron` nor `pg_net` installed (checked 2026-09-26), so nothing calls the edge function on a timer:
   - `publish-queue` runs only when the legacy bridge above or tournament publishing (`src/app/actions/tournament.ts`) invokes it, and tournament publishing also does so only while `publish_jobs` lacks a `platform` column.
-  - `media-derivatives` runs only on demand, through `npm run ops:regenerate-story-derivatives` or `npm run ops:invoke -- media-derivatives '{"assetId":"<uuid>"}'`. Library uploads create their derivatives in the browser and do not call it.
+  - `media-derivatives` was retired on 29 September 2026 (section 12).
 
-> **Deploy notes:** To change a schedule, edit `vercel.json` and deploy, then update the table in `docs/agent-reference.md` section 5 to match. `supabase/config.toml` holds only the `verify_jwt` flags for the two edge functions.
+> **Deploy notes:** To change a schedule, edit `vercel.json` and deploy, then update the table in `docs/agent-reference.md` section 5 to match. `supabase/config.toml` holds only the `verify_jwt` flag for the `publish-queue` edge function.
 
 ## 12. Media Processing Pipeline
-- **Library uploads generate image derivatives in the browser.** `generateImageDerivatives()` in `src/lib/library/client-derivatives.ts` draws square (1080×1350), story (1080×1920) and landscape (1920×1080) JPEGs on a canvas. The upload components (`src/features/library/media-asset-grid-client.tsx`, `media-upload-panel.tsx`, `upload-panel.tsx` and `media-replace-button.tsx`) upload them to signed URLs and pass their paths to `finaliseMediaUpload()`. No upload calls the `media-derivatives` edge function.
+- **Library uploads generate image derivatives in the browser.** `generateImageDerivatives()` in `src/lib/library/client-derivatives.ts` draws square (1080×1350), story (1080×1920) and landscape (1920×1080) JPEGs on a canvas. The upload components (`src/features/library/media-asset-grid-client.tsx`, `media-upload-panel.tsx`, `upload-panel.tsx` and `media-replace-button.tsx`) upload them to signed URLs and pass their paths to `finaliseMediaUpload()`. Nothing builds derivatives on the server.
 - `finaliseMediaUpload()` (`src/app/(app)/library/actions.ts`) sets `processed_status` to `ready` when an image has a story derivative and `failed` when it does not. Videos are saved as `ready` with no derivatives.
-- **The `media-derivatives` edge function runs only on demand**, through the ops scripts: `npm run ops:regenerate-story-derivatives` invokes it for every image that has no story derivative, and `npm run ops:invoke -- media-derivatives '{"assetId":"<uuid>"}'` invokes it for one asset. It renders the same three sizes with FFmpeg WASM and moves the asset `processing` → `ready` (or `failed`); for a video it sets `skipped` and writes a `media_derivative_skipped` notification.
-- Troubleshooting: an image left on `failed` usually means the browser could not render or upload its derivatives (the uploader's browser console logs "derivative generation failed"). Re-run it through the edge function with one of the ops commands above, then check the function logs for FFmpeg errors.
+- **The `media-derivatives` edge function was retired on 29 September 2026**, with `npm run ops:regenerate-story-derivatives` (`tasks/SPEC-retire-media-derivatives.md`). It rendered the same three sizes with FFmpeg WASM on demand, but nothing in the app called it, it had failed to start on every call for about a year (`@ffmpeg/ffmpeg@0.12.6` no longer exports `createFFmpeg`, so it answered 503 `BOOT_ERROR`), and uploads already make their own sizes. The app still understands the `processing` and `skipped` statuses and the `media_derivative_skipped` and `media_derivative_failed` notifications it wrote, though no live row had them on 29 September 2026.
+- Troubleshooting: an image left on `failed` usually means the browser could not render or upload its derivatives (the uploader's browser console logs "derivative generation failed"). Replace it from the library with "Replace image" (section 4.3); there is no server-side re-run.
 
 ## 13. Email Alerts
 - Publish failures and metadata issues send alerts via Resend to `ALERT_EMAIL`/`RESEND_FROM`.

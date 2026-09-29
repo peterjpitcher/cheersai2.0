@@ -12,7 +12,7 @@ CheersAI is an AI-assisted social media tool for hospitality venues. An owner cr
 - `npm run build` runs `next build --webpack`: webpack, not Turbopack. The build type-checks against `tsconfig.build.json` (src only); `npm run typecheck` uses `tsconfig.json`, which also covers `tests/` and `scripts/`, so the two can disagree.
 - Tests are **Vitest 4** (node environment, `TZ` forced to Europe/London) plus **Playwright** for e2e. Not Jest.
 - No `middleware.ts` or `proxy.ts`. The auth gate is `src/app/(app)/layout.tsx` calling `getCurrentUser()` (redirects to `/auth/login` or `/no-access`); server actions and routes call `requireAuthContext()` from `src/lib/auth/server.ts`.
-- Background work: Vercel Cron (`vercel.json`, region `lhr1`) for scheduling, **Upstash QStash** for publish delivery, and two Supabase edge functions (`publish-queue`, `media-derivatives`) for the legacy and media paths.
+- Background work: Vercel Cron (`vercel.json`, region `lhr1`) for scheduling, **Upstash QStash** for publish delivery, and one Supabase edge function (`publish-queue`) for the legacy publish path. A second, `media-derivatives`, was retired on 29 September 2026 (`tasks/SPEC-retire-media-derivatives.md`): nothing called it, it had failed to start for about a year, and uploads build their image sizes in the browser.
 - Logging is **Axiom** via `createLogger()` in `src/lib/logging`. Auth rate limits live in our own database (`src/lib/auth/rate-limit.ts` calling `public.consume_rate_limit`, keys HMAC'd with a key derived from `TOKEN_VAULT_KEY`); a limiter failure refuses sign-in rather than allowing it.
 - `cheersai.uk` is retired and 307-redirects to the new host (`src/lib/routing/legacy-host-redirects.ts`), browser traffic only.
 
@@ -66,7 +66,7 @@ tasks/                  SPEC-*.md, PLAN-*.md, ADS-PLAYBOOK-the-anchor.md
 | Resend | `src/lib/email/`, `src/lib/notifications/` | failure and expiring-connection alerts |
 | Upstash QStash | `src/lib/qstash/client.ts` | delivery queue |
 | Axiom | `src/lib/logging/axiom.ts` | structured logs; silent when `AXIOM_TOKEN` is unset |
-| Supabase edge functions | `supabase/functions/publish-queue`, `media-derivatives` | legacy publish worker; image derivatives via FFmpeg WASM |
+| Supabase edge function | `supabase/functions/publish-queue` | legacy publish worker; `media-derivatives` (image sizes via FFmpeg WASM) was retired on 29 September 2026 |
 | The Anchor management app | `src/lib/management-app/` | event artwork import; per-account settings in `management_app_connections`; allowed hosts in `MANAGEMENT_ARTWORK_ORIGINS` |
 | Booking conversions ingest | `/api/booking-conversions` | per-brand `bce_` secrets; hourly `retry-capi-conversions` cron |
 | Banner rendering | `src/lib/banner/`, `/api/internal/render-banner` | satori, sharp, text-to-svg; fetches only from the project's Supabase Storage host over https |
@@ -105,7 +105,7 @@ tasks/                  SPEC-*.md, PLAN-*.md, ADS-PLAYBOOK-the-anchor.md
 ## Testing
 
 - Vitest picks up `tests/**/*.test.ts` and co-located `src/**/*.test.ts(x)`; both conventions are in use. Coverage thresholds in `vitest.config.ts`: `src/lib/auth` 80%, `src/lib/publishing` 85%, `src/lib/scheduling` 90%.
-- `tests/setup.ts` stubs `localStorage` and Framer Motion (the node environment has no DOM). MSW handlers live in `tests/msw/`, a Supabase mock in `tests/helpers/mock-supabase.ts`, an FFmpeg stub in `tests/__mocks__/`.
+- `tests/setup.ts` stubs `localStorage` and Framer Motion (the node environment has no DOM). MSW handlers live in `tests/msw/` and a Supabase mock in `tests/helpers/mock-supabase.ts`.
 - Mock OpenAI, Resend, Meta and Supabase; a unit test must never reach a live service.
 - Playwright: `e2e/tests/smoke` and `e2e/tests/full`, chromium only, real login via `E2E_TEST_EMAIL` and `E2E_TEST_PASSWORD`.
 

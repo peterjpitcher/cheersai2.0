@@ -25,7 +25,6 @@
     "ops:bootstrap-super-admin": "tsx scripts/ops/bootstrap-super-admin.ts",
     "ops:invoke": "tsx scripts/ops/invoke-function.ts",
     "ops:link-auth-user": "tsx scripts/ops/link-auth-user.ts",
-    "ops:regenerate-story-derivatives": "tsx scripts/ops/regenerate-story-derivatives.ts",
     "ops:repair-hidden-media-references": "tsx scripts/ops/repair-hidden-media-references.ts",
     "ops:search-meta-interests": "tsx scripts/ops/search-meta-interests.ts",
     "ops:seed-world-cup": "npx tsx scripts/ops/seed-world-cup-2026.ts",
