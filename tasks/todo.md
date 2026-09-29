@@ -17,7 +17,9 @@ Spec: `tasks/SPEC-facebook-page-chooser.md`; branch `feat/facebook-page-chooser`
 - [x] lint:ci, typecheck, test:ci and test:utc (3,892 tests each), build with CI's variables; draft
       PR #158, CI green
 - [ ] A real multi-Page Facebook login and pick (not possible locally)
-- [ ] Peter's yes, then merge and deploy
+- [x] Peter's yes (29 September 2026); the independent review's eight code findings fixed in the same PR
+      (spec, "Review fixes"); contrast, focus and the expired-choice clean-up re-checked in the browser
+- [ ] Merge and deploy (the main agent merges)
 
 # Self-serve sign-up PR 6: venue creation (2026-09-28)
 
