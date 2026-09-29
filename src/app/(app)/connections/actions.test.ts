@@ -1,4 +1,9 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { randomBytes } from 'node:crypto';
+
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+
+import type { ManagedPage } from '@/lib/connections/page-selection';
+import { InMemoryConnectionsDb } from '../../../../tests/helpers/in-memory-connections-db';
 
 // ---------------------------------------------------------------------------
 // Mocks -- set up before importing modules under test
@@ -22,9 +27,13 @@ vi.mock('@/lib/connections/oauth', async (importOriginal) => ({
   buildOAuthRedirectUrl: (...args: unknown[]) => mockBuildOAuthRedirectUrl(...args),
 }));
 
-const mockExchangeProviderAuthCode = vi.fn();
-vi.mock('@/lib/connections/token-exchange', () => ({
-  exchangeProviderAuthCode: (...args: unknown[]) => mockExchangeProviderAuthCode(...args),
+// Meta is never called: the login and the Page list are stubbed, the rest is real.
+const mockExchangeCodeForUserToken = vi.fn();
+const mockFetchManagedPages = vi.fn();
+vi.mock('@/lib/connections/token-exchange', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/connections/token-exchange')>()),
+  exchangeCodeForUserToken: (...args: unknown[]) => mockExchangeCodeForUserToken(...args),
+  fetchManagedPages: (...args: unknown[]) => mockFetchManagedPages(...args),
 }));
 
 const mockStoreEncryptedToken = vi.fn();
@@ -36,10 +45,6 @@ vi.mock('@/lib/supabase/errors', () => ({
   isSchemaMissingError: vi.fn(() => false),
 }));
 
-vi.mock('@/lib/connections/metadata', () => ({
-  evaluateConnectionMetadata: vi.fn(() => ({ complete: true, missingKeys: [] })),
-}));
-
 vi.mock('next/cache', () => ({
   revalidatePath: vi.fn(),
 }));
@@ -48,34 +53,31 @@ vi.mock('next/cache', () => ({
 // Helpers
 // ---------------------------------------------------------------------------
 
-function authContext(overrides: Partial<{ accountId: string; user: { id: string }; role: 'owner' | 'member' }> = {}) {
-  const accountId = overrides.accountId ?? 'acc-1';
+const ACCOUNT = '11111111-1111-4111-8111-111111111111';
+const OTHER_ACCOUNT = '22222222-2222-4222-8222-222222222222';
+const USER_TOKEN = 'EAAB-user-token-never-shown';
+
+type Role = 'owner' | 'member';
+
+function authContext(
+  overrides: Partial<{ accountId: string; user: { id: string }; role: Role; brands: Array<{ accountId: string; role: Role }> }> = {},
+) {
+  const accountId = overrides.accountId ?? ACCOUNT;
+  const role = overrides.role ?? 'owner';
+  const brands = (overrides.brands ?? [{ accountId, role }]).map((brand) => ({
+    ...brand,
+    name: 'Test',
+    timezone: 'Europe/London',
+  }));
   return {
     accountId,
     activeAccountId: accountId,
     user: overrides.user ?? { id: 'user-1' },
     supabase: { from: mockFrom },
-    brands: [{ accountId, name: 'Test', timezone: 'Europe/London' }],
+    brands,
     isSuperAdmin: false,
-    role: overrides.role ?? 'owner',
+    role,
   };
-}
-
-/** Build a chainable mock for supabase .from().select().eq().is().lt().single/maybeSingle() */
-function mockQueryChain(data: unknown, error: unknown = null) {
-  const chain = {} as Record<string, ReturnType<typeof vi.fn>>;
-  chain.single = vi.fn().mockResolvedValue({ data, error });
-  chain.maybeSingle = vi.fn().mockResolvedValue({ data, error });
-  chain.select = vi.fn().mockReturnValue(chain);
-  chain.eq = vi.fn().mockReturnValue(chain);
-  chain.is = vi.fn().mockReturnValue(chain);
-  chain.lt = vi.fn().mockReturnValue(chain);
-  chain.lte = vi.fn().mockReturnValue(chain);
-  chain.gt = vi.fn().mockReturnValue(chain);
-  chain.gte = vi.fn().mockReturnValue(chain);
-  chain.not = vi.fn().mockReturnValue(chain);
-  chain.order = vi.fn().mockReturnValue(chain);
-  return chain;
 }
 
 function mockInsertChain(data: unknown = null, error: unknown = null) {
@@ -84,62 +86,52 @@ function mockInsertChain(data: unknown = null, error: unknown = null) {
   };
 }
 
-function mockUpdateChain(data: unknown = null, error: unknown = null) {
-  // Needs to support .update().eq().eq() chains where the last call resolves
-  const terminal = { data, error };
-  const secondEq = vi.fn().mockResolvedValue(terminal);
-  const firstEq = vi.fn().mockReturnValue({ eq: secondEq });
-  const chain = {
-    update: vi.fn().mockReturnValue({ eq: firstEq }),
-    eq: firstEq,
-  };
-  return chain;
-}
-
-function mockUpsertChain(data: unknown[] | null = [{ id: 'conn-1' }], error: unknown = null) {
-  const terminal = {
-    select: vi.fn().mockReturnValue({
-      single: vi.fn().mockResolvedValue({ data: data?.[0] ?? null, error }),
-    }),
-  };
+function page(id: string, overrides: Partial<ManagedPage> = {}): ManagedPage {
   return {
-    upsert: vi.fn().mockReturnValue(terminal),
+    id,
+    name: `Page ${id}`,
+    accessToken: `page-token-${id}`,
+    tasks: ['CREATE_CONTENT', 'MODERATE', 'MANAGE'],
+    instagram: null,
+    ...overrides,
   };
 }
 
-function mockCompleteOAuthFrom({
-  oauthStateRow,
-  upsertChain = mockUpsertChain(),
-  existingConnection = null,
-}: {
-  oauthStateRow: unknown;
-  upsertChain?: ReturnType<typeof mockUpsertChain>;
-  existingConnection?: unknown;
-}) {
-  let oauthCalls = 0;
-  let socialCalls = 0;
+function withInstagram(id: string, overrides: Partial<ManagedPage> = {}): ManagedPage {
+  return page(id, { instagram: { id: `ig-${id}`, username: `venue${id}`, name: null }, ...overrides });
+}
 
-  mockFrom.mockImplementation((table: string) => {
-    if (table === 'oauth_states') {
-      oauthCalls++;
-      // The state row now carries the initiating brand; inject a default so
-      // existing fixtures (which predate account_id binding) resolve to acc-1.
-      const row =
-        oauthStateRow && typeof oauthStateRow === 'object' && !('account_id' in (oauthStateRow as object))
-          ? { ...(oauthStateRow as object), account_id: 'acc-1' }
-          : oauthStateRow;
-      return oauthCalls === 1 ? mockQueryChain(row) : mockUpdateChain();
-    }
-    if (table === 'social_connections') {
-      socialCalls++;
-      if (socialCalls === 1) return mockQueryChain(existingConnection);
-      if (socialCalls === 2) return upsertChain;
-      return mockUpdateChain();
-    }
-    return mockInsertChain();
-  });
+let db: InMemoryConnectionsDb;
 
-  return { upsertChain };
+function useInMemoryDb() {
+  db = new InMemoryConnectionsDb();
+  db.seed('accounts', [{ id: ACCOUNT }, { id: OTHER_ACCOUNT }]);
+  mockFrom.mockImplementation((table: string) => db.client().from(table));
+}
+
+function seedState(overrides: Record<string, unknown> = {}) {
+  db.seed('oauth_states', [
+    {
+      state: 'valid-state',
+      provider: 'facebook',
+      account_id: ACCOUNT,
+      expires_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+      ...overrides,
+    },
+  ]);
+}
+
+/** A connection that currently holds a token (a token_vault access row). */
+function seedConnection(provider: 'facebook' | 'instagram', metadata: Record<string, unknown>, withToken = true) {
+  const id = `${provider}-conn`;
+  db.seed('social_connections', [{ id, account_id: ACCOUNT, provider, status: 'active', metadata }]);
+  if (withToken) {
+    db.seed('token_vault', [{ social_connection_id: id, token_type: 'access', ciphertext: 'c', iv: 'i', tag: 't' }]);
+  }
+}
+
+function connectionRow(provider: 'facebook' | 'instagram') {
+  return db.rows('social_connections').find((row) => row.provider === provider);
 }
 
 // ---------------------------------------------------------------------------
@@ -151,6 +143,7 @@ const {
   completeOAuthConnect,
   disconnectProvider,
 } = await import('./actions');
+const { readPageChoice, PAGE_CHOICE_PATH } = await import('@/lib/connections/page-choice');
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -174,6 +167,8 @@ describe('initiateOAuthConnect', () => {
     const insertCall = insertMock.insert.mock.calls[0][0];
     expect(insertCall).toHaveProperty('provider', 'facebook');
     expect(insertCall).toHaveProperty('state');
+    // A normal connect never forces the chooser.
+    expect(insertCall).not.toHaveProperty('redirect_to');
     // Expiry should be ~10 minutes in the future
     const expiresAt = new Date(insertCall.expires_at).getTime();
     const now = Date.now();
@@ -191,175 +186,326 @@ describe('initiateOAuthConnect', () => {
     expect(result.redirectUrl).toBe('https://oauth.example.com/auth?state=abc');
     expect(mockBuildOAuthRedirectUrl).toHaveBeenCalledWith('instagram', expect.any(String));
   });
+
+  it('records Change Page on the state row so the callback shows the chooser', async () => {
+    useInMemoryDb();
+
+    const result = await initiateOAuthConnect('facebook', { changePage: true });
+
+    expect(result.success).toBe(true);
+    expect(db.rows('oauth_states')).toEqual([
+      expect.objectContaining({ provider: 'facebook', account_id: ACCOUNT, redirect_to: PAGE_CHOICE_PATH, auth_code: null }),
+    ]);
+  });
+
+  it('refuses Change Page on Instagram while Facebook is connected (Facebook is the anchor)', async () => {
+    useInMemoryDb();
+    seedConnection('facebook', { pageId: '1' });
+
+    const result = await initiateOAuthConnect('instagram', { changePage: true });
+
+    expect(result).toEqual({
+      success: false,
+      error: 'Instagram uses the Page connected to Facebook. To change it, use Change Page on the Facebook card.',
+    });
+    expect(db.rows('oauth_states')).toHaveLength(0);
+  });
+
+  it('allows Change Page on Instagram when Facebook is not connected', async () => {
+    useInMemoryDb();
+    seedConnection('facebook', { pageId: '1' }, false);
+
+    const result = await initiateOAuthConnect('instagram', { changePage: true });
+
+    expect(result.success).toBe(true);
+    expect(db.rows('oauth_states')[0]).toMatchObject({ provider: 'instagram', redirect_to: PAGE_CHOICE_PATH });
+  });
 });
 
 describe('completeOAuthConnect', () => {
-  const validExchange = {
-    accessToken: 'access-tok-123',
-    refreshToken: 'refresh-tok-456',
+  const auth = {
+    userAccessToken: USER_TOKEN,
     expiresAt: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString(),
-    displayName: 'My Facebook Page',
-    metadata: { pageId: 'page-123' },
+    metaUserId: 'meta-user-1',
   };
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.stubEnv('TOKEN_VAULT_KEY', randomBytes(32).toString('hex'));
     mockRequireAuthContext.mockResolvedValue(authContext());
-    mockExchangeProviderAuthCode.mockResolvedValue(validExchange);
+    mockExchangeCodeForUserToken.mockResolvedValue(auth);
     mockStoreEncryptedToken.mockResolvedValue(undefined);
+    useInMemoryDb();
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.spyOn(console, 'log').mockImplementation(() => {});
   });
 
-  it('should mark state as used, exchange code, and store tokens in vault for valid state', async () => {
-    const oauthStateRow = {
-      id: 'state-row-1',
-      provider: 'facebook',
-      used_at: null,
-      expires_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
-    };
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllEnvs();
+  });
 
-    mockCompleteOAuthFrom({ oauthStateRow });
+  it('connects the only Page straight away, as before, and stores its token in the vault', async () => {
+    seedState();
+    mockFetchManagedPages.mockResolvedValue([page('1')]);
 
-    const result = await completeOAuthConnect('facebook', 'auth-code-123', 'valid-state-uuid');
+    const result = await completeOAuthConnect('facebook', 'auth-code-123', 'valid-state');
+
+    expect(result).toEqual({ success: true });
+    expect(mockExchangeCodeForUserToken).toHaveBeenCalledWith('facebook', 'auth-code-123');
+    expect(mockFetchManagedPages).toHaveBeenCalledWith(USER_TOKEN);
+    const row = connectionRow('facebook');
+    expect(row).toMatchObject({
+      account_id: ACCOUNT,
+      status: 'active',
+      platform_account_id: '1',
+      platform_account_name: 'Page 1',
+      display_name: 'Page 1',
+      metadata: { pageId: '1' },
+      token_expires_at: auth.expiresAt,
+      meta_user_id: 'meta-user-1',
+      // Never a plaintext token column.
+      access_token: null,
+      refresh_token: null,
+    });
+    expect(row?.scopes).toEqual([
+      'pages_show_list', 'pages_read_engagement', 'pages_manage_posts',
+      'instagram_basic', 'instagram_content_publish', 'business_management',
+    ]);
+    expect(mockStoreEncryptedToken).toHaveBeenCalledTimes(1);
+    expect(mockStoreEncryptedToken).toHaveBeenCalledWith(row?.id, 'access', 'page-token-1');
+    expect(db.rows('oauth_states')[0].used_at).not.toBeNull();
+    expect(db.rejected).toEqual([]);
+  });
+
+  it('reconnects the stored Page with no chooser when several Pages come back (every reconnect today)', async () => {
+    seedState();
+    seedConnection('facebook', { pageId: '2' });
+    mockFetchManagedPages.mockResolvedValue([page('1'), page('2'), page('3')]);
+
+    const result = await completeOAuthConnect('facebook', 'code', 'valid-state');
+
+    expect(result).toEqual({ success: true });
+    expect(connectionRow('facebook')).toMatchObject({ metadata: { pageId: '2' }, status: 'active' });
+    expect(db.rows('oauth_states')).toHaveLength(1);
+  });
+
+  it('reconnects Instagram on the same Page as Facebook, as for The Anchor', async () => {
+    seedState({ provider: 'instagram' });
+    seedConnection('facebook', { pageId: '2', igBusinessId: 'ig-2' });
+    seedConnection('instagram', { pageId: '2', igBusinessId: 'ig-2', instagramUsername: 'venue2' });
+    mockFetchManagedPages.mockResolvedValue([withInstagram('1'), withInstagram('2')]);
+
+    const result = await completeOAuthConnect('instagram', 'code', 'valid-state');
+
+    expect(result).toEqual({ success: true });
+    expect(connectionRow('instagram')).toMatchObject({
+      platform_account_id: 'ig-2',
+      metadata: { pageId: '2', igBusinessId: 'ig-2', instagramUsername: 'venue2' },
+    });
+    expect(mockStoreEncryptedToken).toHaveBeenCalledWith('instagram-conn', 'access', 'page-token-2');
+  });
+
+  it('asks the owner when several Pages come back and none is stored, connecting nothing yet', async () => {
+    seedState();
+    mockFetchManagedPages.mockResolvedValue([page('1'), withInstagram('2')]);
+
+    const result = await completeOAuthConnect('facebook', 'code', 'valid-state');
 
     expect(result.success).toBe(true);
-    expect(mockExchangeProviderAuthCode).toHaveBeenCalledWith(
-      'facebook',
-      'auth-code-123',
-      { existingDisplayName: null, existingMetadata: null },
-    );
-    expect(mockStoreEncryptedToken).toHaveBeenCalledWith('conn-1', 'access', 'access-tok-123');
-    expect(mockStoreEncryptedToken).toHaveBeenCalledWith('conn-1', 'refresh', 'refresh-tok-456');
+    expect(result.pageChoice).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(db.rows('social_connections')).toHaveLength(0);
+    expect(mockStoreEncryptedToken).not.toHaveBeenCalled();
+
+    const handOff = db.rows('oauth_states').find((row) => row.state === result.pageChoice);
+    expect(handOff).toMatchObject({ provider: 'facebook', account_id: ACCOUNT, redirect_to: PAGE_CHOICE_PATH, created_by: null });
+    expect(String(handOff?.auth_code)).not.toContain(USER_TOKEN);
+    expect(String(handOff?.auth_code)).not.toContain('page-token');
+
+    const read = await readPageChoice(db.client(), { token: result.pageChoice!, userId: 'user-1', ownedAccountIds: [ACCOUNT] });
+    expect(read.ok).toBe(true);
+    if (!read.ok) return;
+    expect(read.choice.payload).toMatchObject({ changePage: false, userAccessToken: USER_TOKEN, metaUserId: 'meta-user-1' });
+    expect(read.choice.payload.pages).toEqual([
+      { id: '1', name: 'Page 1', instagramUsername: null, hasInstagram: false, canPostToFacebook: true, canPostToInstagram: false },
+      { id: '2', name: 'Page 2', instagramUsername: 'venue2', hasInstagram: true, canPostToFacebook: true, canPostToInstagram: true },
+    ]);
+  });
+
+  it('always asks for Change Page, even when the stored Page matches', async () => {
+    seedState({ redirect_to: PAGE_CHOICE_PATH });
+    seedConnection('facebook', { pageId: '1' });
+    seedConnection('instagram', { pageId: '1', igBusinessId: 'ig-1' });
+    mockFetchManagedPages.mockResolvedValue([withInstagram('1')]);
+
+    const result = await completeOAuthConnect('facebook', 'code', 'valid-state');
+
+    expect(result.pageChoice).toBeDefined();
+    const read = await readPageChoice(db.client(), { token: result.pageChoice!, userId: 'user-1', ownedAccountIds: [ACCOUNT] });
+    if (!read.ok) throw new Error('expected a readable choice');
+    expect(read.choice.payload).toMatchObject({ changePage: true, currentPageId: '1', instagramPageId: '1' });
+  });
+
+  it("uses Facebook's Page for Instagram when Facebook is connected", async () => {
+    seedState({ provider: 'instagram' });
+    seedConnection('facebook', { pageId: '2' });
+    mockFetchManagedPages.mockResolvedValue([withInstagram('1'), withInstagram('2')]);
+
+    const result = await completeOAuthConnect('instagram', 'code', 'valid-state');
+
+    expect(result).toEqual({ success: true });
+    expect(connectionRow('instagram')).toMatchObject({ metadata: expect.objectContaining({ pageId: '2', igBusinessId: 'ig-2' }) });
+  });
+
+  it("refuses Instagram, connecting nothing, when Facebook's Page has no Instagram account", async () => {
+    seedState({ provider: 'instagram' });
+    seedConnection('facebook', { pageId: '1' });
+    mockFetchManagedPages.mockResolvedValue([page('1'), withInstagram('2')]);
+
+    const result = await completeOAuthConnect('instagram', 'code', 'valid-state');
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('same Page as Facebook');
+    expect(connectionRow('instagram')).toBeUndefined();
+    expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('linked_page_without_instagram'));
+  });
+
+  it('a disconnected Facebook no longer binds Instagram to its old Page', async () => {
+    seedState({ provider: 'instagram' });
+    seedConnection('facebook', { pageId: '1' }, false);
+    mockFetchManagedPages.mockResolvedValue([page('1'), withInstagram('2')]);
+
+    const result = await completeOAuthConnect('instagram', 'code', 'valid-state');
+
+    expect(result.success).toBe(true);
+    expect(result.pageChoice).toBeDefined();
   });
 
   it('should return error for already-used state (replay prevention)', async () => {
-    // Return null because the query filters by used_at IS NULL
-    const queryChain = mockQueryChain(null);
-    mockFrom.mockImplementation((table: string) => {
-      if (table === 'oauth_states') return queryChain;
-      return mockInsertChain();
-    });
+    seedState({ used_at: new Date().toISOString() });
 
-    const result = await completeOAuthConnect('facebook', 'auth-code-123', 'used-state-uuid');
+    const result = await completeOAuthConnect('facebook', 'auth-code-123', 'valid-state');
 
-    expect(result.success).toBe(false);
-    expect(result.error).toContain('Invalid');
-    expect(mockExchangeProviderAuthCode).not.toHaveBeenCalled();
+    expect(result).toEqual({ success: false, error: 'Invalid or expired OAuth state' });
+    expect(mockExchangeCodeForUserToken).not.toHaveBeenCalled();
   });
 
   it('should return error for expired state', async () => {
-    // Expired state returns null because query filters by expires_at > now()
-    const queryChain = mockQueryChain(null);
-    mockFrom.mockImplementation((table: string) => {
-      if (table === 'oauth_states') return queryChain;
-      return mockInsertChain();
-    });
+    seedState({ expires_at: new Date(Date.now() - 1000).toISOString() });
 
-    const result = await completeOAuthConnect('facebook', 'auth-code-123', 'expired-state-uuid');
+    const result = await completeOAuthConnect('facebook', 'auth-code-123', 'valid-state');
 
-    expect(result.success).toBe(false);
     expect(result.error).toContain('Invalid');
-    expect(mockExchangeProviderAuthCode).not.toHaveBeenCalled();
+    expect(mockExchangeCodeForUserToken).not.toHaveBeenCalled();
   });
 
   it('should return error for non-existent state (state fixation prevention)', async () => {
-    const queryChain = mockQueryChain(null);
-    mockFrom.mockImplementation((table: string) => {
-      if (table === 'oauth_states') return queryChain;
-      return mockInsertChain();
-    });
-
     const result = await completeOAuthConnect('instagram', 'auth-code-123', 'fake-state');
 
-    expect(result.success).toBe(false);
     expect(result.error).toContain('Invalid');
     expect(mockStoreEncryptedToken).not.toHaveBeenCalled();
   });
 
-  it('should store access token via storeEncryptedToken', async () => {
-    const oauthStateRow = {
-      id: 'state-row-1', provider: 'facebook',
-      used_at: null, expires_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
-    };
-    mockCompleteOAuthFrom({ oauthStateRow });
+  it('never accepts a pending Page choice as an OAuth state', async () => {
+    seedState();
+    mockFetchManagedPages.mockResolvedValue([page('1'), page('2')]);
+    const first = await completeOAuthConnect('facebook', 'code', 'valid-state');
+    mockExchangeCodeForUserToken.mockClear();
 
-    await completeOAuthConnect('facebook', 'auth-code-123', 'valid-state');
+    const replay = await completeOAuthConnect('facebook', 'code', first.pageChoice!);
 
-    expect(mockStoreEncryptedToken).toHaveBeenCalledWith('conn-1', 'access', 'access-tok-123');
+    expect(replay).toEqual({ success: false, error: 'Invalid or expired OAuth state' });
+    expect(mockExchangeCodeForUserToken).not.toHaveBeenCalled();
   });
 
-  it('should store refresh token when present', async () => {
-    const oauthStateRow = {
-      id: 'state-row-1', provider: 'instagram',
-      used_at: null, expires_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
-    };
-    mockCompleteOAuthFrom({ oauthStateRow });
+  it('refuses a user who is only a member of the brand that started the flow', async () => {
+    mockRequireAuthContext.mockResolvedValue(
+      authContext({ accountId: OTHER_ACCOUNT, brands: [{ accountId: OTHER_ACCOUNT, role: 'owner' }, { accountId: ACCOUNT, role: 'member' }] }),
+    );
+    seedState();
 
-    await completeOAuthConnect('instagram', 'auth-code-123', 'valid-state');
+    const result = await completeOAuthConnect('facebook', 'code', 'valid-state');
 
-    expect(mockStoreEncryptedToken).toHaveBeenCalledWith('conn-1', 'refresh', 'refresh-tok-456');
-  });
-
-  it('should NOT store refresh token when absent', async () => {
-    mockExchangeProviderAuthCode.mockResolvedValue({
-      ...validExchange,
-      refreshToken: null,
+    expect(result).toEqual({
+      success: false,
+      error: 'You no longer have owner access to the brand that started this connection.',
     });
-    const oauthStateRow = {
-      id: 'state-row-1', provider: 'facebook',
-      used_at: null, expires_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
-    };
-    mockCompleteOAuthFrom({ oauthStateRow });
-
-    await completeOAuthConnect('facebook', 'auth-code-123', 'valid-state');
-
-    // Only access token stored, no refresh
-    expect(mockStoreEncryptedToken).toHaveBeenCalledTimes(1);
-    expect(mockStoreEncryptedToken).toHaveBeenCalledWith('conn-1', 'access', 'access-tok-123');
+    expect(mockExchangeCodeForUserToken).not.toHaveBeenCalled();
   });
 
-  it('should return an actionable error when token vault config is missing', async () => {
+  it('should return an actionable error when token vault config is missing, leaving the connection needs_action', async () => {
     mockStoreEncryptedToken.mockRejectedValue(
       new Error('Missing encryption key: TOKEN_VAULT_KEY environment variable is not set'),
     );
-    const oauthStateRow = {
-      id: 'state-row-1',
-      provider: 'instagram',
-      used_at: null,
-      expires_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
-    };
-    mockCompleteOAuthFrom({ oauthStateRow });
+    seedState({ provider: 'instagram' });
+    mockFetchManagedPages.mockResolvedValue([withInstagram('1')]);
 
     const result = await completeOAuthConnect('instagram', 'auth-code-123', 'valid-state');
 
     expect(result.success).toBe(false);
     expect(result.error).toContain('TOKEN_VAULT_KEY');
     expect(result.error).toContain('Supabase Edge Function secrets');
+    expect(connectionRow('instagram')?.status).toBe('needs_action');
   });
 
-  it('should upsert social_connections with v2 columns (metadata, platform_account_name, token_expires_at)', async () => {
-    const oauthStateRow = {
-      id: 'state-row-1', provider: 'facebook',
-      used_at: null, expires_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
-    };
-    const upsertMock = mockUpsertChain();
-    mockCompleteOAuthFrom({ oauthStateRow, upsertChain: upsertMock });
+  it('returns Meta errors from the login to the owner', async () => {
+    seedState();
+    mockExchangeCodeForUserToken.mockRejectedValue(new Error('OAuthException: Code expired (code 100)'));
 
-    await completeOAuthConnect('facebook', 'auth-code-123', 'valid-state');
+    const result = await completeOAuthConnect('facebook', 'code', 'valid-state');
 
-    const upsertCall = upsertMock.upsert.mock.calls[0][0];
-    expect(upsertCall).toHaveProperty('provider', 'facebook');
-    expect(upsertCall).toHaveProperty('status', 'needs_action');
-    expect(upsertCall).toHaveProperty('platform_account_name', 'My Facebook Page');
-    expect(upsertCall).toHaveProperty('token_expires_at');
-    expect(upsertCall).toHaveProperty('metadata');
-    // The stored scopes are the requested list, without the dropped permissions
-    expect(upsertCall.scopes).toEqual([
-      'pages_show_list', 'pages_read_engagement', 'pages_manage_posts',
-      'instagram_basic', 'instagram_content_publish', 'business_management',
-    ]);
-    // Must NOT contain plaintext token columns
-    expect(upsertCall).not.toHaveProperty('access_token');
-    expect(upsertCall).not.toHaveProperty('refresh_token');
+    expect(result).toEqual({ success: false, error: 'OAuthException: Code expired (code 100)' });
+  });
+
+  it('refuses a Page that came back without a token, as before', async () => {
+    seedState();
+    mockFetchManagedPages.mockResolvedValue([page('1', { accessToken: null })]);
+
+    const result = await completeOAuthConnect('facebook', 'code', 'valid-state');
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('missing an access token');
+    expect(connectionRow('facebook')).toBeUndefined();
+  });
+
+  it('fails closed, and says so in the logs, when the connections cannot be read', async () => {
+    seedState();
+    mockFetchManagedPages.mockResolvedValue([page('1'), page('2')]);
+    db.fail('social_connections', 'select', 1);
+
+    const result = await completeOAuthConnect('facebook', 'code', 'valid-state');
+
+    expect(result).toEqual({ success: false, error: "We could not check this brand's connections. Please try again." });
+    expect(db.rows('oauth_states')).toHaveLength(1);
+    expect(console.error).toHaveBeenCalledWith(expect.stringContaining('could not load connections'));
+  });
+
+  it('fails closed when the Page list cannot be saved for the chooser', async () => {
+    seedState();
+    mockFetchManagedPages.mockResolvedValue([page('1'), page('2')]);
+    db.fail('oauth_states', 'insert', 1);
+
+    const result = await completeOAuthConnect('facebook', 'code', 'valid-state');
+
+    expect(result).toEqual({ success: false, error: 'We could not save your list of Pages. Please try again.' });
+    expect(db.rows('social_connections')).toHaveLength(0);
+    expect(console.error).toHaveBeenCalledWith(expect.stringContaining('could not store the Page choice'));
+  });
+
+  it('never logs the Meta user token', async () => {
+    seedState();
+    mockFetchManagedPages.mockResolvedValue([page('1'), page('2')]);
+    db.fail('oauth_states', 'insert', 1);
+
+    await completeOAuthConnect('facebook', 'code', 'valid-state');
+
+    const logged = [
+      ...vi.mocked(console.error).mock.calls,
+      ...vi.mocked(console.warn).mock.calls,
+      ...vi.mocked(console.log).mock.calls,
+    ].flat().map(String).join('\n');
+    expect(logged).not.toContain(USER_TOKEN);
   });
 });
 
@@ -478,7 +624,6 @@ function vaultRow(id: string, connectionId: string, tokenType: 'access' | 'refre
 describe('disconnectProvider', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockRequireAuthContext.mockResolvedValue(authContext());
     failures = {};
     rejectedWrites = [];
     memDb = {
@@ -494,6 +639,7 @@ describe('disconnectProvider', () => {
         vaultRow('v-other-access', 'fb-other', 'access'),
       ],
     };
+    mockRequireAuthContext.mockResolvedValue(authContext({ accountId: 'acc-1' }));
     mockFrom.mockImplementation((table: string) => memQuery(table));
   });
 
@@ -584,6 +730,8 @@ describe('owner-only connections (decision D4)', () => {
 
     await expect(disconnectProvider('facebook')).rejects.toThrow('Only an owner of this brand can do that.');
     await expect(initiateOAuthConnect('facebook')).rejects.toThrow('Only an owner of this brand can do that.');
+    await expect(initiateOAuthConnect('facebook', { changePage: true })).rejects.toThrow('Only an owner of this brand can do that.');
+    await expect(completeOAuthConnect('facebook', 'code', 'state')).rejects.toThrow('Only an owner of this brand can do that.');
     expect(mockFrom).not.toHaveBeenCalled();
   });
 });

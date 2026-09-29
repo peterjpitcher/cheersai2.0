@@ -50,6 +50,22 @@ describe("GET /api/oauth/[provider]/callback", () => {
     expect(response.headers.get("location")).toBe("https://app.test/connections?oauth=success&provider=facebook");
   });
 
+  it("sends the owner to the Page chooser with only the choice reference in the address", async () => {
+    const reference = "A".repeat(43);
+    completeOAuthConnectMock.mockResolvedValueOnce({ success: true, pageChoice: reference });
+
+    const response = await GET(
+      new NextRequest("https://app.test/api/oauth/facebook/callback?code=code-1&state=state-1"),
+      { params: Promise.resolve({ provider: "facebook" }) },
+    );
+
+    const location = new URL(response.headers.get("location") ?? "");
+    expect(location.origin).toBe("https://app.test");
+    expect(location.pathname).toBe("/connections/choose-page");
+    expect([...location.searchParams.keys()]).toEqual(["choice"]);
+    expect(location.searchParams.get("choice")).toBe(reference);
+  });
+
   it("redirects with an error when completion fails", async () => {
     completeOAuthConnectMock.mockResolvedValueOnce({
       success: false,

@@ -1,9 +1,14 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { ManagedPage } from "@/lib/connections/page-selection";
+
 type FetchResponse = Response;
+type TokenExchangeModule = typeof import("@/lib/connections/token-exchange");
 
 const ORIGINAL_FETCH = global.fetch;
-let exchangeProviderAuthCode: typeof import("@/lib/connections/token-exchange")["exchangeProviderAuthCode"];
+let exchangeCodeForUserToken: TokenExchangeModule["exchangeCodeForUserToken"];
+let fetchManagedPages: TokenExchangeModule["fetchManagedPages"];
+let buildPageConnection: TokenExchangeModule["buildPageConnection"];
 
 function jsonResponse(body: unknown, init: number | ResponseInit = 200): FetchResponse {
   const responseInit = typeof init === "number" ? { status: init } : init;
@@ -18,7 +23,8 @@ function jsonResponse(body: unknown, init: number | ResponseInit = 200): FetchRe
 
 function mockFetchSequence(responses: FetchResponse[]) {
   const queue = [...responses];
-  const handler = vi.fn(() => {
+  const handler = vi.fn((url: string) => {
+    void url;
     const next = queue.shift();
     if (!next) {
       return Promise.reject(new Error("Unexpected fetch invocation"));
@@ -29,7 +35,18 @@ function mockFetchSequence(responses: FetchResponse[]) {
   return handler;
 }
 
-describe("exchangeProviderAuthCode", () => {
+function managedPage(overrides: Partial<ManagedPage> = {}): ManagedPage {
+  return {
+    id: "123",
+    name: "Cheers Page",
+    accessToken: "page-token-123",
+    tasks: ["CREATE_CONTENT", "MANAGE"],
+    instagram: null,
+    ...overrides,
+  };
+}
+
+describe("Meta login helpers", () => {
   beforeAll(async () => {
     process.env.ALERTS_SECRET = process.env.ALERTS_SECRET ?? "test-alert";
     process.env.CRON_SECRET = process.env.CRON_SECRET ?? "test-cron";
@@ -50,8 +67,11 @@ describe("exchangeProviderAuthCode", () => {
     process.env.NEXT_PUBLIC_SUPABASE_URL =
       process.env.NEXT_PUBLIC_SUPABASE_URL ?? "https://supabase.local";
 
-    ({ exchangeProviderAuthCode } = await import("@/lib/connections/token-exchange"));
+    ({ exchangeCodeForUserToken, fetchManagedPages, buildPageConnection } = await import(
+      "@/lib/connections/token-exchange"
+    ));
   });
+
   beforeEach(() => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2025-01-01T00:00:00.000Z"));
@@ -63,94 +83,170 @@ describe("exchangeProviderAuthCode", () => {
     global.fetch = ORIGINAL_FETCH;
   });
 
-  it("returns Facebook page metadata when reconnecting", async () => {
-    mockFetchSequence([
-      jsonResponse({ access_token: "short-token", expires_in: 3600 }),
-      jsonResponse({ access_token: "long-token", expires_in: 5184000 }),
-      jsonResponse({ id: "meta-user-1" }),
-      jsonResponse({
-        data: [
-          {
-            id: "123",
-            name: "Cheers Page",
-            access_token: "page-token-123",
-          },
-        ],
-      }),
-    ]);
+  describe("exchangeCodeForUserToken", () => {
+    it("returns the long-lived user token, its expiry and the Meta user id", async () => {
+      mockFetchSequence([
+        jsonResponse({ access_token: "short-token", expires_in: 3600 }),
+        jsonResponse({ access_token: "long-token", expires_in: 5184000 }),
+        jsonResponse({ id: "meta-user-1" }),
+      ]);
 
-    const result = await exchangeProviderAuthCode("facebook", "AUTH_CODE", {
-      existingMetadata: { pageId: "123" },
+      const result = await exchangeCodeForUserToken("facebook", "AUTH_CODE");
+
+      expect(result).toEqual({
+        userAccessToken: "long-token",
+        expiresAt: "2025-03-02T00:00:00.000Z",
+        metaUserId: "meta-user-1",
+      });
     });
 
-    expect(result.accessToken).toBe("page-token-123");
-    expect(result.metadata).toEqual({ pageId: "123" });
-    expect(result.displayName).toBe("Cheers Page");
-    expect(result.expiresAt).toBe("2025-03-02T00:00:00.000Z");
-    expect(result.metaUserId).toBe("meta-user-1");
-  });
+    it("keeps the short-lived token when the upgrade fails", async () => {
+      vi.spyOn(console, "warn").mockImplementation(() => {});
+      mockFetchSequence([
+        jsonResponse({ access_token: "short-token", expires_in: 3600 }),
+        jsonResponse({ error: { message: "nope" } }, 400),
+        jsonResponse({ id: "meta-user-1" }),
+      ]);
 
-  it("prefers matching Instagram Business account metadata", async () => {
-    mockFetchSequence([
-      jsonResponse({ access_token: "short-token", expires_in: 3600 }),
-      jsonResponse({ access_token: "long-token", expires_in: 5184000 }),
-      jsonResponse({ id: "meta-user-1" }),
-      jsonResponse({
-        data: [
-          {
-            id: "page-1",
-            name: "Page One",
-            access_token: "page-token-1",
-            instagram_business_account: { id: "ig-1", username: "pubone" },
-          },
-          {
-            id: "page-2",
-            name: "Page Two",
-            access_token: "page-token-2",
-            instagram_business_account: { id: "ig-2", username: "pubtwo" },
-          },
-        ],
-      }),
-    ]);
+      const result = await exchangeCodeForUserToken("instagram", "AUTH_CODE");
 
-    const result = await exchangeProviderAuthCode("instagram", "AUTH_CODE", {
-      existingMetadata: { igBusinessId: "ig-2" },
+      expect(result.userAccessToken).toBe("short-token");
+      expect(result.expiresAt).toBe("2025-01-01T01:00:00.000Z");
     });
 
-    expect(result.accessToken).toBe("page-token-2");
-    expect(result.metadata).toEqual({
-      igBusinessId: "ig-2",
-      pageId: "page-2",
-      instagramUsername: "pubtwo",
+    it("still succeeds when the Meta user id lookup fails", async () => {
+      mockFetchSequence([
+        jsonResponse({ access_token: "short-token", expires_in: 3600 }),
+        jsonResponse({ access_token: "long-token", expires_in: 5184000 }),
+        jsonResponse({ error: { message: "nope" } }, { status: 400 }),
+      ]);
+
+      const result = await exchangeCodeForUserToken("facebook", "AUTH_CODE");
+
+      expect(result.metaUserId).toBeNull();
     });
-    expect(result.displayName).toBe("pubtwo");
-    expect(result.expiresAt).toBe("2025-03-02T00:00:00.000Z");
+
+    it("throws Meta's error when the code is refused", async () => {
+      mockFetchSequence([jsonResponse({ error: { message: "Code expired", type: "OAuthException", code: 100 } }, 400)]);
+
+      await expect(exchangeCodeForUserToken("facebook", "AUTH_CODE")).rejects.toThrow(
+        "OAuthException: Code expired (code 100)",
+      );
+    });
   });
 
-  it("throws when no Facebook pages are available", async () => {
-    mockFetchSequence([
-      jsonResponse({ access_token: "short-token", expires_in: 3600 }),
-      jsonResponse({ access_token: "long-token", expires_in: 5184000 }),
-      jsonResponse({ id: "meta-user-1" }),
-      jsonResponse({ data: [] }),
-    ]);
+  describe("fetchManagedPages", () => {
+    it("asks for tasks and the linked Instagram account, and maps each Page", async () => {
+      const fetchMock = mockFetchSequence([
+        jsonResponse({
+          data: [
+            {
+              id: "page-1",
+              name: "Page One",
+              access_token: "page-token-1",
+              tasks: ["CREATE_CONTENT"],
+              instagram_business_account: { id: "ig-1", username: "pubone" },
+            },
+            { name: "no id, dropped" },
+          ],
+        }),
+      ]);
 
-    await expect(exchangeProviderAuthCode("facebook", "AUTH_CODE")).rejects.toThrow(
-      /No Facebook Pages found/i,
-    );
+      const pages = await fetchManagedPages("user-token");
+
+      const requested = new URL(fetchMock.mock.calls[0][0]);
+      expect(requested.pathname).toMatch(/\/me\/accounts$/);
+      expect(requested.searchParams.get("fields")).toBe(
+        "id,name,access_token,tasks,instagram_business_account{id,username,name}",
+      );
+      expect(pages).toEqual([
+        {
+          id: "page-1",
+          name: "Page One",
+          accessToken: "page-token-1",
+          tasks: ["CREATE_CONTENT"],
+          instagram: { id: "ig-1", username: "pubone", name: null },
+        },
+      ]);
+    });
+
+    it("follows Meta's paging on the Graph host and stops after four requests", async () => {
+      const next = (n: number) => ({ next: `https://graph.facebook.com/v24.0/me/accounts?after=${n}` });
+      const fetchMock = mockFetchSequence([
+        jsonResponse({ data: [{ id: "1" }], paging: next(1) }),
+        jsonResponse({ data: [{ id: "2" }, { id: "1" }], paging: next(2) }),
+        jsonResponse({ data: [{ id: "3" }], paging: next(3) }),
+        jsonResponse({ data: [{ id: "4" }], paging: next(4) }),
+      ]);
+
+      const pages = await fetchManagedPages("user-token");
+
+      expect(pages.map((page) => page.id)).toEqual(["1", "2", "3", "4"]);
+      expect(fetchMock).toHaveBeenCalledTimes(4);
+      expect(fetchMock.mock.calls[1][0]).toBe("https://graph.facebook.com/v24.0/me/accounts?after=1");
+    });
+
+    it("ignores a paging link that points anywhere else", async () => {
+      const fetchMock = mockFetchSequence([
+        jsonResponse({ data: [{ id: "1" }], paging: { next: "https://evil.example/me/accounts?after=1" } }),
+      ]);
+
+      const pages = await fetchManagedPages("user-token");
+
+      expect(pages).toHaveLength(1);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    it("throws Meta's error, without the token, when the list fails", async () => {
+      mockFetchSequence([jsonResponse({ error: { message: "Session expired", code: 190 } }, 400)]);
+
+      const failure = await fetchManagedPages("secret-user-token").catch((error: Error) => error);
+
+      expect(failure).toBeInstanceOf(Error);
+      expect((failure as Error).message).toBe("Session expired (code 190)");
+      expect((failure as Error).message).not.toContain("secret-user-token");
+    });
   });
 
-  it("still connects when the Meta user id lookup fails", async () => {
-    mockFetchSequence([
-      jsonResponse({ access_token: "short-token", expires_in: 3600 }),
-      jsonResponse({ access_token: "long-token", expires_in: 5184000 }),
-      jsonResponse({ error: { message: "nope" } }, { status: 400 }),
-      jsonResponse({ data: [{ id: "123", name: "Cheers Page", access_token: "page-token-123" }] }),
-    ]);
+  describe("buildPageConnection", () => {
+    const auth = { expiresAt: "2025-03-02T00:00:00.000Z", metaUserId: "meta-user-1" };
 
-    const result = await exchangeProviderAuthCode("facebook", "AUTH_CODE", { existingMetadata: { pageId: "123" } });
+    it("stores the Facebook Page token and Page id", () => {
+      expect(buildPageConnection("facebook", managedPage(), auth)).toEqual({
+        accessToken: "page-token-123",
+        refreshToken: null,
+        expiresAt: "2025-03-02T00:00:00.000Z",
+        displayName: "Cheers Page",
+        metadata: { pageId: "123" },
+        metaUserId: "meta-user-1",
+      });
+    });
 
-    expect(result.accessToken).toBe("page-token-123");
-    expect(result.metaUserId).toBeNull();
+    it("records the linked Instagram account on the Facebook connection, as before", () => {
+      const page = managedPage({ instagram: { id: "ig-1", username: "pubone", name: null } });
+      expect(buildPageConnection("facebook", page, auth).metadata).toEqual({ pageId: "123", igBusinessId: "ig-1" });
+    });
+
+    it("stores the Instagram account through its Page token", () => {
+      const page = managedPage({ id: "page-2", instagram: { id: "ig-2", username: "pubtwo", name: null } });
+
+      expect(buildPageConnection("instagram", page, auth)).toEqual({
+        accessToken: "page-token-123",
+        refreshToken: null,
+        expiresAt: "2025-03-02T00:00:00.000Z",
+        displayName: "pubtwo",
+        metadata: { igBusinessId: "ig-2", pageId: "page-2", instagramUsername: "pubtwo" },
+        metaUserId: "meta-user-1",
+      });
+    });
+
+    it("refuses a Page that came back without a token", () => {
+      expect(() => buildPageConnection("facebook", managedPage({ accessToken: null }), auth)).toThrow(
+        /missing an access token/,
+      );
+      const igPage = managedPage({ accessToken: null, instagram: { id: "ig-1", username: null, name: null } });
+      expect(() => buildPageConnection("instagram", igPage, auth)).toThrow(/requires a Page access token/);
+      expect(() => buildPageConnection("instagram", managedPage(), auth)).toThrow(/No Instagram Business Account/);
+    });
   });
 });

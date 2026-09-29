@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { completeOAuthConnect } from "@/app/(app)/connections/actions";
+import { PAGE_CHOICE_PATH } from "@/lib/connections/page-choice";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
 import { env } from "@/env";
 
@@ -10,7 +11,7 @@ const SUPPORTED_PROVIDERS = new Set(["facebook", "instagram"]);
  * OAuth callback route.
  * Receives the auth code and state from the provider, completes the token
  * exchange, stores tokens, and redirects to /connections with success/error
- * status.
+ * status, or to the Page chooser when the owner has to pick a Page.
  */
 export async function GET(
   request: NextRequest,
@@ -51,6 +52,13 @@ export async function GET(
         provider,
         message: result.error ?? "Could not finish the OAuth connection.",
       });
+    }
+    if (result.pageChoice) {
+      // Several Pages and no stored match: the owner chooses. Only the random
+      // reference travels in the URL; the tokens stay encrypted on the server.
+      const chooserUrl = new URL(PAGE_CHOICE_PATH, base);
+      chooserUrl.searchParams.set("choice", result.pageChoice);
+      return NextResponse.redirect(chooserUrl);
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : "Could not finish the OAuth connection.";
