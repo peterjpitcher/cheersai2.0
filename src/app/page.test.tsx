@@ -3,7 +3,7 @@ import { cleanup, render } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { bannedClaimsIn } from "@/content/claims";
-import { homeFaq } from "@/content/homepage";
+import { CLICHE_EXAMPLES, HERO, homeFaq, hospitalityPoints } from "@/content/homepage";
 import { plainText } from "@/content/rich-text";
 import { HOME_SEO } from "@/content/seo";
 import { EXAMPLE_WEEK_POSTS } from "@/features/front-door/planner-illustration";
@@ -161,6 +161,23 @@ describe("/ in production once the sign-up switch is on", () => {
     );
   });
 
+  it("shortens the header's trial button to Free trial on a phone, so it fits beside the larger logo", async () => {
+    signedOut("open");
+    const { container } = await renderHome();
+    const labels = Array.from(container.querySelectorAll('header a[href="/signup"] span')).map((span) => [
+      span.textContent,
+      span.getAttribute("class"),
+    ]);
+
+    expect(labels).toEqual([
+      ["Free trial", "sm:hidden"],
+      ["Start your free trial", "hidden sm:inline"],
+    ]);
+    // Everywhere else the button keeps its full words.
+    const hero = container.querySelector('section[aria-labelledby="hero-title"] a[href="/signup"]');
+    expect(hero?.textContent).toBe("Start your free trial");
+  });
+
   it("has its own title, description, canonical URL and share cards, and may be indexed", async () => {
     mocks.switchState.mockResolvedValue("open");
     const metadata = await generateMetadata();
@@ -203,6 +220,90 @@ describe("the guides links on the homepage", () => {
 
 describe("the homepage content", () => {
   beforeEach(() => signedOut("open"));
+
+  it("says who Cheers is for before anything else", async () => {
+    const { container } = await renderHome();
+    const hero = container.querySelector('section[aria-labelledby="hero-title"]');
+
+    expect(hero?.querySelector("h1")?.textContent).toBe(
+      "Made for hospitality. Cheers writes your venue's posts and puts them out on time.",
+    );
+    expect(hero?.textContent).toContain("Social media for pubs, bars, restaurants, cafes and hotels");
+    expect(hero?.textContent).toContain("Tell Cheers what's on, from quiz night to the Sunday roast");
+    for (const point of HERO.points) expect(hero?.textContent).toContain(point);
+  });
+
+  it("follows the hero with what only a venue needs, then the kinds of venue, then how it works", async () => {
+    const { container } = await renderHome();
+    const sections = Array.from(container.querySelectorAll("main > section")).map((section) =>
+      section.getAttribute("aria-labelledby"),
+    );
+
+    expect(sections.slice(0, 5)).toEqual([
+      "hero-title",
+      "hospitality-title",
+      "audience-title",
+      "how-it-works-title",
+      "features-title",
+    ]);
+  });
+
+  it("shows each venue feature with its heading, words and a described picture", async () => {
+    const { container } = await renderHome();
+    const cards = Array.from(container.querySelectorAll("[data-hospitality-point]"));
+
+    expect(cards.map((card) => card.getAttribute("data-hospitality-point"))).toEqual(["events", "weekly", "voice", "link"]);
+    hospitalityPoints().forEach((point, index) => {
+      expect(cards[index].querySelector("h3")?.textContent).toBe(point.title);
+      expect(cards[index].textContent).toContain(point.body);
+      expect(cards[index].querySelector('[role="img"]')?.getAttribute("aria-label")).toBeTruthy();
+    });
+  });
+
+  it("draws the event run-up with the labels on the picture, on the feed and as a story", async () => {
+    const { container } = await renderHome();
+    const picture = container.querySelector('[data-hospitality-point="events"] [role="img"]');
+    const days = Array.from(picture?.querySelectorAll("ol > li") ?? []).map((day) => day.textContent ?? "");
+
+    expect(days).toEqual(["WedTHIS FRIDAYFeedStory", "ThuTOMORROW NIGHTFeedStory", "FriTONIGHTFeedStory"]);
+    expect(picture?.getAttribute("aria-label")).toContain("THIS FRIDAY");
+  });
+
+  it("draws the venue types from the sign-up form and the clichés Cheers keeps out", async () => {
+    const { container } = await renderHome();
+    const picture = container.querySelector('[data-hospitality-point="voice"] [role="img"]');
+
+    for (const type of ["Pub", "Bar", "Restaurant", "Cafe", "Hotel"]) expect(picture?.textContent).toContain(type);
+    for (const phrase of CLICHE_EXAMPLES) expect(picture?.textContent).toContain(phrase);
+  });
+
+  it("shows the logo larger in the header and the footer, sharp on high-density screens", async () => {
+    const { container } = await renderHome();
+    const header = container.querySelector("header img");
+    const footer = container.querySelector("footer img");
+    const widestCopy = (img: Element | null) =>
+      Math.max(...(img?.getAttribute("srcset") ?? "").split(",").map((entry) => parseInt(entry.trim().split(" ")[1] ?? "0", 10)));
+
+    expect(header?.getAttribute("alt")).toBe("Cheers home");
+    expect(header?.closest("a")?.getAttribute("href")).toBe("/");
+    expect(decodeURIComponent(header?.getAttribute("src") ?? "")).toContain("/brand/cheers-logo-horizontal-on-dark.png");
+    // 164 by 56 on a phone, 211 by 72 from md (it was 117 by 40), with copies up to 3x.
+    expect(header?.getAttribute("sizes")).toBe("(min-width: 768px) 211px, 164px");
+    expect(header?.getAttribute("class")).toBe("h-14 w-auto md:h-[72px]");
+    expect(widestCopy(header)).toBeGreaterThanOrEqual(3 * 211);
+
+    expect(footer?.getAttribute("alt")).toBe("Cheers by Orange Jelly");
+    expect(footer?.getAttribute("sizes")).toBe("234px");
+    expect(widestCopy(footer)).toBeGreaterThanOrEqual(3 * 234);
+  });
+
+  it("raises the brand mark over the closing call to action, as decoration", async () => {
+    const { container } = await renderHome();
+    const mark = container.querySelector('section[aria-labelledby="closing-title"] img');
+
+    expect(decodeURIComponent(mark?.getAttribute("src") ?? "")).toContain("/brand/cheers-icon.png");
+    expect(mark?.getAttribute("alt")).toBe("");
+  });
 
   it("takes every price from PLANS and marks each one ex VAT", async () => {
     const { container, text } = await renderHome();

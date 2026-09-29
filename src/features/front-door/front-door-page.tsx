@@ -17,10 +17,12 @@ import {
   Repeat,
   ScrollText,
   Send,
+  Tag,
   Users,
   UtensilsCrossed,
   type LucideIcon,
 } from 'lucide-react';
+import Image from 'next/image';
 import Link from 'next/link';
 
 import {
@@ -34,6 +36,8 @@ import {
   heroTrialNote,
   homeFaq,
   homeFeatures,
+  HOSPITALITY_SECTION,
+  hospitalityPoints,
   HOW_IT_WORKS,
   otherVenueNote,
   PRICING_SECTION,
@@ -43,12 +47,19 @@ import {
   whatYouNeed,
   type FaqItem,
   type FeatureIcon,
+  type HospitalityIcon,
   type NamedVenueType,
   type TrustIcon,
 } from '@/content/homepage';
 import type { Guide } from '@/content/guides/types';
 import { PlannerIllustration } from '@/features/front-door/planner-illustration';
 import { priceCards, trialLines, type PriceCard } from '@/features/front-door/pricing';
+import {
+  EventRunUpIllustration,
+  LinkInBioIllustration,
+  VenueVoiceIllustration,
+  WeeklyRegularsIllustration,
+} from '@/features/front-door/venue-illustrations';
 import { GuideCard } from '@/features/guides/guide-card';
 import { LOGIN_PATH, PrimaryCta, SECONDARY_ON_DARK, SECONDARY_ON_LIGHT } from '@/features/marketing/cta';
 import { JsonLd } from '@/features/marketing/json-ld';
@@ -67,6 +78,10 @@ import type { FrontDoorCta } from '@/lib/signup/front-door';
  * never mentions paid ads, tournaments or the management-app import: new
  * venues do not get them. No cookies and no client script.
  *
+ * From the hero down it says who Cheers is for: the hero, then what only a
+ * venue needs (events, weekly regulars, the venue's voice, the link in bio),
+ * then the kinds of venue, before how it works and the rest.
+ *
  * `cta` follows the sign-up switch: "trial" offers "Start your free trial";
  * anything else offers "Talk to us" with the email and WhatsApp contacts.
  * `guidesHref` and `latestGuides` are empty unless the guides are public.
@@ -79,15 +94,26 @@ export interface FrontDoorPageProps {
 }
 
 const FEATURE_ICONS: Record<FeatureIcon, LucideIcon> = {
-  voice: PenLine,
   platforms: Send,
   planner: CalendarDays,
   publishing: BadgeCheck,
+  offers: Tag,
+  library: Images,
+  team: Users,
+};
+
+const HOSPITALITY_ICONS: Record<HospitalityIcon, LucideIcon> = {
   events: PartyPopper,
   weekly: Repeat,
-  library: Images,
+  voice: PenLine,
   link: Link2,
-  team: Users,
+};
+
+const HOSPITALITY_PICTURES: Record<HospitalityIcon, () => React.JSX.Element> = {
+  events: EventRunUpIllustration,
+  weekly: WeeklyRegularsIllustration,
+  voice: VenueVoiceIllustration,
+  link: LinkInBioIllustration,
 };
 
 const VENUE_ICONS: Record<NamedVenueType, LucideIcon> = {
@@ -117,9 +143,10 @@ export function FrontDoorPage({ cta, guidesHref, latestGuides }: FrontDoorPagePr
       <main id="main">
         <JsonLd data={homeJsonLd(faq)} />
         <Hero cta={cta} />
+        <Hospitality />
+        <Audiences />
         <HowItWorks />
         <Features />
-        <Audiences />
         <Pricing cta={cta} />
         {guidesHref && latestGuides.length ? <GuidesTeaser guidesHref={guidesHref} guides={latestGuides} /> : null}
         <Questions faq={faq} />
@@ -203,6 +230,51 @@ function Hero({ cta }: { cta: FrontDoorCta }): React.JSX.Element {
           </ul>
         </div>
         <PlannerIllustration />
+      </div>
+    </section>
+  );
+}
+
+/**
+ * What only a venue needs, each with a drawn example. Words first, so the
+ * headings in a row line up; the picture fills the rest of the card.
+ */
+function Hospitality(): React.JSX.Element {
+  return (
+    <section aria-labelledby="hospitality-title" className="bg-paper py-16 sm:py-24">
+      <div className={CONTAINER}>
+        <SectionHeading
+          id="hospitality-title"
+          eyebrow={HOSPITALITY_SECTION.eyebrow}
+          title={HOSPITALITY_SECTION.heading}
+          intro={HOSPITALITY_SECTION.intro}
+        />
+        <ul className="mt-12 grid grid-cols-1 gap-4 md:grid-cols-2 lg:gap-6">
+          {hospitalityPoints().map((point) => {
+            const Icon = HOSPITALITY_ICONS[point.icon];
+            const Picture = HOSPITALITY_PICTURES[point.icon];
+            return (
+              <li
+                key={point.icon}
+                data-hospitality-point={point.icon}
+                className="flex flex-col overflow-hidden rounded-[var(--r-2xl)] border border-line bg-card"
+              >
+                <div className="p-6 sm:p-8">
+                  <div className="flex items-center gap-3">
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[var(--r-lg)] bg-orange-soft text-orange-hi">
+                      <Icon aria-hidden="true" className="h-5 w-5" strokeWidth={2} />
+                    </span>
+                    <h3 className="text-lg font-semibold leading-snug text-ink">{point.title}</h3>
+                  </div>
+                  <p className="mt-3 text-[15px] leading-relaxed text-ink-2">{point.body}</p>
+                </div>
+                <div className="flex flex-1 items-center justify-center border-t border-orange-soft bg-orange-tint px-4 py-8 sm:px-8">
+                  <Picture />
+                </div>
+              </li>
+            );
+          })}
+        </ul>
       </div>
     </section>
   );
@@ -526,7 +598,16 @@ function Closing({ cta }: { cta: FrontDoorCta }): React.JSX.Element {
     <section aria-labelledby="closing-title" className="relative isolate overflow-hidden bg-ink py-16 sm:py-24">
       <div aria-hidden="true" className="site-glow pointer-events-none absolute inset-0 -z-10" />
       <div className="mx-auto max-w-[760px] px-4 text-center sm:px-6">
-        <h2 id="closing-title" className="text-3xl font-semibold text-white sm:text-4xl">
+        {/* The brand mark, two glasses raised: decorative, as the heading below says it all. */}
+        <Image
+          src="/brand/cheers-icon.png"
+          alt=""
+          width={1167}
+          height={972}
+          sizes="(min-width: 640px) 120px, 96px"
+          className="mx-auto h-20 w-auto sm:h-[100px]"
+        />
+        <h2 id="closing-title" className="mt-6 text-3xl font-semibold text-white sm:text-4xl">
           {trial ? CLOSING.trialHeading : CLOSING.talkHeading}
         </h2>
         <p className="mt-4 text-lg leading-relaxed text-[var(--c-line-2)]">

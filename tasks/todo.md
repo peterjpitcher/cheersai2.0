@@ -1,6 +1,23 @@
+# Homepage: a bigger logo and "made for hospitality" (2026-09-29)
+
+Spec: `tasks/SPEC-homepage-hospitality-and-logo.md`; branch `feat/homepage-hospitality-and-logo`.
+
+- [x] Check every venue feature the page will claim against the code (claims table in the spec)
+- [x] Header logo larger on phone and desktop, crisp at 3x; tidy with both calls to action; 44px links
+      (164x56 phone, 211x72 from md; trial button checked at 8 widths from 320 to 1440)
+- [x] Footer logo larger (234x80); the brand mark in the closing band
+- [x] Hero headline, intro and points rewritten for venues
+- [x] New "Made for the way venues work" section (events, weekly regulars, venue voice, link in bio) with drawn examples
+- [x] Venue types moved up; Features trimmed of what the new section covers; one venue FAQ
+- [x] Tests updated (`homepage-claims.test.ts` new); lint, typecheck, 3,883 tests in London and UTC, build
+- [x] Local production build: screenshots at 375 and 1440, no sideways scroll at 320/375/768/1440
+      (homepage, /guides, a guide), axe 0 violations at 375 and 1440 (colour contrast on 262 text nodes)
+- [x] Commit, push, PR (claims with proof files, before and after hero wording); no merge, no deploy
+- [x] Peter asked for this (29 September 2026); merge and deploy by the main agent
+
 # Facebook Page chooser (2026-09-29)
 
-Spec: `tasks/SPEC-facebook-page-chooser.md`; branch `feat/facebook-page-chooser` (draft PR, not approved to ship).
+Spec: `tasks/SPEC-facebook-page-chooser.md`; branch `feat/facebook-page-chooser` (PR #158, approved by Peter 29 September 2026).
 
 - [x] Read-only check of production's oauth_states and social_connections columns, constraints,
       policies and grants; every brand's Facebook and Instagram hold the same pageId
@@ -19,7 +36,7 @@ Spec: `tasks/SPEC-facebook-page-chooser.md`; branch `feat/facebook-page-chooser`
 - [ ] A real multi-Page Facebook login and pick (not possible locally)
 - [x] Peter's yes (29 September 2026); the independent review's eight code findings fixed in the same PR
       (spec, "Review fixes"); contrast, focus and the expired-choice clean-up re-checked in the browser
-- [ ] Merge and deploy (the main agent merges)
+- [x] Merged as #158 and live 29 September 2026 (dpl_91HwgcPgw5rmRzw7ZjgXUDevAxLo)
 
 # Self-serve sign-up PR 6: venue creation (2026-09-28)
 
