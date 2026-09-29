@@ -3,12 +3,37 @@
  *
  * Each content type extends a base schema with shared fields (title, platforms,
  * fine-tune controls). The discriminated union `contentBriefSchema` parses any
- * content type based on the `contentType` field.
+ * content type based on the `contentType` field; `contentBriefSubmissionSchema`
+ * adds the checks that depend on today's date.
  *
  * Tone enum values use snake_case IDs matching D-05 curated hospitality tones.
  */
 
+import { DateTime } from 'luxon';
 import { z } from 'zod';
+
+import { DEFAULT_TIMEZONE } from '@/lib/constants';
+
+/** What the owner sees when an offer's dates cannot work. */
+export const OFFER_DATE_MESSAGES = {
+  endDatePassed: 'The offer end date has passed. Choose today or a later date.',
+  startAfterEnd: 'The offer start date is after the end date. Choose a start date on or before the end date.',
+} as const;
+
+function isIsoDate(value: unknown): value is string {
+  return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value);
+}
+
+/**
+ * True when an offer's end date (YYYY-MM-DD, a London day) is before today in
+ * London. Compared as London days, never UTC ones: just after midnight in
+ * British Summer Time the UTC date is still yesterday's.
+ */
+function hasOfferEnded(endDate: unknown): boolean {
+  if (!isIsoDate(endDate)) return false;
+  const today = DateTime.now().setZone(DEFAULT_TIMEZONE).toISODate();
+  return today !== null && endDate < today;
+}
 
 const placementSchema = z.enum(['feed', 'story']);
 /**
@@ -109,17 +134,25 @@ export const eventBriefSchema = baseContentSchema.extend({
   placements: eventPlacementsSchema,
 });
 
-export const promotionBriefSchema = baseContentSchema.extend({
-  contentType: z.literal('promotion'),
-  offerSummary: z.string().min(1, 'Describe the offer').max(500),
-  couponCode: z.string().max(50).optional(),
-  startDate: z
-    .union([z.string().date(), z.literal('')])
-    .transform((v) => v || undefined)
-    .optional(),
-  endDate: z.string().date(),
-  placements: campaignPlacementsSchema,
-});
+export const promotionBriefSchema = baseContentSchema
+  .extend({
+    contentType: z.literal('promotion'),
+    offerSummary: z.string().min(1, 'Describe the offer').max(500),
+    couponCode: z.string().max(50).optional(),
+    startDate: z
+      .union([z.string().date(), z.literal('')])
+      .transform((v) => v || undefined)
+      .optional(),
+    endDate: z.string().date(),
+    placements: campaignPlacementsSchema,
+  })
+  .superRefine((brief, ctx) => {
+    // Both are YYYY-MM-DD, so comparing the strings compares the days. Zod runs
+    // this even when another field has failed, so check each is a real date.
+    if (isIsoDate(brief.startDate) && isIsoDate(brief.endDate) && brief.startDate > brief.endDate) {
+      ctx.addIssue({ code: 'custom', path: ['startDate'], message: OFFER_DATE_MESSAGES.startAfterEnd });
+    }
+  });
 
 export const weeklyCampaignBriefSchema = baseContentSchema.extend({
   contentType: z.literal('weekly_recurring'),
@@ -160,6 +193,23 @@ export const contentBriefSchema = z.discriminatedUnion('contentType', [
   promotionBriefSchema,
   weeklyCampaignBriefSchema,
 ]);
+
+// ---------------------------------------------------------------------------
+// The brief as submitted today
+// ---------------------------------------------------------------------------
+
+/**
+ * contentBriefSchema plus the checks that depend on today's date, which is read
+ * each time a brief is parsed. The create wizard's form and the server actions
+ * that accept a brief (createDraft, createScheduledBatch) all use this, so a
+ * form left open past an offer's end date cannot slip through. contentBriefSchema
+ * stays free of today's date for stored briefs and tests.
+ */
+export const contentBriefSubmissionSchema = contentBriefSchema.superRefine((brief, ctx) => {
+  if (brief.contentType === 'promotion' && hasOfferEnded(brief.endDate)) {
+    ctx.addIssue({ code: 'custom', path: ['endDate'], message: OFFER_DATE_MESSAGES.endDatePassed });
+  }
+});
 
 // ---------------------------------------------------------------------------
 // Inferred TypeScript types

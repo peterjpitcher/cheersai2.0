@@ -16,7 +16,7 @@ import { getCreateModalData } from '@/features/create/create-modal-actions';
 import { getContentTypeDefaults } from '@/features/create/content-type-defaults';
 import type { MediaAssetSummary } from '@/lib/library/data';
 import type { AccountBannerDefaults } from '@/lib/banner/config';
-import { contentBriefSchema } from '@/features/create/schemas/content-schemas';
+import { contentBriefSubmissionSchema } from '@/features/create/schemas/content-schemas';
 import type { ContentBrief, ContentBriefInput } from '@/features/create/schemas/content-schemas';
 import { buildWeeklyMultiDaySuggestions } from '@/features/create/schedule/suggestion-utils';
 import type {
@@ -111,7 +111,7 @@ export function CreateWizard({ initialDraftId, accountId, onClose }: CreateWizar
   // and cast the resolver to satisfy both React Hook Form and Zod.
   const form = useForm<ContentBriefInput>({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    resolver: zodResolver(contentBriefSchema) as any,
+    resolver: zodResolver(contentBriefSubmissionSchema) as any,
     defaultValues: {
       contentType: 'instant_post',
       title: '',

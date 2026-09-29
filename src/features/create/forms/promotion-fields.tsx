@@ -64,13 +64,14 @@ export function PromotionFields({ form }: PromotionFieldsProps): React.JSX.Eleme
         )}
       </div>
 
+      {/* The start date is checked against the end date, so changing either re-checks both. */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="space-y-1.5">
           <Label htmlFor="startDate">Start date (optional)</Label>
           <Input
             id="startDate"
             type="date"
-            {...register('startDate')}
+            {...register('startDate', { deps: ['endDate'] })}
             aria-invalid={!!errors.startDate}
           />
           {errors.startDate && (
@@ -85,7 +86,7 @@ export function PromotionFields({ form }: PromotionFieldsProps): React.JSX.Eleme
           <Input
             id="endDate"
             type="date"
-            {...register('endDate')}
+            {...register('endDate', { deps: ['startDate'] })}
             aria-invalid={!!errors.endDate}
           />
           {errors.endDate && (
