@@ -4,6 +4,7 @@ import { useEffect, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import { useToast } from "@/components/providers/toast-provider";
+import { CONNECT_MESSAGES } from "@/lib/connections/messages";
 
 export function ConnectionOAuthHandler() {
   const searchParams = useSearchParams();
@@ -33,7 +34,7 @@ export function ConnectionOAuthHandler() {
         ? `Could not connect ${provider}`
         : "Could not finish connection";
       toast.error(title, {
-        description: message ?? "The provider authorization was cancelled or failed. Please try again.",
+        description: message ?? CONNECT_MESSAGES.cancelled,
       });
       router.replace("/connections");
     }

@@ -82,10 +82,6 @@ function getProfileFormDefaultValues(
   };
 }
 
-function getErrorMessage(error: unknown, fallback: string) {
-  return error instanceof Error ? error.message : fallback;
-}
-
 /**
  * Origin shown in the slug help text. Derived from the deployed site URL rather
  * than hardcoded, so it follows the app if the domain changes. NEXT_PUBLIC_* is
@@ -139,9 +135,10 @@ export function LinkInBioProfileForm({ profile, mediaAssets }: LinkInBioProfileF
         reset(values);
         router.refresh();
         toast.success("Link-in-bio profile saved");
-      } catch (error) {
+      } catch {
+        // A thrown server action reaches the browser as technical text: never show it.
         toast.error("Could not save link-in-bio profile", {
-          description: getErrorMessage(error, "Please try again."),
+          description: "Please try again.",
         });
       }
     });

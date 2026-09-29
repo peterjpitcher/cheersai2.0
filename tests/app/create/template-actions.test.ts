@@ -19,6 +19,12 @@ vi.mock("@/lib/auth/server", () => ({
   requireAuthContext: (...args: unknown[]) => requireAuthContextMock(...args),
 }));
 
+// The owner gets plain words; the database's own message goes to the logger.
+const loggerMock = vi.hoisted(() => ({ debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }));
+vi.mock("@/lib/logging", () => ({
+  createLogger: () => loggerMock,
+}));
+
 // ---------------------------------------------------------------------------
 // Supabase mock builder
 // ---------------------------------------------------------------------------
@@ -173,8 +179,12 @@ describe("saveTemplate", () => {
       toneAdjust: "default",
     });
 
-    expect(result).toHaveProperty("error");
-    expect((result as { error: string }).error).toMatch(/Failed to save template/);
+    expect(result).toEqual({ error: "We could not save this template. Please try again." });
+    expect(loggerMock.error).toHaveBeenCalledWith(
+      "could not save a template",
+      expect.objectContaining({ message: "unique constraint violation" }),
+      { accountId: ACCOUNT_ID },
+    );
     expect(revalidatePathMock).not.toHaveBeenCalled();
   });
 
@@ -227,8 +237,12 @@ describe("deleteTemplate", () => {
     const { deleteTemplate } = await import("@/app/(app)/create/template-actions");
     const result = await deleteTemplate("template-xyz");
 
-    expect(result).toHaveProperty("error");
-    expect((result as { error: string }).error).toMatch(/Failed to delete template/);
+    expect(result).toEqual({ error: "We could not delete this template. Please try again." });
+    expect(loggerMock.error).toHaveBeenCalledWith(
+      "could not delete a template",
+      expect.objectContaining({ message: "row not found" }),
+      { accountId: ACCOUNT_ID, templateId: "template-xyz" },
+    );
     expect(revalidatePathMock).not.toHaveBeenCalled();
   });
 

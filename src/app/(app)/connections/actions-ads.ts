@@ -16,11 +16,28 @@ import {
   getMetaAdAccountTokens,
   storeMetaAdAccountToken,
 } from "@/lib/meta/ad-account-tokens";
+import { createLogger } from "@/lib/logging";
+import { toLoggableError } from "@/lib/logging/to-error";
 import { getMetaGraphApiBase } from "@/lib/meta/graph";
 import { redactMetaAccessTokens } from "@/lib/meta/redact";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
 
 const TOKEN_EXPIRY_WARNING_DAYS = 7;
+
+const logger = createLogger("ads");
+
+/**
+ * What the owner sees (tasks/SPEC-plain-error-messages.md). Meta's and the
+ * database's own text goes to the log, never to the page.
+ */
+const ADS_MESSAGES = {
+  tokenUnreadable: "We could not load your Meta Ads connection. Please try again, or reconnect Meta Ads.",
+  notConnected: "Meta Ads is not connected. Please connect it again.",
+  accountsFailed: "Facebook did not send your ad accounts. Please try again, or reconnect Meta Ads.",
+  selectFailed: "We could not save that ad account. Please try again.",
+  conversionSaveFailed: "We could not save the conversion settings. Please try again.",
+  capiTokenSaveFailed: "We could not save the Conversions API token. Please try again.",
+} as const;
 
 interface AdAccountApiEntry {
   id: string;
@@ -76,6 +93,8 @@ export async function startAdsOAuth(): Promise<{ url: string }> {
   });
 
   if (error) {
+    // Still thrown (the page shows its own plain words for a failed start).
+    logger.error("could not store the Meta Ads OAuth state", toLoggableError(error), { accountId });
     throw error;
   }
 
@@ -98,11 +117,12 @@ export async function fetchAdAccounts(): Promise<
   try {
     ({ accessToken } = await getMetaAdAccountTokens(supabase, accountId));
   } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : "Could not load the ads token." };
+    logger.error("could not load the Meta Ads token to list ad accounts", toLoggableError(error), { accountId });
+    return { success: false, error: ADS_MESSAGES.tokenUnreadable };
   }
 
   if (!accessToken) {
-    return { success: false, error: "No ads token found." };
+    return { success: false, error: ADS_MESSAGES.notConnected };
   }
 
   try {
@@ -116,8 +136,8 @@ export async function fetchAdAccounts(): Promise<
     const json = (await safeJson(response)) as { data?: AdAccountApiEntry[] } | null;
 
     if (!response.ok) {
-      const message = resolveGraphError(json);
-      return { success: false, error: message };
+      logger.error("Meta refused the ad account list", new Error(resolveGraphError(json)), { accountId, status: response.status });
+      return { success: false, error: ADS_MESSAGES.accountsFailed };
     }
 
     const raw = Array.isArray(json?.data) ? json.data : [];
@@ -137,8 +157,8 @@ export async function fetchAdAccounts(): Promise<
 
     return { success: true, accounts };
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unexpected error fetching ad accounts.";
-    return { success: false, error: message };
+    logger.error("could not list ad accounts", toLoggableError(error), { accountId });
+    return { success: false, error: ADS_MESSAGES.accountsFailed };
   }
 }
 
@@ -163,16 +183,12 @@ export async function selectAdAccount(
   try {
     ({ accessToken } = await getMetaAdAccountTokens(supabase, accountId));
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Could not load the ads token.";
-    console.error("[ads] failed to load Meta Ads token before account selection", {
-      accountId,
-      error: message,
-    });
-    return { error: message };
+    logger.error("could not load the Meta Ads token before account selection", toLoggableError(error), { accountId });
+    return { error: ADS_MESSAGES.tokenUnreadable };
   }
 
   if (!accessToken) {
-    return { error: "No ads token found." };
+    return { error: ADS_MESSAGES.notConnected };
   }
 
   try {
@@ -222,12 +238,11 @@ export async function selectAdAccount(
       );
 
     if (upsertError) {
-      console.error("[ads] failed to save selected Meta ad account", {
+      logger.error("could not save the selected Meta ad account", toLoggableError(upsertError), {
         accountId,
         metaAccountId: normalizedMetaAccountId,
-        error: upsertError,
       });
-      return { error: upsertError.message };
+      return { error: ADS_MESSAGES.selectFailed };
     }
 
     revalidatePath("/connections");
@@ -235,9 +250,11 @@ export async function selectAdAccount(
 
     return { success: true };
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Unexpected error selecting ad account.";
-    return { error: message };
+    logger.error("could not select the Meta ad account", toLoggableError(error), {
+      accountId,
+      metaAccountId: normalizedMetaAccountId,
+    });
+    return { error: ADS_MESSAGES.selectFailed };
   }
 }
 
@@ -392,7 +409,8 @@ export async function updateAdAccountConversionSettings(input: {
     .maybeSingle<{ setup_complete: boolean }>();
 
   if (fetchError) {
-    return { error: fetchError.message };
+    logger.error("conversion settings: could not read the ad account", toLoggableError(fetchError), { accountId });
+    return { error: ADS_MESSAGES.conversionSaveFailed };
   }
 
   if (!current?.setup_complete) {
@@ -409,14 +427,16 @@ export async function updateAdAccountConversionSettings(input: {
     .eq("account_id", accountId);
 
   if (updateError) {
-    return { error: updateError.message };
+    logger.error("conversion settings: could not save", toLoggableError(updateError), { accountId });
+    return { error: ADS_MESSAGES.conversionSaveFailed };
   }
 
   if (capiToken) {
     try {
       await storeMetaAdAccountToken(supabase, accountId, "conversions_api", capiToken);
     } catch (storeError) {
-      return { error: storeError instanceof Error ? storeError.message : "Could not save the Conversions API token." };
+      logger.error("conversion settings: could not store the Conversions API token", toLoggableError(storeError), { accountId });
+      return { error: ADS_MESSAGES.capiTokenSaveFailed };
     }
 
     await skipSupersededCapiRecommendations(supabase, accountId);
@@ -473,7 +493,7 @@ async function safeJson(response: Response): Promise<unknown> {
   }
 }
 
-/** Meta's error as text, with any access token it echoes removed (it is logged and shown). */
+/** Meta's error as text, with any access token it echoes removed (it is logged, never shown). */
 function resolveGraphError(payload: unknown): string {
   if (payload && typeof payload === "object" && "error" in payload) {
     const err = (

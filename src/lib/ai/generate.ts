@@ -12,6 +12,16 @@ import { getOpenAIClient } from './client';
 import { trackAiCall } from './usage';
 import { AiGenerationResponseSchema, type AiGenerationResponse } from './schemas';
 
+/**
+ * Failures whose message is written for the owner, so the create screen shows
+ * it as it is (tasks/SPEC-plain-error-messages.md). Any other failure (an
+ * OpenAI error, a missing key) is logged and replaced with plain words.
+ */
+export const AI_OWNER_MESSAGES = {
+  empty: 'The AI did not write any copy this time. Please try again.',
+  timeout: 'Content generation timed out after 30 seconds. Please try again with a simpler brief.',
+} as const;
+
 export interface GenerateOptions {
   systemPrompt: string;
   userPrompt: string;
@@ -56,16 +66,12 @@ export async function generatePlatformCopy(
 
     const parsed = completion.choices[0]?.message?.parsed;
     if (!parsed) {
-      throw new Error(
-        'AI returned no parsed content. Please try again.',
-      );
+      throw new Error(AI_OWNER_MESSAGES.empty);
     }
     return parsed;
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') {
-      throw new Error(
-        'Content generation timed out after 30 seconds. Please try again with a simpler brief.',
-      );
+      throw new Error(AI_OWNER_MESSAGES.timeout);
     }
     throw error;
   } finally {

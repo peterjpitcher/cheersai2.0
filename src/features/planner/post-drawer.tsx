@@ -184,8 +184,9 @@ function DrawerContent({
               await queryClient.invalidateQueries({ queryKey: ['content-detail', contentId] });
               router.refresh();
               toast.success('Post restored', { description: 'The post is back in your planner.' });
-            } catch (err) {
-              const msg = err instanceof Error ? err.message : 'Unable to restore post.';
+            } catch {
+              // A thrown server action reaches the browser as technical text: never show it.
+              const msg = 'Please try again.';
               toast.error('Could not restore post', { description: msg });
             }
           });
@@ -198,8 +199,9 @@ function DrawerContent({
             onClick: handleUndo,
           },
         });
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : 'Unable to delete post.';
+      } catch {
+        // A thrown server action reaches the browser as technical text: never show it.
+        const msg = 'Please try again.';
         toast.error('Could not delete post', { description: msg });
       }
     });
@@ -215,8 +217,9 @@ function DrawerContent({
         toast.success('Failure archived', {
           description: 'The post has been removed from active failed posts.',
         });
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : 'Unable to archive failure.';
+      } catch {
+        // A thrown server action reaches the browser as technical text: never show it.
+        const msg = 'Please try again.';
         toast.error('Could not archive failure', { description: msg });
       }
     });
@@ -417,8 +420,9 @@ function InlineScheduleEditor({
         setEditing(false);
         queryClient.invalidateQueries({ queryKey: ['content-detail', contentId] });
         router.refresh();
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : 'Unable to update schedule.';
+      } catch {
+        // A thrown server action reaches the browser as technical text: never show it.
+        const msg = 'Please try again.';
         toast.error('Could not update', { description: msg });
       }
     });
@@ -539,8 +543,9 @@ function InlineCopyEditor({
         setEditing(false);
         queryClient.invalidateQueries({ queryKey: ['content-detail', contentId] });
         router.refresh();
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : 'Unable to save.';
+      } catch {
+        // A thrown server action reaches the browser as technical text: never show it.
+        const msg = 'Please try again.';
         toast.error('Save failed', { description: msg });
       }
     });

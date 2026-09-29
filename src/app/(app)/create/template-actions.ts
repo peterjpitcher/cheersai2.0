@@ -5,6 +5,10 @@ import { z } from "zod";
 
 import { requireAuthContext } from "@/lib/auth/server";
 import { requireEntitledContext } from "@/lib/billing/entitlement-server";
+import { createLogger } from "@/lib/logging";
+import { toLoggableError } from "@/lib/logging/to-error";
+
+const logger = createLogger("templates");
 
 export interface ContentTemplate {
   id: string;
@@ -72,6 +76,8 @@ export async function listTemplates(): Promise<ContentTemplate[]> {
     .order("updated_at", { ascending: false });
 
   if (error) {
+    // Thrown, as before; the template picker shows its own plain words.
+    logger.error("could not load templates", toLoggableError(error), { accountId });
     throw new Error(`Failed to load templates: ${error.message}`);
   }
 
@@ -105,7 +111,8 @@ export async function saveTemplate(
     .single<{ id: string }>();
 
   if (error) {
-    return { error: `Failed to save template: ${error.message}` };
+    logger.error("could not save a template", toLoggableError(error), { accountId });
+    return { error: "We could not save this template. Please try again." };
   }
 
   revalidatePath("/create");
@@ -128,7 +135,8 @@ export async function deleteTemplate(
     .eq("account_id", accountId);
 
   if (error) {
-    return { error: `Failed to delete template: ${error.message}` };
+    logger.error("could not delete a template", toLoggableError(error), { accountId, templateId: id });
+    return { error: "We could not delete this template. Please try again." };
   }
 
   revalidatePath("/create");

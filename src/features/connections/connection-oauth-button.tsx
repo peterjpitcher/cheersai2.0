@@ -18,6 +18,8 @@ const ACTION_LABELS = {
   needs_action: "Reconnect",
 } as const;
 
+const TRY_AGAIN = "Please try again.";
+
 export function ConnectionOAuthButton({ provider, status, hasAccessToken }: ConnectionOAuthButtonProps) {
   const [isPending, startTransition] = useTransition();
   const toast = useToast();
@@ -27,13 +29,14 @@ export function ConnectionOAuthButton({ provider, status, hasAccessToken }: Conn
       try {
         const result = await initiateOAuthConnect(provider);
         if (!result?.success || !result?.redirectUrl) {
-          throw new Error(result?.error ?? "Missing redirect URL");
+          toast.error("Could not open Facebook", { description: result?.error ?? TRY_AGAIN });
+          return;
         }
         toast.success("Redirecting to provider…");
         window.location.href = result.redirectUrl;
-      } catch (error) {
-        const message = error instanceof Error ? error.message : "Something went wrong";
-        toast.error("Could not start OAuth flow", { description: message });
+      } catch {
+        // A thrown server action reaches the browser as technical text: never show it.
+        toast.error("Could not open Facebook", { description: TRY_AGAIN });
       }
     });
   };

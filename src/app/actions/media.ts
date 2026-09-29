@@ -9,6 +9,14 @@ import { normaliseTags } from '@/lib/library/tags';
 import { isSchemaMissingError } from '@/lib/supabase/errors';
 import type { MediaItem } from '@/types/media';
 import { requireEntitledContext } from '@/lib/billing/entitlement-server';
+import { ownerMessage } from '@/lib/errors/owner-message';
+import { createLogger } from '@/lib/logging';
+import { toLoggableError } from '@/lib/logging/to-error';
+
+const logger = createLogger('media');
+
+/** Shown by the create wizard (tasks/SPEC-plain-error-messages.md); the detail goes to the log. */
+const ATTACH_FAILED = 'We could not add your images to this post. Please try again.';
 
 // ---------------------------------------------------------------------------
 // Mapper
@@ -251,7 +259,8 @@ export async function attachMediaToContent(
       .single();
 
     if (itemError || !item) {
-      return { error: 'Content item not found or access denied' };
+      if (itemError) logger.error('attachMediaToContent: post lookup failed', toLoggableError(itemError), { accountId, contentItemId });
+      return { error: 'We could not find this post. Please start again from Create.' };
     }
 
     // Verify all media-library rows belong to this account. The attachment
@@ -264,13 +273,14 @@ export async function attachMediaToContent(
         .eq('account_id', accountId);
 
       if (mediaError) {
-        return { error: 'Failed to verify media ownership' };
+        logger.error('attachMediaToContent: media ownership check failed', toLoggableError(mediaError), { accountId, contentItemId });
+        return { error: ATTACH_FAILED };
       }
 
       const ownedIds = new Set((ownedMedia ?? []).map((m: { id: string }) => m.id));
       const unowned = mediaIds.filter((id) => !ownedIds.has(id));
       if (unowned.length > 0) {
-        return { error: 'Some media assets do not belong to this account' };
+        return { error: 'One or more selected images are not available. Reselect your media.' };
       }
     }
 
@@ -282,7 +292,8 @@ export async function attachMediaToContent(
 
     if (deleteError) {
       if (!isSchemaMissingError(deleteError)) {
-        return { error: deleteError.message };
+        logger.error('attachMediaToContent: clearing attachments failed', toLoggableError(deleteError), { accountId, contentItemId });
+        return { error: ATTACH_FAILED };
       }
     }
 
@@ -300,7 +311,8 @@ export async function attachMediaToContent(
 
       if (insertError) {
         if (!isSchemaMissingError(insertError)) {
-          return { error: insertError.message };
+          logger.error('attachMediaToContent: attachment insert failed', toLoggableError(insertError), { accountId, contentItemId });
+          return { error: ATTACH_FAILED };
         }
       }
     }
@@ -310,7 +322,8 @@ export async function attachMediaToContent(
     return { success: true };
   } catch (err) {
     unstable_rethrow(err);
-    return { error: err instanceof Error ? err.message : String(err) };
+    logger.error('attachMediaToContent failed', toLoggableError(err), { contentItemId });
+    return { error: ownerMessage(err, ATTACH_FAILED) };
   }
 }
 

@@ -23,8 +23,9 @@ export function DeleteContentButton({ contentId, className }: DeleteContentButto
             try {
               await restorePlannerContent({ contentId });
               toast.success("Post restored", { description: "The post is back in your planner." });
-            } catch (error) {
-              const message = error instanceof Error ? error.message : "Something went wrong";
+            } catch {
+              // A thrown server action reaches the browser as technical text: never show it.
+              const message = "Please try again.";
               toast.error("Could not restore post", { description: message });
             }
           });
@@ -37,8 +38,9 @@ export function DeleteContentButton({ contentId, className }: DeleteContentButto
             onClick: handleUndo,
           },
         });
-      } catch (error) {
-        const message = error instanceof Error ? error.message : "Something went wrong";
+      } catch {
+        // A thrown server action reaches the browser as technical text: never show it.
+        const message = "Please try again.";
         toast.error("Could not delete post", { description: message });
       }
     });

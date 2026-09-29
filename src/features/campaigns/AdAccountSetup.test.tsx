@@ -178,14 +178,14 @@ describe("AdAccountSetup: disconnect", () => {
     expect(replaceMock).not.toHaveBeenCalled();
   });
 
-  it("shows the failure when the server action throws", async () => {
+  it("shows the failure in plain words, not the thrown text, when the server action throws", async () => {
     disconnectAdAccountMock.mockRejectedValue(new Error("network down"));
     render(<AdAccountSetup initialStatus={connectedStatus} canDisconnect />);
 
     fireEvent.click(screen.getByRole("button", { name: "Disconnect" }));
 
     await waitFor(() =>
-      expect(toastErrorMock).toHaveBeenCalledWith("Could not disconnect Meta Ads", { description: "network down" }),
+      expect(toastErrorMock).toHaveBeenCalledWith("Could not disconnect Meta Ads", { description: "Please try again." }),
     );
     expect(replaceMock).not.toHaveBeenCalled();
   });

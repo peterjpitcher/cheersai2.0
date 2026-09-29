@@ -71,9 +71,9 @@ export function ManagementConnectionForm({ data }: ManagementConnectionFormProps
         reset(getConnectionFormDefaultValues(summary));
         setSaveMessage("Management connection saved.");
         router.refresh();
-      } catch (error) {
-        const message = error instanceof Error ? error.message : "Failed to save management connection.";
-        setSaveMessage(message);
+      } catch {
+        // A thrown server action reaches the browser as technical text: never show it.
+        setSaveMessage("We could not save the management app connection. Please try again.");
       }
     });
   });

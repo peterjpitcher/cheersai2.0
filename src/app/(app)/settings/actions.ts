@@ -23,12 +23,17 @@ import {
   updateLinkInBioTile,
   upsertLinkInBioProfile,
 } from "@/lib/link-in-bio/profile";
+import { createLogger } from "@/lib/logging";
+import { toLoggableError } from "@/lib/logging/to-error";
 import { ManagementApiError } from "@/lib/management-app/client";
 import {
   getManagementConnectionConfig,
+  MANAGEMENT_CONNECTION_SCHEMA_MISSING_MESSAGE,
   saveManagementConnection,
   updateManagementConnectionTestResult,
 } from "@/lib/management-app/data";
+
+const logger = createLogger("settings");
 
 async function revalidateCurrentLinkInBioPage() {
   const { profile } = await getLinkInBioProfileWithTiles();
@@ -249,12 +254,28 @@ function describeManagementConnectionError(error: unknown): string {
     if (error.code === "NETWORK") {
       return "Management API is unreachable. Check the base URL and network access.";
     }
-    return error.message;
   }
 
-  if (error instanceof Error) {
+  // The messages above, and the connection check's own, were written for the
+  // person entering the Base URL and API key. Anything else (the management
+  // API's or the database's own text) goes to the log, not the page
+  // (tasks/SPEC-plain-error-messages.md).
+  if (error instanceof Error && MANAGEMENT_TEST_MESSAGES.has(error.message)) {
     return error.message;
   }
+  if (error instanceof Error && error.message === MANAGEMENT_CONNECTION_SCHEMA_MISSING_MESSAGE) {
+    logger.error("management connection test: schema missing", error);
+    return "The management app connection is not set up for this brand yet. Please contact Cheers support.";
+  }
 
-  return "Connection test failed.";
+  logger.error("management connection test failed", toLoggableError(error));
+  return "The connection test failed. Check the Base URL and API key, then try again.";
 }
+
+/** Thrown by getManagementConnectionConfig and checkManagementConnection for the person setting it up. */
+const MANAGEMENT_TEST_MESSAGES = new Set([
+  "Management app connection is not configured.",
+  "Management app connection is disabled.",
+  "Event artwork access failed. The API key needs read:events:artwork permission.",
+  "Event artwork could not be checked. Check the management artwork API.",
+]);

@@ -172,7 +172,7 @@ describe("selectAdAccount", () => {
     );
     const result = await selectAdAccount("act_123456789");
 
-    expect(result).toEqual({ error: "No ads token found." });
+    expect(result).toEqual({ error: "Meta Ads is not connected. Please connect it again." });
     expect(fromQueue).toHaveLength(0);
   });
 
@@ -226,18 +226,24 @@ describe("selectAdAccount", () => {
     fetchSpy.mockRestore();
   });
 
-  it("fails with the token store's error instead of acting on a missing token", async () => {
+  it("fails with plain words, logging the token store's error, instead of acting on a missing token", async () => {
     adTokenMocks.getMetaAdAccountTokens.mockReset();
     adTokenMocks.getMetaAdAccountTokens.mockRejectedValue(new Error("token could not be decrypted"));
-    vi.spyOn(console, "error").mockImplementation(() => {});
+    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
     const { selectAdAccount } = await import(
       "@/app/(app)/connections/actions-ads"
     );
     const result = await selectAdAccount("act_123456789");
 
-    expect(result).toEqual({ error: "token could not be decrypted" });
+    expect(result).toEqual({
+      error: "We could not load your Meta Ads connection. Please try again, or reconnect Meta Ads.",
+    });
     expect(fromQueue).toHaveLength(0);
+    const logged = consoleErrorSpy.mock.calls.flat().map(String).join("\n");
+    expect(logged).toContain("could not load the Meta Ads token before account selection");
+    expect(logged).toContain("token could not be decrypted");
+    consoleErrorSpy.mockRestore();
   });
 
   it("normalises numeric Meta account IDs before saving", async () => {
@@ -298,13 +304,16 @@ describe("selectAdAccount", () => {
       ),
     );
 
+    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     const { selectAdAccount } = await import(
       "@/app/(app)/connections/actions-ads"
     );
     const result = await selectAdAccount("act_123");
 
-    expect(result).toEqual({ error: "DB constraint violation" });
+    expect(result).toEqual({ error: "We could not save that ad account. Please try again." });
+    expect(consoleErrorSpy.mock.calls.flat().map(String).join("\n")).toContain("DB constraint violation");
 
+    consoleErrorSpy.mockRestore();
     fetchSpy.mockRestore();
   });
 });
@@ -604,7 +613,7 @@ describe("updateAdAccountConversionSettings", () => {
       conversionsApiAccessToken: "capi-token-1234567890",
     });
 
-    expect(result).toEqual({ error: "Failed to store Meta Ads token: boom" });
+    expect(result).toEqual({ error: "We could not save the Conversions API token. Please try again." });
     expect(revalidatePathMock).not.toHaveBeenCalled();
     expect(fromQueue).toHaveLength(0);
   });

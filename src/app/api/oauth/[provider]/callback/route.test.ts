@@ -131,8 +131,9 @@ describe("GET /api/oauth/[provider]/callback", () => {
     expect(outcome).toEqual({ path, status: 307 });
   });
 
-  it("still redirects to /connections with the message when the connect step throws a real error", async () => {
-    completeOAuthConnectMock.mockRejectedValueOnce(new Error("OAuth token exchange failed"));
+  it("redirects to /connections with plain words, and logs the detail, when the connect step throws a real error", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    completeOAuthConnectMock.mockRejectedValueOnce(new Error("OAuthException: Invalid verification code format (code 100)"));
 
     const response = await GET(
       new NextRequest("https://app.test/api/oauth/facebook/callback?code=code-1&state=state-1"),
@@ -143,7 +144,11 @@ describe("GET /api/oauth/[provider]/callback", () => {
     expect(location.pathname).toBe("/connections");
     expect(location.searchParams.get("oauth")).toBe("error");
     expect(location.searchParams.get("provider")).toBe("facebook");
-    expect(location.searchParams.get("message")).toBe("OAuth token exchange failed");
+    expect(location.searchParams.get("message")).toBe("We could not finish connecting. Please click Connect again.");
+    const logged = consoleError.mock.calls.flat().map(String).join("\n");
+    expect(logged).toContain("OAuth callback failed");
+    expect(logged).toContain("Invalid verification code format");
+    consoleError.mockRestore();
   });
 
   it("does not show success when the provider returns an OAuth error, and marks the state failed", async () => {
@@ -158,6 +163,25 @@ describe("GET /api/oauth/[provider]/callback", () => {
     expect(stateRow("state-1")?.used_at).not.toBeNull();
     expect(location.searchParams.get("oauth")).toBe("error");
     expect(location.searchParams.get("provider")).toBe("facebook");
+    expect(location.searchParams.get("message")).toBe(
+      "The Facebook sign-in was cancelled or did not finish. Please click Connect again.",
+    );
+  });
+
+  it("sends a callback without a state back to /connections with plain words, not a JSON error", async () => {
+    const response = await GET(
+      new NextRequest("https://app.test/api/oauth/instagram/callback?code=code-1"),
+      { params: Promise.resolve({ provider: "instagram" }) },
+    );
+
+    const location = new URL(response.headers.get("location") ?? "");
+    expect(completeOAuthConnectMock).not.toHaveBeenCalled();
+    expect(location.pathname).toBe("/connections");
+    expect(location.searchParams.get("oauth")).toBe("error");
+    expect(location.searchParams.get("provider")).toBe("instagram");
+    expect(location.searchParams.get("message")).toBe(
+      "This connection link has expired or was already used. Please click Connect again.",
+    );
   });
 
   it("does not use up a pending Page choice named in an error callback", async () => {

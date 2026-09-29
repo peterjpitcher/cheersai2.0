@@ -44,6 +44,10 @@ import { buildGenerationTemporalContext } from '@/lib/create/temporal-context';
 import type { MediaAssetSummary } from '@/lib/library/data';
 import { composePublishBody } from '@/lib/publishing/compose-body';
 
+/** Shown when a generate call throws; a returned `error` is already plain words. */
+const GENERATION_FAILED = 'We could not write the copy just now. Please try again.';
+const REGENERATION_FAILED = 'We could not rewrite the copy just now. Please try again.';
+
 // ---------------------------------------------------------------------------
 // Modifier chips (D-06)
 // ---------------------------------------------------------------------------
@@ -542,12 +546,13 @@ export function GenerateStep({
               error: undefined,
             });
           }
-        } catch (err) {
+        } catch {
+          // A thrown server action reaches the browser as technical text: never show it.
           const prev = byKey.get(slot.key)!;
           byKey.set(slot.key, {
             ...prev,
             status: 'failed',
-            error: err instanceof Error ? err.message : 'Generation failed',
+            error: GENERATION_FAILED,
           });
         }
 
@@ -636,8 +641,9 @@ export function GenerateStep({
       if (result.data && modifier) {
         toast.success('Content regenerated');
       }
-    } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : 'Regeneration failed';
+    } catch {
+      // A thrown server action reaches the browser as technical text: never show it.
+      const errorMsg = modifier ? REGENERATION_FAILED : GENERATION_FAILED;
       const failCopies = generatedSlotCopies.map(sc =>
         sc.slotKey === slotKey ? { ...sc, status: 'failed' as const, error: errorMsg } : sc,
       );

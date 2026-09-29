@@ -98,7 +98,7 @@ export function buildPageConnection(
 ): ProviderTokenExchange {
   if (provider === "facebook") {
     if (!page.accessToken) {
-      throw new Error("Selected Facebook Page is missing an access token. Try reconnecting and granting publish permissions.");
+      throw new Error("Facebook did not give CheersAI permission to post to this Page. Please click Connect again and allow posting when Facebook asks.");
     }
 
     const metadata: Record<string, unknown> = { pageId: page.id };
@@ -121,7 +121,7 @@ export function buildPageConnection(
     throw new Error("No Instagram Business Account is linked to the selected Facebook Page.");
   }
   if (!page.accessToken) {
-    throw new Error("Instagram publishing requires a Page access token. Grant the 'pages_manage_posts' permission and reconnect.");
+    throw new Error("Facebook did not give CheersAI permission to post to Instagram for this Page. Please click Connect again and allow posting when Facebook asks.");
   }
 
   const metadata: Record<string, unknown> = { pageId: page.id, igBusinessId: instagram.id };

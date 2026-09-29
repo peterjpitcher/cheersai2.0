@@ -2,11 +2,16 @@ import { unstable_rethrow } from "next/navigation";
 import { NextRequest, NextResponse } from "next/server";
 
 import { completeOAuthConnect } from "@/app/(app)/connections/actions";
+import { CONNECT_MESSAGES } from "@/lib/connections/messages";
 import { PAGE_CHOICE_PATH } from "@/lib/connections/page-choice";
+import { createLogger } from "@/lib/logging";
+import { toLoggableError } from "@/lib/logging/to-error";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
 import { env } from "@/env";
 
 const SUPPORTED_PROVIDERS = new Set(["facebook", "instagram"]);
+
+const logger = createLogger("oauth");
 
 /**
  * OAuth callback route.
@@ -29,29 +34,33 @@ export async function GET(
   const errorParam = url.searchParams.get("error") ?? url.searchParams.get("error_message");
   const errorDescription = url.searchParams.get("error_description");
 
-  if (!state) {
-    return NextResponse.json({ error: "Missing state" }, { status: 400 });
-  }
-
   const base = env.client.NEXT_PUBLIC_SITE_URL.replace(/\/$/, "");
+
+  if (!state) {
+    // Nothing to look up: send the owner back with plain words, not a JSON body.
+    logger.warn("OAuth callback without a state", { provider, providerError: errorParam ?? null });
+    return redirectToConnections(base, { oauth: "error", provider, message: CONNECT_MESSAGES.expiredLink });
+  }
 
   if (errorParam || !code) {
     const reason = errorParam ?? errorDescription ?? "missing_code";
     await markOAuthStateFailed(state, provider, reason);
+    logger.warn("OAuth callback without a code", { provider, reason });
     return redirectToConnections(base, {
       oauth: "error",
       provider,
-      message: resolveProviderErrorMessage(reason),
+      message: CONNECT_MESSAGES.cancelled,
     });
   }
 
   try {
     const result = await completeOAuthConnect(provider, code, state);
     if (!result.success) {
+      // completeOAuthConnect returns plain words and logs the detail itself.
       return redirectToConnections(base, {
         oauth: "error",
         provider,
-        message: result.error ?? "Could not finish the OAuth connection.",
+        message: result.error ?? CONNECT_MESSAGES.finishFailed,
       });
     }
     if (result.pageChoice) {
@@ -65,11 +74,11 @@ export async function GET(
     // A signed-out owner is sent to sign in (requireOwnerContext redirects by
     // throwing), not to /connections with "NEXT_REDIRECT" as the message.
     unstable_rethrow(error);
-    const message = error instanceof Error ? error.message : "Could not finish the OAuth connection.";
+    logger.error("OAuth callback failed", toLoggableError(error), { provider });
     return redirectToConnections(base, {
       oauth: "error",
       provider,
-      message,
+      message: CONNECT_MESSAGES.finishFailed,
     });
   }
 
@@ -93,7 +102,7 @@ async function markOAuthStateFailed(state: string, provider: string, reason: str
     .is("auth_code", null);
 
   if (error) {
-    console.error("[oauth] failed to mark OAuth state as failed", error);
+    logger.error("failed to mark OAuth state as failed", toLoggableError(error), { provider });
   }
 }
 
@@ -103,11 +112,4 @@ function redirectToConnections(base: string, params: Record<string, string>) {
     redirectUrl.searchParams.set(key, value);
   }
   return NextResponse.redirect(redirectUrl);
-}
-
-function resolveProviderErrorMessage(reason: string) {
-  if (reason === "missing_code") {
-    return "The provider did not return an authorization code. Please try reconnecting.";
-  }
-  return "The provider authorization was cancelled or failed. Please try reconnecting.";
 }

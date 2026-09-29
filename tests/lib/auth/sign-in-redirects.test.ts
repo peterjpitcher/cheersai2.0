@@ -112,9 +112,9 @@ describe('server actions keep their usual answer for a real error', () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {});
   });
 
-  it('content: getDraft returns the error message', async () => {
+  it('content: getDraft returns plain words, not the error message', async () => {
     const { getDraft } = await import('@/app/actions/content');
-    expect(await getDraft('content-1')).toEqual({ error: 'sign-in lookup failed' });
+    expect(await getDraft('content-1')).toEqual({ error: 'We could not load your draft. Please try again.' });
   });
 
   it('analytics: getAnalyticsData returns its generic message', async () => {

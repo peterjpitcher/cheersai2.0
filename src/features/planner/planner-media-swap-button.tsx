@@ -86,8 +86,9 @@ export function PlannerMediaSwapButton({
       try {
         const assets = await loadPlannerMediaLibrary({ includeAssetIds: attachedAssetIds });
         setLibrary(assets);
-      } catch (error) {
-        const message = error instanceof Error ? error.message : "Unable to load media library.";
+      } catch {
+        // A thrown server action reaches the browser as technical text: never show it.
+        const message = "We could not load your media library. Please try again.";
         setLoadError(message);
       } finally {
         setIsLoading(false);

@@ -461,9 +461,15 @@ describe('choosePageForConnection: fails closed', () => {
 
     const result = await choosePageForConnection({ choice: token, pageId: '2' });
 
-    expect(result).toEqual({ success: false, provider: 'facebook', error: 'Failed to store connection tokens' });
+    expect(result).toEqual({
+      success: false,
+      provider: 'facebook',
+      error:
+        'We could not save this connection securely. Please try connecting again, and contact Cheers support if it keeps happening.',
+    });
     expect(connectionRow('facebook')?.status).toBe('needs_action');
     expect(loggedText()).toContain('could not save the chosen Page');
+    expect(loggedText()).toContain('token vault write failed');
   });
 
   it('fails closed when the brand connections cannot be read', async () => {

@@ -299,8 +299,9 @@ export function MediaAttachmentSelector({
           });
         }
       } catch (error) {
+        // The browser console keeps the detail; the owner gets plain words.
         console.error("[create] media upload failed", error);
-        errorMessage = error instanceof Error ? error.message : "Upload failed";
+        errorMessage = `We could not upload ${file.name}. Please try again.`;
       }
     }
 

@@ -59,10 +59,6 @@ function getAssetPlacement(asset: MediaAssetSummary) {
   return resolveMediaPlacement({ placement: asset.previewShape });
 }
 
-function getErrorMessage(error: unknown, fallback: string) {
-  return error instanceof Error ? error.message : fallback;
-}
-
 export function LinkInBioTileManager({ tiles, mediaAssets }: LinkInBioTileManagerProps) {
   const router = useRouter();
   const toast = useToast();
@@ -143,9 +139,10 @@ export function LinkInBioTileManager({ tiles, mediaAssets }: LinkInBioTileManage
         router.refresh();
         resetForm();
         toast.success(values.id ? "Tile updated" : "Tile created");
-      } catch (error) {
+      } catch {
+        // A thrown server action reaches the browser as technical text: never show it.
         toast.error("Could not save tile", {
-          description: getErrorMessage(error, "Please try again."),
+          description: "Please try again.",
         });
       }
     });
@@ -164,9 +161,10 @@ export function LinkInBioTileManager({ tiles, mediaAssets }: LinkInBioTileManage
           resetForm();
         }
         toast.success("Tile deleted");
-      } catch (error) {
+      } catch {
+        // A thrown server action reaches the browser as technical text: never show it.
         toast.error("Could not delete tile", {
-          description: getErrorMessage(error, "Please try again."),
+          description: "Please try again.",
         });
       }
     });
@@ -197,9 +195,10 @@ export function LinkInBioTileManager({ tiles, mediaAssets }: LinkInBioTileManage
         await reorderLinkInBioTilesSettings({ tileIds: reordered.map((tile) => tile.id) });
         router.refresh();
         toast.success("Tile order updated");
-      } catch (error) {
+      } catch {
+        // A thrown server action reaches the browser as technical text: never show it.
         toast.error("Could not reorder tiles", {
-          description: getErrorMessage(error, "Please try again."),
+          description: "Please try again.",
         });
       }
     });

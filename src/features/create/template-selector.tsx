@@ -47,8 +47,9 @@ export function TemplateSelector({
         const data = await listTemplates();
         setTemplates(data);
         setLoadError(null);
-      } catch (err) {
-        setLoadError(err instanceof Error ? err.message : "Failed to load templates.");
+      } catch {
+        // A thrown server action reaches the browser as technical text: never show it.
+        setLoadError("We could not load your templates. Please try again.");
       }
     });
   };

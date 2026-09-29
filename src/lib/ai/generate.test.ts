@@ -82,7 +82,7 @@ describe('generatePlatformCopy', () => {
     });
 
     await expect(generatePlatformCopy(DEFAULT_OPTIONS)).rejects.toThrow(
-      'AI returned no parsed content',
+      'The AI did not write any copy this time. Please try again.',
     );
   });
 
@@ -90,7 +90,7 @@ describe('generatePlatformCopy', () => {
     mockParse.mockResolvedValue({ choices: [] });
 
     await expect(generatePlatformCopy(DEFAULT_OPTIONS)).rejects.toThrow(
-      'AI returned no parsed content',
+      'The AI did not write any copy this time. Please try again.',
     );
   });
 });

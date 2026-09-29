@@ -7,6 +7,7 @@ import { z } from "zod";
 
 import { ownsBrand, requireOwnerContext } from "@/lib/auth/roles";
 import { evaluateConnectionMetadata } from "@/lib/connections/metadata";
+import { CONNECT_MESSAGES } from "@/lib/connections/messages";
 import { buildOAuthRedirectUrl } from "@/lib/connections/oauth";
 import { createPageChoice, PAGE_CHOICE_PATH, toPageChoiceOption } from "@/lib/connections/page-choice";
 import { resolvePageSelection, type ManagedPage } from "@/lib/connections/page-selection";
@@ -28,6 +29,7 @@ import {
   type ProviderTokenExchange,
 } from "@/lib/connections/token-exchange";
 import { createLogger } from "@/lib/logging";
+import { toLoggableError } from "@/lib/logging/to-error";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
 import { isSchemaMissingError } from "@/lib/supabase/errors";
 
@@ -53,8 +55,15 @@ const providerDisplayNames: Record<Provider, string> = {
 /** OAuth state expiry: 10 minutes */
 const OAUTH_STATE_EXPIRY_MS = 10 * 60 * 1000;
 
-/** Shown for an unknown, used or expired state, and for one someone else started. */
-const INVALID_STATE_ERROR = "Invalid or expired OAuth state";
+/**
+ * Owners never see technical text (tasks/SPEC-plain-error-messages.md); the
+ * detail goes to the log. INVALID_STATE_ERROR is shown for an unknown, used or
+ * expired state, and for one someone else started.
+ */
+const INVALID_STATE_ERROR = CONNECT_MESSAGES.expiredLink;
+const START_FAILED_ERROR = CONNECT_MESSAGES.startFailed;
+const FINISH_FAILED_ERROR = CONNECT_MESSAGES.finishFailed;
+const META_LOGIN_FAILED_ERROR = CONNECT_MESSAGES.metaLoginFailed;
 
 const payloadSchema = z.object({
   provider: providerSchema,
@@ -96,8 +105,8 @@ export async function initiateOAuthConnect(
     try {
       connections = await loadBrandConnections(supabase, accountId);
     } catch (error) {
-      logger.error("could not check connections before Change Page", toError(error), { accountId, provider });
-      return { success: false, error: "Failed to initiate OAuth flow" };
+      logger.error("could not check connections before Change Page", toLoggableError(error), { accountId, provider });
+      return { success: false, error: START_FAILED_ERROR };
     }
     if (connections.facebook?.hasAccessToken) {
       return {
@@ -124,8 +133,8 @@ export async function initiateOAuthConnect(
   });
 
   if (error) {
-    console.error("[connections] failed to insert oauth_states", error);
-    return { success: false, error: "Failed to initiate OAuth flow" };
+    logger.error("could not store the OAuth state", toLoggableError(error), { accountId, provider });
+    return { success: false, error: START_FAILED_ERROR };
   }
 
   const redirectUrl = buildOAuthRedirectUrl(provider, state);
@@ -172,8 +181,8 @@ export async function completeOAuthConnect(
     .maybeSingle();
 
   if (stateError) {
-    console.error("[connections] oauth_states lookup failed", stateError);
-    return { success: false, error: "OAuth state validation failed" };
+    logger.error("oauth_states lookup failed", toLoggableError(stateError), { provider, userId: ctx.user.id });
+    return { success: false, error: FINISH_FAILED_ERROR };
   }
 
   if (!oauthState) {
@@ -222,20 +231,20 @@ export async function completeOAuthConnect(
     .eq("created_by", ctx.user.id);
 
   if (markError) {
-    console.error("[connections] failed to mark oauth_states used", markError);
-    return { success: false, error: "Failed to process OAuth state" };
+    logger.error("could not mark the OAuth state used", toLoggableError(markError), { stateId: state.id, accountId, provider });
+    return { success: false, error: FINISH_FAILED_ERROR };
   }
 
-  // 3. Exchange the auth code for a user token and list the Pages it manages
+  // 3. Exchange the auth code for a user token and list the Pages it manages.
+  //    Meta's own error text (already token-redacted) goes to the log, not the owner.
   let auth: MetaUserAuth;
   let pages: ManagedPage[];
   try {
     auth = await exchangeCodeForUserToken(provider, code);
     pages = await fetchManagedPages(auth.userAccessToken);
   } catch (error) {
-    const message = error instanceof Error ? error.message : "OAuth token exchange failed";
-    console.error("[connections] OAuth token exchange failed", error);
-    return { success: false, error: message };
+    logger.error("Meta login or Page list failed", toLoggableError(error), { accountId, provider });
+    return { success: false, error: META_LOGIN_FAILED_ERROR };
   }
 
   // 4. Choose the Page: linked (same Page as the other platform), stored, only, or the owner's choice
@@ -243,7 +252,7 @@ export async function completeOAuthConnect(
   try {
     connections = await loadBrandConnections(supabase, accountId);
   } catch (error) {
-    logger.error("could not load connections to choose a Page", toError(error), { accountId, provider });
+    logger.error("could not load connections to choose a Page", toLoggableError(error), { accountId, provider });
     return { success: false, error: "We could not check this brand's connections. Please try again." };
   }
 
@@ -280,7 +289,7 @@ export async function completeOAuthConnect(
       logger.info("Page choice needed", { accountId, provider, pageCount: selection.pages.length, changePage: forceChoice });
       return { success: true, pageChoice };
     } catch (error) {
-      logger.error("could not store the Page choice", toError(error), { accountId, provider });
+      logger.error("could not store the Page choice", toLoggableError(error), { accountId, provider });
       return { success: false, error: "We could not save your list of Pages. Please try again." };
     }
   }
@@ -290,7 +299,8 @@ export async function completeOAuthConnect(
   try {
     exchange = buildPageConnection(provider, selection.page, auth);
   } catch (error) {
-    const message = error instanceof Error ? error.message : "OAuth token exchange failed";
+    // buildPageConnection throws owner-readable reasons (see its doc comment).
+    const message = error instanceof Error ? error.message : FINISH_FAILED_ERROR;
     logger.warn("selected Page cannot be connected", { accountId, provider, message });
     return { success: false, error: message };
   }
@@ -339,11 +349,16 @@ export async function disconnectProvider(
 // Metadata management (retained from v1 with v2 column fixes)
 // ---------------------------------------------------------------------------
 
+/**
+ * Failures are returned, not thrown: production hides a thrown server action
+ * message behind React's generic one, so the owner would never see the reason.
+ */
 export async function updateConnectionMetadata(input: unknown) {
   const { provider, metadataValue } = payloadSchema.parse(input);
   const value = metadataValue?.trim() ?? "";
   const { accountId } = await requireOwnerContext();
   const supabase = createServiceSupabaseClient();
+  const saveFailed = { ok: false as const, error: "We could not save this. Please try again." };
 
   const { data: existing, error: fetchError } = await supabase
     .from("social_connections")
@@ -362,11 +377,12 @@ export async function updateConnectionMetadata(input: unknown) {
     }>();
 
   if (fetchError && !isSchemaMissingError(fetchError)) {
-    throw fetchError;
+    logger.error("metadata save: connection lookup failed", toLoggableError(fetchError), { accountId, provider });
+    return saveFailed;
   }
 
   if (!existing) {
-    throw new Error(`Connect ${providerDisplayNames[provider]} before saving metadata.`);
+    return { ok: false as const, error: `Connect your ${providerDisplayNames[provider]} before saving this.` };
   }
 
   const metadata = (existing.metadata ?? {}) as Record<string, unknown>;
@@ -380,7 +396,13 @@ export async function updateConnectionMetadata(input: unknown) {
   }
 
   const evaluation = evaluateUpdatedMetadata(provider, nextMetadata);
-  const hasAccessToken = hasTokenValue(existing.access_token) || await hasVaultAccessToken(supabase, existing.id);
+  let hasAccessToken: boolean;
+  try {
+    hasAccessToken = hasTokenValue(existing.access_token) || await hasVaultAccessToken(supabase, existing.id);
+  } catch (error) {
+    logger.error("metadata save: token lookup failed", toLoggableError(error), { accountId, provider });
+    return saveFailed;
+  }
   const readiness = deriveConnectionReadiness({
     provider,
     storedStatus: evaluation.complete && hasAccessToken ? "active" : existing.status,
@@ -401,7 +423,8 @@ export async function updateConnectionMetadata(input: unknown) {
     .eq("provider", provider);
 
   if (updateError && !isSchemaMissingError(updateError)) {
-    throw updateError;
+    logger.error("metadata save: update failed", toLoggableError(updateError), { accountId, provider });
+    return saveFailed;
   }
 
   const message = evaluation.complete
@@ -438,10 +461,6 @@ export async function updateConnectionMetadata(input: unknown) {
 // ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------
-
-function toError(error: unknown): Error {
-  return error instanceof Error ? error : new Error(String(error));
-}
 
 async function hasVaultAccessToken(
   supabase: ReturnType<typeof createServiceSupabaseClient>,

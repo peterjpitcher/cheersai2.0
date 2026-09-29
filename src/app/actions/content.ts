@@ -18,6 +18,24 @@ import { logPublishAuditEvent } from '@/lib/publishing/audit';
 import { MEDIA_BUCKET, DEFAULT_TIMEZONE, WEEKLY_MAX_OCCURRENCES } from '@/lib/constants';
 import type { ContentItem, ContentType, Platform, PlatformCopy } from '@/types/content';
 import { requireEntitledContext } from '@/lib/billing/entitlement-server';
+import { ownerMessage } from '@/lib/errors/owner-message';
+import { createLogger } from '@/lib/logging';
+import { toLoggableError } from '@/lib/logging/to-error';
+
+const logger = createLogger('content');
+
+/**
+ * What the create screens show when a save fails (tasks/SPEC-plain-error-messages.md).
+ * The database's own text goes to the log; a message written for owners (plan
+ * on hold, owners only) still reaches them through ownerMessage().
+ */
+const CONTENT_MESSAGES = {
+  draftSaveFailed: 'We could not save your draft. Please try again.',
+  draftLoadFailed: 'We could not load your draft. Please try again.',
+  calendarLoadFailed: 'We could not load your scheduled posts. Please refresh the page to try again.',
+  scheduleFailed: 'We could not schedule your posts, so nothing was scheduled. Please try again.',
+  mediaCheckFailed: 'We could not check your selected images. Please try again.',
+} as const;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -150,7 +168,8 @@ export async function createDraft(
       .single();
 
     if (error) {
-      return { error: error.message };
+      logger.error('createDraft insert failed', toLoggableError(error), { accountId });
+      return { error: CONTENT_MESSAGES.draftSaveFailed };
     }
 
     revalidatePath('/dashboard/create');
@@ -158,7 +177,8 @@ export async function createDraft(
     return { success: true, id: (data as { id: string }).id };
   } catch (err) {
     unstable_rethrow(err);
-    return { error: err instanceof Error ? err.message : String(err) };
+    logger.error('createDraft failed', toLoggableError(err));
+    return { error: ownerMessage(err, CONTENT_MESSAGES.draftSaveFailed) };
   }
 }
 
@@ -187,13 +207,15 @@ export async function saveDraft(
       .eq('account_id', accountId);
 
     if (error) {
-      return { error: error.message };
+      logger.error('saveDraft update failed', toLoggableError(error), { accountId, contentId });
+      return { error: CONTENT_MESSAGES.draftSaveFailed };
     }
 
     return { success: true };
   } catch (err) {
     unstable_rethrow(err);
-    return { error: err instanceof Error ? err.message : String(err) };
+    logger.error('saveDraft failed', toLoggableError(err), { contentId });
+    return { error: ownerMessage(err, CONTENT_MESSAGES.draftSaveFailed) };
   }
 }
 
@@ -219,13 +241,15 @@ export async function getDraft(
       .single();
 
     if (error) {
-      return { error: error.message };
+      logger.error('getDraft lookup failed', toLoggableError(error), { accountId, contentId });
+      return { error: CONTENT_MESSAGES.draftLoadFailed };
     }
 
     return { data: mapContentItem(data as Record<string, unknown>) };
   } catch (err) {
     unstable_rethrow(err);
-    return { error: err instanceof Error ? err.message : String(err) };
+    logger.error('getDraft failed', toLoggableError(err), { contentId });
+    return { error: ownerMessage(err, CONTENT_MESSAGES.draftLoadFailed) };
   }
 }
 
@@ -260,7 +284,8 @@ export async function listDrafts(): Promise<{
     return { data: items };
   } catch (err) {
     unstable_rethrow(err);
-    return { error: err instanceof Error ? err.message : String(err) };
+    logger.error('getCalendarItemsAction failed', toLoggableError(err));
+    return { error: ownerMessage(err, CONTENT_MESSAGES.calendarLoadFailed) };
   }
 }
 
@@ -471,7 +496,8 @@ export async function getCalendarItemsAction(
       .order('scheduled_for', { ascending: true, nullsFirst: false });
 
     if (error) {
-      return { error: error.message };
+      logger.error('calendar items lookup failed', toLoggableError(error), { accountId });
+      return { error: CONTENT_MESSAGES.calendarLoadFailed };
     }
 
     const rowsList = ((rows ?? []) as Record<string, unknown>[]).filter((row) => !row.deleted_at);
@@ -495,7 +521,10 @@ export async function getCalendarItemsAction(
         .eq('account_id', accountId)
         .in('id', assetIds)
         .returns<CalendarAsset[]>();
-      if (assetError) return { error: assetError.message };
+      if (assetError) {
+        logger.error('calendar media lookup failed', toLoggableError(assetError), { accountId });
+        return { error: CONTENT_MESSAGES.calendarLoadFailed };
+      }
       for (const asset of assets ?? []) assetsById.set(asset.id, asset);
     }
     const previewRefs = new Map<string, { paths: string[]; mediaType: 'image' | 'video' }>();
@@ -746,7 +775,8 @@ export async function createScheduledBatch(
       .single();
 
     if (draftError || !draftRow) {
-      return { error: 'Draft not found or access denied' };
+      if (draftError) logger.error('createScheduledBatch draft lookup failed', toLoggableError(draftError), { accountId });
+      return { error: 'We could not find this draft. Please start again from Create.' };
     }
 
     const placements = resolveBatchPlacements(contentType, brief);
@@ -775,7 +805,8 @@ export async function createScheduledBatch(
         .returns<Array<{ id: string }>>();
 
       if (ownedMediaError) {
-        return { error: `Could not verify media: ${ownedMediaError.message}` };
+        logger.error('createScheduledBatch media ownership check failed', toLoggableError(ownedMediaError), { accountId });
+        return { error: CONTENT_MESSAGES.mediaCheckFailed };
       }
 
       const ownedIds = new Set((ownedMedia ?? []).map((row) => row.id));
@@ -830,7 +861,8 @@ export async function createScheduledBatch(
         }>>();
 
       if (storyAssetsError) {
-        return { error: `Could not verify media: ${storyAssetsError.message}` };
+        logger.error('createScheduledBatch story media check failed', toLoggableError(storyAssetsError), { accountId });
+        return { error: CONTENT_MESSAGES.mediaCheckFailed };
       }
 
       const storyAssetsById = new Map((storyAssets ?? []).map((row) => [row.id, row]));
@@ -901,7 +933,8 @@ export async function createScheduledBatch(
         .single();
 
       if (campaignError) {
-        return { error: `Campaign creation failed: ${campaignError.message}` };
+        logger.error('createScheduledBatch campaign insert failed', toLoggableError(campaignError), { accountId });
+        return { error: CONTENT_MESSAGES.scheduleFailed };
       }
 
       campaignId = campaignRow.id as string;
@@ -954,7 +987,8 @@ export async function createScheduledBatch(
       .select('id, platform');
 
     if (contentError) {
-      return { error: `Content items insert failed: ${contentError.message}` };
+      logger.error('createScheduledBatch content_items insert failed', toLoggableError(contentError), { accountId });
+      return { error: CONTENT_MESSAGES.scheduleFailed };
     }
 
     const insertedItems = (insertedContent ?? []) as Array<{
@@ -1044,7 +1078,8 @@ export async function createScheduledBatch(
         campaignId,
         deleteCampaign: Boolean(campaignId),
       });
-      return { error: `Variant insert failed: ${variantError.message}` };
+      logger.error('createScheduledBatch variant insert failed', toLoggableError(variantError), { accountId });
+      return { error: CONTENT_MESSAGES.scheduleFailed };
     }
 
     // Insert content_media_attachments for v2 compatibility. Attachments are keyed
@@ -1106,9 +1141,7 @@ export async function createScheduledBatch(
           deleteCampaign: Boolean(campaignId),
         });
 
-        return {
-          error: `Publish job creation failed for item ${index + 1}. No content was scheduled; please retry.`,
-        };
+        return { error: CONTENT_MESSAGES.scheduleFailed };
       }
     }
 
@@ -1155,7 +1188,8 @@ export async function createScheduledBatch(
     };
   } catch (err) {
     unstable_rethrow(err);
-    return { error: err instanceof Error ? err.message : String(err) };
+    logger.error('createScheduledBatch failed', toLoggableError(err));
+    return { error: ownerMessage(err, CONTENT_MESSAGES.scheduleFailed) };
   }
 }
 

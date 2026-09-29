@@ -179,8 +179,9 @@ export function PlannerContentComposer({ detail, ownerTimezone, mediaLibrary }: 
         startRefreshTransition(() => {
           router.refresh();
         });
-      } catch (err) {
-        const message = err instanceof Error ? err.message : "Unable to save post copy.";
+      } catch {
+        // A thrown server action reaches the browser as technical text: never show it.
+        const message = "We could not save the post copy. Please try again.";
         setError(message);
         toast.error("Save failed", { description: message });
       }

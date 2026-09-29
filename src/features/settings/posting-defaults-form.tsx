@@ -62,10 +62,6 @@ function getPostingDefaultsFormDefaultValues(data: PostingDefaults): PostingDefa
   };
 }
 
-function getErrorMessage(error: unknown, fallback: string) {
-  return error instanceof Error ? error.message : fallback;
-}
-
 export function PostingDefaultsForm({ data }: PostingDefaultsFormProps) {
   const router = useRouter();
   const toast = useToast();
@@ -89,9 +85,10 @@ export function PostingDefaultsForm({ data }: PostingDefaultsFormProps) {
         reset(values);
         router.refresh();
         toast.success("Posting defaults saved");
-      } catch (error) {
+      } catch {
+        // A thrown server action reaches the browser as technical text: never show it.
         toast.error("Could not save posting defaults", {
-          description: getErrorMessage(error, "Please try again."),
+          description: "Please try again.",
         });
       }
     });

@@ -18,7 +18,14 @@ import { listMediaAssets } from "@/lib/library/data";
 import { isSchemaMissingError } from "@/lib/supabase/errors";
 import { formatUkDateTime } from "@/lib/utils/date";
 import { requireEntitledContext } from "@/lib/billing/entitlement-server";
+import { createLogger } from "@/lib/logging";
+import { toLoggableError } from "@/lib/logging/to-error";
 import type { ContentStatus } from "@/types/content";
+
+const logger = createLogger("planner");
+
+/** Plain words for the owner (tasks/SPEC-plain-error-messages.md); the detail goes to the log. */
+const BANNER_SAVE_FAILED = "We could not save the date strip settings. Please try again.";
 
 const approveSchema = z.object({
   contentId: z.string().uuid(),
@@ -1608,11 +1615,12 @@ export async function updatePlannerBannerConfig(
     .maybeSingle();
 
   if (fetchError) {
-    return { error: fetchError.message };
+    logger.error("banner settings: post lookup failed", toLoggableError(fetchError), { accountId, contentId: data.contentItemId });
+    return { error: BANNER_SAVE_FAILED };
   }
 
   if (!content) {
-    return { error: "Content item not found" };
+    return { error: "We could not find this post. Refresh the page and try again." };
   }
 
   if (!(BANNER_EDITABLE_STATUSES as readonly string[]).includes(content.status)) {
@@ -1651,7 +1659,8 @@ export async function updatePlannerBannerConfig(
     .eq("content_item_id", data.contentItemId);
 
   if (error) {
-    return { error: error.message };
+    logger.error("banner settings: save failed", toLoggableError(error), { accountId, contentId: data.contentItemId });
+    return { error: BANNER_SAVE_FAILED };
   }
 
   revalidatePath("/planner");

@@ -10,12 +10,17 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { CONNECTION_SAVE_MESSAGES } from "@/lib/connections/messages";
 import { evaluateConnectionMetadata } from "@/lib/connections/metadata";
 import { FACEBOOK_SCOPE_LIST, INSTAGRAM_SCOPE_LIST, type Provider } from "@/lib/connections/oauth";
 import { deriveConnectionReadiness, hasTokenValue } from "@/lib/connections/readiness";
 import type { ProviderTokenExchange } from "@/lib/connections/token-exchange";
+import { createLogger } from "@/lib/logging";
+import { toLoggableError } from "@/lib/logging/to-error";
 import { storeEncryptedToken } from "@/lib/providers/token-helpers";
 import { isSchemaMissingError } from "@/lib/supabase/errors";
+
+const logger = createLogger("connections");
 
 export interface BrandConnection {
   id: string;
@@ -136,8 +141,8 @@ export async function saveProviderConnection(
     .single();
 
   if (upsertError || !connection) {
-    console.error("[connections] social_connections upsert failed", upsertError);
-    return { success: false, error: "Failed to save connection" };
+    logger.error("social_connections upsert failed", toLoggableError(upsertError ?? "no row returned"), { accountId, provider });
+    return { success: false, error: CONNECTION_SAVE_MESSAGES.saveFailed };
   }
 
   // Tokens live only in the token vault (PLAT-09 / C-3).
@@ -147,8 +152,15 @@ export async function saveProviderConnection(
       await storeEncryptedToken(connection.id, "refresh", exchange.refreshToken);
     }
   } catch (error) {
-    console.error("[connections] token vault write failed", error);
-    return { success: false, error: resolveTokenVaultStorageError(error) };
+    // The owner cannot fix a missing key, so they get a plain message and the
+    // log names the cause (TOKEN_VAULT_KEY in Vercel and the edge function secrets).
+    const keyMissing = error instanceof Error && /TOKEN_VAULT_KEY|encryption key/i.test(error.message);
+    logger.error(
+      keyMissing ? "token vault write failed: TOKEN_VAULT_KEY is missing or invalid" : "token vault write failed",
+      toLoggableError(error),
+      { accountId, provider, connectionId: connection.id },
+    );
+    return { success: false, error: CONNECTION_SAVE_MESSAGES.secureStoreFailed };
   }
 
   const readiness = deriveConnectionReadiness({
@@ -166,8 +178,8 @@ export async function saveProviderConnection(
     .eq("account_id", accountId);
 
   if (statusError) {
-    console.error("[connections] failed to activate connection", statusError);
-    return { success: false, error: "Failed to activate connection" };
+    logger.error("could not activate the connection", toLoggableError(statusError), { accountId, provider, connectionId: connection.id });
+    return { success: false, error: CONNECTION_SAVE_MESSAGES.activateFailed };
   }
 
   return { success: true };
@@ -183,7 +195,7 @@ export async function clearProviderTokens(
   accountId: string,
   provider: Provider,
 ): Promise<SaveResult> {
-  const failure = { success: false, error: "Failed to disconnect provider" };
+  const failure = { success: false, error: CONNECTION_SAVE_MESSAGES.disconnectFailed };
 
   const { data: connections, error: lookupError } = await supabase
     .from("social_connections")
@@ -192,7 +204,7 @@ export async function clearProviderTokens(
     .eq("provider", provider);
 
   if (lookupError) {
-    console.error("[connections] disconnect lookup failed", lookupError);
+    logger.error("disconnect lookup failed", toLoggableError(lookupError), { accountId, provider });
     return failure;
   }
 
@@ -208,7 +220,7 @@ export async function clearProviderTokens(
     .in("social_connection_id", connectionIds);
 
   if (vaultError) {
-    console.error("[connections] disconnect token_vault delete failed", vaultError);
+    logger.error("disconnect token_vault delete failed", toLoggableError(vaultError), { accountId, provider });
     return failure;
   }
 
@@ -226,19 +238,11 @@ export async function clearProviderTokens(
     .eq("provider", provider);
 
   if (updateError) {
-    console.error("[connections] disconnect update failed", updateError);
+    logger.error("disconnect update failed", toLoggableError(updateError), { accountId, provider });
     return failure;
   }
 
   return { success: true };
-}
-
-function resolveTokenVaultStorageError(error: unknown) {
-  const message = error instanceof Error ? error.message : "";
-  if (/TOKEN_VAULT_KEY|encryption key/i.test(message)) {
-    return "Token vault is not configured. Set TOKEN_VAULT_KEY to a 64-character hex secret in Vercel and Supabase Edge Function secrets, then reconnect.";
-  }
-  return "Failed to store connection tokens";
 }
 
 /** platform_account_id from the stored ids; 'default' when none is known. */
