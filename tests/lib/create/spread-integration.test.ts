@@ -1,13 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   buildSpreadEvenlySlots,
-  getEngagementOptimisedHour,
   type SpreadConfig,
 } from "@/lib/scheduling/spread";
 
 /**
- * Integration test: verifies the spread algorithm + time selection work
- * together in a realistic campaign creation scenario.
+ * Integration test: verifies the spread algorithm in a realistic campaign
+ * creation scenario.
  *
  * We test the pure functions directly rather than calling createWeeklyCampaign
  * (which requires full Supabase auth mocking) to validate the algorithm chain.
@@ -48,44 +47,6 @@ describe("spread-evenly campaign creation flow", () => {
     }
     expect(platformCounts.get("instagram")).toBe(4);
     expect(platformCounts.get("facebook")).toBe(4);
-  });
-
-  it("applies engagement-optimised times to spread slots", () => {
-    const config: SpreadConfig = {
-      postsPerWeek: 2,
-      platforms: ["instagram"],
-      staggerPlatforms: false,
-      windowStart: new Date(2026, 3, 13),
-      windowEnd: new Date(2026, 3, 19),
-    };
-
-    const slots = buildSpreadEvenlySlots(config, []);
-    expect(slots).toHaveLength(2);
-
-    // Apply time selection with default posting time
-    const times = slots.map((slot) =>
-      getEngagementOptimisedHour(slot.date, null, "14:30"),
-    );
-
-    // Both should use the configured default
-    for (const time of times) {
-      expect(time).toEqual({ hour: 14, minute: 30 });
-    }
-  });
-
-  it("uses 17:00 for same-day event when no default time", () => {
-    const eventDate = new Date(2026, 3, 15); // Wednesday
-    const result = getEngagementOptimisedHour(eventDate, eventDate, null);
-    expect(result).toEqual({ hour: 17, minute: 0 });
-  });
-
-  it("falls back to 12pm when no event and no default time", () => {
-    const result = getEngagementOptimisedHour(
-      new Date(2026, 3, 15),
-      new Date(2026, 3, 20), // Different day
-      null,
-    );
-    expect(result).toEqual({ hour: 12, minute: 0 });
   });
 
   it("handles stagger=false with multiple platforms on same day", () => {

@@ -12,8 +12,6 @@
 
 import { DateTime } from "luxon";
 
-import { DEFAULT_POST_TIME } from "@/lib/constants";
-
 type Platform = "facebook" | "instagram";
 
 export interface SpreadConfig {
@@ -207,47 +205,6 @@ function placePostsForWeek(
   }
 
   return slots;
-}
-
-/**
- * Select an engagement-optimised posting hour for a scheduled date.
- *
- * Priority:
- * 1. If defaultPostingTime is set and valid (HH:mm), use it.
- * 2. If this is a same-day event post, use 17:00.
- * 3. Otherwise use DEFAULT_POST_TIME.
- */
-export function getEngagementOptimisedHour(
-  scheduledDate: Date,
-  eventDate: Date | null,
-  defaultPostingTime: string | null,
-  timezone?: string,
-): { hour: number; minute: number } {
-  const postingTime = defaultPostingTime && /^\d{2}:\d{2}$/.test(defaultPostingTime)
-    ? defaultPostingTime
-    : eventDate && isSameCalendarDay(scheduledDate, eventDate, timezone ?? DEFAULT_TZ)
-      ? "17:00"
-      : DEFAULT_POST_TIME;
-
-  const [hourStr, minuteStr] = postingTime.split(":");
-  const hour = Number(hourStr);
-  const minute = Number(minuteStr);
-  if (Number.isFinite(hour) && Number.isFinite(minute) && hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59) {
-    return { hour, minute };
-  }
-
-  return { hour: 12, minute: 0 };
-}
-
-/** Check if two dates fall on the same calendar day in the target timezone. */
-export function isSameCalendarDay(a: Date, b: Date, tz: string): boolean {
-  const aLocal = DateTime.fromJSDate(a, { zone: tz });
-  const bLocal = DateTime.fromJSDate(b, { zone: tz });
-  return (
-    aLocal.year === bLocal.year &&
-    aLocal.month === bLocal.month &&
-    aLocal.day === bLocal.day
-  );
 }
 
 /**

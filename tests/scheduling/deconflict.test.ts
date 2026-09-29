@@ -1,7 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { DateTime } from "luxon";
 import { deconflictCampaignPlans } from "@/lib/scheduling/deconflict";
-import { getEngagementOptimisedHour, toDayKey } from "@/lib/scheduling/spread";
+import { toDayKey } from "@/lib/scheduling/spread";
 
 const TZ = "Europe/London";
 
@@ -332,55 +332,5 @@ describe("deconflictCampaignPlans occupancy window", () => {
       to: "2026-04-17T23:00:00.000Z",
       toInclusive: false,
     });
-  });
-});
-
-describe("getEngagementOptimisedHour", () => {
-  it("returns 17:00 for same-day event posts (no user default)", () => {
-    const eventDate = londonDate("2026-04-22", 19, 0);
-    const scheduledDate = londonDate("2026-04-22", 7, 0);
-
-    const result = getEngagementOptimisedHour(scheduledDate, eventDate, null, TZ);
-    expect(result).toEqual({ hour: 17, minute: 0 });
-  });
-
-  it("returns 12:00 for advance event posts (no user default)", () => {
-    const eventDate = londonDate("2026-04-22", 19, 0);
-    const scheduledDate = londonDate("2026-04-15", 7, 0); // 1 week before
-
-    const result = getEngagementOptimisedHour(scheduledDate, eventDate, null, TZ);
-    expect(result).toEqual({ hour: 12, minute: 0 });
-  });
-
-  it("uses defaultPostingTime when set", () => {
-    const eventDate = londonDate("2026-04-22", 19, 0);
-    const scheduledDate = londonDate("2026-04-15", 7, 0);
-
-    const result = getEngagementOptimisedHour(
-      scheduledDate,
-      eventDate,
-      "14:30",
-      TZ,
-    );
-    expect(result).toEqual({ hour: 14, minute: 30 });
-  });
-
-  it("falls back to 12:00 when no event date and no user default", () => {
-    const scheduledDate = londonDate("2026-04-15", 7, 0);
-
-    const result = getEngagementOptimisedHour(scheduledDate, null, null, TZ);
-    expect(result).toEqual({ hour: 12, minute: 0 });
-  });
-
-  it("ignores malformed defaultPostingTime", () => {
-    const scheduledDate = londonDate("2026-04-15", 7, 0);
-
-    const result = getEngagementOptimisedHour(
-      scheduledDate,
-      null,
-      "not-a-time",
-      TZ,
-    );
-    expect(result).toEqual({ hour: 12, minute: 0 });
   });
 });

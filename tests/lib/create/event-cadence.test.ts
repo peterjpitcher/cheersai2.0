@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { buildEventCadenceSlots, buildEventScheduleOffsets } from "@/lib/create/event-cadence";
+import { buildEventCadenceSlots } from "@/lib/create/event-cadence";
 
 const TZ = "Europe/London";
 
@@ -124,40 +124,5 @@ describe("buildEventCadenceSlots", () => {
     expect(slots.some((slot) => slot.label === "1 day to go")).toBe(true);
     expect(slots.some((slot) => slot.label === "Event day")).toBe(true);
     expect(slots.some((slot) => slot.label.startsWith("Weekly hype"))).toBe(false);
-  });
-});
-
-describe("buildEventScheduleOffsets", () => {
-  it("produces offsets relative to the event start time", () => {
-    const offsets = buildEventScheduleOffsets({
-      startDate: "2024-09-28",
-      startTime: "18:00",
-      timezone: TZ,
-      now: new Date("2024-08-01T09:00:00Z"),
-    });
-
-    const oneDay = offsets.find((entry) => entry.label === "1 day to go");
-    const twoDays = offsets.find((entry) => entry.label === "2 days to go");
-    const eventDay = offsets.find((entry) => entry.label === "Event day");
-    const weekly = offsets.find((entry) => entry.label.startsWith("Weekly hype"));
-
-    // Event day at 07:00 for an 18:00 start; the days before at midday.
-    expect(eventDay?.offsetHours).toBeCloseTo(-11, 5);
-    expect(oneDay?.offsetHours).toBeCloseTo(-30, 5);
-    expect(twoDays?.offsetHours).toBeCloseTo(-54, 5);
-    expect(weekly && weekly.offsetHours).toBeLessThan(-24);
-  });
-
-  it("falls back to an event-day beat when all default slots are in the past", () => {
-    const offsets = buildEventScheduleOffsets({
-      startDate: "2024-01-10",
-      startTime: "18:00",
-      timezone: TZ,
-      now: new Date("2024-01-10T16:00:00Z"),
-    });
-
-    expect(offsets).toHaveLength(1);
-    expect(offsets[0]?.label).toBe("Event day");
-    expect(offsets[0]?.offsetHours).toBeCloseTo(-11, 5);
   });
 });

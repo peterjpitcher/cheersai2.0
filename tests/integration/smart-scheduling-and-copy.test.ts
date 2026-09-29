@@ -10,7 +10,6 @@ import {
 } from "@/lib/ai/pillars";
 import {
   buildSpreadEvenlySlots,
-  getEngagementOptimisedHour,
   type SpreadConfig,
 } from "@/lib/scheduling/spread";
 import { buildInstantPostPrompt } from "@/lib/ai/prompts";
@@ -204,39 +203,7 @@ describe("Spread-evenly scheduling", () => {
   });
 });
 
-// --- 4. Engagement-Optimised Time ---
-
-describe("Engagement-optimised time selection", () => {
-  it("uses defaultPostingTime when provided", () => {
-    const result = getEngagementOptimisedHour(
-      new Date(2026, 3, 10),
-      null,
-      "18:30",
-    );
-    expect(result).toEqual({ hour: 18, minute: 30 });
-  });
-
-  it("returns 17:00 for same-day events", () => {
-    const eventDate = new Date(2026, 3, 10);
-    const scheduledDate = new Date(2026, 3, 10);
-    const result = getEngagementOptimisedHour(scheduledDate, eventDate, null);
-    expect(result).toEqual({ hour: 17, minute: 0 });
-  });
-
-  it("defaults to 12:00 with no preferences", () => {
-    const result = getEngagementOptimisedHour(new Date(2026, 3, 10), null, null);
-    expect(result).toEqual({ hour: 12, minute: 0 });
-  });
-
-  it("defaultPostingTime takes priority over same-day event", () => {
-    const eventDate = new Date(2026, 3, 10);
-    const scheduledDate = new Date(2026, 3, 10);
-    const result = getEngagementOptimisedHour(scheduledDate, eventDate, "09:00");
-    expect(result).toEqual({ hour: 9, minute: 0 });
-  });
-});
-
-// --- 5. Prompt Builder with Copy Intelligence ---
+// --- 4. Prompt Builder with Copy Intelligence ---
 
 describe("Prompt builder includes copy intelligence context", () => {
   it("includes hook instruction in prompt adjustments", () => {
@@ -315,7 +282,7 @@ describe("Prompt builder includes copy intelligence context", () => {
   });
 });
 
-// --- 6. Date Formatting Utilities ---
+// --- 5. Date Formatting Utilities ---
 
 describe("Date formatting utilities", () => {
   it("formatFriendlyTime converts Date to 12-hour string", () => {
@@ -344,7 +311,7 @@ describe("Date formatting utilities", () => {
   });
 });
 
-// --- 7. End-to-end flow: all modules working together ---
+// --- 6. End-to-end flow: all modules working together ---
 
 describe("End-to-end: scheduling + copy intelligence", () => {
   it("complete flow produces a valid prompt with all intelligence signals", () => {
@@ -379,11 +346,7 @@ describe("End-to-end: scheduling + copy intelligence", () => {
     const slots = buildSpreadEvenlySlots(config, []);
     expect(slots).toHaveLength(2);
 
-    // 6. Get posting time for first slot
-    const time = getEngagementOptimisedHour(slots[0]!.date, null, "18:00");
-    expect(time).toEqual({ hour: 18, minute: 0 });
-
-    // 7. Build prompt with all intelligence
+    // 6. Build prompt with all intelligence
     const hookInstruction = HOOK_STRATEGIES[hookStrategy];
     const brand = makeBrandProfile();
     const input = makeInstantPostInput();
