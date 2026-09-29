@@ -50,6 +50,7 @@ For every brand in production today, Facebook and Instagram hold the same `pageI
 7. **Checked again when the owner picks.** The Page must be one they were shown, still returned by Meta for that login, and still pickable (fresh token, `tasks` and Instagram link). Any failure shows the reason and a Start again button, and logs a warning through `createLogger("connections")` (Axiom and Vercel logs) with the brand, platform and reason, never a token.
 8. **Owner of the initiating brand.** `completeOAuthConnect` checked only membership of the brand that started the flow; it now requires owner (or super-admin), matching decision D4, and the chooser uses the same check. This only refuses more: an owner who started the flow still passes.
 9. **Change Page on a one-Page login still shows the chooser**, with a note that Facebook only shared one Page and how to share more.
+10. **The chooser keeps its own result.** Picking a Page uses the choice up, and Next.js re-renders the page after the server action (seen when the session cookie is refreshed), which on its own would replace a specific error, or the success, with "already used". Found by running the page locally; one client component now renders every case and its own outcome wins. On a later reload a used choice says: "This Page choice has already been used. If your Page is not connected yet, start again from the Connections screen."
 
 ## Security notes
 

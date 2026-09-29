@@ -4,12 +4,16 @@ Spec: `tasks/SPEC-facebook-page-chooser.md`; branch `feat/facebook-page-chooser`
 
 - [x] Read-only check of production's oauth_states and social_connections columns, constraints,
       policies and grants; every brand's Facebook and Instagram hold the same pageId
-- [ ] Selection rules module and tests
-- [ ] Hand-off store (create, read, claim) and tests
-- [ ] Token exchange split (user token, Pages with tasks and paging, build connection) and tests
-- [ ] Shared persistence helpers; `completeOAuthConnect` uses the rules; callback redirects to the chooser
-- [ ] `choosePageForConnection` with Instagram following a Facebook choice; tests with failing dependencies
-- [ ] Chooser page, Change Page buttons, success notice; component tests
+- [x] Selection rules module and tests
+- [x] Hand-off store (create, read, claim) and tests
+- [x] Token exchange split (user token, Pages with tasks and paging, build connection) and tests
+- [x] Shared persistence helpers; `completeOAuthConnect` uses the rules; callback redirects to the chooser
+- [x] `choosePageForConnection` with Instagram following a Facebook choice; tests with failing dependencies
+- [x] Chooser page, Change Page buttons, success notice; component tests
+- [x] Local run (worktree dev server, local Supabase, test owner): chooser listed from the encrypted row,
+      no token in the page, a failed Meta check showed its reason with Start again (running it caught the
+      server re-render hiding that reason; fixed), used and expired choices, Change Page wrote a forcing
+      state and went to Facebook. Local test data removed afterwards.
 - [ ] `npm run ci:verify` (includes `test:utc`); draft PR
 - [ ] Peter's yes, then merge and deploy
 
