@@ -66,7 +66,7 @@ Two more come from the repeat free-trial check (below). They are not throttled, 
 | Alert | Record | What to do |
 |---|---|---|
 | Free trial refused: card already used for a trial | `trial_refused_repeat_card` in `admin_audit` | Nothing, unless the owner contacts you. The trial was cancelled with nothing charged, and Billing offers them a paid plan straight away. |
-| Free trial started with no card to check | a `no_card` row in `trial_card_checks` | The subscription has no card payment method (for example Link), so the check could not run and the trial carries on. Look at it in Stripe and cancel by hand if this business has had a trial before. |
+| Free trial started with no card to check | a `no_card` row in `trial_card_checks` | A Checkout trial has no card payment method, so the check could not run and the trial carries on. Trial Checkouts take cards only, so this should not happen; look at it in Stripe and cancel by hand if this business has had a trial before. |
 
 And one throttled like the Stripe alerts above (at most one a day per brand):
 
@@ -78,7 +78,8 @@ And one throttled like the Stripe alerts above (at most one a day per brand):
 
 One free trial per card, across every brand (spec §4.7, decisions L6 and P5). Code: `src/lib/billing/trial-card-check.ts`, called by the reconcile after the current subscription row is stored, so the webhook, "Check again" and admin re-sync all run it. Table: `trial_card_checks` (migration `20260928200000_trial_card_checks.sql`), service role only, kept 24 months (the data-retention job).
 
-- **Only free trials that started with their subscription are checked** (Stripe's `trial_start` within a minute of `created` or `start_date`, as Checkout's trial is). A paid subscription moved into a trial later, for example a free month you give in the Stripe Dashboard, is left alone and nothing is recorded. For a checked trial, the default payment method is read from Stripe (expanded), and its card fingerprint is turned into a code: HMAC-SHA256 with `TRIAL_CARD_HASH_KEY`. No card number, fingerprint, brand or last four digits is stored, logged or emailed. Any other subscription costs one or two database reads and no Stripe call, so comped brands are unaffected. A trial you create by hand in the Dashboard starts with its subscription, so it is checked like any other.
+- **Only free trials CheersAI's own Checkout started are checked.** Two conditions, both needed: the subscription's metadata has `created_by=cheersai_checkout` (only `startCheckout` sets it, through `subscription_data.metadata`; `app=cheersai` alone is not enough), and its trial started with it (Stripe's `trial_start` within a minute of `created` or `start_date`, as Checkout's trial is). **A trial you create by hand in the Stripe Dashboard, as a favour to a customer, is never checked, refused or cancelled, and nothing is recorded,** whatever card it uses; so is a paid subscription moved into a trial later (a free month you give in the Dashboard). Do not type `created_by` into a subscription's metadata by hand. For a checked trial, the default payment method is read from Stripe (expanded), and its card fingerprint is turned into a code: HMAC-SHA256 with `TRIAL_CARD_HASH_KEY`. No card number, fingerprint, brand or last four digits is stored, logged or emailed. Any other subscription costs one or two database reads and no Stripe call, so comped brands are unaffected.
+- **Trial Checkouts take cards only** (`payment_method_types: ['card']` on a Checkout Session with a trial), so every checked trial has a card to read; Apple Pay and Google Pay still work, because they pay by card. A Checkout with no trial (a brand that has subscribed before) sets no payment method types, so it offers whatever the account's Dashboard payment method settings offer, as before.
 - **The first trial on a card** is recorded as `first_trial`. A partial unique index allows one `first_trial` per code, which is the whole cross-brand check.
 - **A later trial on the same card**, on any brand (a second venue of the same business included), is recorded as `repeat_refused`. The reconcile that recorded it cancels the trial in Stripe at once (`invoice_now: false`, `prorate: false`: nothing is charged in a trial), stores the cancelled subscription, emails the operator, writes `trial_refused_repeat_card` to `admin_audit` (once per subscription, however many retries) and then sets `cancelled_at`. Before refusing, it confirms a first trial really exists for that card code. The owner sees "This card has already been used for a Cheers free trial, so this plan cannot start with one. Start your plan today to carry on." with the usual plan picker, which offers no trial because the brand has subscribed before.
 - **No card** on the subscription: `no_card` (its `card_hash` is `none`) and an operator email; the trial carries on.
@@ -142,6 +143,13 @@ In this order, each by Peter:
 4. Just before merging, confirm production still has no trialing subscription (read only: `select count(*) from subscriptions where status = 'trialing'` is 0; see `TRIAL_CARD_CHECK_STARTS_AT` below).
 5. Merge and deploy. Until the key is there, Checkout says "Billing is not set up yet" and the webhook answers 503, which Stripe retries.
 
+### Before the Checkout-only follow-up deploys (29 September 2026)
+
+No migration, no new setting and no key permission. Just before merging, two read-only checks in the Supabase SQL editor:
+
+1. `select count(*) from trial_card_checks where outcome = 'repeat_refused' and cancelled_at is null` is 0. An unfinished refusal recorded before this change is still finished (cancelled) after it, whoever made the trial.
+2. `select s.stripe_subscription_id from subscriptions s left join trial_card_checks t on t.stripe_subscription_id = s.stripe_subscription_id where s.status = 'trialing' and t.stripe_subscription_id is null` lists no Checkout trial. A Checkout trial started before the deploy carries no `created_by` marker, so if it has not been recorded by then it is never checked. Normally every Checkout trial is recorded within seconds.
+
 ## Terms acceptance at Checkout
 
 Checkout shows a required tick box (`consent_collection.terms_of_service: 'required'`) with our own text (`custom_text.terms_of_service_acceptance`): the owner accepts the Terms of Service and the Data Processing Agreement, with links to `/terms` and `/data-processing` on `NEXT_PUBLIC_SITE_URL`, and the version from `LEGAL_VERSION` in `src/lib/legal/company.ts`. Stripe records the acceptance on the Checkout Session (`consent.terms_of_service = 'accepted'`).
@@ -196,6 +204,18 @@ The tool browser could not open the hosted Checkout page, so the app's "Start 14
 | Comped brand whose only subscription is cancelled | only `subscriptions.list` called; nothing written |
 | After the review fixes: a paid subscription (card 4242, which had a first trial) moved into a 30-day trial 85 seconds after creation | `trial_start` later than `created`; both events 200; nothing recorded, no card lookup, no cancel |
 | After the review fixes: refusal left unfinished (email failed), owner pays on a new subscription inside the window, its two events redelivered together after 10 minutes | Inside the window the events answer 500 (they wait for the unfinished refusal) but the paid row is already stored, so Billing shows "Starter, billed monthly. Renews on 28 October 2026."; after the window both answer 200, one takes over (one email, one audit row, no second cancel) and the old cancelled row is stored 1 ms older than the paid one, so the brand stays active |
+
+### Checkout-only check and card-only trials, verified (2026-09-29, test mode, local stack)
+
+Real hosted Checkouts this time (the Browser pane opened the Checkout page), card `4242 4242 4242 4242`, `stripe listen` forwarding, a mock Resend. All 11 forwarded webhooks answered 200.
+
+| Step | Result |
+|---|---|
+| Brand A: "Start 14-day free trial" | Checkout showed only "Card"; the Session has `payment_method_types: ['card']` and no payment method configuration; automatic tax and the terms tick box as before |
+| Brand A completes Checkout | subscription metadata carries `created_by=cheersai_checkout`; `first_trial` recorded; Billing: "Free trial of Starter, billed monthly, until 13 October 2026." |
+| Brand B: trial created through the API as the Dashboard would (no metadata), same card | log "a trial that CheersAI Checkout did not start is not checked"; nothing recorded, no card lookup, no cancel, no email; Billing: "Free trial of Starter..." and the trial still runs in Stripe |
+| Brand C completes a trial Checkout with the same card (control) | `repeat_refused`, cancelled in Stripe, one operator email with no card details, Billing: "This card has already been used for a Cheers free trial..." |
+| Brand C "Continue to payment" (no trial) | Session uses the account's Dashboard payment method configuration (`pmc_1MF1lpIMsxxxvzCC60NGUojn`), as before; £35.99 today |
 
 ## Re-syncing a brand
 

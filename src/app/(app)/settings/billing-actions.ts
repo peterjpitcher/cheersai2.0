@@ -23,6 +23,7 @@ import {
   BILLING_NOT_CONFIGURED_MESSAGE,
   BillingNotConfiguredError,
   CHEERSAI_APP_TAG,
+  CHEERSAI_CHECKOUT_MARKER,
   getStripe,
   missingBillingEnv,
 } from '@/lib/billing/stripe';
@@ -247,6 +248,10 @@ export async function startCheckout(
     // legal_version: the terms and DPA version the owner accepts at the tick box,
     // readable on the Session and the subscription in Stripe (spec §4.5, §4.13).
     const metadata = { app: CHEERSAI_APP_TAG, account_id: ctx.accountId, plan, interval, legal_version: LEGAL_VERSION };
+    // A free trial takes cards only, so the repeat free-trial check can always
+    // read the card (spec §4.7). A plan paid from day one keeps the payment
+    // methods set in the Stripe Dashboard.
+    const trialPaymentMethods: Stripe.Checkout.SessionCreateParams.PaymentMethodType[] = ['card'];
     const session = await stripe.checkout.sessions.create(
       {
         mode: 'subscription',
@@ -254,9 +259,12 @@ export async function startCheckout(
         client_reference_id: ctx.accountId,
         line_items: [{ price: priceId, quantity: 1 }],
         payment_method_collection: 'always',
+        ...(trial ? { payment_method_types: trialPaymentMethods } : {}),
         subscription_data: {
           ...(trial ? { trial_period_days: TRIAL_DAYS } : {}),
-          metadata,
+          // The Checkout marker tells the repeat free-trial check that this
+          // Checkout, not a person in the Stripe Dashboard, made the subscription.
+          metadata: { ...metadata, ...CHEERSAI_CHECKOUT_MARKER },
         },
         automatic_tax: { enabled: true },
         tax_id_collection: { enabled: true },

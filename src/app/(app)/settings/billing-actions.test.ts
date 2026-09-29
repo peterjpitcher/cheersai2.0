@@ -161,7 +161,10 @@ describe('startCheckout: the Checkout Session', () => {
       client_reference_id: BRAND,
       line_items: [{ price: TEST_PRICES.starterMonthly, quantity: 1 }],
       payment_method_collection: 'always',
-      subscription_data: { trial_period_days: 14, metadata },
+      // Cards only on a trial, so the repeat free-trial check can read the card (spec §4.7).
+      payment_method_types: ['card'],
+      // created_by marks a subscription CheersAI's Checkout made, so only those trials are checked.
+      subscription_data: { trial_period_days: 14, metadata: { ...metadata, created_by: 'cheersai_checkout' } },
       automatic_tax: { enabled: true },
       tax_id_collection: { enabled: true },
       billing_address_collection: 'required',
@@ -217,6 +220,46 @@ describe('startCheckout: the Checkout Session', () => {
     await startCheckout({ plan: 'starter', interval: 'month', accountId: BRAND });
     const [params] = fake.sessionsCreate.mock.calls[0] as [{ subscription_data: Record<string, unknown> }];
     expect(params.subscription_data).not.toHaveProperty('trial_period_days');
+  });
+
+  it('a trial Checkout takes cards only; a Checkout paid from day one keeps the Dashboard\'s payment methods', async () => {
+    await startCheckout({ plan: 'starter', interval: 'month', accountId: BRAND });
+    const [trialParams] = fake.sessionsCreate.mock.calls[0] as [Record<string, unknown>];
+    expect(trialParams.subscription_data).toHaveProperty('trial_period_days', 14);
+    expect(trialParams.payment_method_types).toEqual(['card']);
+    expect(trialParams).not.toHaveProperty('payment_method_configuration');
+
+    // The brand has subscribed before, so the next Checkout has no trial.
+    fake.subscriptions.push(fakeSubscription({ customer: 'cus_test_new', status: 'canceled' }));
+    await startCheckout({ plan: 'professional', interval: 'year', accountId: BRAND });
+    const [paidParams] = fake.sessionsCreate.mock.calls[1] as [Record<string, unknown>];
+    expect(paidParams.subscription_data).not.toHaveProperty('trial_period_days');
+    expect(paidParams).not.toHaveProperty('payment_method_types');
+    expect(paidParams).not.toHaveProperty('payment_method_configuration');
+
+    // Everything else is the same for both kinds.
+    for (const params of [trialParams, paidParams]) {
+      expect(params).toMatchObject({
+        payment_method_collection: 'always',
+        automatic_tax: { enabled: true },
+        consent_collection: { terms_of_service: 'required' },
+        custom_text: { terms_of_service_acceptance: { message: TERMS_ACCEPTANCE } },
+      });
+    }
+  });
+
+  it('marks every subscription its Checkout makes, with or without a trial, and leaves the Session\'s own metadata as it was', async () => {
+    await startCheckout({ plan: 'starter', interval: 'month', accountId: BRAND });
+    fake.subscriptions.push(fakeSubscription({ customer: 'cus_test_new', status: 'canceled' }));
+    await startCheckout({ plan: 'starter', interval: 'month', accountId: BRAND });
+    for (const [params] of fake.sessionsCreate.mock.calls as [Record<string, unknown>][]) {
+      expect((params.subscription_data as { metadata: Record<string, string> }).metadata).toMatchObject({
+        app: 'cheersai',
+        account_id: BRAND,
+        created_by: 'cheersai_checkout',
+      });
+      expect(params.metadata).not.toHaveProperty('created_by');
+    }
   });
 
   it('offers "Start your plan today" with no trial after a trial refused for a repeat card (spec §4.7)', async () => {
