@@ -214,6 +214,18 @@ describe('choosePageForConnection: Facebook and Instagram stay on one Page', () 
     expect(connectionRow('instagram')).toEqual(before);
   });
 
+  it('leaves a legacy Instagram row without a Page id alone, as the chooser showed no warning for it', async () => {
+    seedConnection('instagram', { igBusinessId: 'ig-1' });
+    const token = await pendingChoice([withInstagram('1'), withInstagram('2')]);
+    mockFetchManagedPages.mockResolvedValue([withInstagram('1'), withInstagram('2')]);
+    const before = connectionRow('instagram');
+
+    const result = await choosePageForConnection({ choice: token, pageId: '2' });
+
+    expect(result).toEqual({ success: true, provider: 'facebook', notice: undefined });
+    expect(connectionRow('instagram')).toEqual(before);
+  });
+
   it('reports, and logs, an Instagram move that could not be saved', async () => {
     seedConnection('instagram', { pageId: '1', igBusinessId: 'ig-1' });
     const token = await pendingChoice([withInstagram('1'), withInstagram('2')], { instagramPageId: '1' });
@@ -328,6 +340,19 @@ describe('choosePageForConnection: fails closed', () => {
     expect((await choosePageForConnection({ choice: 'short', pageId: '1' })).success).toBe(false);
     expect((await choosePageForConnection({ choice: 'a'.repeat(43), pageId: '1; drop' })).success).toBe(false);
     expect(db.queries).toHaveLength(0);
+  });
+
+  it('fails closed, connecting nothing, when the choice cannot be claimed', async () => {
+    const token = await pendingChoice([page('1'), page('2')]);
+    mockFetchManagedPages.mockResolvedValue([page('1'), page('2')]);
+    db.fail('oauth_states', 'update', 1);
+
+    const result = await choosePageForConnection({ choice: token, pageId: '2' });
+
+    expect(result).toEqual({ success: false, provider: 'facebook', error: 'We could not finish this. Please start again.' });
+    expect(mockFetchManagedPages).not.toHaveBeenCalled();
+    expect(db.rows('social_connections')).toHaveLength(0);
+    expect(loggedText()).toContain('could not claim the Page choice');
   });
 
   it('fails closed, logs it and uses up the choice, when Meta cannot be asked again', async () => {

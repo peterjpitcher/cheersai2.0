@@ -16,7 +16,6 @@ import {
   clearProviderTokens,
   linkedPageIdFor,
   loadBrandConnections,
-  metadataString,
   saveProviderConnection,
   scopesForProvider,
   type BrandConnections,
@@ -196,8 +195,10 @@ async function keepInstagramOnPage(
     connections: BrandConnections;
   },
 ): Promise<{ success: true; notice?: string } | { success: false; error: string }> {
-  const instagram = connections.instagram;
-  if (!instagram?.hasAccessToken || metadataString(instagram, "pageId") === page.id) {
+  // The same test the chooser used for its warning: Instagram holds a token and
+  // records its Page. A legacy row without a Page id is left alone.
+  const instagramPageId = linkedPageIdFor("facebook", connections);
+  if (!instagramPageId || instagramPageId === page.id) {
     return { success: true };
   }
 
