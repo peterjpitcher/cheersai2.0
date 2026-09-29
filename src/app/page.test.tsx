@@ -2,10 +2,13 @@
 import { cleanup, render } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { bannedClaimsIn } from "@/content/claims";
 import { homeFaq } from "@/content/homepage";
 import { plainText } from "@/content/rich-text";
 import { HOME_SEO } from "@/content/seo";
-import { PLANS } from "@/lib/billing/plans";
+import { EXAMPLE_WEEK_POSTS } from "@/features/front-door/planner-illustration";
+import { PLANS, TRIAL_PLAN } from "@/lib/billing/plans";
+import { WEEKLY_MAX_OCCURRENCES } from "@/lib/constants";
 import type { SelfServeSignupSwitch } from "@/lib/signup/switch";
 
 import { SAMPLE_GUIDES } from "../../tests/fixtures/guides/sample-guides";
@@ -185,15 +188,21 @@ describe("/ on a Vercel Preview (copy approval) while the switch is off", () => 
     expect(hrefs(container)).not.toContain("/signup");
   });
 
-  it("never links the guides while the switch is off, even when guides exist", async () => {
+  it("links the guides when guides exist, as the guides show on a Preview too", async () => {
     mocks.guides = SAMPLE_GUIDES;
     for (const state of ["closed", "unavailable"] as const) {
       signedOut(state);
       const { container, text } = await renderHome();
-      expect(hrefs(container).filter((href) => href.startsWith("/guides"))).toEqual([]);
-      expect(text).not.toContain("Guides for hospitality social media");
+      expect(container.querySelector('header a[href="/guides"]')?.textContent).toBe("Guides");
+      expect(text).toContain("Guides for hospitality social media");
       cleanup();
     }
+  });
+
+  it("leaves the guides links out while there are no guides", async () => {
+    signedOut("closed");
+    const { container } = await renderHome();
+    expect(hrefs(container).filter((href) => href.startsWith("/guides"))).toEqual([]);
   });
 });
 
@@ -212,6 +221,8 @@ describe("the guides links on the homepage", () => {
     const header = container.querySelector("header");
     const footer = container.querySelector("footer");
     expect(Array.from(header?.querySelectorAll("a") ?? []).map((a) => a.textContent)).toContain("Guides");
+    // The homepage is not the guides section, so nothing in the header is marked current.
+    expect(header?.querySelector("[aria-current]")).toBeNull();
     expect(footer?.querySelector('a[href="/guides"]')?.textContent).toBe("Guides");
     expect(text).toContain("Guides for hospitality social media");
     for (const guide of SAMPLE_GUIDES) expect(hrefs(container)).toContain(`/guides/${guide.slug}`);
@@ -264,6 +275,47 @@ describe("the homepage content", () => {
     expect(text).toContain("day 15, unless you cancel before then");
   });
 
+  it("describes weekly regulars as the wizard makes them: every date written up front, up to an end date", async () => {
+    const { text } = await renderHome();
+    expect(text).toContain("Weekly regulars, set up once");
+    expect(text).toContain("Pick the days, a time and an end date.");
+    expect(text).toContain(`up to ${WEEKLY_MAX_OCCURRENCES} dates at a time`);
+    expect(text).not.toContain("each week for you to check");
+  });
+
+  it("says a trial has the trial plan's seats, whichever plan is chosen, wherever it names the seats", async () => {
+    const { container } = await renderHome();
+    const note = `(${PLANS[TRIAL_PLAN].limits?.seats} during the free trial, whichever plan you choose)`;
+    const teamFeature = Array.from(container.querySelectorAll("li")).find(
+      (item) => item.querySelector("h3")?.textContent === "Room for your team",
+    );
+    const teamAnswer = Array.from(container.querySelectorAll("details[data-faq]")).find(
+      (item) => item.querySelector("[data-faq-question]")?.textContent === "Can my team use Cheers?",
+    );
+    expect(teamFeature?.textContent).toContain(note);
+    expect(teamAnswer?.textContent).toContain(note);
+  });
+
+  it("explains in plain words what counts as a published post and an AI generation", async () => {
+    const { text } = await renderHome();
+    expect(text).toContain("Each Facebook or Instagram placement counts as a separate published post");
+    expect(text).toContain("a post on Facebook and Instagram counts as two");
+    expect(text).toContain("An AI generation is Cheers writing or rewriting one post");
+  });
+
+  it("draws the example week in day order, counting posts as the plans do", async () => {
+    const { container } = await renderHome();
+    const picture = container.querySelector('[role="img"]');
+    const rows = Array.from(picture?.querySelectorAll("ol > li") ?? []).map((row) => row.textContent ?? "");
+
+    expect(rows.map((row) => row.slice(0, 3))).toEqual(["Mon", "Thu", "Fri"]);
+    expect(rows.map((row) => (row.includes("Posted") ? "Posted" : "Scheduled"))).toEqual(["Posted", "Scheduled", "Scheduled"]);
+    // Monday on Facebook (1), Thursday's feed post and story on both (4), Friday on both (2).
+    expect(EXAMPLE_WEEK_POSTS).toBe(7);
+    expect(picture?.textContent).toContain("7 posts, all approved");
+    expect(picture?.getAttribute("aria-label")).toContain("7 posts across Facebook and Instagram");
+  });
+
   it("names what a venue needs before starting a trial", async () => {
     const { text } = await renderHome();
     expect(text).toContain("Admin access to your venue's Facebook Page");
@@ -276,9 +328,9 @@ describe("the homepage content", () => {
     expect(text).toContain("Other hospitality venue");
   });
 
-  it("never mentions paid ads, tournaments or Google", async () => {
+  it("never mentions paid ads, tournaments, the management app or any network but Facebook and Instagram", async () => {
     const { text } = await renderHome();
-    expect(text).not.toMatch(/\bads?\b|advert|campaign|tournament|google/i);
+    expect(bannedClaimsIn(text)).toEqual([]);
   });
 
   it("shows the company details and links to the legal pages, help and sign in", async () => {

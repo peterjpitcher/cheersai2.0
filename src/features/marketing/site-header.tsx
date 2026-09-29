@@ -6,23 +6,40 @@ import type { FrontDoorCta } from '@/lib/signup/front-door';
 
 interface SiteHeaderProps {
   cta: FrontDoorCta;
-  /** "/guides" while the guides are public; null leaves the link out entirely. */
+  /** "/guides" while the guides are shown; null leaves the link out entirely. */
   guidesHref: string | null;
+  /**
+   * Where the visitor is, so the matching link is marked for everyone: on
+   * /guides the Guides link is the current page; on a guide it is the current
+   * section.
+   */
+  current?: 'guides' | 'guide';
+}
+
+interface NavLink {
+  href: string;
+  label: string;
+  current?: 'page' | 'true';
 }
 
 const NAV_LINK =
   'rounded-[var(--r-sm)] py-1 text-[var(--c-line-2)] underline-offset-4 transition-colors hover:text-white hover:underline';
+
+/** The current page or section: white and underlined in orange. */
+const NAV_LINK_CURRENT =
+  'rounded-[var(--r-sm)] py-1 text-white underline decoration-orange decoration-2 underline-offset-[6px]';
 
 /**
  * The public site's header, on the ink band: logo, main links and the call to
  * action. On a phone it wraps into two rows (logo and button, then the links)
  * so nothing scrolls sideways at 375px.
  */
-export function SiteHeader({ cta, guidesHref }: SiteHeaderProps): React.JSX.Element {
-  const links = [
+export function SiteHeader({ cta, guidesHref, current }: SiteHeaderProps): React.JSX.Element {
+  const guidesCurrent: NavLink['current'] = current === 'guides' ? 'page' : current === 'guide' ? 'true' : undefined;
+  const links: NavLink[] = [
     { href: '/#how-it-works', label: 'How it works' },
     { href: '/#pricing', label: 'Pricing' },
-    ...(guidesHref ? [{ href: guidesHref, label: 'Guides' }] : []),
+    ...(guidesHref ? [{ href: guidesHref, label: 'Guides', current: guidesCurrent }] : []),
     { href: LOGIN_PATH, label: 'Sign in' },
   ];
 
@@ -48,7 +65,11 @@ export function SiteHeader({ cta, guidesHref }: SiteHeaderProps): React.JSX.Elem
           <ul className="flex flex-wrap items-center gap-x-5 gap-y-1 text-sm font-medium">
             {links.map((link) => (
               <li key={link.href}>
-                <Link href={link.href} className={NAV_LINK}>
+                <Link
+                  href={link.href}
+                  aria-current={link.current}
+                  className={link.current ? NAV_LINK_CURRENT : NAV_LINK}
+                >
                   {link.label}
                 </Link>
               </li>

@@ -1,23 +1,8 @@
-import { buildCustomRoute } from 'next/dist/lib/build-custom-route';
 import { describe, expect, it } from 'vitest';
 
-import { INDEXABLE_PATHS, INDEXABLE_SECTIONS, securityHeaders } from '@/lib/security/headers';
+import { INDEXABLE_PATHS, INDEXABLE_SECTIONS } from '@/lib/security/headers';
 
-/**
- * The headers each path gets, matched the way Next compiles `headers()` rules
- * into the routes manifest (buildCustomRoute), so the test checks the same
- * regex production serves with.
- */
-function headersFor(pathname: string): Record<string, string> {
-  const result: Record<string, string> = {};
-  for (const rule of securityHeaders) {
-    const { regex } = buildCustomRoute('header', rule) as { regex: string };
-    if (new RegExp(regex).test(pathname)) {
-      for (const header of rule.headers) result[header.key] = header.value;
-    }
-  }
-  return result;
-}
+import { headersFor } from '../../helpers/security-headers';
 
 const NOT_INDEXABLE = [
   '/login',
@@ -37,17 +22,29 @@ const NOT_INDEXABLE = [
   '/guides-old',
   '/guidesx',
   '/guides/some-guide/extra',
-  '/og',
-  '/og/guides/some-guide',
+  '/og/guides',
+  '/og/guides/some-guide/extra',
+  '/og/other',
+  '/ogx',
+  '/brand',
+  '/brand/',
+  '/brand/sub/file.png',
+  '/brands/logo.png',
   '/sitemap.xml',
 ];
 
 /** Each guide sits one level below /guides and may be indexed once the switch is on. */
 const GUIDE_PAGES = ['/guides/some-guide', '/guides/some-guide/', '/guides/plan-a-week-of-pub-posts'];
 
+/**
+ * Images the structured data names: the logo and the share images. Google's
+ * Organization and Article guidelines need them crawlable and indexable.
+ */
+const INDEXABLE_FILES = ['/brand/cheers-icon-512.png', '/og', '/og/', '/og/guides/some-guide'];
+
 describe('security headers', () => {
   it('send the security headers on every path, indexable or not', () => {
-    for (const path of [...INDEXABLE_PATHS, ...GUIDE_PAGES, ...NOT_INDEXABLE]) {
+    for (const path of [...INDEXABLE_PATHS, ...GUIDE_PAGES, ...INDEXABLE_FILES, ...NOT_INDEXABLE]) {
       const headers = headersFor(path);
       expect(headers['X-Frame-Options'], path).toBe('DENY');
       expect(headers['X-Content-Type-Options'], path).toBe('nosniff');
@@ -66,6 +63,12 @@ describe('security headers', () => {
   it('never send X-Robots-Tag on /guides or a guide one level below it', () => {
     expect(INDEXABLE_SECTIONS).toEqual(['/guides']);
     for (const path of ['/guides', '/guides/', ...GUIDE_PAGES]) {
+      expect(headersFor(path)['X-Robots-Tag'], path).toBeUndefined();
+    }
+  });
+
+  it('never send X-Robots-Tag on the logo or the share images the structured data names', () => {
+    for (const path of INDEXABLE_FILES) {
       expect(headersFor(path)['X-Robots-Tag'], path).toBeUndefined();
     }
   });

@@ -17,10 +17,19 @@ interface FooterLink {
 
 const FOOTER_LINK = 'text-[var(--c-line-2)] underline-offset-4 transition-colors hover:text-white hover:underline';
 
+/**
+ * Column titles. The style sits on a span inside the heading because
+ * globals.css sets every heading's font and tracking outside any layer, which
+ * beats utility classes on the heading itself.
+ */
+const COLUMN_TITLE = 'block font-mono text-xs font-medium uppercase tracking-[0.14em] text-[var(--c-ink-4)]';
+
 function FooterColumn({ title, links }: { title: string; links: FooterLink[] }): React.JSX.Element {
   return (
     <nav aria-label={title}>
-      <h2 className="font-mono text-xs font-medium uppercase tracking-[0.14em] text-[var(--c-ink-4)]">{title}</h2>
+      <h2>
+        <span className={COLUMN_TITLE}>{title}</span>
+      </h2>
       <ul className="mt-4 space-y-2.5 text-sm">
         {links.map((link) => (
           <li key={link.href}>
@@ -63,8 +72,8 @@ export function SiteFooter({ guidesHref }: SiteFooterProps): React.JSX.Element {
           <FooterColumn title="Cheers" links={cheersLinks} />
           <FooterColumn title="Legal" links={legalLinks} />
           <div>
-            <h2 className="font-mono text-xs font-medium uppercase tracking-[0.14em] text-[var(--c-ink-4)]">
-              Contact
+            <h2>
+              <span className={COLUMN_TITLE}>Contact</span>
             </h2>
             <ul className="mt-4 space-y-2.5 text-sm">
               <li>

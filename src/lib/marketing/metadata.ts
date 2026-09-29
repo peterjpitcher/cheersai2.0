@@ -53,7 +53,8 @@ export function homeMetadata(): Metadata {
 
 export function guidesIndexMetadata(): Metadata {
   const url = absoluteUrl(GUIDES_PATH);
-  const image = shareImage(HOME_IMAGE_PATH, GUIDES_SEO.imageAlt);
+  // The same picture as the homepage, so the same words describe it.
+  const image = shareImage(HOME_IMAGE_PATH, HOME_SEO.imageAlt);
   return {
     title: GUIDES_SEO.title,
     description: GUIDES_SEO.description,

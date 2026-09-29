@@ -2,26 +2,30 @@
 import { cleanup, render } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { GUIDES_SEO } from '@/content/seo';
+import { GUIDES_SEO, HOME_SEO } from '@/content/seo';
+import { RESERVED_ANCHORS } from '@/lib/guides/define-guide';
+import { SwitchUnavailableError } from '@/lib/signup/front-door';
 
 import { planningGuide, SAMPLE_GUIDES, storiesGuide } from '../../../tests/fixtures/guides/sample-guides';
 
 /**
  * /guides and /guides/<slug> (SPEC-homepage-and-guides §3): hidden (not found,
- * with nothing new in the metadata) while the sign-up switch is off or
- * unreadable or there are no guides; once public, the index groups guides by
- * category and each guide has its metadata, JSON-LD, table of contents,
- * London-time updated date, related guides and a call to action that follows
- * the switch.
+ * with nothing new in the metadata) in production while the sign-up switch is
+ * off or there are no guides; a server error, never "not found", when the
+ * switch cannot be read; shown on a Vercel Preview for copy approval. Once
+ * public, the index groups guides by category and each guide has its metadata,
+ * JSON-LD, table of contents, London-time updated date, related guides and a
+ * call to action that follows the switch.
  */
 
 const mocks = vi.hoisted(() => ({
   switchState: vi.fn(),
+  serverEnv: { VERCEL_ENV: 'production' } as Record<string, string>,
   guides: [] as import('@/content/guides/types').Guide[],
 }));
 
 vi.mock('@/env', () => ({
-  env: { server: { VERCEL_ENV: 'production' }, client: { NEXT_PUBLIC_SITE_URL: 'https://cheers.orangejelly.co.uk' } },
+  env: { server: mocks.serverEnv, client: { NEXT_PUBLIC_SITE_URL: 'https://cheers.orangejelly.co.uk' } },
 }));
 vi.mock('@/lib/signup/switch', () => ({ getSelfServeSignupSwitch: () => mocks.switchState() }));
 vi.mock('@/content/guides', () => ({ listGuides: () => mocks.guides }));
@@ -57,18 +61,70 @@ function hrefs(container: HTMLElement): string[] {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.serverEnv.VERCEL_ENV = 'production';
   mocks.guides = SAMPLE_GUIDES;
 });
 afterEach(cleanup);
 
-describe('while the sign-up switch is off or unreadable', () => {
-  it.each(['closed', 'unavailable'])('every guides page is not found (switch %s)', async (state) => {
-    mocks.switchState.mockResolvedValue(state);
+describe('in production while the sign-up switch is off', () => {
+  it('every guides page is not found and carries nothing new', async () => {
+    mocks.switchState.mockResolvedValue('closed');
 
     expect(await isNotFound(() => indexPage.default())).toBe(true);
     expect(await isNotFound(() => guidePage.default(paramsFor(planningGuide.slug)))).toBe(true);
     expect(await indexPage.generateMetadata()).toEqual({});
     expect(await guidePage.generateMetadata(paramsFor(planningGuide.slug))).toEqual({});
+  });
+});
+
+describe('in production when the switch cannot be read', () => {
+  it('every guides page fails with a server error, never "not found", so search engines keep it', async () => {
+    mocks.switchState.mockResolvedValue('unavailable');
+
+    await expect(indexPage.default()).rejects.toThrow(SwitchUnavailableError);
+    await expect(indexPage.generateMetadata()).rejects.toThrow(SwitchUnavailableError);
+    await expect(guidePage.default(paramsFor(planningGuide.slug))).rejects.toThrow(SwitchUnavailableError);
+    await expect(guidePage.generateMetadata(paramsFor(planningGuide.slug))).rejects.toThrow(SwitchUnavailableError);
+    // The switch comes first, so an unknown slug tells nothing about which guides exist.
+    await expect(guidePage.default(paramsFor('no-such-guide'))).rejects.toThrow(SwitchUnavailableError);
+  });
+
+  it('is still simply not found while there are no guides', async () => {
+    mocks.switchState.mockResolvedValue('unavailable');
+    mocks.guides = [];
+    expect(await isNotFound(() => indexPage.default())).toBe(true);
+  });
+});
+
+describe('on a Vercel Preview (copy approval) while the switch is off or unreadable', () => {
+  beforeEach(() => {
+    mocks.serverEnv.VERCEL_ENV = 'preview';
+  });
+
+  it.each(['closed', 'unavailable'])('shows the guides with Talk to us, still noindex (switch %s)', async (state) => {
+    mocks.switchState.mockResolvedValue(state);
+
+    const { container } = render(await guidePage.default(paramsFor(planningGuide.slug)));
+    const text = container.textContent ?? '';
+    expect(container.querySelector('h1')?.textContent).toBe(planningGuide.title);
+    expect(text).toContain('Talk to us');
+    expect(text).not.toContain('Start your free trial');
+    expect(hrefs(container)).not.toContain('/signup');
+    cleanup();
+
+    const index = render(await indexPage.default());
+    expect(index.container.querySelector('h1')?.textContent).toBe(GUIDES_SEO.heading);
+    const metadata = await guidePage.generateMetadata(paramsFor(planningGuide.slug));
+    expect(metadata.title).toBe('Plan a week of pub social media posts | Cheers');
+    expect(metadata.robots).toBeUndefined();
+    expect((await indexPage.generateMetadata()).robots).toBeUndefined();
+  });
+
+  it('is still not found while there are no guides, or for a slug that is not a guide', async () => {
+    mocks.switchState.mockResolvedValue('closed');
+    expect(await isNotFound(() => guidePage.default(paramsFor('no-such-guide')))).toBe(true);
+    mocks.guides = [];
+    expect(await isNotFound(() => indexPage.default())).toBe(true);
   });
 });
 
@@ -96,6 +152,11 @@ describe('/guides once public', () => {
     for (const guide of SAMPLE_GUIDES) expect(hrefs(container)).toContain(`/guides/${guide.slug}`);
   });
 
+  it('marks Guides in the header as the current page', async () => {
+    const { container } = render(await indexPage.default());
+    expect(container.querySelector('header a[href="/guides"]')?.getAttribute('aria-current')).toBe('page');
+  });
+
   it('lists the guides in ItemList JSON-LD in the order the page shows them', async () => {
     const { container } = render(await indexPage.default());
     const itemList = jsonLd(container).find((item) => item['@type'] === 'ItemList');
@@ -113,6 +174,14 @@ describe('/guides once public', () => {
     expect(metadata.description).toBe(GUIDES_SEO.description);
     expect(metadata.alternates?.canonical).toBe(`${SITE}/guides`);
     expect(metadata.robots).toEqual({ index: true, follow: true });
+  });
+
+  it('shares the homepage picture, described in the same words', async () => {
+    const metadata = await indexPage.generateMetadata();
+    const image = { url: `${SITE}/og`, width: 1200, height: 630, alt: HOME_SEO.imageAlt };
+
+    expect(metadata.openGraph).toMatchObject({ images: [image] });
+    expect(metadata.twitter).toMatchObject({ images: [image] });
   });
 });
 
@@ -174,6 +243,21 @@ describe('a guide once public', () => {
     expect(container.querySelector('[role="note"]')?.textContent).toContain('Keep a note on your phone');
     expect(container.querySelector('strong')?.textContent).toBe('People');
     expect(container.querySelectorAll('h3').length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('marks Guides in the header as the current section', async () => {
+    const { container } = render(await guidePage.default(paramsFor(planningGuide.slug)));
+    expect(container.querySelector('header a[href="/guides"]')?.getAttribute('aria-current')).toBe('true');
+  });
+
+  it('uses each id once, and only the reserved ones besides its section anchors', async () => {
+    const { container } = render(await guidePage.default(paramsFor(planningGuide.slug)));
+    const ids = Array.from(container.querySelectorAll('[id]')).map((element) => element.id);
+    const sectionIds = new Set(planningGuide.sections.map((section) => section.id));
+
+    expect(new Set(ids).size).toBe(ids.length);
+    // A new id on the page must join RESERVED_ANCHORS, so no guide can reuse it.
+    expect(ids.filter((id) => !sectionIds.has(id)).sort()).toEqual([...RESERVED_ANCHORS].sort());
   });
 
   it('describes itself in Article and BreadcrumbList JSON-LD', async () => {

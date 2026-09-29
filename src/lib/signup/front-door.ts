@@ -1,5 +1,6 @@
 import type { Metadata, MetadataRoute } from 'next';
 
+import type { Guide } from '@/content/guides/types';
 import { env } from '@/env';
 import { GUIDES_PATH } from '@/lib/guides/guides';
 import { LEGAL_DOCUMENTS } from '@/lib/legal/company';
@@ -34,10 +35,60 @@ export function currentDeployment(): Deployment {
   return { vercelEnv: env.server.VERCEL_ENV || undefined, nodeEnv: process.env.NODE_ENV };
 }
 
+/** A Vercel Preview or a local dev server, where the public pages show whatever the switch says. */
+function isPreviewOrLocalDev(deployment: Deployment): boolean {
+  return deployment.vercelEnv === 'preview' || deployment.nodeEnv === 'development';
+}
+
 /** Whether a signed-out visitor to `/` sees the landing page (otherwise the login page). */
 export function frontDoorVisible(state: SelfServeSignupSwitch, deployment: Deployment): boolean {
-  if (state === 'open') return true;
-  return deployment.vercelEnv === 'preview' || deployment.nodeEnv === 'development';
+  return state === 'open' || isPreviewOrLocalDev(deployment);
+}
+
+/**
+ * Whether the guides (/guides, each guide and its share image) are shown for
+ * this request (SPEC-homepage-and-guides §3):
+ *
+ * - "visible" once the switch is on and at least one guide exists, and on a
+ *   Vercel Preview or local dev server whenever a guide exists, so Peter can
+ *   approve article copy on the PR preview as he did the homepage. They stay
+ *   noindex there: only an open switch lifts the noindex meta tag, and Vercel
+ *   sends `x-robots-tag: noindex` on previews.
+ * - "hidden" (not found, and linked from nowhere) while there are no guides,
+ *   or in production while the switch is off.
+ * - "unavailable" in production when the switch cannot be read and guides
+ *   exist. The pages then answer with a temporary server error, not "not
+ *   found", so search engines keep the guides they have indexed (see
+ *   SwitchUnavailableError).
+ *
+ * The sitemap and robots.txt name the guides only while the switch is on.
+ */
+export type GuidesVisibility = 'visible' | 'hidden' | 'unavailable';
+
+export function guidesVisibility(
+  state: SelfServeSignupSwitch,
+  guides: readonly Guide[],
+  deployment: Deployment,
+): GuidesVisibility {
+  if (!guides.length) return 'hidden';
+  if (state === 'open' || isPreviewOrLocalDev(deployment)) return 'visible';
+  return state === 'unavailable' ? 'unavailable' : 'hidden';
+}
+
+/**
+ * Thrown by public pages and files that follow the switch when it cannot be
+ * read in production (the guides, sitemap.xml and robots.txt), so they answer
+ * with a temporary server error (500) instead of "gone". Google drops indexed
+ * URLs that return 404 but keeps them through a 5xx, and it caches a 200
+ * robots.txt (here, one that disallows everything) for up to a day but retries
+ * a failed one and keeps its last good copy. Nothing new is shown, so a failed
+ * read still fails closed. The share images answer 503 instead (og-image.tsx).
+ */
+export class SwitchUnavailableError extends Error {
+  constructor(surface: string) {
+    super(`The self-serve sign-up switch could not be read, so ${surface} is temporarily unavailable.`);
+    this.name = 'SwitchUnavailableError';
+  }
 }
 
 /** The landing page offers sign-up only when the switch is on; anything else is "Talk to us". */
@@ -50,7 +101,8 @@ export function frontDoorCta(state: SelfServeSignupSwitch): FrontDoorCta {
 /**
  * Files a search engine needs to show the open pages properly: their CSS,
  * scripts and images, the logo named in the structured data, the share
- * images (X's crawler obeys robots.txt) and the favicons. They are files, not
+ * images (X's crawler obeys robots.txt), the favicons and the sitemap itself
+ * (Google fetches a sitemap only if robots.txt allows it). They are files, not
  * pages, so they add nothing to the pages that may be indexed.
  */
 export const CRAWLABLE_FILES = [
@@ -61,6 +113,7 @@ export const CRAWLABLE_FILES = [
   '/favicon.ico',
   '/icon.png',
   '/apple-icon.png',
+  '/sitemap.xml',
 ] as const;
 
 /**

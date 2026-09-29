@@ -145,7 +145,7 @@ function SectionHeading({
   return (
     <div className="max-w-[640px]">
       <p className={`${EYEBROW} text-orange-hi`}>{eyebrow}</p>
-      <h2 id={id} className="mt-3 text-balance text-3xl font-semibold leading-tight tracking-[-0.02em] text-ink sm:text-4xl">
+      <h2 id={id} className="mt-3 text-balance text-3xl font-semibold leading-tight text-ink sm:text-4xl">
         {title}
       </h2>
       {intro ? <p className="mt-4 text-lg leading-relaxed text-ink-2">{intro}</p> : null}
@@ -158,14 +158,15 @@ function Hero({ cta }: { cta: FrontDoorCta }): React.JSX.Element {
     <section aria-labelledby="hero-title" className="relative isolate overflow-hidden bg-ink">
       <div aria-hidden="true" className="site-grid pointer-events-none absolute inset-0 -z-10" />
       <div aria-hidden="true" className="site-glow pointer-events-none absolute inset-0 -z-10" />
+      {/* grid-cols-1 is minmax(0, 1fr): without it the one column sizes to the planner card's widest line and overflows at 320px. */}
       <div
-        className={`${CONTAINER} grid items-center gap-12 pb-16 pt-8 sm:pb-20 sm:pt-12 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)] lg:gap-16 lg:pb-28 lg:pt-16`}
+        className={`${CONTAINER} grid grid-cols-1 items-center gap-12 pb-16 pt-8 sm:pb-20 sm:pt-12 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)] lg:gap-16 lg:pb-28 lg:pt-16`}
       >
         <div className="motion-safe:animate-slide-up">
           <p className={`${EYEBROW} text-orange`}>{HERO.eyebrow}</p>
           <h1
             id="hero-title"
-            className="mt-5 text-balance text-4xl font-semibold leading-[1.06] tracking-[-0.03em] text-white sm:text-5xl lg:text-[3.6rem]"
+            className="mt-5 text-balance text-4xl font-semibold leading-[1.06] text-white sm:text-5xl lg:text-[3.6rem]"
           >
             {HERO.title} <span className="block text-orange">{HERO.titleAccent}</span>
           </h1>
@@ -176,10 +177,11 @@ function Hero({ cta }: { cta: FrontDoorCta }): React.JSX.Element {
               {HERO.secondaryCta}
             </a>
           </div>
+          {/* --c-line-2, not --c-ink-4: the small print must pass 4.5:1 over the orange glow too. */}
           {cta === 'trial' ? (
-            <p className="mt-4 text-sm text-[var(--c-ink-4)]">{heroTrialNote()}</p>
+            <p className="mt-4 text-sm text-[var(--c-line-2)]">{heroTrialNote()}</p>
           ) : (
-            <p className="mt-4 text-sm text-[var(--c-ink-4)]">
+            <p className="mt-4 text-sm text-[var(--c-line-2)]">
               Email{' '}
               <a href={`mailto:${CONTACT.email}`} className="text-white underline underline-offset-4">
                 {CONTACT.email}
@@ -280,14 +282,21 @@ function Audiences(): React.JSX.Element {
           title={AUDIENCE_SECTION.heading}
           intro={AUDIENCE_SECTION.intro}
         />
-        <ul className="mt-10 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        {/* Five cards: 2 + 2 + a full-width last card below md, 3 + 2 from md, one row from lg, so none sits alone beside a gap. */}
+        <ul className="mt-10 grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
           {audiences().map((audience) => {
             const Icon = VENUE_ICONS[audience.type];
             return (
-              <li key={audience.type} className="rounded-[var(--r-xl)] border border-orange-soft bg-card p-5">
+              <li
+                key={audience.type}
+                className="rounded-[var(--r-xl)] border border-orange-soft bg-card p-5 sm:last:col-span-2 md:last:col-span-1"
+              >
                 <div className="flex items-center gap-2.5">
                   <Icon aria-hidden="true" className="h-5 w-5 text-orange-hi" strokeWidth={1.75} />
-                  <h3 className={`${EYEBROW} text-orange-hi`}>{audience.heading}</h3>
+                  {/* The eyebrow style sits on a span: globals.css sets every heading's font and tracking outside any layer, which beats utility classes. */}
+                  <h3>
+                    <span className={`block ${EYEBROW} text-orange-hi`}>{audience.heading}</span>
+                  </h3>
                 </div>
                 <p className="mt-3 text-[15px] leading-relaxed text-ink-2">{audience.examples}</p>
               </li>
@@ -300,13 +309,18 @@ function Audiences(): React.JSX.Element {
   );
 }
 
+/**
+ * From md to lg the two priced plans sit side by side and Group, the odd one
+ * out, takes a centred card of the same width below them; from lg all three
+ * share a row.
+ */
+const PRICE_CARD = 'flex flex-col rounded-[var(--r-2xl)] border border-line-2 bg-card p-6 sm:p-7';
+const GROUP_CARD = `${PRICE_CARD} md:col-span-2 md:w-full md:max-w-[calc((100%-1rem)/2)] md:justify-self-center lg:col-span-1 lg:max-w-none`;
+
 function PriceCardView({ card, cta }: { card: PriceCard; cta: FrontDoorCta }): React.JSX.Element {
   const priced = card.monthlyAmount !== null && card.monthly !== null && card.annual !== null;
   return (
-    <article
-      aria-labelledby={`plan-${card.id}`}
-      className="flex flex-col rounded-[var(--r-2xl)] border border-line-2 bg-card p-6 sm:p-7"
-    >
+    <article aria-labelledby={`plan-${card.id}`} className={priced ? PRICE_CARD : GROUP_CARD}>
       <h3 id={`plan-${card.id}`} className="text-xl font-semibold text-ink">
         {card.name}
       </h3>
@@ -371,12 +385,15 @@ function Pricing({ cta }: { cta: FrontDoorCta }): React.JSX.Element {
         <p className="mt-4 max-w-[640px] text-lg leading-relaxed text-ink-2">
           {PRICING_SECTION.intro} {PRICING_SECTION.vat}
         </p>
-        <div className="mt-10 grid gap-4 lg:grid-cols-3">
+        <div className="mt-10 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
           {priceCards().map((card) => (
             <PriceCardView key={card.id} card={card} cta={cta} />
           ))}
         </div>
-        <p className="mt-4 text-sm text-ink-2">{PRICING_SECTION.placements}</p>
+        <div className="mt-4 space-y-1 text-sm text-ink-2">
+          <p>{PRICING_SECTION.placements}</p>
+          <p>{PRICING_SECTION.aiGenerations}</p>
+        </div>
 
         <div className="mt-10 grid gap-4 md:grid-cols-2">
           <div className="rounded-[var(--r-xl)] border border-orange-soft bg-orange-tint p-6">
@@ -509,7 +526,7 @@ function Closing({ cta }: { cta: FrontDoorCta }): React.JSX.Element {
     <section aria-labelledby="closing-title" className="relative isolate overflow-hidden bg-ink py-16 sm:py-24">
       <div aria-hidden="true" className="site-glow pointer-events-none absolute inset-0 -z-10" />
       <div className="mx-auto max-w-[760px] px-4 text-center sm:px-6">
-        <h2 id="closing-title" className="text-3xl font-semibold tracking-[-0.02em] text-white sm:text-4xl">
+        <h2 id="closing-title" className="text-3xl font-semibold text-white sm:text-4xl">
           {trial ? CLOSING.trialHeading : CLOSING.talkHeading}
         </h2>
         <p className="mt-4 text-lg leading-relaxed text-[var(--c-line-2)]">

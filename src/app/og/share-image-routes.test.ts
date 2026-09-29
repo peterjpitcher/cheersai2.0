@@ -5,10 +5,10 @@ import { HOME_SEO } from '@/content/seo';
 import { planningGuide, SAMPLE_GUIDES } from '../../../tests/fixtures/guides/sample-guides';
 
 /**
- * The share images follow their pages: /og follows the homepage (shown on a
- * Preview or local dev server for copy approval), /og/guides/<slug> follows
- * the guides (switch on and a real guide). Hidden ones answer 404 and draw
- * nothing.
+ * The share images follow their pages: /og follows the homepage and
+ * /og/guides/<slug> follows the guides (both shown on a Preview or local dev
+ * server for copy approval). Hidden ones answer 404 and draw nothing; while
+ * the switch cannot be read in production they answer 503, so crawlers retry.
  */
 
 const mocks = vi.hoisted(() => ({
@@ -44,10 +44,19 @@ beforeEach(() => {
 });
 
 describe('/og (the homepage share image)', () => {
-  it.each(['closed', 'unavailable'])('is not found in production while the switch is %s', async (state) => {
-    mocks.switchState.mockResolvedValue(state);
+  it('is not found in production while the switch is off', async () => {
+    mocks.switchState.mockResolvedValue('closed');
     const response = await homeImage.GET();
     expect(response.status).toBe(404);
+    expect(response.headers.get('cache-control')).toBe('no-store');
+    expect(mocks.render).not.toHaveBeenCalled();
+  });
+
+  it('answers 503 with Retry-After in production when the switch cannot be read', async () => {
+    mocks.switchState.mockResolvedValue('unavailable');
+    const response = await homeImage.GET();
+    expect(response.status).toBe(503);
+    expect(response.headers.get('retry-after')).toBe('60');
     expect(response.headers.get('cache-control')).toBe('no-store');
     expect(mocks.render).not.toHaveBeenCalled();
   });
@@ -71,16 +80,33 @@ describe('/og (the homepage share image)', () => {
 });
 
 describe('/og/guides/<slug> (a guide share image)', () => {
-  it.each(['closed', 'unavailable'])('is not found while the switch is %s, even on a Preview', async (state) => {
-    mocks.serverEnv.VERCEL_ENV = 'preview';
-    mocks.switchState.mockResolvedValue(state);
+  it('is not found in production while the switch is off', async () => {
+    mocks.switchState.mockResolvedValue('closed');
     expect((await guideRequest(planningGuide.slug)).status).toBe(404);
     expect(mocks.render).not.toHaveBeenCalled();
   });
 
-  it('is not found for a slug that is not a guide', async () => {
+  it('answers 503 with Retry-After in production when the switch cannot be read', async () => {
+    mocks.switchState.mockResolvedValue('unavailable');
+    const response = await guideRequest(planningGuide.slug);
+    expect(response.status).toBe(503);
+    expect(response.headers.get('retry-after')).toBe('60');
+    expect(response.headers.get('cache-control')).toBe('no-store');
+    expect(mocks.render).not.toHaveBeenCalled();
+  });
+
+  it.each(['closed', 'unavailable'])('is drawn on a Vercel Preview while the switch is %s, like the guide', async (state) => {
+    mocks.serverEnv.VERCEL_ENV = 'preview';
+    mocks.switchState.mockResolvedValue(state);
+    expect((await guideRequest(planningGuide.slug)).status).toBe(200);
+  });
+
+  it('is not found for a slug that is not a guide, or while there are no guides', async () => {
     mocks.switchState.mockResolvedValue('open');
     expect((await guideRequest('no-such-guide')).status).toBe(404);
+    mocks.guides = [];
+    expect((await guideRequest(planningGuide.slug)).status).toBe(404);
+    expect(mocks.render).not.toHaveBeenCalled();
   });
 
   it('is drawn with the guide title and category once public', async () => {

@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { HOME_CONTENT_UPDATED } from "@/content/homepage";
 import { LEGAL_UPDATED } from "@/lib/legal/company";
-import { CRAWLABLE_FILES } from "@/lib/signup/front-door";
+import { CRAWLABLE_FILES, SwitchUnavailableError } from "@/lib/signup/front-door";
 import { ukLongDateToIso } from "@/lib/utils/date";
 
 import { SAMPLE_GUIDES } from "../../tests/fixtures/guides/sample-guides";
@@ -10,6 +10,9 @@ import { SAMPLE_GUIDES } from "../../tests/fixtures/guides/sample-guides";
 /**
  * robots.txt, sitemap.xml and the legacy /auth/signup URL follow the sign-up
  * switch (SPEC-self-serve-signup §4.1 and P11, SPEC-homepage-and-guides §3).
+ * robots.txt and sitemap.xml answer a server error when the switch cannot be
+ * read, so search engines retry instead of caching "disallow everything" or
+ * an empty sitemap.
  */
 
 const switchState = vi.hoisted(() => vi.fn());
@@ -45,11 +48,14 @@ beforeEach(() => {
 });
 
 describe("robots.txt", () => {
-  it("disallows the whole site while the switch is off or unreadable, as before", async () => {
-    for (const state of ["closed", "unavailable"]) {
-      switchState.mockResolvedValue(state);
-      expect(await robots()).toEqual({ rules: [{ userAgent: "*", disallow: "/" }] });
-    }
+  it("disallows the whole site while the switch is off, as before", async () => {
+    switchState.mockResolvedValue("closed");
+    expect(await robots()).toEqual({ rules: [{ userAgent: "*", disallow: "/" }] });
+  });
+
+  it("fails with a server error, not a cacheable disallow, when the switch cannot be read", async () => {
+    switchState.mockResolvedValue("unavailable");
+    await expect(robots()).rejects.toThrow(SwitchUnavailableError);
   });
 
   it("allows the home page, the legal pages and the guides once the switch is on, and names the sitemap", async () => {
@@ -68,12 +74,16 @@ describe("robots.txt", () => {
 });
 
 describe("sitemap.xml", () => {
-  it("is empty while the switch is off or unreadable, even when guides exist", async () => {
+  it("is empty while the switch is off, even when guides exist", async () => {
     registry.guides = SAMPLE_GUIDES;
-    for (const state of ["closed", "unavailable"]) {
-      switchState.mockResolvedValue(state);
-      expect(await sitemap()).toEqual([]);
-    }
+    switchState.mockResolvedValue("closed");
+    expect(await sitemap()).toEqual([]);
+  });
+
+  it("fails with a server error, not an empty sitemap, when the switch cannot be read", async () => {
+    registry.guides = SAMPLE_GUIDES;
+    switchState.mockResolvedValue("unavailable");
+    await expect(sitemap()).rejects.toThrow(SwitchUnavailableError);
   });
 
   it("lists the home page and the legal pages, dated by their content, while there are no guides", async () => {

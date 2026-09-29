@@ -1,17 +1,21 @@
 import type { RichText } from '@/content/rich-text';
 import { PLANS, TRIAL_DAYS, TRIAL_PLAN } from '@/lib/billing/plans';
+import { WEEKLY_MAX_OCCURRENCES } from '@/lib/constants';
 import { COMPANY, CONTACT, LEGAL_DOCUMENTS } from '@/lib/legal/company';
 import { VENUE_TYPES, type VenueType } from '@/lib/signup/venue-form';
 
 /**
  * The homepage's words (rendered by src/features/front-door/front-door-page.tsx).
  *
- * Every claim was checked against the code on 29 September 2026 and is true
- * for a new self-serve venue. Prices, limits and the trial come from PLANS;
- * company facts and contacts from company.ts; venue types from the sign-up
- * form. Never add paid ads, tournaments or the management-app import (they
- * are off for new venues), and never add testimonials, ratings, customer
- * names or statistics.
+ * Every claim was checked against the code on 29 September 2026. They hold
+ * for a new self-serve venue once the launch gates in SPEC-self-serve-signup
+ * (§4.8 and §6) have passed: Meta App Review approved with Advanced access and
+ * the D7 gate passed, then billing enforcement on, then the sign-up switch on.
+ * Until App Review, a new venue cannot connect Facebook or Instagram at all.
+ * Prices, limits and the trial come from PLANS; company facts and contacts
+ * from company.ts; venue types from the sign-up form. Never add paid ads,
+ * tournaments or the management-app import (they are off for new venues),
+ * and never add testimonials, ratings, customer names or statistics.
  */
 
 /** When the homepage copy last changed, for the sitemap. Update it with the copy. */
@@ -70,13 +74,23 @@ export const FEATURES_SECTION = {
   intro: 'Writing, planning and posting, handled in one place.',
 } as const;
 
-export function homeFeatures(): Feature[] {
+/**
+ * The seats each plan includes, from PLANS, with the trial's own limit: a
+ * trial of any plan runs on the trial plan's limits (effectivePlanForLimits),
+ * so Professional's extra seats start only when the trial ends. Null when a
+ * plan has no fixed limits.
+ */
+function seatsSentence(): string | null {
   const starter = PLANS.starter.limits;
   const professional = PLANS.professional.limits;
-  const seats =
-    starter && professional
-      ? `${PLANS.starter.name} includes ${starter.seats} team seats and ${PLANS.professional.name} includes ${professional.seats}, counting the owner.`
-      : 'Every plan includes team seats, counting the owner.';
+  if (!starter || !professional) return null;
+  const trial = PLANS[TRIAL_PLAN].limits;
+  const duringTrial = trial ? ` (${trial.seats} during the free trial, whichever plan you choose)` : '';
+  return `${PLANS.starter.name} includes ${starter.seats} team seats and ${PLANS.professional.name} includes ${professional.seats}, counting the owner${duringTrial}.`;
+}
+
+export function homeFeatures(): Feature[] {
+  const seats = seatsSentence() ?? 'Every plan includes team seats, counting the owner.';
   return [
     {
       icon: 'voice',
@@ -104,9 +118,11 @@ export function homeFeatures(): Feature[] {
       body: 'Add an event and Cheers plans the posts in the run-up, with a banner on the photo such as Tonight or This Friday, and a story alongside each post.',
     },
     {
+      // As the create wizard works: every date's post is written up front,
+      // approved there, then scheduled; nothing carries on past the end date.
       icon: 'weekly',
-      title: 'Weekly regulars on repeat',
-      body: 'Quiz every Tuesday or curry night every Thursday? Set it up once and Cheers writes and schedules each week for you to check.',
+      title: 'Weekly regulars, set up once',
+      body: `Quiz every Tuesday or curry night every Thursday? Pick the days, a time and an end date. Cheers writes a post for every date in one go for you to check and approve, then puts each one out on its day, up to ${WEEKLY_MAX_OCCURRENCES} dates at a time.`,
     },
     {
       icon: 'library',
@@ -178,7 +194,12 @@ export const PRICING_SECTION = {
   intro: 'Pick a plan and pay monthly or yearly.',
   /** Terms section 6 and decision L2: every price is shown ex VAT. */
   vat: 'All prices are ex VAT. We add VAT at the UK rate.',
-  placements: 'Each Facebook or Instagram placement counts as a separate published post.',
+  /** Terms section 4's words, then what they mean in practice (PlanLimits.postsPerMonth). */
+  placements:
+    'Each Facebook or Instagram placement counts as a separate published post: a post on Facebook and Instagram counts as two, and a story on both counts as two more.',
+  /** Every OpenAI call is one generation (src/lib/ai/usage.ts); one call writes both versions of a post. */
+  aiGenerations:
+    'An AI generation is Cheers writing or rewriting one post (its Facebook and Instagram versions together), or naming and tagging one photo.',
 } as const;
 
 /** What a venue needs before starting a time-limited trial (SPEC-self-serve-signup R19). */
@@ -203,17 +224,15 @@ export const FAQ_SECTION = {
 /** The FAQs. The page shows them and repeats them word for word in FAQPage JSON-LD. */
 export function homeFaq(): FaqItem[] {
   const { terms, privacy, dpa } = LEGAL_DOCUMENTS;
-  const starter = PLANS.starter.limits;
-  const professional = PLANS.professional.limits;
-  const team: FaqItem[] =
-    starter && professional
-      ? [
-          {
-            question: 'Can my team use Cheers?',
-            answer: `Yes. ${PLANS.starter.name} includes ${starter.seats} team seats and ${PLANS.professional.name} includes ${professional.seats}, counting the owner. An owner can invite team members by email.`,
-          },
-        ]
-      : [];
+  const seats = seatsSentence();
+  const team: FaqItem[] = seats
+    ? [
+        {
+          question: 'Can my team use Cheers?',
+          answer: `Yes. ${seats} An owner can invite team members by email.`,
+        },
+      ]
+    : [];
   return [
     {
       question: 'Which social networks does Cheers post to?',

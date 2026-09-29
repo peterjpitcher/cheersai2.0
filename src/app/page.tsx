@@ -3,9 +3,15 @@ import { redirect } from "next/navigation";
 
 import { listGuides } from "@/content/guides";
 import { FrontDoorPage } from "@/features/front-door/front-door-page";
-import { GUIDES_PATH, guidesVisible, latestGuides } from "@/lib/guides/guides";
+import { GUIDES_PATH, latestGuides } from "@/lib/guides/guides";
 import { homeMetadata } from "@/lib/marketing/metadata";
-import { currentDeployment, frontDoorCta, frontDoorVisible, indexableWhenOpen } from "@/lib/signup/front-door";
+import {
+  currentDeployment,
+  frontDoorCta,
+  frontDoorVisible,
+  guidesVisibility,
+  indexableWhenOpen,
+} from "@/lib/signup/front-door";
 import { getSelfServeSignupSwitch } from "@/lib/signup/switch";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 
@@ -20,7 +26,8 @@ import { createServerSupabaseClient } from "@/lib/supabase/server";
  *
  * Vercel Preview and local development show the homepage with the switch
  * off, so the copy can be approved on the PR preview (see front-door.ts). The
- * guides links appear only while the guides themselves are public.
+ * guides links appear only while the guides themselves are shown
+ * (guidesVisibility).
  */
 export const dynamic = "force-dynamic";
 
@@ -51,12 +58,13 @@ export default async function Home(): Promise<React.JSX.Element> {
   }
 
   const state = await getSelfServeSignupSwitch();
-  if (!frontDoorVisible(state, currentDeployment())) {
+  const deployment = currentDeployment();
+  if (!frontDoorVisible(state, deployment)) {
     redirect("/login");
   }
 
   const guides = listGuides();
-  const showGuides = guidesVisible(state, guides);
+  const showGuides = guidesVisibility(state, guides, deployment) === "visible";
   return (
     <FrontDoorPage
       cta={frontDoorCta(state)}

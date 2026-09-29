@@ -6,8 +6,9 @@ import { ChefHat, CircleCheck, Sparkles, Trophy, UtensilsCrossed, type LucideIco
  * posts are examples, not a real venue. The labels match the product: the
  * event-day post goes out at 07:00 with a feed post and a story, carries a
  * "TONIGHT" banner on its photo, and the badges read Scheduled and Posted as
- * they do in the planner. Screen readers get one description instead of the
- * parts.
+ * they do in the planner. Days run in order, so only earlier days have
+ * posted, and the count uses the pricing rule (each placement is one
+ * published post). Screen readers get one description instead of the parts.
  */
 
 interface ExamplePost {
@@ -24,6 +25,17 @@ interface ExamplePost {
 }
 
 const POSTS: readonly ExamplePost[] = [
+  {
+    day: 'Mon',
+    title: 'New lunch menu from today',
+    time: '12:00',
+    status: 'Posted',
+    platforms: ['Facebook'],
+    story: false,
+    banner: null,
+    icon: ChefHat,
+    thumbClass: 'bg-linear-to-br from-ink-2 to-ink',
+  },
   {
     day: 'Thu',
     title: 'Quiz night from 8pm',
@@ -46,23 +58,21 @@ const POSTS: readonly ExamplePost[] = [
     icon: UtensilsCrossed,
     thumbClass: 'bg-linear-to-br from-orange-hi to-[var(--c-orange-lo)]',
   },
-  {
-    day: 'Sun',
-    title: 'Sunday roasts are back',
-    time: '12:00',
-    status: 'Posted',
-    platforms: ['Facebook'],
-    story: false,
-    banner: null,
-    icon: ChefHat,
-    thumbClass: 'bg-linear-to-br from-ink-2 to-ink',
-  },
 ];
+
+/**
+ * Published posts in the example week, counted as the plans count them: each
+ * platform's feed post is one, and a story on each platform is one more
+ * (content.ts makes one post per platform and placement).
+ */
+export const EXAMPLE_WEEK_POSTS = POSTS.reduce(
+  (total, post) => total + post.platforms.length * (post.story ? 2 : 1),
+  0,
+);
 
 const CHIP = 'rounded-[var(--r-sm)] px-1.5 py-0.5 text-[11px] font-medium leading-none';
 
-const DESCRIPTION =
-  'An example week in the Cheers planner: a quiz night post with a Tonight banner and a story, scheduled for 7am, a Friday food post scheduled for noon, and a Sunday roast post already posted.';
+const DESCRIPTION = `An example week in the Cheers planner, ${EXAMPLE_WEEK_POSTS} posts across Facebook and Instagram: a Monday lunch menu post already posted, a quiz night post for Thursday with a Tonight banner and a story, scheduled for 7am, and a Friday food post scheduled for noon.`;
 
 function PlatformChip({ platform }: { platform: 'Facebook' | 'Instagram' }): React.JSX.Element {
   return platform === 'Facebook' ? (
@@ -91,7 +101,8 @@ export function PlannerIllustration(): React.JSX.Element {
         <div className="flex items-center justify-between gap-3">
           <div>
             <p className="text-sm font-semibold text-ink">This week</p>
-            <p className="text-xs text-ink-3">3 posts, all approved</p>
+            {/* The Facebook and Instagram chips beside it say where the posts go. */}
+            <p className="text-xs text-ink-3">{EXAMPLE_WEEK_POSTS} posts, all approved</p>
           </div>
           <div className="flex gap-1.5">
             <PlatformChip platform="Facebook" />

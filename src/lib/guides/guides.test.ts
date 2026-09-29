@@ -8,6 +8,7 @@ import {
   guideReadableText,
   headingId,
   readingMinutes,
+  RESERVED_ANCHORS,
   WORDS_PER_MINUTE,
 } from '@/lib/guides/define-guide';
 import {
@@ -15,7 +16,6 @@ import {
   guideImagePath,
   guidePath,
   guidesByCategory,
-  guidesVisible,
   lastUpdated,
   latestGuides,
   relatedGuides,
@@ -117,6 +117,18 @@ describe('defineGuide', () => {
     ]);
   });
 
+  it('refuses a section anchor the page already uses for itself', () => {
+    const paragraph = { type: 'paragraph', text: 'Words.' } as const;
+    expect(guideProblems(input({ sections: [{ heading: 'Main', blocks: [paragraph] }] }))).toEqual([
+      '"Main" has the anchor "main", which the page already uses',
+    ]);
+    for (const id of RESERVED_ANCHORS) {
+      expect(guideProblems(input({ sections: [{ heading: 'Anything', id, blocks: [paragraph] }] })), id).toEqual([
+        `"Anything" has the anchor "${id}", which the page already uses`,
+      ]);
+    }
+  });
+
   it('refuses links that are not a site path, https or mailto', () => {
     for (const href of ['javascript:alert(1)', '//evil.example', 'http://example.com', 'data:text/html,hi', '/\\evil']) {
       const problems = guideProblems(
@@ -142,13 +154,6 @@ describe('guide lookups', () => {
   it('builds the paths the pages and share images use', () => {
     expect(guidePath('abc')).toBe('/guides/abc');
     expect(guideImagePath('abc')).toBe('/og/guides/abc');
-  });
-
-  it('shows guides only while the switch is open and there is at least one', () => {
-    expect(guidesVisible('open', SAMPLE_GUIDES)).toBe(true);
-    expect(guidesVisible('open', [])).toBe(false);
-    expect(guidesVisible('closed', SAMPLE_GUIDES)).toBe(false);
-    expect(guidesVisible('unavailable', SAMPLE_GUIDES)).toBe(false);
   });
 
   it('finds a guide by slug', () => {

@@ -1,11 +1,12 @@
 import { GUIDE_CATEGORIES, type GuideCategory } from '@/content/guides/categories';
 import type { Guide, IsoDate } from '@/content/guides/types';
-import type { SelfServeSignupSwitch } from '@/lib/signup/switch';
 
 /**
  * Lookups the guide pages, the homepage, the sitemap and the share images
  * share. Everything takes the list of guides as an argument, so tests can pass
- * a fixture instead of the real (empty) list.
+ * a fixture instead of the real (empty) list. Whether the guides are shown at
+ * all follows the sign-up switch: guidesVisibility() in
+ * src/lib/signup/front-door.ts.
  */
 
 export const GUIDES_PATH = '/guides';
@@ -17,16 +18,6 @@ export function guidePath(slug: string): string {
 /** The guide's share image (src/app/og/guides/[slug]/route.tsx). */
 export function guideImagePath(slug: string): string {
   return `/og/guides/${slug}`;
-}
-
-/**
- * Whether the guides are public for this request. Like everything else from
- * the sign-up work, they stay hidden (not found, and linked from nowhere) while
- * the self_serve_signup switch is off or cannot be read. With the switch on
- * they also need at least one guide, so an empty list is never shown.
- */
-export function guidesVisible(state: SelfServeSignupSwitch, guides: readonly Guide[]): boolean {
-  return state === 'open' && guides.length > 0;
 }
 
 export function findGuide(guides: readonly Guide[], slug: string): Guide | undefined {

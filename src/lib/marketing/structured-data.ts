@@ -101,6 +101,13 @@ export function planOffers(): JsonLdObject[] {
   });
 }
 
+/**
+ * What Cheers is and what it costs, for search engines and AI assistants
+ * reading the homepage. It can never earn Google's software app rich result,
+ * which needs aggregateRating or review, because we never add ratings or
+ * reviews (no invented praise). The Rich Results Test calling it ineligible
+ * is expected, not a fault to fix (SPEC-homepage-and-guides §4).
+ */
 export function softwareApplicationJsonLd(): JsonLdObject {
   return {
     '@type': 'SoftwareApplication',

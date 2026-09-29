@@ -40,7 +40,7 @@ const contentSecurityPolicy = [
  * three legal pages and the guides index. They never get the X-Robots-Tag
  * header, which a page cannot override. While the switch is off they stay out
  * of search through the root layout's noindex meta tag (the guides are not
- * found at all) and robots.txt, both of which follow the switch.
+ * found at all in production) and robots.txt, both of which follow the switch.
  */
 export const INDEXABLE_PATHS = ['/', '/terms', '/privacy', '/data-processing', '/guides'] as const;
 
@@ -51,12 +51,19 @@ export const INDEXABLE_PATHS = ['/', '/terms', '/privacy', '/data-processing', '
 export const INDEXABLE_SECTIONS = ['/guides'] as const;
 
 /**
- * Every path except INDEXABLE_PATHS and the pages one level inside
- * INDEXABLE_SECTIONS. `.+` leaves out `/`; the lookahead leaves out the legal
- * pages and /guides (with or without a trailing slash) and /guides/<slug>,
- * but not paths below those.
+ * Every path except INDEXABLE_PATHS, the pages one level inside
+ * INDEXABLE_SECTIONS, and the images the structured data names, which
+ * Google's Organization and Article guidelines require to be crawlable and
+ * indexable: the logo (a file directly in /brand) and the share images (/og
+ * and /og/guides/<slug>). The share images answer 404 while the switch is off;
+ * the static /brand files stay out of search through robots.txt until then.
+ *
+ * `.+` leaves out `/`; the lookahead leaves out the legal pages, /guides,
+ * /guides/<slug>, /brand/<file>, /og and /og/guides/<slug> (each with or
+ * without a trailing slash), but not paths below those.
  */
-const NOT_INDEXABLE_SOURCE = '/:path((?!(?:terms|privacy|data-processing|guides(?:/[^/]+)?)/?$).+)';
+const NOT_INDEXABLE_SOURCE =
+  '/:path((?!(?:terms|privacy|data-processing|guides(?:/[^/]+)?|brand/[^/]+|og(?:/guides/[^/]+)?)/?$).+)';
 
 /** Security headers for all routes. Import into next.config.ts headers(). */
 export const securityHeaders: HeaderConfig[] = [

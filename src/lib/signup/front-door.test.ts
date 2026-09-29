@@ -1,6 +1,15 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { CRAWLABLE_FILES, frontDoorCta, frontDoorVisible, indexableWhenOpen, robotsFor } from '@/lib/signup/front-door';
+import {
+  CRAWLABLE_FILES,
+  frontDoorCta,
+  frontDoorVisible,
+  guidesVisibility,
+  indexableWhenOpen,
+  robotsFor,
+} from '@/lib/signup/front-door';
+
+import { SAMPLE_GUIDES } from '../../../tests/fixtures/guides/sample-guides';
 
 // Hoisted above the imports by Vitest: absolute URLs use the canonical host.
 vi.mock('@/env', () => ({
@@ -40,6 +49,7 @@ describe('robots.txt', () => {
       '/favicon.ico',
       '/icon.png',
       '/apple-icon.png',
+      '/sitemap.xml',
     ]);
     const allow = robotsFor('open').rules;
     const allowed = (Array.isArray(allow) ? allow : [allow]).flatMap((rule) => rule.allow ?? []);
@@ -61,6 +71,33 @@ describe('who sees the landing page', () => {
   it('on a Vercel Preview or a local dev server whatever the switch, so the copy can be approved', () => {
     expect(frontDoorVisible('closed', PREVIEW)).toBe(true);
     expect(frontDoorVisible('unavailable', LOCAL_DEV)).toBe(true);
+  });
+});
+
+describe('who sees the guides', () => {
+  it('in production, everyone once the switch is on and a guide exists; nobody while it is off', () => {
+    expect(guidesVisibility('open', SAMPLE_GUIDES, PRODUCTION)).toBe('visible');
+    expect(guidesVisibility('closed', SAMPLE_GUIDES, PRODUCTION)).toBe('hidden');
+    expect(guidesVisibility('closed', SAMPLE_GUIDES, { nodeEnv: 'production' })).toBe('hidden');
+  });
+
+  it('in production, a temporary error rather than "not found" when the switch cannot be read', () => {
+    expect(guidesVisibility('unavailable', SAMPLE_GUIDES, PRODUCTION)).toBe('unavailable');
+  });
+
+  it('on a Vercel Preview or a local dev server whatever the switch, so article copy can be approved', () => {
+    for (const state of ['open', 'closed', 'unavailable'] as const) {
+      expect(guidesVisibility(state, SAMPLE_GUIDES, PREVIEW), state).toBe('visible');
+      expect(guidesVisibility(state, SAMPLE_GUIDES, LOCAL_DEV), state).toBe('visible');
+    }
+  });
+
+  it('never while there are no guides, whatever the switch and wherever', () => {
+    for (const state of ['open', 'closed', 'unavailable'] as const) {
+      for (const deployment of [PRODUCTION, PREVIEW, LOCAL_DEV]) {
+        expect(guidesVisibility(state, [], deployment), state).toBe('hidden');
+      }
+    }
   });
 });
 

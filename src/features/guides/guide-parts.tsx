@@ -38,11 +38,11 @@ export function Breadcrumbs({ crumbs }: { crumbs: readonly Crumb[] }): React.JSX
 export function TableOfContents({ sections }: { sections: readonly GuideSectionWithId[] }): React.JSX.Element {
   return (
     <nav aria-labelledby="guide-contents-title" className="rounded-[var(--r-xl)] border border-line bg-card p-5">
-      <h2
-        id="guide-contents-title"
-        className="font-mono text-xs font-semibold uppercase tracking-[0.14em] text-ink-2"
-      >
-        {GUIDE_PAGE_COPY.contents}
+      {/* The style sits on a span: globals.css sets every heading's font and tracking outside any layer. */}
+      <h2 id="guide-contents-title">
+        <span className="block font-mono text-xs font-semibold uppercase tracking-[0.14em] text-ink-2">
+          {GUIDE_PAGE_COPY.contents}
+        </span>
       </h2>
       <ol className="mt-3 space-y-0.5 border-l border-line">
         {sections.map((section) => (

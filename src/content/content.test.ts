@@ -3,7 +3,9 @@ import { join, relative } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
+import { bannedClaimsIn } from '@/content/claims';
 import { listGuides } from '@/content/guides';
+import { GUIDE_PAGE_COPY } from '@/content/guides/page-copy';
 import type { Guide, GuideBlock } from '@/content/guides/types';
 import { linkTargets, plainText, type RichText } from '@/content/rich-text';
 import { GUIDES_SEO, guideSeoTitle, HOME_SEO, homeDescription } from '@/content/seo';
@@ -15,8 +17,9 @@ import { SAMPLE_GUIDES } from '../../tests/fixtures/guides/sample-guides';
 /**
  * Content rules for the public site (SPEC-homepage-and-guides): no em dashes
  * anywhere in the copy or the code that renders it, search titles and
- * descriptions within length, and every guide (the published list and the
- * test fixtures) well formed, with links that go somewhere real.
+ * descriptions within length, no banned claims about Cheers (claims.ts), and
+ * every guide (the published list and the test fixtures) well formed, with
+ * links that go somewhere real.
  */
 
 const ROOT = process.cwd();
@@ -88,7 +91,16 @@ function guideRuleBreaks(guide: Guide, all: readonly Guide[]): string[] {
   }
   const words = [guide.title, guide.description, guide.summary, ...guide.sections.flatMap((s) => [s.heading, ...s.blocks.flatMap(blockTexts).map(plainText)])];
   if (words.some((text) => text.includes(EM_DASH))) breaks.push(`${guide.slug}: contains an em dash`);
+  // The closing sells Cheers, so it must not promise what new venues do not get.
+  const claims = bannedClaimsIn(`${guide.closing.heading} ${guide.closing.text}`);
+  if (claims.length) breaks.push(`${guide.slug}: the closing mentions ${claims.join(', ')}`);
   return breaks;
+}
+
+/** Every fixed word on the guide pages, the search titles and descriptions, and the share image words. */
+function siteClaimTexts(): string[] {
+  const pageCopy = Object.values(GUIDE_PAGE_COPY).map((value) => (typeof value === 'function' ? value(5) : value));
+  return [...pageCopy, ...Object.values(HOME_SEO), homeDescription(), ...Object.values(GUIDES_SEO)];
 }
 
 describe('the public site copy and code', () => {
@@ -97,6 +109,22 @@ describe('the public site copy and code', () => {
     expect(files.length).toBeGreaterThan(20);
     const offenders = files.filter((file) => readFileSync(file, 'utf8').includes(EM_DASH)).map((file) => relative(ROOT, file));
     expect(offenders).toEqual([]);
+  });
+
+  it('never claims what new venues do not get, in the fixed guide words, search text or share images', () => {
+    const texts = siteClaimTexts();
+    expect(texts.length).toBeGreaterThan(15);
+    expect(texts.flatMap((text) => bannedClaimsIn(text).map((claim) => `${claim}: ${text}`))).toEqual([]);
+  });
+
+  it('catches the claims it bans', () => {
+    expect(bannedClaimsIn('Cheers can boost this as an ad.')).toEqual(['paid ads']);
+    expect(bannedClaimsIn('Send it to TikTok and LinkedIn too.')).toEqual(['TikTok', 'LinkedIn']);
+    expect(bannedClaimsIn('Post to X or Twitter.')).toEqual(['Twitter or X']);
+    expect(bannedClaimsIn('Import your events from the management app.')).toEqual(['the management app or its import']);
+    expect(bannedClaimsIn('Show up on your Business Profile.')).toEqual(['Google or a Business Profile']);
+    expect(bannedClaimsIn('Run a tournament campaign.')).toEqual(['campaigns', 'tournaments']);
+    expect(bannedClaimsIn("An important note for your pub's Facebook Page and Instagram.")).toEqual([]);
   });
 
   it('keeps search titles within 60 characters and descriptions within 70 to 160', () => {
@@ -134,6 +162,7 @@ describe('the guides', () => {
         },
         { id: 'dash', heading: `A heading ${EM_DASH} with a dash`, blocks: [{ type: 'paragraph', text: 'Words.' }] },
       ],
+      closing: { heading: 'Boost it', text: 'Cheers can turn this into an ad and post it to TikTok.' },
     };
     const breaks = guideRuleBreaks(broken, [broken]).map((line) => line.replace(`${first.slug}: `, ''));
     expect(breaks).toEqual([
@@ -143,6 +172,7 @@ describe('the guides', () => {
       'links to /guides/missing-guide, which is not a page',
       'links to /nowhere, which is not a page',
       'contains an em dash',
+      'the closing mentions paid ads, TikTok',
     ]);
   });
 });

@@ -20,6 +20,14 @@ const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 /** Reading speed behind "N min read": a common figure for adult silent reading. */
 export const WORDS_PER_MINUTE = 200;
 
+/**
+ * Ids the guide page already uses for itself: the skip link's target, the
+ * contents heading and the related guides heading. A section anchor that
+ * reused one would duplicate the id, so its contents link would jump to the
+ * wrong place. The guide page test checks this list against the rendered page.
+ */
+export const RESERVED_ANCHORS: readonly string[] = ['main', 'guide-contents-title', 'related-title'];
+
 /** A heading's anchor: "What's on this week?" becomes "whats-on-this-week". */
 export function headingId(text: string): string {
   return text
@@ -107,6 +115,8 @@ export function guideProblems(input: GuideInput): string[] {
     const anchor = section.id ?? headingId(section.heading);
     if (!SLUG_PATTERN.test(anchor)) {
       problems.push(`${label} has no usable anchor`);
+    } else if (RESERVED_ANCHORS.includes(anchor)) {
+      problems.push(`${label} has the anchor "${anchor}", which the page already uses`);
     } else if (anchors.has(anchor)) {
       problems.push(`two sections share the anchor "${anchor}"`);
     }

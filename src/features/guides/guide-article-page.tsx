@@ -33,7 +33,7 @@ export function GuideArticlePage({ guide, related, cta }: GuideArticlePageProps)
 
   return (
     <div className="min-h-svh bg-paper text-ink">
-      <SiteHeader cta={cta} guidesHref={GUIDES_PATH} />
+      <SiteHeader cta={cta} guidesHref={GUIDES_PATH} current="guide" />
       <main id="main">
         <JsonLd data={articleJsonLd(guide)} />
         <JsonLd data={breadcrumbJsonLd(crumbs)} />
@@ -46,7 +46,7 @@ export function GuideArticlePage({ guide, related, cta }: GuideArticlePageProps)
               <p className="font-mono text-xs font-medium uppercase tracking-[0.14em] text-orange-hi">
                 {guideCategory(guide.category).label}
               </p>
-              <h1 className="mt-3 text-balance text-4xl font-semibold leading-[1.1] tracking-[-0.02em] text-ink sm:text-5xl">
+              <h1 className="mt-3 text-balance text-4xl font-semibold leading-[1.1] text-ink sm:text-5xl">
                 {guide.title}
               </h1>
               <p className="mt-5 text-xl leading-relaxed text-ink-2">{guide.summary}</p>
@@ -59,15 +59,22 @@ export function GuideArticlePage({ guide, related, cta }: GuideArticlePageProps)
               </p>
             </header>
 
-            <div className="mt-10 grid gap-10 border-t border-line pt-10 lg:grid-cols-[minmax(0,1fr)_300px] lg:gap-16">
-              <aside className="lg:col-start-2 lg:row-start-1">
-                <div className="space-y-6 lg:sticky lg:top-8">
-                  <TableOfContents sections={guide.sections} />
-                  <div className="hidden lg:block">
-                    <SideCta cta={cta} />
-                  </div>
+            <div className="mt-10 grid grid-cols-1 gap-10 border-t border-line pt-10 lg:grid-cols-[minmax(0,1fr)_300px] lg:gap-16">
+              {/*
+                The sidebar comes first so the contents sit above the article on a phone. On wide
+                screens the call to action scrolls away with the page and only the contents stay in
+                view, capped to the screen's height (scrolling inside if needed) so every entry can
+                be reached however long the guide. A plain div, not an aside: an aside inside the
+                article is a nested landmark, and the contents are already a labelled nav.
+              */}
+              <div className="lg:col-start-2 lg:row-start-1">
+                <div className="mb-6 hidden lg:block">
+                  <SideCta cta={cta} />
                 </div>
-              </aside>
+                <div className="lg:sticky lg:top-8 lg:max-h-[calc(100svh-4rem)] lg:overflow-y-auto">
+                  <TableOfContents sections={guide.sections} />
+                </div>
+              </div>
 
               <div className="min-w-0 max-w-[700px] lg:col-start-1 lg:row-start-1">
                 <GuideBody guide={guide} />
@@ -82,7 +89,7 @@ export function GuideArticlePage({ guide, related, cta }: GuideArticlePageProps)
         {related.length ? (
           <section aria-labelledby="related-title" className="border-t border-line bg-card py-16 sm:py-20">
             <div className="mx-auto w-full max-w-[1160px] px-4 sm:px-6">
-              <h2 id="related-title" className="text-2xl font-semibold tracking-[-0.01em] text-ink sm:text-3xl">
+              <h2 id="related-title" className="text-2xl font-semibold text-ink sm:text-3xl">
                 {GUIDE_PAGE_COPY.related}
               </h2>
               <ul className="mt-8 grid gap-4 md:grid-cols-3">

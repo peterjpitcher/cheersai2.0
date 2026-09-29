@@ -41,9 +41,6 @@ export const GUIDES_SEO = {
   heading: 'Social media guides for hospitality',
   intro:
     'Practical advice on Facebook and Instagram for pubs, bars, restaurants, cafes and hotels, written in plain English.',
-  imageEyebrow: 'Guides from Cheers',
-  imageHeadline: 'Social media guides for hospitality',
-  imageAlt: 'Cheers guides: social media for pubs, bars, restaurants, cafes and hotels',
 } as const;
 
 /** A guide's page title: its own SEO title when it has one, otherwise "<title> | Cheers". */

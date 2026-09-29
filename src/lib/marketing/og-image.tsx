@@ -130,3 +130,22 @@ export function shareImageNotFound(): Response {
     headers: { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store' },
   });
 }
+
+/** Seconds a crawler is asked to wait before trying a share image again. */
+export const SHARE_IMAGE_RETRY_AFTER_SECONDS = 60;
+
+/**
+ * The response for a share image while the sign-up switch cannot be read:
+ * a temporary 503 that draws nothing, so crawlers retry instead of treating
+ * the image as gone (see SwitchUnavailableError in front-door.ts).
+ */
+export function shareImageUnavailable(): Response {
+  return new Response('Temporarily unavailable', {
+    status: 503,
+    headers: {
+      'content-type': 'text/plain; charset=utf-8',
+      'cache-control': 'no-store',
+      'retry-after': String(SHARE_IMAGE_RETRY_AFTER_SECONDS),
+    },
+  });
+}

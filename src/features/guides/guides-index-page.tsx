@@ -29,7 +29,7 @@ export function GuidesIndexPage({ guides, cta }: GuidesIndexPageProps): React.JS
 
   return (
     <div className="min-h-svh bg-paper text-ink">
-      <SiteHeader cta={cta} guidesHref={GUIDES_PATH} />
+      <SiteHeader cta={cta} guidesHref={GUIDES_PATH} current="guides" />
       <main id="main">
         <JsonLd data={guidesItemListJsonLd(inPageOrder)} />
         <JsonLd data={breadcrumbJsonLd(crumbs)} />
@@ -43,7 +43,7 @@ export function GuidesIndexPage({ guides, cta }: GuidesIndexPageProps): React.JS
             </p>
             <h1
               id="guides-title"
-              className="mt-4 max-w-[760px] text-balance text-4xl font-semibold leading-[1.08] tracking-[-0.03em] text-white sm:text-5xl"
+              className="mt-4 max-w-[760px] text-balance text-4xl font-semibold leading-[1.08] text-white sm:text-5xl"
             >
               {GUIDES_SEO.heading}
             </h1>
@@ -59,7 +59,7 @@ export function GuidesIndexPage({ guides, cta }: GuidesIndexPageProps): React.JS
               <section key={group.category.id} aria-labelledby={`category-${group.category.id}`}>
                 <h2
                   id={`category-${group.category.id}`}
-                  className="text-2xl font-semibold tracking-[-0.01em] text-ink sm:text-3xl"
+                  className="text-2xl font-semibold text-ink sm:text-3xl"
                 >
                   {group.category.label}
                 </h2>

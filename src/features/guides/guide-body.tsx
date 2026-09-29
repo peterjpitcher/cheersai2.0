@@ -15,7 +15,7 @@ export function GuideBody({ guide }: { guide: Guide }): React.JSX.Element {
         <section key={section.id} aria-labelledby={section.id} className="space-y-5">
           <h2
             id={section.id}
-            className="scroll-mt-6 text-2xl font-semibold leading-tight tracking-[-0.01em] text-ink sm:text-[1.75rem]"
+            className="scroll-mt-6 text-2xl font-semibold leading-tight text-ink sm:text-[1.75rem]"
           >
             {section.heading}
           </h2>
