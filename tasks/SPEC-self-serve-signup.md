@@ -270,7 +270,7 @@ Each PR deploys on its own, passes `npm run ci:verify` (London and UTC), targets
 | # | Branch | What | Migration | Gate |
 |---|---|---|---|---|
 | **Stage 1 (P1: can ship now)** | | | | |
-| 1 | `fix/auth-rate-limits` | Database limiter replacing the Upstash no-op on sign-in, magic link and reset (§4.11); delete `/api/auth/login`; remove `@upstash/ratelimit` and `@upstash/redis`; `config.toml` `[auth] enable_signup = false`, `[auth.email] enable_confirmations = true` (now matching live) | `consume_rate_limit` with explicit grants | Order: migration, then deploy; then sign in as Peter (the HMAC key comes from `TOKEN_VAULT_KEY`, §4.11) |
+| 1 | `fix/auth-rate-limits` | Database limiter replacing the Upstash no-op on sign-in, magic link and reset (§4.11); delete `/api/auth/login`; remove `@upstash/ratelimit` and `@upstash/redis`. The planned `config.toml` `[auth] enable_signup = false` and `[auth.email] enable_confirmations = true` were never committed, so local stacks run with Supabase's default sign-up settings (found 29 September 2026; live is unaffected) | `consume_rate_limit` with explicit grants | Order: migration, then deploy; then sign in as Peter (the HMAC key comes from `TOKEN_VAULT_KEY`, §4.11) |
 | 2 | `fix/auth-confirm-button` | `/auth/confirm` GET shows "Confirm and continue", POST verifies (§4.3) | none | none |
 | **Stage 3 (dark until opening)** | | | | |
 | 3 | `feat/front-door-and-legal` | §4.1 landing and pricing, robots, footer, redirects, login link; §4.13 wording, version bump, `legal_version` in Checkout metadata | insert `app_flags ('self_serve_signup', false)` | CTA follows the switch; notice check (§4.13) before merge |

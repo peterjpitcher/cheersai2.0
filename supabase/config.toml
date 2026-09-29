@@ -21,7 +21,8 @@ project_id = "cheersai"
 # as the Authorization header; nothing in src/, tests/ or CI calls it, and library uploads build
 # their derivatives in the browser. The function checks no caller itself, so turning
 # verification on is a separate change: deploy it by name with Peter's yes, then re-run both
-# scripts.
+# scripts. Any deploy changes its behaviour as well: the live copy was last deployed on
+# 8 October 2025 from an older checkout and lacks this repo's aspect_class write.
 [functions."media-derivatives"]
   verify_jwt = false
 
