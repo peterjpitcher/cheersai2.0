@@ -125,6 +125,20 @@ describe('SignupsCard', () => {
     expect(html).toContain('The sign-up switch could not be read just now');
   });
 
+  it('says when the switch is on but billing enforcement is off, so sign-up stays closed', () => {
+    const html = renderToStaticMarkup(<SignupsCard overview={ready({ signupSwitch: 'enforcement_off' })} />);
+    expect(html).toContain('Sign-up switch on, but billing enforcement is off: sign-up stays closed.');
+    expect(html).not.toContain('Sign-up is open.');
+    expectClean(html);
+  });
+
+  it('treats a switch value it does not know as unreadable, never as open', () => {
+    const odd = { ...ready(), signupSwitch: 'maybe' } as unknown as SignupsOverview;
+    const html = renderToStaticMarkup(<SignupsCard overview={odd} />);
+    expect(html).toContain('The sign-up switch could not be read just now');
+    expect(html).not.toContain('Sign-up is open.');
+  });
+
   it('shows the first 50 of a long list and counts the rest', () => {
     const many = Array.from({ length: DIGEST_LIST_LIMIT + 3 }, (_, index) => ({
       accountId: `a${index}`,

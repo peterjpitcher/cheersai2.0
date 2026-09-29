@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 // owners, and only while self-serve sign-up is on, so nothing changes before
 // opening. Everything else on the page is stubbed out.
 
-const mockSwitch = vi.fn<() => Promise<'open' | 'closed' | 'unavailable'>>(async () => 'open');
+const mockSwitch = vi.fn<() => Promise<'open' | 'closed' | 'enforcement_off' | 'unavailable'>>(async () => 'open');
 vi.mock('@/lib/signup/switch', () => ({ getSelfServeSignupSwitch: () => mockSwitch() }));
 
 const OWNER_CTX = { features: { managementImport: false }, role: 'owner', supabase: {}, accountId: 'a1', user: { id: 'u1' }, isSuperAdmin: false };
@@ -63,8 +63,8 @@ describe('Settings: the owner data section (spec section 5, Later (P10))', () =>
     expect(html).not.toContain(OLD_LINE);
   });
 
-  it('is not shown while the switch is off or cannot be read, so existing brands see no change', async () => {
-    for (const state of ['closed', 'unavailable'] as const) {
+  it('is not shown while the switch is off, cannot be read or is on without billing enforcement, so existing brands see no change', async () => {
+    for (const state of ['closed', 'enforcement_off', 'unavailable'] as const) {
       mockSwitch.mockResolvedValue(state);
       const html = await render();
       expect(html, state).not.toContain(SECTION);

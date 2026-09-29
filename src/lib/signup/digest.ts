@@ -389,6 +389,8 @@ const NOT_REFUSED_KINDS: Readonly<Record<string, string>> = {
   closure_notice:
     "Not refused: the owner was told we have their request to close the venue, and the request email reached you; only its admin_audit record or the owner's confirmation email failed.",
   login_cleanup: 'Nobody was refused: the nightly clean-up could not delete some unused sign-up logins and tries again the next day.',
+  signup_without_enforcement:
+    'Nobody was shown an error: the sign-up switch was on while billing_enforcement was off, so sign-up stayed closed, as if the switch were off. Counted a few times an hour at most, not per visitor. Turn billing_enforcement on first, then self_serve_signup.',
   admin_export: 'No customer involved: an operator export in Admin failed at the sign-in lookup, and the Admin page said so.',
 };
 

@@ -85,6 +85,11 @@ describe("/ in production while the sign-up switch is off", () => {
     expect(await redirectOf(() => Home())).toEqual({ path: "/login", status: 307 });
   });
 
+  it("does the same when the switch is on but billing enforcement is off", async () => {
+    signedOut("enforcement_off");
+    expect(await redirectOf(() => Home())).toEqual({ path: "/login", status: 307 });
+  });
+
   it("treats a session that cannot be read as signed out", async () => {
     mocks.getUser.mockRejectedValue(new Error("supabase down"));
     mocks.switchState.mockResolvedValue("closed");
@@ -92,7 +97,7 @@ describe("/ in production while the sign-up switch is off", () => {
   });
 
   it("keeps the site-wide metadata: no new title, no price, still noindex", async () => {
-    for (const state of ["closed", "unavailable"] as const) {
+    for (const state of ["closed", "enforcement_off", "unavailable"] as const) {
       mocks.switchState.mockResolvedValue(state);
       const metadata = await generateMetadata();
       expect(metadata).toEqual({});
@@ -148,6 +153,15 @@ describe("/ on a Vercel Preview (copy approval) while the switch is off", () => 
     const { container, text } = await renderHome();
 
     expect(text).toContain("Talk to us");
+    expect(hrefs(container)).not.toContain("/signup");
+  });
+
+  it("shows Talk to us when the switch is on but billing enforcement is off", async () => {
+    signedOut("enforcement_off");
+    const { container, text } = await renderHome();
+
+    expect(text).toContain("Talk to us");
+    expect(text).not.toContain("Start your free trial");
     expect(hrefs(container)).not.toContain("/signup");
   });
 });

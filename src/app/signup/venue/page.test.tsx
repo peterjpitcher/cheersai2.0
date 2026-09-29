@@ -12,7 +12,7 @@ const mockEnv = {
 };
 vi.mock('@/env', () => ({ env: mockEnv }));
 
-const mockSwitch = vi.fn<() => Promise<'open' | 'closed' | 'unavailable'>>(async () => 'open');
+const mockSwitch = vi.fn<() => Promise<'open' | 'closed' | 'enforcement_off' | 'unavailable'>>(async () => 'open');
 vi.mock('@/lib/signup/switch', () => ({ getSelfServeSignupSwitch: () => mockSwitch() }));
 
 const mockReport = vi.fn<(kind: string, error: unknown) => Promise<void>>(async () => {});
@@ -114,11 +114,13 @@ describe('/signup/venue', () => {
   });
 
   it('shows nothing and reads no session while the switch is off: a confirmed sign-up link leads only here', async () => {
-    mockSwitch.mockResolvedValue('closed');
-    const html = await render();
-    expect(html).toContain('Sign-up is not open yet');
-    expect(html).toContain(CONTACT);
-    expect(html).not.toContain('name="venueName"');
+    for (const state of ['closed', 'enforcement_off'] as const) {
+      mockSwitch.mockResolvedValue(state);
+      const html = await render();
+      expect(html, state).toContain('Sign-up is not open yet');
+      expect(html, state).toContain(CONTACT);
+      expect(html, state).not.toContain('name="venueName"');
+    }
     expect(mockReadLogin).not.toHaveBeenCalled();
     expect(mockMarkVerified).not.toHaveBeenCalled();
     expect(mockReport).not.toHaveBeenCalled();

@@ -22,8 +22,8 @@ async function redirectOf(run: () => Promise<unknown>): Promise<{ path: string; 
 beforeEach(() => switchState.mockReset());
 
 describe("robots.txt", () => {
-  it("disallows the whole site while the switch is off or unreadable, as before", async () => {
-    for (const state of ["closed", "unavailable"]) {
+  it("disallows the whole site while the switch is off, unreadable or on without billing enforcement, as before", async () => {
+    for (const state of ["closed", "enforcement_off", "unavailable"]) {
       switchState.mockResolvedValue(state);
       expect(await robots()).toEqual({ rules: [{ userAgent: "*", disallow: "/" }] });
     }
@@ -38,8 +38,8 @@ describe("robots.txt", () => {
 });
 
 describe("/auth/signup", () => {
-  it("goes to the login page while the switch is off or unreadable, with a 307", async () => {
-    for (const state of ["closed", "unavailable"]) {
+  it("goes to the login page while the switch is off, unreadable or on without billing enforcement, with a 307", async () => {
+    for (const state of ["closed", "enforcement_off", "unavailable"]) {
       switchState.mockResolvedValue(state);
       expect(await redirectOf(() => LegacySignupRedirectPage())).toEqual({ path: "/login", status: 307 });
     }
