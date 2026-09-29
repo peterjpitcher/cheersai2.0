@@ -48,9 +48,11 @@ beforeEach(() => {
 });
 
 describe("robots.txt", () => {
-  it("disallows the whole site while the switch is off, as before", async () => {
-    switchState.mockResolvedValue("closed");
-    expect(await robots()).toEqual({ rules: [{ userAgent: "*", disallow: "/" }] });
+  it("disallows the whole site while the switch is off or on without billing enforcement, as before", async () => {
+    for (const state of ["closed", "enforcement_off"]) {
+      switchState.mockResolvedValue(state);
+      expect(await robots()).toEqual({ rules: [{ userAgent: "*", disallow: "/" }] });
+    }
   });
 
   it("fails with a server error, not a cacheable disallow, when the switch cannot be read", async () => {
@@ -113,8 +115,8 @@ describe("sitemap.xml", () => {
 });
 
 describe("/auth/signup", () => {
-  it("goes to the login page while the switch is off or unreadable, with a 307", async () => {
-    for (const state of ["closed", "unavailable"]) {
+  it("goes to the login page while the switch is off, unreadable or on without billing enforcement, with a 307", async () => {
+    for (const state of ["closed", "enforcement_off", "unavailable"]) {
       switchState.mockResolvedValue(state);
       expect(await redirectOf(() => LegacySignupRedirectPage())).toEqual({ path: "/login", status: 307 });
     }

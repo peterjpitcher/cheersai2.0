@@ -14,7 +14,7 @@ vi.mock('next/headers', () => ({
   headers: vi.fn(async () => new Headers({ 'x-forwarded-for': '203.0.113.7' })),
 }));
 
-type SwitchState = 'open' | 'closed' | 'unavailable';
+type SwitchState = 'open' | 'closed' | 'enforcement_off' | 'unavailable';
 const mockSwitch = vi.fn<() => Promise<SwitchState>>(async () => 'open');
 vi.mock('@/lib/signup/switch', () => ({ getSelfServeSignupSwitch: () => mockSwitch() }));
 
@@ -333,11 +333,15 @@ describe('requestSignup: refuses unless it may run', () => {
     expect(mockCreateService).not.toHaveBeenCalled();
   });
 
-  it('refuses while the switch is off, without an alert', async () => {
-    mockSwitch.mockResolvedValue('closed');
-    expect(await requestSignup(REQUEST())).toEqual({ error: SIGNUP_MESSAGES.notOpen });
+  it('refuses while the switch is off, or on without billing enforcement, without a sign-up alert', async () => {
+    // The switch module alerts 'signup_without_enforcement' itself; the action adds nothing.
+    for (const state of ['closed', 'enforcement_off'] as const) {
+      mockSwitch.mockResolvedValue(state);
+      expect(await requestSignup(REQUEST()), state).toEqual({ error: SIGNUP_MESSAGES.notOpen });
+    }
     expect(SIGNUP_MESSAGES.notOpen).toMatch(/not open yet.*peter@orangejelly\.co\.uk/i);
     expect(mockVerifyTurnstile).not.toHaveBeenCalled();
+    expect(mockCreateService).not.toHaveBeenCalled();
     expect(mockReport).not.toHaveBeenCalled();
   });
 
@@ -505,6 +509,8 @@ describe('reportTurnstileWidgetFailure: a broken widget is never silent on our s
 
   it('does nothing while the switch is off, or on Vercel Preview', async () => {
     mockSwitch.mockResolvedValue('closed');
+    await reportTurnstileWidgetFailure({ reason: 'widget_error' });
+    mockSwitch.mockResolvedValue('enforcement_off');
     await reportTurnstileWidgetFailure({ reason: 'widget_error' });
     mockSwitch.mockResolvedValue('unavailable');
     await reportTurnstileWidgetFailure({ reason: 'widget_error' });

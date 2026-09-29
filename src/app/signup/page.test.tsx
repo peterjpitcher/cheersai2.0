@@ -7,7 +7,7 @@ const mockEnv = {
 };
 vi.mock('@/env', () => ({ env: mockEnv }));
 
-const mockSwitch = vi.fn<() => Promise<'open' | 'closed' | 'unavailable'>>(async () => 'open');
+const mockSwitch = vi.fn<() => Promise<'open' | 'closed' | 'enforcement_off' | 'unavailable'>>(async () => 'open');
 vi.mock('@/lib/signup/switch', () => ({ getSelfServeSignupSwitch: () => mockSwitch() }));
 
 const mockGetUser = vi.fn(async () => ({ data: { user: null as { id: string } | null } }));
@@ -57,8 +57,8 @@ describe('/signup', () => {
     expect(html).not.toContain('preview deployment');
   });
 
-  it('shows "Talk to us" and no form while the switch is off or cannot be read', async () => {
-    for (const state of ['closed', 'unavailable'] as const) {
+  it('shows "Talk to us" and no form while the switch is off, cannot be read or is on without billing enforcement', async () => {
+    for (const state of ['closed', 'enforcement_off', 'unavailable'] as const) {
       mockSwitch.mockResolvedValue(state);
       const html = await render();
       expect(html, state).toContain('Sign-up is not open yet');

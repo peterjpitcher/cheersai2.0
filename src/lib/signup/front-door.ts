@@ -12,11 +12,12 @@ import type { SelfServeSignupSwitch } from '@/lib/signup/switch';
  * (SPEC-self-serve-signup §4.1, P11).
  *
  * Peter was promised that nothing new is public until he decides, so while
- * the switch is off (or cannot be read) production behaves exactly as before
- * this change: `/` sends signed-out visitors to the login page, robots.txt
- * disallows everything and every page stays noindex. Only when the switch is
- * on does `/` show the landing page and may search engines index `/` and the
- * three legal pages.
+ * the switch is off (or cannot be read, or is on while billing enforcement is
+ * off: ./switch.ts reads all three as not open) production behaves exactly as
+ * before this change: `/` sends signed-out visitors to the login page,
+ * robots.txt disallows everything and every page stays noindex. Only when the
+ * switch is open does `/` show the landing page and may search engines index
+ * `/` and the three legal pages.
  *
  * The one exception is a Vercel Preview or local development server, which
  * shows the landing page with the switch off so Peter can approve the copy on

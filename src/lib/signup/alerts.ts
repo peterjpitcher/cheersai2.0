@@ -11,8 +11,10 @@ import { createServiceSupabaseClient } from '@/lib/supabase/service';
 // §4.9): the sign-up request (/signup), venue creation (/signup/venue), the
 // nightly login clean-up, and the owner's Settings actions that came with it
 // (section 5, "Later (P10)": "Download my data" and "Ask us to close this
-// venue"). Sign-up is a public write path, so every failure caused by a
-// dependency is refused with a visible error AND made visible on our side.
+// venue"); also the switch itself, when it is on while billing enforcement is
+// off (./switch.ts keeps sign-up closed then). Sign-up is a public write path,
+// so every failure caused by a dependency is refused with a visible error AND
+// made visible on our side.
 //
 // For each failure:
 //   1. log it (Vercel logs);
@@ -30,6 +32,7 @@ import { createServiceSupabaseClient } from '@/lib/supabase/service';
 
 export type SignupFailureKind =
   | 'switch'
+  | 'signup_without_enforcement'
   | 'turnstile'
   | 'turnstile_widget'
   | 'rate_limiter'
@@ -52,6 +55,8 @@ export type SignupFailureKind =
 
 const WHAT_BROKE: Record<SignupFailureKind, string> = {
   switch: 'Cheers could not read the self-serve sign-up switch (app_flags.self_serve_signup), so sign-up is refused as if it were off.',
+  signup_without_enforcement:
+    'The self-serve sign-up switch (app_flags.self_serve_signup) is on, but billing enforcement (app_flags.billing_enforcement) is off or missing, so Cheers keeps sign-up closed: without enforcement, a venue that skipped Checkout would use Cheers free (spec decision P3). Either turn billing_enforcement on (after re-checking billing_override on every live brand) or turn self_serve_signup off. The opening-day order is billing_enforcement first, then self_serve_signup.',
   turnstile:
     'Cheers could not check the Cloudflare Turnstile answer on the sign-up form (TURNSTILE_SECRET_KEY missing or rejected, Cloudflare down or slow, or test keys in Production).',
   turnstile_widget:
@@ -99,6 +104,9 @@ function subjectFor(kind: SignupFailureKind): string {
 function whoWasTold(kind: SignupFailureKind): string {
   if (OWNER_REQUEST_KINDS.has(kind)) return 'The owner is told what happened and given our email address.';
   if (kind === 'admin_export') return 'The Admin page said the export failed.';
+  if (kind === 'signup_without_enforcement') {
+    return 'Visitors are treated exactly as when the switch is off: the home page goes to the login page and /signup says sign-up is not open yet. Nobody is shown an error.';
+  }
   return 'Visitors are shown an error and asked to try again or email us.';
 }
 

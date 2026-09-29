@@ -37,13 +37,15 @@ describe('getFirstPostHelpHref', () => {
     expect(await getFirstPostHelpHref()).toBeNull();
     mocks.getSelfServeSignupSwitch.mockResolvedValueOnce('unavailable');
     expect(await getFirstPostHelpHref()).toBeNull();
+    mocks.getSelfServeSignupSwitch.mockResolvedValueOnce('enforcement_off');
+    expect(await getFirstPostHelpHref()).toBeNull();
   });
 });
 
 describe('first-post help article', () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it.each(['closed', 'unavailable'])('is not found while the switch is %s', async (state) => {
+  it.each(['closed', 'enforcement_off', 'unavailable'])('is not found while the switch is %s', async (state) => {
     mocks.getSelfServeSignupSwitch.mockResolvedValue(state);
 
     await expect(FirstPostHelpPage()).rejects.toThrow('NEXT_NOT_FOUND');

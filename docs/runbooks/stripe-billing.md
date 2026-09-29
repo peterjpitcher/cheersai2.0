@@ -138,8 +138,8 @@ The Stripe CLI's own live key was given write access to Products, Prices, Custom
 In this order, each by Peter:
 
 1. Apply `supabase/migrations/20260928200000_trial_card_checks.sql` (it only adds the table and one retention rule; nothing reads them yet).
-2. On the "CheersAI production" restricted key, add two permissions: **PaymentMethods: Read** (to read the trial's card fingerprint) and **Subscriptions: Write** (to cancel a refused trial). Without the first, every trial's reconcile fails with a permission error (webhook 500 and an alert) and the trial runs unchecked; without the second, a refused trial cannot be cancelled and fails the same way.
-3. Add `TRIAL_CARD_HASH_KEY` to Vercel **Production** only: `openssl rand -hex 32`, pasted straight into Vercel, never into a file or chat. Preview needs none.
+2. On the "CheersAI production" restricted key, add two permissions: **PaymentMethods: Read** (to read the trial's card fingerprint) and **Subscriptions: Write** (to cancel a refused trial). Without the first, every trial's reconcile fails with a permission error (webhook 500 and an alert) and the trial runs unchecked; without the second, a refused trial cannot be cancelled and fails the same way. **Done, verified 28 September 2026:** a PaymentMethods read and a Subscriptions write, each for an id that does not exist, both answered 404 `resource_missing`, not a permission error, so both permissions are in place and nothing was created or changed.
+3. Add `TRIAL_CARD_HASH_KEY` to Vercel **Production** only: `openssl rand -hex 32`, pasted straight into Vercel, never into a file or chat. Preview needs none. **Done:** `TRIAL_CARD_HASH_KEY` (64 hex characters) is set in Vercel Production (recorded 29 September 2026).
 4. Just before merging, confirm production still has no trialing subscription (read only: `select count(*) from subscriptions where status = 'trialing'` is 0; see `TRIAL_CARD_CHECK_STARTS_AT` below).
 5. Merge and deploy. Until the key is there, Checkout says "Billing is not set up yet" and the webhook answers 503, which Stripe retries.
 

@@ -206,6 +206,7 @@ Severity: **B** blocks any new customer, **H** high, **M** medium, **L** low. Co
 
 - Order: expand migrations, deploy code that reads new state but does not enforce, confirm The Anchor and Orange Jelly resolve to `comped`, then switch the entitlement gate on with a flag.
 - Rollback: turn the gate flag off (restores today's behaviour without a deploy); stop new checkouts by removing the pricing link and disabling the Checkout route; reconcile any webhook events received during rollback once the app is back.
+- Since #156, turning `billing_enforcement` off while `self_serve_signup` is on also closes self-serve sign-up (every sign-up path treats the pair as closed), hides the owner "Download my data" and "Ask us to close this venue" buttons, and emails a `signup_without_enforcement` alert about once an hour until `self_serve_signup` is turned off too. Turn both off together when rolling billing back.
 - Payments, published posts and deleted data cannot be undone by a code rollback; test these only in Stripe test mode and on test Pages until go-live.
 
 ## 7. Verification

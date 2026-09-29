@@ -7,7 +7,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mockEnv = { server: { VERCEL_ENV: 'production' }, client: { NEXT_PUBLIC_SITE_URL: 'https://cheers.orangejelly.co.uk' } };
 vi.mock('@/env', () => ({ env: mockEnv }));
 
-const mockSwitch = vi.fn<() => Promise<'open' | 'closed' | 'unavailable'>>(async () => 'open');
+const mockSwitch = vi.fn<() => Promise<'open' | 'closed' | 'enforcement_off' | 'unavailable'>>(async () => 'open');
 vi.mock('@/lib/signup/switch', () => ({ getSelfServeSignupSwitch: () => mockSwitch() }));
 
 const mockUser = vi.fn(async () => ({ id: 'u1', activeAccountId: null as string | null }));
@@ -65,8 +65,8 @@ describe('/no-access', () => {
     expect(html).toContain('No brands assigned yet');
   });
 
-  it('is exactly as before while the switch is off or cannot be read, or on a Preview', async () => {
-    for (const state of ['closed', 'unavailable'] as const) {
+  it('is exactly as before while the switch is off, cannot be read or is on without billing enforcement, or on a Preview', async () => {
+    for (const state of ['closed', 'enforcement_off', 'unavailable'] as const) {
       mockSwitch.mockResolvedValue(state);
       const html = await render();
       expect(html, state).not.toContain('Start a free trial');
