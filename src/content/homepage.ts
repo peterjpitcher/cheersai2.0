@@ -21,14 +21,26 @@ import { VENUE_TYPES, type VenueType } from '@/lib/signup/venue-form';
 /** When the homepage copy last changed, for the sitemap. Update it with the copy. */
 export const HOME_CONTENT_UPDATED = '2026-09-29';
 
+/**
+ * The hero says who Cheers is for before anything else (Peter, 29 September
+ * 2026: "really push on how this has been designed for hospitality"). The
+ * date strip is automatic on event posts only (createScheduledBatch sets
+ * banner_enabled for events), and TONIGHT is its label on the day of an
+ * evening event (proximity-label.ts).
+ */
 export const HERO = {
   eyebrow: 'Social media for pubs, bars, restaurants, cafes and hotels',
-  title: "Tell Cheers what's on.",
-  titleAccent: 'It writes the posts and puts them out on time.',
+  title: 'Made for hospitality.',
+  titleAccent: "Cheers writes your venue's posts and puts them out on time.",
   intro:
-    "Describe a post once and Cheers writes a version for Facebook and one for Instagram, in your venue's voice. You check it, approve it and pick the time. Cheers does the posting.",
+    "Tell Cheers what's on, from quiz night to the Sunday roast, and it writes a post for Facebook and one for Instagram in your venue's voice. Event posts get THIS FRIDAY or TONIGHT on the picture. Nothing goes out until you approve it.",
   secondaryCta: 'See how it works',
-  points: ['Facebook Pages and Instagram', 'You approve every post', `From ${COMPANY.legalName}, a UK company`],
+  points: [
+    'Event posts that count down to the night',
+    'Writes as a pub, bar, restaurant, cafe or hotel',
+    'You approve every post',
+    `From ${COMPANY.legalName}, a UK company`,
+  ],
 } as const;
 
 /** Under the hero button while sign-up is open. */
@@ -60,7 +72,68 @@ export const HOW_IT_WORKS = {
   ],
 } as const;
 
-export type FeatureIcon = 'voice' | 'platforms' | 'planner' | 'publishing' | 'events' | 'weekly' | 'library' | 'link' | 'team';
+export type HospitalityIcon = 'events' | 'weekly' | 'voice' | 'link';
+
+export interface HospitalityPoint {
+  readonly icon: HospitalityIcon;
+  readonly title: string;
+  readonly body: string;
+}
+
+/** Two of the clichés Cheers keeps out of every post (voice.ts BANNED_PHRASES; a page test checks). */
+export const CLICHE_EXAMPLES = ['a night to remember', 'mouth-watering'] as const;
+
+export const HOSPITALITY_SECTION = {
+  eyebrow: 'Built for venues',
+  heading: 'Made for the way venues work',
+  intro:
+    'Events need a run-up. The quiz comes round every week. Guests want to book a table or see the menu. Cheers is built around all of it.',
+} as const;
+
+/**
+ * What only a venue needs, each checked against the code on 29 September 2026:
+ * - events: the wizard suggests weekly posts up to four weeks out, then two
+ *   days, one day and the day itself (event-cadence.ts); an event posts to the
+ *   feed and as a story by default (content.ts resolveBatchPlacements, create
+ *   schema); its date strip is switched on automatically and the publish
+ *   worker prints the label for each post's own date (content.ts,
+ *   publish-queue worker and banner-label.ts, mirrored by proximity-label.ts).
+ * - weekly: as the create wizard works (every date written up front, approved
+ *   there, then scheduled; nothing carries on past the end date).
+ * - voice: the venue type from sign-up is brand_profile.business_type, which
+ *   the prompt names (venue-form.ts, prompts.ts); British English is in the
+ *   prompt; the house list of clichés (voice.ts BANNED_PHRASES) is in the
+ *   prompt and removed afterwards (ai-generate.ts, postprocess.ts); tone,
+ *   key phrases and banned phrases are the brand voice settings.
+ * - link: the public link-in-bio page's buttons, each shown once filled in,
+ *   and its "Live now" list (link-in-bio-public-page.tsx).
+ */
+export function hospitalityPoints(): HospitalityPoint[] {
+  return [
+    {
+      icon: 'events',
+      title: 'Events with a proper run-up',
+      body: 'Add an event and Cheers suggests the run-up: posts in the weeks before, two days before, the day before and on the day, each on your feed and as a story. The strip on the picture changes as the day gets closer, from THIS FRIDAY to TOMORROW NIGHT to TONIGHT.',
+    },
+    {
+      icon: 'weekly',
+      title: 'Weekly regulars, set up once',
+      body: `Quiz every Tuesday or curry night every Thursday? Pick the days, a time and an end date. Cheers writes a post for every date in one go for you to check and approve, then puts each one out on its day, up to ${WEEKLY_MAX_OCCURRENCES} dates at a time.`,
+    },
+    {
+      icon: 'voice',
+      title: 'Posts that sound like your venue',
+      body: `Choose pub, bar, restaurant, cafe or hotel when you sign up and Cheers writes as that kind of place, in British English. It keeps out tired lines like "${CLICHE_EXAMPLES[0]}" and "${CLICHE_EXAMPLES[1]}". Set your tone, add the phrases you always use and ban the ones you never want to see.`,
+    },
+    {
+      icon: 'link',
+      title: 'A link in bio for bookings and menus',
+      body: "Put one link on your Instagram profile and it opens a page with Book a table, See our menu, Call us and Find us buttons, plus what's on now.",
+    },
+  ];
+}
+
+export type FeatureIcon = 'platforms' | 'planner' | 'publishing' | 'offers' | 'library' | 'team';
 
 export interface Feature {
   readonly icon: FeatureIcon;
@@ -70,7 +143,7 @@ export interface Feature {
 
 export const FEATURES_SECTION = {
   eyebrow: 'What you get',
-  heading: 'What Cheers does for your venue',
+  heading: 'Everything else you need',
   intro: 'Writing, planning and posting, handled in one place.',
 } as const;
 
@@ -89,14 +162,16 @@ function seatsSentence(): string | null {
   return `${PLANS.starter.name} includes ${starter.seats} team seats and ${PLANS.professional.name} includes ${professional.seats}, counting the owner${duringTrial}.`;
 }
 
+/**
+ * Everything the hospitality section does not already cover. Offers: a
+ * promotion needs an end date and the wizard suggests Launch, Mid-run reminder
+ * and Last chance posts (promotion-fields.tsx, suggestion-utils.ts). Photos:
+ * the library's tags describe the subject, the setting, any food or drink and
+ * the mood (media-tagging.ts).
+ */
 export function homeFeatures(): Feature[] {
   const seats = seatsSentence() ?? 'Every plan includes team seats, counting the owner.';
   return [
-    {
-      icon: 'voice',
-      title: 'Posts that sound like you',
-      body: 'Cheers writes to your brand profile: your type of venue, your tone, the phrases you use and the ones you never want to see.',
-    },
     {
       icon: 'platforms',
       title: 'Facebook and Instagram from one idea',
@@ -113,26 +188,14 @@ export function homeFeatures(): Feature[] {
       body: 'Approved posts publish automatically at the time you set. Cheers checks each one before it goes and emails you if something fails.',
     },
     {
-      icon: 'events',
-      title: 'Events that build up to the night',
-      body: 'Add an event and Cheers plans the posts in the run-up, with a banner on the photo such as Tonight or This Friday, and a story alongside each post.',
-    },
-    {
-      // As the create wizard works: every date's post is written up front,
-      // approved there, then scheduled; nothing carries on past the end date.
-      icon: 'weekly',
-      title: 'Weekly regulars, set up once',
-      body: `Quiz every Tuesday or curry night every Thursday? Pick the days, a time and an end date. Cheers writes a post for every date in one go for you to check and approve, then puts each one out on its day, up to ${WEEKLY_MAX_OCCURRENCES} dates at a time.`,
+      icon: 'offers',
+      title: 'Specials and offers, start to finish',
+      body: 'Running a special, like 2-for-1 cocktails until Sunday? Give it an end date and Cheers suggests a launch post, a reminder and a last-chance post.',
     },
     {
       icon: 'library',
       title: 'A photo library that sorts itself',
-      body: 'Upload your photos to the library and Cheers names and tags them, so the right picture is easy to find next time.',
-    },
-    {
-      icon: 'link',
-      title: 'A link-in-bio page',
-      body: "Give Instagram visitors one link with buttons to book, call, find you or see your menu, plus what's on now.",
+      body: 'Upload photos of your food, drinks and venue, and Cheers names and tags them, so the right picture is easy to find next time.',
     },
     {
       icon: 'team',
@@ -144,8 +207,8 @@ export function homeFeatures(): Feature[] {
 
 export const AUDIENCE_SECTION = {
   eyebrow: 'Who it is for',
-  heading: 'Made for hospitality',
-  intro: 'Tell Cheers what kind of place you run and it writes for it.',
+  heading: 'Whatever kind of venue you run',
+  intro: 'Tell Cheers what you run when you sign up and it writes for that kind of place.',
 } as const;
 
 /** The venue types the homepage names: every sign-up venue type except "other". */
@@ -155,14 +218,14 @@ export type NamedVenueType = Exclude<VenueType, 'other'>;
 const AUDIENCE_EXAMPLES: Record<NamedVenueType, { heading: string; examples: string }> = {
   pub: {
     heading: 'Pubs',
-    examples: 'Quiz nights, live sport, Sunday roasts and the first sunny day in the beer garden.',
+    examples: 'Quiz nights, match days, Sunday roasts and the first sunny day in the beer garden.',
   },
   bar: { heading: 'Bars', examples: 'Cocktail lists, DJ nights, live music and private hire.' },
   restaurant: {
     heading: 'Restaurants',
-    examples: 'New menus, set lunches, special dinners and weekend bookings.',
+    examples: 'New menus, the specials board, set lunches and Christmas party bookings.',
   },
-  cafe: { heading: 'Cafes', examples: "Today's bakes, brunch, seasonal drinks and new opening hours." },
+  cafe: { heading: 'Cafes', examples: "Today's bakes, brunch, seasonal drinks and bank holiday opening hours." },
   hotel: {
     heading: 'Hotels',
     examples: 'Weekend stays, afternoon tea, weddings and events in your function room.',
@@ -186,6 +249,19 @@ export function otherVenueNote(): string {
   return other
     ? `Run something else? Choose ${other.label} when you sign up.`
     : 'Run another kind of hospitality business? Cheers works for you too.';
+}
+
+/** "pubs, bars, restaurants, cafes and hotels": the sign-up form's venue types, in its order. */
+export function venueTypeList(): string {
+  const names = audiences().map((audience) => audience.heading.toLowerCase());
+  return names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}` : names.join('');
+}
+
+/** The FAQ answer on who Cheers is for, from the sign-up form's venue types. */
+function whoItIsForAnswer(): string {
+  const other = VENUE_TYPES.find((venue) => venue.value === 'other');
+  const orOther = other ? `, or ${other.label},` : '';
+  return `No. Cheers is made for ${venueTypeList()}. When you sign up you choose your type of venue${orOther} and Cheers writes your posts for that kind of place.`;
 }
 
 export const PRICING_SECTION = {
@@ -237,6 +313,10 @@ export function homeFaq(): FaqItem[] {
     {
       question: 'Which social networks does Cheers post to?',
       answer: 'Facebook Pages and Instagram professional accounts. Cheers does not post to any other network.',
+    },
+    {
+      question: 'Is Cheers only for pubs?',
+      answer: whoItIsForAnswer(),
     },
     {
       question: 'Who writes the posts?',

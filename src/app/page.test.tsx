@@ -3,7 +3,7 @@ import { cleanup, render } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { bannedClaimsIn } from "@/content/claims";
-import { homeFaq } from "@/content/homepage";
+import { CLICHE_EXAMPLES, HERO, homeFaq, hospitalityPoints } from "@/content/homepage";
 import { plainText } from "@/content/rich-text";
 import { HOME_SEO } from "@/content/seo";
 import { EXAMPLE_WEEK_POSTS } from "@/features/front-door/planner-illustration";
@@ -220,6 +220,62 @@ describe("the guides links on the homepage", () => {
 
 describe("the homepage content", () => {
   beforeEach(() => signedOut("open"));
+
+  it("says who Cheers is for before anything else", async () => {
+    const { container } = await renderHome();
+    const hero = container.querySelector('section[aria-labelledby="hero-title"]');
+
+    expect(hero?.querySelector("h1")?.textContent).toBe(
+      "Made for hospitality. Cheers writes your venue's posts and puts them out on time.",
+    );
+    expect(hero?.textContent).toContain("Social media for pubs, bars, restaurants, cafes and hotels");
+    expect(hero?.textContent).toContain("Tell Cheers what's on, from quiz night to the Sunday roast");
+    for (const point of HERO.points) expect(hero?.textContent).toContain(point);
+  });
+
+  it("follows the hero with what only a venue needs, then the kinds of venue, then how it works", async () => {
+    const { container } = await renderHome();
+    const sections = Array.from(container.querySelectorAll("main > section")).map((section) =>
+      section.getAttribute("aria-labelledby"),
+    );
+
+    expect(sections.slice(0, 5)).toEqual([
+      "hero-title",
+      "hospitality-title",
+      "audience-title",
+      "how-it-works-title",
+      "features-title",
+    ]);
+  });
+
+  it("shows each venue feature with its heading, words and a described picture", async () => {
+    const { container } = await renderHome();
+    const cards = Array.from(container.querySelectorAll("[data-hospitality-point]"));
+
+    expect(cards.map((card) => card.getAttribute("data-hospitality-point"))).toEqual(["events", "weekly", "voice", "link"]);
+    hospitalityPoints().forEach((point, index) => {
+      expect(cards[index].querySelector("h3")?.textContent).toBe(point.title);
+      expect(cards[index].textContent).toContain(point.body);
+      expect(cards[index].querySelector('[role="img"]')?.getAttribute("aria-label")).toBeTruthy();
+    });
+  });
+
+  it("draws the event run-up with the labels on the picture, on the feed and as a story", async () => {
+    const { container } = await renderHome();
+    const picture = container.querySelector('[data-hospitality-point="events"] [role="img"]');
+    const days = Array.from(picture?.querySelectorAll("ol > li") ?? []).map((day) => day.textContent ?? "");
+
+    expect(days).toEqual(["WedTHIS FRIDAYFeedStory", "ThuTOMORROW NIGHTFeedStory", "FriTONIGHTFeedStory"]);
+    expect(picture?.getAttribute("aria-label")).toContain("THIS FRIDAY");
+  });
+
+  it("draws the venue types from the sign-up form and the clichés Cheers keeps out", async () => {
+    const { container } = await renderHome();
+    const picture = container.querySelector('[data-hospitality-point="voice"] [role="img"]');
+
+    for (const type of ["Pub", "Bar", "Restaurant", "Cafe", "Hotel"]) expect(picture?.textContent).toContain(type);
+    for (const phrase of CLICHE_EXAMPLES) expect(picture?.textContent).toContain(phrase);
+  });
 
   it("shows the logo larger in the header and the footer, sharp on high-density screens", async () => {
     const { container } = await renderHome();
