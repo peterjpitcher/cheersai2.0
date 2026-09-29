@@ -33,12 +33,6 @@ All server actions use `'use server'` directive. Auth is verified server-side vi
 | `getCalendarItemsAction` | content_items | -- |
 | `createScheduledBatch` | content_items | revalidatePath |
 
-### Publish (`publish.ts`)
-
-| Action | Tables | Audit |
-|--------|--------|-------|
-| `retryPublishJob` | publish_jobs | -- |
-
 ### Tournament (`tournament.ts`)
 
 | Action | Tables | Audit |

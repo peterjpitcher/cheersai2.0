@@ -41,7 +41,6 @@ const GUARDED: Record<string, Record<string, 'create' | 'publish'>> = {
   },
   'src/app/actions/media.ts': { uploadMediaAction: 'create', updateMediaTags: 'create', attachMediaToContent: 'create' },
   'src/app/(app)/create/template-actions.ts': { saveTemplate: 'create' },
-  'src/app/actions/publish.ts': { retryPublishJob: 'publish' },
   'src/lib/link-in-bio/profile.ts': {
     upsertLinkInBioProfile: 'create',
     createLinkInBioTile: 'create',
