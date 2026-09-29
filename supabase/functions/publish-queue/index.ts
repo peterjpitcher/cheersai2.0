@@ -1,13 +1,23 @@
 /// <reference lib="dom" />
 /// <reference lib="deno.unstable" />
 
+import { CALLER_CHECK_ENFORCED, checkCaller, logCallerVerdict } from "./caller-auth.ts";
 import { readPublishQueueRequest } from "./request-options.ts";
 import { PublishQueueWorker, createDefaultConfig } from "./worker.ts";
 
 const config = createDefaultConfig();
 const worker = new PublishQueueWorker(config);
+const readEnv = (name: string) => Deno.env.get(name);
 
 Deno.serve(async (request: Request) => {
+  // Who is calling, before the method check and before the body is read (caller-auth.ts). While
+  // CALLER_CHECK_ENFORCED is false (step 1, report-only) a refused caller is only logged.
+  const caller = await checkCaller(request.headers, readEnv);
+  logCallerVerdict(caller, { method: request.method, enforced: CALLER_CHECK_ENFORCED });
+  if (CALLER_CHECK_ENFORCED && !caller.accepted) {
+    return new Response(null, { status: 401 });
+  }
+
   if (request.method !== "POST") {
     return new Response("Method not allowed", { status: 405 });
   }
