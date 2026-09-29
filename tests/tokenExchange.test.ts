@@ -206,6 +206,16 @@ describe("Meta login helpers", () => {
       expect((failure as Error).message).toBe("Session expired (code 190)");
       expect((failure as Error).message).not.toContain("secret-user-token");
     });
+
+    it("removes an access token that Meta echoes in its error text", async () => {
+      mockFetchSequence([
+        jsonResponse({ error: { message: "Invalid token EAABsbCS1iHgBAKZCZBZCxyz0123456789", type: "OAuthException", code: 190 } }, 400),
+      ]);
+
+      const failure = await fetchManagedPages("user-token").catch((error: Error) => error);
+
+      expect((failure as Error).message).toBe("OAuthException: Invalid token [redacted token] (code 190)");
+    });
   });
 
   describe("buildPageConnection", () => {

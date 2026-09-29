@@ -1,5 +1,6 @@
 import { env } from "@/env";
 import { getMetaGraphApiBase } from "@/lib/meta/graph";
+import { redactMetaAccessTokens } from "@/lib/meta/redact";
 import type { Provider } from "@/lib/connections/oauth";
 import { toManagedPage, type ManagedPage } from "@/lib/connections/page-selection";
 
@@ -243,13 +244,14 @@ async function safeJson(response: Response) {
   }
 }
 
+/** Meta's error as text, with any access token it echoes removed (it is logged and shown). */
 function resolveGraphError(payload: unknown) {
   if (payload && typeof payload === "object" && "error" in payload) {
     const err = (payload as { error: { message?: string; type?: string; code?: number } }).error;
     const message = err?.message ?? "Unknown Graph API error";
     const type = err?.type ? `${err.type}: ` : "";
     const code = err?.code ? ` (code ${err.code})` : "";
-    return `${type}${message}${code}`;
+    return redactMetaAccessTokens(`${type}${message}${code}`);
   }
   return "Facebook token exchange failed";
 }
