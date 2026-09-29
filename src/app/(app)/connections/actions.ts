@@ -191,7 +191,7 @@ export async function completeOAuthConnect(
   // before the state is marked used, so someone else's attempt does not use it up,
   // and answered like an unknown state. Ids only in the log: never the state itself.
   if (state.created_by !== ctx.user.id) {
-    logger.warn("OAuth state refused: started by someone else", {
+    logger.warn("OAuth state refused: not started by the signed-in user", {
       stateId: state.id,
       accountId: state.account_id,
       provider,

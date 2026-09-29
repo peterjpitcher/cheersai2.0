@@ -64,7 +64,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   }
   if (!userId || oauthState.created_by !== userId) {
     logger.warn(
-      userId ? "Meta Ads login refused: started by someone else" : "Meta Ads login refused: not signed in",
+      userId ? "Meta Ads login refused: not started by the signed-in user" : "Meta Ads login refused: not signed in",
       { ...refusal, userId },
     );
     return NextResponse.redirect(`${SITE_URL}/connections?ads_error=invalid_state`);

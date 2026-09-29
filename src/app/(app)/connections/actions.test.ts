@@ -502,7 +502,7 @@ describe('completeOAuthConnect', () => {
     // No Page choice was made, and the state is still there for the person who started it.
     expect(db.rows('oauth_states')).toHaveLength(1);
     expect(db.rows('oauth_states')[0].used_at).toBeNull();
-    expect(warnings()).toContain('OAuth state refused: started by someone else');
+    expect(warnings()).toContain('OAuth state refused: not started by the signed-in user');
     expect(warnings()).toContain(`"userId":"${OTHER_USER_ID}"`);
     expect(warnings()).toContain(`"startedBy":"${USER_ID}"`);
     // Ids only: never the state itself.
@@ -522,6 +522,7 @@ describe('completeOAuthConnect', () => {
     expect(mockExchangeCodeForUserToken).not.toHaveBeenCalled();
     expect(db.rows('social_connections')).toHaveLength(0);
     expect(db.rows('oauth_states')[0].used_at).toBeNull();
+    expect(warnings()).toContain('OAuth state refused: not started by the signed-in user');
     expect(warnings()).toContain('"startedBy":null');
   });
 

@@ -168,7 +168,7 @@ describe('GET /api/oauth/facebook-ads/callback', () => {
     expect(mocks.adAccountUpsert).not.toHaveBeenCalled();
     expect(mocks.storeMetaAdAccountToken).not.toHaveBeenCalled();
     expect(stateRow('state-1')).toEqual(before);
-    expect(logged('warn')).toContain('Meta Ads login refused: started by someone else');
+    expect(logged('warn')).toContain('Meta Ads login refused: not started by the signed-in user');
     expect(logged('warn')).toContain(`"userId":"${OTHER_USER}"`);
     expect(logged('warn')).toContain(`"startedBy":"${USER}"`);
     // Ids only: never the state itself.
@@ -200,6 +200,7 @@ describe('GET /api/oauth/facebook-ads/callback', () => {
     expect(response.headers.get('location')).toBe('https://cheers.test/connections?ads_error=invalid_state');
     expect(fetchMock).not.toHaveBeenCalled();
     expect(stateRow('old-state')).toEqual(before);
+    expect(logged('warn')).toContain('Meta Ads login refused: not started by the signed-in user');
     expect(logged('warn')).toContain('"startedBy":null');
   });
 
