@@ -1,7 +1,7 @@
 import { buildCustomRoute } from 'next/dist/lib/build-custom-route';
 import { describe, expect, it } from 'vitest';
 
-import { INDEXABLE_PATHS, securityHeaders } from '@/lib/security/headers';
+import { INDEXABLE_PATHS, INDEXABLE_SECTIONS, securityHeaders } from '@/lib/security/headers';
 
 /**
  * The headers each path gets, matched the way Next compiles `headers()` rules
@@ -34,11 +34,20 @@ const NOT_INDEXABLE = [
   '/privacy-policy',
   '/data-processing/annex',
   '/_next/static/chunk.js',
+  '/guides-old',
+  '/guidesx',
+  '/guides/some-guide/extra',
+  '/og',
+  '/og/guides/some-guide',
+  '/sitemap.xml',
 ];
+
+/** Each guide sits one level below /guides and may be indexed once the switch is on. */
+const GUIDE_PAGES = ['/guides/some-guide', '/guides/some-guide/', '/guides/plan-a-week-of-pub-posts'];
 
 describe('security headers', () => {
   it('send the security headers on every path, indexable or not', () => {
-    for (const path of [...INDEXABLE_PATHS, ...NOT_INDEXABLE]) {
+    for (const path of [...INDEXABLE_PATHS, ...GUIDE_PAGES, ...NOT_INDEXABLE]) {
       const headers = headersFor(path);
       expect(headers['X-Frame-Options'], path).toBe('DENY');
       expect(headers['X-Content-Type-Options'], path).toBe('nosniff');
@@ -48,8 +57,15 @@ describe('security headers', () => {
   });
 
   it('never send X-Robots-Tag on the home page and the three legal pages, so they can be indexed once sign-up opens (P11)', () => {
-    expect(INDEXABLE_PATHS).toEqual(['/', '/terms', '/privacy', '/data-processing']);
+    expect(INDEXABLE_PATHS).toEqual(['/', '/terms', '/privacy', '/data-processing', '/guides']);
     for (const path of [...INDEXABLE_PATHS, '/terms/', '/privacy/', '/data-processing/']) {
+      expect(headersFor(path)['X-Robots-Tag'], path).toBeUndefined();
+    }
+  });
+
+  it('never send X-Robots-Tag on /guides or a guide one level below it', () => {
+    expect(INDEXABLE_SECTIONS).toEqual(['/guides']);
+    for (const path of ['/guides', '/guides/', ...GUIDE_PAGES]) {
       expect(headersFor(path)['X-Robots-Tag'], path).toBeUndefined();
     }
   });

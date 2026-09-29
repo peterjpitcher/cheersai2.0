@@ -17,6 +17,14 @@ export const COMPANY = {
   siteHost: "cheers.orangejelly.co.uk",
 } as const;
 
+/**
+ * The company details sentence the law asks for on the website, written once
+ * for the legal pages' footer and the public site's footer.
+ */
+export function companyDetailsLine(): string {
+  return `${COMPANY.tradingName} is a trading name of ${COMPANY.legalName}, a company registered in ${COMPANY.registeredIn}, company number ${COMPANY.companyNumber}. Registered office: ${COMPANY.registeredOffice}. Trading address: ${COMPANY.tradingAddress}. VAT number ${COMPANY.vatNumber}.`;
+}
+
 /** One contact route for support, privacy requests and complaints. */
 export const CONTACT = {
   email: "peter@orangejelly.co.uk",

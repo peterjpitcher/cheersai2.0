@@ -2,21 +2,28 @@
 import { cleanup, render } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { homeFaq } from "@/content/homepage";
+import { plainText } from "@/content/rich-text";
+import { HOME_SEO } from "@/content/seo";
 import { PLANS } from "@/lib/billing/plans";
 import type { SelfServeSignupSwitch } from "@/lib/signup/switch";
 
+import { SAMPLE_GUIDES } from "../../tests/fixtures/guides/sample-guides";
+
 /**
- * `/` (SPEC-self-serve-signup §4.1, PR 3 tests): signed-in visitors go to the
- * app with a 307; while the sign-up switch is off or unreadable, production
- * behaves as before (the login page); the landing page shows prices from
- * PLANS, each "ex VAT", never mentions paid ads or tournaments, and offers
- * sign-up only when the switch is on.
+ * `/` (SPEC-self-serve-signup §4.1, SPEC-homepage-and-guides): signed-in
+ * visitors go to the app with a 307; while the sign-up switch is off or
+ * unreadable, production behaves as before (the login page); the homepage
+ * shows prices from PLANS, each "ex VAT", never mentions paid ads or
+ * tournaments, offers sign-up only when the switch is on, and links the
+ * guides only while they are public.
  */
 
 const mocks = vi.hoisted(() => ({
   getUser: vi.fn(),
   switchState: vi.fn(),
   serverEnv: { VERCEL_ENV: "production" } as Record<string, string>,
+  guides: [] as import("@/content/guides/types").Guide[],
 }));
 
 vi.mock("@/env", () => ({
@@ -28,6 +35,7 @@ vi.mock("@/lib/supabase/server", () => ({
 vi.mock("@/lib/signup/switch", () => ({
   getSelfServeSignupSwitch: () => mocks.switchState(),
 }));
+vi.mock("@/content/guides", () => ({ listGuides: () => mocks.guides }));
 
 const { default: Home, generateMetadata } = await import("@/app/page");
 
@@ -59,9 +67,18 @@ function hrefs(container: HTMLElement): string[] {
   return Array.from(container.querySelectorAll("a")).map((a) => a.getAttribute("href") ?? "");
 }
 
+/** Every JSON-LD object on the page, with @graph members flattened out. */
+function jsonLd(container: HTMLElement): Record<string, unknown>[] {
+  return Array.from(container.querySelectorAll('script[type="application/ld+json"]')).flatMap((script) => {
+    const data = JSON.parse(script.textContent ?? "{}") as Record<string, unknown>;
+    return Array.isArray(data["@graph"]) ? (data["@graph"] as Record<string, unknown>[]) : [data];
+  });
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.serverEnv.VERCEL_ENV = "production";
+  mocks.guides = [];
 });
 afterEach(cleanup);
 
@@ -96,13 +113,13 @@ describe("/ in production while the sign-up switch is off", () => {
       mocks.switchState.mockResolvedValue(state);
       const metadata = await generateMetadata();
       expect(metadata).toEqual({});
-      expect(JSON.stringify(metadata)).not.toMatch(/£|ex VAT|Social media for hospitality venues/);
+      expect(JSON.stringify(metadata)).not.toMatch(/£|ex VAT|Social media for/);
     }
   });
 });
 
 describe("/ in production once the sign-up switch is on", () => {
-  it("shows the landing page with Start your free trial, and no Talk to us", async () => {
+  it("shows the homepage with Start your free trial, and no Talk to us", async () => {
     signedOut("open");
     const { container, text } = await renderHome();
 
@@ -111,12 +128,29 @@ describe("/ in production once the sign-up switch is on", () => {
     expect(hrefs(container)).toContain("/signup");
   });
 
-  it("has its own title and description, and may be indexed", async () => {
+  it("has a header with Sign in and the call to action", async () => {
+    signedOut("open");
+    const { container } = await renderHome();
+    const header = container.querySelector("header");
+
+    expect(header?.textContent).toContain("Sign in");
+    expect(header?.textContent).toContain("Start your free trial");
+    expect(Array.from(header?.querySelectorAll("a") ?? []).map((a) => a.getAttribute("href"))).toEqual(
+      expect.arrayContaining(["/login", "/signup"]),
+    );
+  });
+
+  it("has its own title, description, canonical URL and share cards, and may be indexed", async () => {
     mocks.switchState.mockResolvedValue("open");
     const metadata = await generateMetadata();
-    expect(metadata.title).toBe("Cheers by Orange Jelly | Social media for hospitality venues");
+
+    expect(metadata.title).toBe(HOME_SEO.title);
     expect(metadata.description).toContain("From £29.99 a month ex VAT, with a 14-day free trial.");
     expect(metadata.robots).toEqual({ index: true, follow: true });
+    expect(metadata.alternates?.canonical).toBe("https://cheers.orangejelly.co.uk/");
+    const image = { url: "https://cheers.orangejelly.co.uk/og", width: 1200, height: 630, alt: HOME_SEO.imageAlt };
+    expect(metadata.openGraph).toMatchObject({ url: "https://cheers.orangejelly.co.uk/", locale: "en_GB", images: [image] });
+    expect(metadata.twitter).toMatchObject({ card: "summary_large_image", images: [image] });
   });
 });
 
@@ -125,7 +159,7 @@ describe("/ on a Vercel Preview (copy approval) while the switch is off", () => 
     mocks.serverEnv.VERCEL_ENV = "preview";
   });
 
-  it("shows the landing page with Talk to us and never offers sign-up", async () => {
+  it("shows the homepage with Talk to us and never offers sign-up", async () => {
     signedOut("closed");
     const { container, text, html } = await renderHome();
 
@@ -139,7 +173,7 @@ describe("/ on a Vercel Preview (copy approval) while the switch is off", () => 
   it("carries the new title for review but stays noindex", async () => {
     mocks.switchState.mockResolvedValue("closed");
     const metadata = await generateMetadata();
-    expect(metadata.title).toBe("Cheers by Orange Jelly | Social media for hospitality venues");
+    expect(metadata.title).toBe(HOME_SEO.title);
     expect(metadata.robots).toBeUndefined();
   });
 
@@ -150,9 +184,41 @@ describe("/ on a Vercel Preview (copy approval) while the switch is off", () => 
     expect(text).toContain("Talk to us");
     expect(hrefs(container)).not.toContain("/signup");
   });
+
+  it("never links the guides while the switch is off, even when guides exist", async () => {
+    mocks.guides = SAMPLE_GUIDES;
+    for (const state of ["closed", "unavailable"] as const) {
+      signedOut(state);
+      const { container, text } = await renderHome();
+      expect(hrefs(container).filter((href) => href.startsWith("/guides"))).toEqual([]);
+      expect(text).not.toContain("Guides for hospitality social media");
+      cleanup();
+    }
+  });
 });
 
-describe("the landing page content", () => {
+describe("the guides links on the homepage", () => {
+  it("are left out while there are no guides, even with the switch on", async () => {
+    signedOut("open");
+    const { container } = await renderHome();
+    expect(hrefs(container).filter((href) => href.startsWith("/guides"))).toEqual([]);
+  });
+
+  it("appear in the header, the footer and a newest-guides section once the switch is on and guides exist", async () => {
+    mocks.guides = SAMPLE_GUIDES;
+    signedOut("open");
+    const { container, text } = await renderHome();
+
+    const header = container.querySelector("header");
+    const footer = container.querySelector("footer");
+    expect(Array.from(header?.querySelectorAll("a") ?? []).map((a) => a.textContent)).toContain("Guides");
+    expect(footer?.querySelector('a[href="/guides"]')?.textContent).toBe("Guides");
+    expect(text).toContain("Guides for hospitality social media");
+    for (const guide of SAMPLE_GUIDES) expect(hrefs(container)).toContain(`/guides/${guide.slug}`);
+  });
+});
+
+describe("the homepage content", () => {
   beforeEach(() => signedOut("open"));
 
   it("takes every price from PLANS and marks each one ex VAT", async () => {
@@ -180,6 +246,17 @@ describe("the landing page content", () => {
     for (const shown of text.match(/£\d+\.\d{2}/g) ?? []) expect(allowed).toContain(shown);
   });
 
+  it("works out the yearly saving from PLANS", async () => {
+    const { container } = await renderHome();
+    for (const id of ["starter", "professional"] as const) {
+      const { monthlyPricePence, annualPricePence } = PLANS[id];
+      const saving = Math.round((1 - (annualPricePence ?? 0) / ((monthlyPricePence ?? 0) * 12)) * 100);
+      const cardText = container.querySelector(`[aria-labelledby="plan-${id}"]`)?.textContent ?? "";
+      expect(saving).toBeGreaterThan(0);
+      expect(cardText).toContain(`Save ${saving}% when you pay yearly`);
+    }
+  });
+
   it("states the trial as the terms do", async () => {
     const { text } = await renderHome();
     expect(text).toContain("14-day free trial");
@@ -191,6 +268,12 @@ describe("the landing page content", () => {
     const { text } = await renderHome();
     expect(text).toContain("Admin access to your venue's Facebook Page");
     expect(text).toContain("a professional Instagram account linked to that Facebook Page");
+  });
+
+  it("names every kind of venue it is for", async () => {
+    const { text } = await renderHome();
+    for (const venue of ["Pubs", "Bars", "Restaurants", "Cafes", "Hotels"]) expect(text).toContain(venue);
+    expect(text).toContain("Other hospitality venue");
   });
 
   it("never mentions paid ads, tournaments or Google", async () => {
@@ -212,5 +295,57 @@ describe("the landing page content", () => {
     const { text, html } = await renderHome();
     expect(html).not.toContain(String.fromCharCode(0x2014));
     for (const bad of ["undefined", "NaN", "Invalid Date", "£0.00", "null"]) expect(text).not.toContain(bad);
+  });
+});
+
+describe("the homepage structured data", () => {
+  beforeEach(() => signedOut("open"));
+
+  it("repeats every visible FAQ, question and answer, word for word", async () => {
+    const { container } = await renderHome();
+    const shown = Array.from(container.querySelectorAll("details[data-faq]")).map((item) => ({
+      question: item.querySelector("[data-faq-question]")?.textContent,
+      answer: item.querySelector("[data-faq-answer]")?.textContent,
+    }));
+    const faqPage = jsonLd(container).find((item) => item["@type"] === "FAQPage");
+    const inJsonLd = (faqPage?.mainEntity as { name: string; acceptedAnswer: { text: string } }[]).map((entry) => ({
+      question: entry.name,
+      answer: entry.acceptedAnswer.text,
+    }));
+
+    expect(shown.length).toBeGreaterThanOrEqual(8);
+    expect(inJsonLd).toEqual(shown);
+    expect(shown).toEqual(homeFaq().map((item) => ({ question: item.question, answer: plainText(item.answer) })));
+  });
+
+  it("describes the company from company.ts", async () => {
+    const { container } = await renderHome();
+    const organization = jsonLd(container).find((item) => item["@type"] === "Organization");
+    expect(organization).toMatchObject({
+      name: "Orange Jelly Limited",
+      alternateName: "Cheers",
+      url: "https://cheers.orangejelly.co.uk/",
+      vatID: "GB315203647",
+      identifier: { value: "10537179" },
+      email: "peter@orangejelly.co.uk",
+    });
+  });
+
+  it("offers each plan at its PLANS price, ex VAT, and never Group", async () => {
+    const { container } = await renderHome();
+    const app = jsonLd(container).find((item) => item["@type"] === "SoftwareApplication");
+    const offers = app?.offers as { name: string; price: string; priceCurrency: string; priceSpecification: Record<string, unknown> }[];
+
+    const price = (pence: number | null) => ((pence ?? 0) / 100).toFixed(2);
+    expect(offers.map((offer) => [offer.name, offer.price])).toEqual(
+      (["starter", "professional"] as const).flatMap((id) => [
+        [`${PLANS[id].name}, paid monthly`, price(PLANS[id].monthlyPricePence)],
+        [`${PLANS[id].name}, paid yearly`, price(PLANS[id].annualPricePence)],
+      ]),
+    );
+    for (const offer of offers) {
+      expect(offer.priceCurrency).toBe("GBP");
+      expect(offer.priceSpecification.valueAddedTaxIncluded).toBe(false);
+    }
   });
 });

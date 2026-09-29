@@ -2,7 +2,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 
 import {
-  COMPANY,
+  companyDetailsLine,
   CONTACT,
   LEGAL_DOCUMENTS,
   LEGAL_UPDATED,
@@ -69,11 +69,7 @@ export function LegalFooter() {
   return (
     <footer className="mt-16 border-t pt-6 text-sm" style={{ ...mutedStyle, borderColor: "var(--c-line)" }}>
       <address className="not-italic space-y-2 leading-relaxed">
-        <p>
-          {COMPANY.tradingName} is a trading name of {COMPANY.legalName}, a company registered in{" "}
-          {COMPANY.registeredIn}, company number {COMPANY.companyNumber}. Registered office:{" "}
-          {COMPANY.registeredOffice}. Trading address: {COMPANY.tradingAddress}. VAT number {COMPANY.vatNumber}.
-        </p>
+        <p>{companyDetailsLine()}</p>
         <p>
           Email <ContactEmail /> or message us on WhatsApp at <ContactWhatsApp />.
         </p>

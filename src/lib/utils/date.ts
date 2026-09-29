@@ -109,6 +109,16 @@ export function formatUkLongDate(input: Date | string): string {
 }
 
 /**
+ * The ISO calendar date ("2026-09-28") for a long UK date written the way
+ * formatUkLongDate writes it ("28 September 2026"), read on the
+ * Europe/London calendar. Returns null for text that is not such a date.
+ */
+export function ukLongDateToIso(input: string): string | null {
+  const dt = DateTime.fromFormat(input.trim(), "d LLLL yyyy", { zone: DEFAULT_TIMEZONE, locale: "en-GB" });
+  return dt.isValid ? dt.toISODate() : null;
+}
+
+/**
  * Format an instant as a UK date and time, "06/09/2026, 14:30:15", in
  * Europe/London time: the layout en-GB `toLocaleString()` gives in a UK
  * browser, but identical on the server. Returns "" for an invalid date.

@@ -276,6 +276,23 @@ h1, h2, h3, h4 {
 .type-badge-adset { background: var(--c-orange-soft); color: var(--c-orange-hi); }
 .type-badge-ad { background: var(--c-paper-2); color: var(--c-ink-3); }
 
+/* ── Public site (homepage and guides): backgrounds on the ink band ── */
+/* A faint planner grid that fades in and out, so it never shows a seam. */
+.site-grid {
+  background-image:
+    linear-gradient(color-mix(in srgb, var(--c-card) 7%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--c-card) 7%, transparent) 1px, transparent 1px);
+  background-size: 44px 44px;
+  mask-image: linear-gradient(to bottom, transparent, black 25%, black 65%, transparent);
+}
+
+/* A warm orange glow, like light from the bar. */
+.site-glow {
+  background:
+    radial-gradient(55% 60% at 85% 15%, color-mix(in srgb, var(--c-orange) 30%, transparent), transparent 70%),
+    radial-gradient(40% 45% at 5% 95%, color-mix(in srgb, var(--c-orange-hi) 18%, transparent), transparent 70%);
+}
+
 /* Interactive elements always show pointer cursor */
 button:not(:disabled),
 [role="button"]:not(:disabled) {

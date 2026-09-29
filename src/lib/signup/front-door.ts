@@ -1,7 +1,9 @@
 import type { Metadata, MetadataRoute } from 'next';
 
 import { env } from '@/env';
+import { GUIDES_PATH } from '@/lib/guides/guides';
 import { LEGAL_DOCUMENTS } from '@/lib/legal/company';
+import { absoluteUrl } from '@/lib/marketing/site';
 import type { SelfServeSignupSwitch } from '@/lib/signup/switch';
 
 /**
@@ -46,9 +48,27 @@ export function frontDoorCta(state: SelfServeSignupSwitch): FrontDoorCta {
 }
 
 /**
- * robots.txt. Closed: disallow everything, as before. Open (P11): the home
- * page (`/$`, the home page only, not every path) and the three legal pages,
- * nothing else. The longest matching rule wins, so each allow beats `/`.
+ * Files a search engine needs to show the open pages properly: their CSS,
+ * scripts and images, the logo named in the structured data, the share
+ * images (X's crawler obeys robots.txt) and the favicons. They are files, not
+ * pages, so they add nothing to the pages that may be indexed.
+ */
+export const CRAWLABLE_FILES = [
+  '/_next/static/',
+  '/_next/image',
+  '/brand/',
+  '/og',
+  '/favicon.ico',
+  '/icon.png',
+  '/apple-icon.png',
+] as const;
+
+/**
+ * robots.txt. Closed: disallow everything, as before. Open (P11 and
+ * SPEC-homepage-and-guides): the home page (`/$`, the home page only, not
+ * every path), the three legal pages, the guides (`/guides` and below) and
+ * the files those pages need, nothing else, plus the sitemap. The longest
+ * matching rule wins, so each allow beats `/`.
  */
 export function robotsFor(state: SelfServeSignupSwitch): MetadataRoute.Robots {
   if (state !== 'open') {
@@ -58,10 +78,11 @@ export function robotsFor(state: SelfServeSignupSwitch): MetadataRoute.Robots {
     rules: [
       {
         userAgent: '*',
-        allow: ['/$', ...Object.values(LEGAL_DOCUMENTS).map((doc) => doc.path)],
+        allow: ['/$', ...Object.values(LEGAL_DOCUMENTS).map((doc) => doc.path), GUIDES_PATH, ...CRAWLABLE_FILES],
         disallow: '/',
       },
     ],
+    sitemap: absoluteUrl('/sitemap.xml'),
   };
 }
 

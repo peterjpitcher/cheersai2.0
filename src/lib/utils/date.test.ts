@@ -1,7 +1,30 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { DateTime } from "luxon";
 
-import { formatEventDateLong, formatUkDate, formatUkDateTime, formatUkLongDate, ordinalSuffix } from "@/lib/utils/date";
+import {
+  formatEventDateLong,
+  formatUkDate,
+  formatUkDateTime,
+  formatUkLongDate,
+  ordinalSuffix,
+  ukLongDateToIso,
+} from "@/lib/utils/date";
+
+describe("ukLongDateToIso", () => {
+  it("reads a long UK date back as the same calendar day", () => {
+    expect(ukLongDateToIso("28 September 2026")).toBe("2026-09-28");
+    expect(ukLongDateToIso(" 1 March 2026 ")).toBe("2026-03-01");
+    // The day the clocks go back is still that day.
+    expect(ukLongDateToIso("25 October 2026")).toBe("2026-10-25");
+    expect(ukLongDateToIso(formatUkLongDate("2026-07-14T23:30:00Z"))).toBe("2026-07-15");
+  });
+
+  it("returns null for anything else", () => {
+    expect(ukLongDateToIso("2026-09-28")).toBeNull();
+    expect(ukLongDateToIso("31 February 2026")).toBeNull();
+    expect(ukLongDateToIso("")).toBeNull();
+  });
+});
 
 describe("formatUkLongDate", () => {
   it("uses the London calendar in summer (BST): late UTC evening is the next day", () => {
