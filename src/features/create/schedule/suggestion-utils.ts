@@ -2,7 +2,7 @@ import { DateTime } from "luxon";
 
 import type { SuggestedSlotDisplay } from "@/features/create/schedule/schedule-calendar";
 import { buildEventCadenceSlots } from "@/lib/create/event-cadence";
-import { DEFAULT_POST_TIME, EVENT_DAY_POST_TIME } from "@/lib/constants";
+import { DEFAULT_POST_TIME } from "@/lib/constants";
 
 interface EventSuggestionInput {
   startDate: string | undefined;
@@ -120,6 +120,10 @@ export function buildEventSuggestions({ startDate, startTime, timezone }: EventS
  * date — shifting them would mislabel the suggestion. So if their slot is occupied, they're
  * dropped rather than shifted onto a different day. The user can still add a custom slot
  * on any empty day.
+ *
+ * Times are never changed here. The wizard skips this on an empty planner, so a time
+ * rule belongs where the suggestions are built (the event-day 07:00 is set in
+ * buildEventCadenceSlots).
  */
 export function deconflictSuggestions(
   suggestions: SuggestedSlotDisplay[],
@@ -152,10 +156,7 @@ export function deconflictSuggestions(
     if (isPinned) {
       // Pinned suggestions keep their date; claim the day
       claimedDays.add(originalDate);
-      // Event-day posts go out first thing. The cadence builder puts every slot
-      // at DEFAULT_POST_TIME, which is fine days ahead but wrong on the day
-      // itself: the post has to leave people time to see it and book.
-      result.push({ ...suggestion, time: EVENT_DAY_POST_TIME });
+      result.push({ ...suggestion });
       continue;
     }
 

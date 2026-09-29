@@ -1,9 +1,31 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { deconflictSuggestions } from "@/features/create/schedule/suggestion-utils";
+import { buildEventSuggestions, deconflictSuggestions } from "@/features/create/schedule/suggestion-utils";
 import type { SuggestedSlotDisplay } from "@/features/create/schedule/schedule-calendar";
 
 const TZ = "Europe/London";
+
+describe("buildEventSuggestions", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("puts only the event-day suggestion at 07:00, with no planner to deconflict against", () => {
+    // What the wizard shows a new venue: its planner is empty, so these
+    // suggestions reach the calendar exactly as built.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-05-11T08:00:00.000Z")); // Mon 11 May, 09:00 BST
+
+    const result = buildEventSuggestions({ startDate: "2026-05-23", startTime: "19:00", timezone: TZ });
+
+    expect(result.map((slot) => [slot.label, slot.date, slot.time])).toEqual([
+      ["Weekly hype · 1 week out", "2026-05-16", "12:00"],
+      ["2 days to go", "2026-05-21", "12:00"],
+      ["1 day to go", "2026-05-22", "12:00"],
+      ["Event day", "2026-05-23", "07:00"],
+    ]);
+  });
+});
 
 function suggestion(
   overrides: Partial<SuggestedSlotDisplay> = {},
@@ -81,32 +103,29 @@ describe("deconflictSuggestions (Issue 2 regression)", () => {
     expect(result[0]?.label).toBe("Weekly hype · 2 weeks out");
   });
 
-  it("keeps Event day pinned and moves it to 07:00", () => {
-    // The cadence builder puts every slot at midday, which is fine days out and
-    // wrong on the day itself: an event-day post has to leave people time to
-    // see it and book. It used to be forced to 17:00, which did not.
+  it("keeps Event day pinned to its date and time even when that day is occupied", () => {
     const suggestions: SuggestedSlotDisplay[] = [
-      suggestion({ id: "event-day", date: "2026-05-23", time: "12:00", label: "Event day" }),
+      suggestion({ id: "event-day", date: "2026-05-23", time: "07:00", label: "Event day" }),
     ];
 
     const result = deconflictSuggestions(suggestions, [{ date: "2026-05-23" }], TZ);
 
-    // Event day stays even when occupied; only its time is normalised.
     expect(result).toHaveLength(1);
     expect(result[0]?.date).toBe("2026-05-23");
     expect(result[0]?.time).toBe("07:00");
   });
 
-  it("moves only Event day, leaving the countdown slots at their own time", () => {
-    // "7am on the day" is about the day of the event. A post three days out has
-    // no reason to move.
+  it("never changes a suggestion's time", () => {
+    // Times are set where the suggestions are built (the event-day 07:00 in
+    // event-cadence.ts). The wizard skips this function on an empty planner,
+    // so a time rule living here would silently not apply there.
     const suggestions: SuggestedSlotDisplay[] = [
       suggestion({ id: "a", date: "2026-05-21", time: "12:00", label: "2 days to go" }),
       suggestion({ id: "b", date: "2026-05-22", time: "12:00", label: "1 day to go" }),
-      suggestion({ id: "c", date: "2026-05-23", time: "12:00", label: "Event day" }),
+      suggestion({ id: "c", date: "2026-05-23", time: "07:00", label: "Event day" }),
     ];
 
-    const result = deconflictSuggestions(suggestions, [], TZ);
+    const result = deconflictSuggestions(suggestions, [{ date: "2026-05-20" }], TZ);
 
     expect(result.map((slot) => [slot.label, slot.time])).toEqual([
       ["2 days to go", "12:00"],
