@@ -11,6 +11,8 @@ import type { SupabaseClient } from '@supabase/supabase-js';
  * columns, CHECK lists, primary and unique keys, foreign keys, and unknown
  * columns. A write production would refuse is refused here with the same
  * Postgres error code, so a test cannot pass on a row production would reject.
+ * Columns marked strictUuid also refuse, in writes and eq filters, a value
+ * Postgres cannot read as a uuid (22P02).
  *
  * Supports: select, insert, update, upsert (onConflict), delete, eq, is, gt,
  * in, order, returns, maybeSingle, single, and .select() after a write.
@@ -26,6 +28,18 @@ interface ColumnSpec {
   notNull?: boolean;
   default?: () => unknown;
   check?: readonly unknown[];
+  /**
+   * The value must be uuid text, as Postgres requires. Opt-in because older
+   * fixtures use readable ids in other uuid columns.
+   */
+  strictUuid?: boolean;
+}
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function uuidError(value: unknown): DbError | null {
+  if (value === null || value === undefined || UUID_PATTERN.test(String(value))) return null;
+  return dbError('22P02', `invalid input syntax for type uuid: "${String(value)}"`);
 }
 
 interface TableSpec {
@@ -60,7 +74,8 @@ export const CONNECTIONS_SCHEMA: Record<string, TableSpec> = {
       created_at: { type: 'timestamptz', notNull: true, default: now },
       used_at: { type: 'timestamptz' },
       account_id: { type: 'uuid' },
-      created_by: { type: 'uuid' },
+      // The signed-in user's id (auth.users), which only they can finish a flow with.
+      created_by: { type: 'uuid', strictUuid: true },
       expires_at: { type: 'timestamptz', default: () => new Date(Date.now() + 10 * 60 * 1000).toISOString() },
     },
     primaryKey: ['id'],
@@ -126,7 +141,7 @@ export class InMemoryConnectionsDb {
   private failures: Array<{ table: string; op: Op; error: DbError; times: number; skip: number }> = [];
   /** Every query, with its equality filters, for brand-scoping assertions. */
   queries: Array<{ table: string; op: Op; eq: Array<[string, unknown]> }> = [];
-  /** Writes production would have refused. */
+  /** Writes, and uuid filters, production would have refused. */
   rejected: DbError[] = [];
 
   seed(table: string, rows: Row[]): void {
@@ -188,6 +203,10 @@ export class InMemoryConnectionsDb {
       if (value !== null && value !== undefined && rule.type === 'text[]' && !Array.isArray(value)) {
         return dbError('22P02', `malformed array literal: "${String(value)}"`);
       }
+      if (rule.strictUuid) {
+        const error = uuidError(value);
+        if (error) return error;
+      }
     }
     for (const fk of spec.foreignKeys ?? []) {
       const value = row[fk.column];
@@ -239,6 +258,8 @@ class Query implements PromiseLike<Result> {
   private returning = false;
   private columns: string | null = null;
   private mode: 'many' | 'maybe' | 'one' = 'many';
+  /** A filter value Postgres would refuse to parse: the whole statement fails. */
+  private filterError: DbError | null = null;
 
   constructor(
     private readonly db: InMemoryConnectionsDb,
@@ -290,7 +311,7 @@ class Query implements PromiseLike<Result> {
   }
 
   eq(column: string, value: unknown): this {
-    this.column(column);
+    if (this.column(column).strictUuid) this.filterError ??= uuidError(value);
     this.eqFilters.push([column, value]);
     this.filters.push((row) => row[column] === value);
     return this;
@@ -359,6 +380,10 @@ class Query implements PromiseLike<Result> {
     this.db.queries.push({ table: this.table, op: this.op, eq: [...this.eqFilters] });
     const failure = this.db.takeFailure(this.table, this.op);
     if (failure) return { data: null, error: failure };
+    if (this.filterError) {
+      this.db.rejected.push(this.filterError);
+      return { data: null, error: this.filterError };
+    }
 
     const all = this.db.tables[this.table];
     const matched = all.filter((row) => this.filters.every((filter) => filter(row)));

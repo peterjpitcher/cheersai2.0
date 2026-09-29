@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto';
 
+import { redirect } from 'next/navigation';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 import type { ManagedPage } from '@/lib/connections/page-selection';
@@ -55,6 +56,9 @@ vi.mock('next/cache', () => ({
 
 const ACCOUNT = '11111111-1111-4111-8111-111111111111';
 const OTHER_ACCOUNT = '22222222-2222-4222-8222-222222222222';
+// Supabase auth user ids are uuids, and oauth_states.created_by is a uuid column.
+const USER_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+const OTHER_USER_ID = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 const USER_TOKEN = 'EAAB-user-token-never-shown';
 
 type Role = 'owner' | 'member';
@@ -72,7 +76,7 @@ function authContext(
   return {
     accountId,
     activeAccountId: accountId,
-    user: overrides.user ?? { id: 'user-1' },
+    user: overrides.user ?? { id: USER_ID },
     supabase: { from: mockFrom },
     brands,
     isSuperAdmin: false,
@@ -109,16 +113,27 @@ function useInMemoryDb() {
   mockFrom.mockImplementation((table: string) => db.client().from(table));
 }
 
+/** A state as initiateOAuthConnect stores it: started by USER_ID unless overridden. */
 function seedState(overrides: Record<string, unknown> = {}) {
   db.seed('oauth_states', [
     {
       state: 'valid-state',
       provider: 'facebook',
       account_id: ACCOUNT,
+      created_by: USER_ID,
       expires_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
       ...overrides,
     },
   ]);
+}
+
+/** requireAuthContext() for a visitor who is not signed in: it redirects by throwing. */
+function signedOut() {
+  mockRequireAuthContext.mockImplementation(async () => redirect('/auth/login'));
+}
+
+function warnings(): string {
+  return vi.mocked(console.warn).mock.calls.flat().map(String).join('\n');
 }
 
 /** A connection that currently holds a token (a token_vault access row). */
@@ -167,6 +182,8 @@ describe('initiateOAuthConnect', () => {
     const insertCall = insertMock.insert.mock.calls[0][0];
     expect(insertCall).toHaveProperty('provider', 'facebook');
     expect(insertCall).toHaveProperty('state');
+    // Only the signed-in user who started it can finish it.
+    expect(insertCall).toHaveProperty('created_by', USER_ID);
     // A normal connect never forces the chooser.
     expect(insertCall).not.toHaveProperty('redirect_to');
     // Expiry should be ~10 minutes in the future
@@ -194,8 +211,52 @@ describe('initiateOAuthConnect', () => {
 
     expect(result.success).toBe(true);
     expect(db.rows('oauth_states')).toEqual([
-      expect.objectContaining({ provider: 'facebook', account_id: ACCOUNT, redirect_to: PAGE_CHOICE_PATH, auth_code: null }),
+      expect.objectContaining({
+        provider: 'facebook',
+        account_id: ACCOUNT,
+        created_by: USER_ID,
+        redirect_to: PAGE_CHOICE_PATH,
+        auth_code: null,
+      }),
     ]);
+  });
+
+  it.each([
+    ['Facebook', 'facebook', undefined],
+    ['Instagram', 'instagram', undefined],
+    ['Change Page', 'facebook', { changePage: true }],
+  ])('%s: records the signed-in user as the only one who can finish it', async (_flow, provider, options) => {
+    useInMemoryDb();
+
+    const result = await initiateOAuthConnect(provider, options);
+
+    expect(result.success).toBe(true);
+    expect(db.rows('oauth_states')).toEqual([expect.objectContaining({ provider, account_id: ACCOUNT, created_by: USER_ID })]);
+    // A real uuid, as the live created_by column requires.
+    expect(db.rejected).toEqual([]);
+  });
+
+  it('sends a signed-out visitor to sign in without storing a state', async () => {
+    useInMemoryDb();
+    signedOut();
+
+    await expect(initiateOAuthConnect('facebook')).rejects.toThrow('NEXT_REDIRECT');
+    expect(db.rows('oauth_states')).toHaveLength(0);
+    expect(mockBuildOAuthRedirectUrl).not.toHaveBeenCalled();
+  });
+
+  it('fails closed, and logs it, when the state cannot be stored', async () => {
+    useInMemoryDb();
+    db.fail('oauth_states', 'insert', 1);
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const result = await initiateOAuthConnect('instagram');
+
+    expect(result).toEqual({ success: false, error: 'Failed to initiate OAuth flow' });
+    expect(db.rows('oauth_states')).toHaveLength(0);
+    expect(mockBuildOAuthRedirectUrl).not.toHaveBeenCalled();
+    expect(consoleError).toHaveBeenCalledWith('[connections] failed to insert oauth_states', expect.anything());
+    consoleError.mockRestore();
   });
 
   it('refuses Change Page on Instagram while Facebook is connected (Facebook is the anchor)', async () => {
@@ -218,7 +279,7 @@ describe('initiateOAuthConnect', () => {
     const result = await initiateOAuthConnect('instagram', { changePage: true });
 
     expect(result.success).toBe(true);
-    expect(db.rows('oauth_states')[0]).toMatchObject({ provider: 'instagram', redirect_to: PAGE_CHOICE_PATH });
+    expect(db.rows('oauth_states')[0]).toMatchObject({ provider: 'instagram', redirect_to: PAGE_CHOICE_PATH, created_by: USER_ID });
   });
 });
 
@@ -319,11 +380,15 @@ describe('completeOAuthConnect', () => {
     expect(mockStoreEncryptedToken).not.toHaveBeenCalled();
 
     const handOff = db.rows('oauth_states').find((row) => row.state === result.pageChoice);
-    expect(handOff).toMatchObject({ provider: 'facebook', account_id: ACCOUNT, redirect_to: PAGE_CHOICE_PATH, created_by: null });
+    // The hand-off is bound to the same person as the login.
+    expect(handOff).toMatchObject({ provider: 'facebook', account_id: ACCOUNT, redirect_to: PAGE_CHOICE_PATH, created_by: USER_ID });
     expect(String(handOff?.auth_code)).not.toContain(USER_TOKEN);
     expect(String(handOff?.auth_code)).not.toContain('page-token');
 
-    const read = await readPageChoice(db.client(), { token: result.pageChoice!, userId: 'user-1', ownedAccountIds: [ACCOUNT] });
+    const otherOwner = await readPageChoice(db.client(), { token: result.pageChoice!, userId: OTHER_USER_ID, ownedAccountIds: [ACCOUNT] });
+    expect(otherOwner).toMatchObject({ ok: false, reason: 'forbidden' });
+
+    const read = await readPageChoice(db.client(), { token: result.pageChoice!, userId: USER_ID, ownedAccountIds: [ACCOUNT] });
     expect(read.ok).toBe(true);
     if (!read.ok) return;
     expect(read.choice.payload).toMatchObject({ changePage: false, userAccessToken: USER_TOKEN, metaUserId: 'meta-user-1' });
@@ -342,7 +407,7 @@ describe('completeOAuthConnect', () => {
     const result = await completeOAuthConnect('facebook', 'code', 'valid-state');
 
     expect(result.pageChoice).toBeDefined();
-    const read = await readPageChoice(db.client(), { token: result.pageChoice!, userId: 'user-1', ownedAccountIds: [ACCOUNT] });
+    const read = await readPageChoice(db.client(), { token: result.pageChoice!, userId: USER_ID, ownedAccountIds: [ACCOUNT] });
     if (!read.ok) throw new Error('expected a readable choice');
     expect(read.choice.payload).toMatchObject({ changePage: true, currentPageId: '1', instagramPageId: '1' });
   });
@@ -417,6 +482,81 @@ describe('completeOAuthConnect', () => {
 
     expect(replay).toEqual({ success: false, error: 'Invalid or expired OAuth state' });
     expect(mockExchangeCodeForUserToken).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['a Facebook login', 'facebook', {}],
+    ['an Instagram login', 'instagram', { provider: 'instagram' }],
+    ['a Change Page login', 'facebook', { redirect_to: PAGE_CHOICE_PATH }],
+  ])('refuses %s started by another signed-in user, even an owner of the brand, and does not use it up', async (_flow, provider, overrides) => {
+    seedState(overrides);
+    // An owner of the same brand: only created_by tells them apart.
+    mockRequireAuthContext.mockResolvedValue(authContext({ user: { id: OTHER_USER_ID } }));
+    mockFetchManagedPages.mockResolvedValue([withInstagram('1')]);
+
+    const result = await completeOAuthConnect(provider, 'code', 'valid-state');
+
+    expect(result).toEqual({ success: false, error: 'Invalid or expired OAuth state' });
+    expect(mockExchangeCodeForUserToken).not.toHaveBeenCalled();
+    expect(db.rows('social_connections')).toHaveLength(0);
+    // No Page choice was made, and the state is still there for the person who started it.
+    expect(db.rows('oauth_states')).toHaveLength(1);
+    expect(db.rows('oauth_states')[0].used_at).toBeNull();
+    expect(warnings()).toContain('OAuth state refused: not started by the signed-in user');
+    expect(warnings()).toContain(`"userId":"${OTHER_USER_ID}"`);
+    expect(warnings()).toContain(`"startedBy":"${USER_ID}"`);
+    // Ids only: never the state itself.
+    expect(warnings()).not.toContain('valid-state');
+
+    mockRequireAuthContext.mockResolvedValue(authContext());
+    expect((await completeOAuthConnect(provider, 'code', 'valid-state')).success).toBe(true);
+  });
+
+  it('refuses a state with no created_by (made before it was recorded), using nothing up', async () => {
+    seedState({ created_by: null });
+    mockFetchManagedPages.mockResolvedValue([page('1')]);
+
+    const result = await completeOAuthConnect('facebook', 'code', 'valid-state');
+
+    expect(result).toEqual({ success: false, error: 'Invalid or expired OAuth state' });
+    expect(mockExchangeCodeForUserToken).not.toHaveBeenCalled();
+    expect(db.rows('social_connections')).toHaveLength(0);
+    expect(db.rows('oauth_states')[0].used_at).toBeNull();
+    expect(warnings()).toContain('OAuth state refused: not started by the signed-in user');
+    expect(warnings()).toContain('"startedBy":null');
+  });
+
+  it('sends a signed-out visitor to sign in, touching nothing', async () => {
+    seedState();
+    signedOut();
+
+    await expect(completeOAuthConnect('facebook', 'code', 'valid-state')).rejects.toThrow('NEXT_REDIRECT');
+    expect(db.queries).toHaveLength(0);
+    expect(db.rows('oauth_states')[0].used_at).toBeNull();
+    expect(mockExchangeCodeForUserToken).not.toHaveBeenCalled();
+  });
+
+  it('fails closed, using nothing up, when the state cannot be looked up', async () => {
+    seedState();
+    db.fail('oauth_states', 'select', 1);
+
+    const result = await completeOAuthConnect('facebook', 'code', 'valid-state');
+
+    expect(result).toEqual({ success: false, error: 'OAuth state validation failed' });
+    expect(mockExchangeCodeForUserToken).not.toHaveBeenCalled();
+    expect(db.rows('oauth_states')[0].used_at).toBeNull();
+    expect(console.error).toHaveBeenCalledWith('[connections] oauth_states lookup failed', expect.anything());
+  });
+
+  it('fails closed, connecting nothing, when the state cannot be marked used', async () => {
+    seedState();
+    db.fail('oauth_states', 'update', 1);
+
+    const result = await completeOAuthConnect('facebook', 'code', 'valid-state');
+
+    expect(result).toEqual({ success: false, error: 'Failed to process OAuth state' });
+    expect(mockExchangeCodeForUserToken).not.toHaveBeenCalled();
+    expect(db.rows('social_connections')).toHaveLength(0);
   });
 
   it('refuses a user who is only a member of the brand that started the flow', async () => {

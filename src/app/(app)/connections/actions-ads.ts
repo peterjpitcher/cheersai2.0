@@ -57,6 +57,8 @@ function normalizeMetaAccountId(value: string): string | null {
 
 /**
  * Creates a state token in oauth_states and returns the Facebook Ads OAuth URL.
+ * The state records the signed-in user (created_by): the callback refuses
+ * anyone else. It expires after the column default of 10 minutes.
  */
 export async function startAdsOAuth(): Promise<{ url: string }> {
   const adsCtx = await requireFeatureContext('paidAds');
@@ -70,6 +72,7 @@ export async function startAdsOAuth(): Promise<{ url: string }> {
     provider: "facebook",
     state,
     account_id: accountId,
+    created_by: adsCtx.user.id,
   });
 
   if (error) {

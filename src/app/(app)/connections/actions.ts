@@ -53,6 +53,9 @@ const providerDisplayNames: Record<Provider, string> = {
 /** OAuth state expiry: 10 minutes */
 const OAUTH_STATE_EXPIRY_MS = 10 * 60 * 1000;
 
+/** Shown for an unknown, used or expired state, and for one someone else started. */
+const INVALID_STATE_ERROR = "Invalid or expired OAuth state";
+
 const payloadSchema = z.object({
   provider: providerSchema,
   metadataValue: z.string().optional(),
@@ -74,6 +77,8 @@ const initiateOptionsSchema = z
  * `changePage` (the Change Page button) makes the callback show the Page
  * chooser even when a stored Page matches. It is recorded on the state row as
  * redirect_to = PAGE_CHOICE_PATH, never taken from the callback URL.
+ *
+ * The signed-in user's id goes in created_by: only they can finish the flow.
  */
 export async function initiateOAuthConnect(
   providerInput: string,
@@ -81,7 +86,8 @@ export async function initiateOAuthConnect(
 ): Promise<{ success: boolean; redirectUrl?: string; error?: string }> {
   const provider = providerSchema.parse(providerInput);
   const changePage = initiateOptionsSchema.parse(optionsInput)?.changePage === true;
-  const { accountId } = await requireOwnerContext();
+  const ctx = await requireOwnerContext();
+  const { accountId } = ctx;
   const supabase = createServiceSupabaseClient();
 
   if (changePage && provider === "instagram") {
@@ -107,11 +113,13 @@ export async function initiateOAuthConnect(
   // Bind the INITIATING brand into the state so the callback attributes the
   // connection to the brand that started the flow -- not whichever brand happens
   // to be active at callback time (multi-brand: the user may switch mid-flow).
+  // Bind the initiating USER too: only they can finish it (completeOAuthConnect).
   const { error } = await supabase.from("oauth_states").insert({
     state,
     provider,
     expires_at: expiresAt,
     account_id: accountId,
+    created_by: ctx.user.id,
     ...(changePage ? { redirect_to: PAGE_CHOICE_PATH } : {}),
   });
 
@@ -134,6 +142,8 @@ export async function initiateOAuthConnect(
  * - State must not be already used (replay prevention)
  * - State must not be expired (10-minute window)
  * - State must not be a pending Page choice (those carry an auth_code)
+ * - State must have been started by the signed-in user (created_by); a row
+ *   without created_by, made before this check existed, is refused too
  *
  * When the owner has to choose, nothing is connected yet: the result carries
  * `pageChoice`, the reference for /connections/choose-page, and the Meta user
@@ -153,7 +163,7 @@ export async function completeOAuthConnect(
   //    to -- never the callback-time active brand.
   const { data: oauthState, error: stateError } = await supabase
     .from("oauth_states")
-    .select("id, provider, used_at, expires_at, account_id, redirect_to")
+    .select("id, provider, used_at, expires_at, account_id, redirect_to, created_by")
     .eq("state", stateParam)
     .eq("provider", provider)
     .is("used_at", null)
@@ -167,12 +177,32 @@ export async function completeOAuthConnect(
   }
 
   if (!oauthState) {
-    return { success: false, error: "Invalid or expired OAuth state" };
+    return { success: false, error: INVALID_STATE_ERROR };
+  }
+
+  const state = oauthState as {
+    id: string;
+    account_id: string | null;
+    redirect_to?: string | null;
+    created_by: string | null;
+  };
+
+  // Only the signed-in person who started this connection can finish it. Checked
+  // before the state is marked used, so someone else's attempt does not use it up,
+  // and answered like an unknown state. Ids only in the log: never the state itself.
+  if (state.created_by !== ctx.user.id) {
+    logger.warn("OAuth state refused: not started by the signed-in user", {
+      stateId: state.id,
+      accountId: state.account_id,
+      provider,
+      userId: ctx.user.id,
+      startedBy: state.created_by,
+    });
+    return { success: false, error: INVALID_STATE_ERROR };
   }
 
   // Attribute to the initiating brand, and fail safe if the caller is no longer
   // an owner of it (e.g. access revoked or role changed during the round-trip).
-  const state = oauthState as { id: string; account_id: string | null; redirect_to?: string | null };
   const initiatingAccountId = state.account_id;
   if (!initiatingAccountId) {
     return { success: false, error: "This connection is missing its brand. Please start it again." };
@@ -188,7 +218,8 @@ export async function completeOAuthConnect(
     .from("oauth_states")
     .update({ used_at: new Date().toISOString() })
     .eq("id", state.id)
-    .eq("account_id", accountId);
+    .eq("account_id", accountId)
+    .eq("created_by", ctx.user.id);
 
   if (markError) {
     console.error("[connections] failed to mark oauth_states used", markError);

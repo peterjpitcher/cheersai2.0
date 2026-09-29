@@ -15,7 +15,9 @@ import { InMemoryConnectionsDb } from "../../../tests/helpers/in-memory-connecti
 
 const ACCOUNT = "11111111-1111-4111-8111-111111111111";
 const OTHER_ACCOUNT = "22222222-2222-4222-8222-222222222222";
-const USER = "user-owner";
+// Supabase auth user ids are uuids, and oauth_states.created_by is a uuid column.
+const USER = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+const OTHER_USER = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const USER_TOKEN = "EAAB-long-lived-user-token-secret";
 
 function input(overrides: Partial<Omit<PageChoicePayload, "version">> = {}): Omit<PageChoicePayload, "version"> {
@@ -54,7 +56,7 @@ describe("Page choice hand-off", () => {
   const read = (token: string, overrides: Partial<{ userId: string; ownedAccountIds: string[] }> = {}) =>
     readPageChoice(db.client(), { token, userId: USER, ownedAccountIds: [ACCOUNT], ...overrides });
 
-  it("stores one encrypted, unowned row that expires in 10 minutes", async () => {
+  it("stores one encrypted row, bound to the person who logged in, that expires in 10 minutes", async () => {
     const before = Date.now();
     const token = await createPageChoice(db.client(), input());
 
@@ -66,9 +68,10 @@ describe("Page choice hand-off", () => {
       account_id: ACCOUNT,
       redirect_to: PAGE_CHOICE_PATH,
       used_at: null,
-      // Left empty on purpose: production's RLS exposes rows by created_by.
-      created_by: null,
+      // Safe since #163: no row level security policy reads created_by any more.
+      created_by: USER,
     });
+    expect(db.rejected).toEqual([]);
     const expiresIn = Date.parse(String(row.expires_at)) - before;
     expect(expiresIn).toBeGreaterThan(9 * 60 * 1000);
     expect(expiresIn).toBeLessThanOrEqual(10 * 60 * 1000 + 1000);
@@ -94,7 +97,28 @@ describe("Page choice hand-off", () => {
   it("refuses another signed-in user, even an owner of the same brand", async () => {
     const token = await createPageChoice(db.client(), input());
 
-    expect(await read(token, { userId: "someone-else" })).toMatchObject({ ok: false, reason: "forbidden" });
+    expect(await read(token, { userId: OTHER_USER })).toMatchObject({ ok: false, reason: "forbidden" });
+  });
+
+  it("refuses a row without created_by (made before it was recorded), even for the person in the payload", async () => {
+    const token = await createPageChoice(db.client(), input({ changePage: true }));
+    db.tables.oauth_states[0].created_by = null;
+
+    expect(await read(token)).toMatchObject({ ok: false, reason: "forbidden" });
+
+    // Once expired it still drops the token, but does not reveal the flow's mode.
+    vi.useFakeTimers();
+    vi.setSystemTime(Date.now() + 11 * 60 * 1000);
+    expect(await read(token)).toEqual({ ok: false, reason: "expired", provider: "facebook", changePage: null });
+    expect(db.rows("oauth_states")[0].auth_code).toBeNull();
+  });
+
+  it("needs both bindings: the row's created_by and the payload's user", async () => {
+    const token = await createPageChoice(db.client(), input());
+    db.tables.oauth_states[0].created_by = OTHER_USER;
+
+    expect(await read(token)).toMatchObject({ ok: false, reason: "forbidden" });
+    expect(await read(token, { userId: OTHER_USER })).toMatchObject({ ok: false, reason: "forbidden" });
   });
 
   it("does not look at rows in brands the user does not own", async () => {
@@ -138,7 +162,7 @@ describe("Page choice hand-off", () => {
     vi.useFakeTimers();
     vi.setSystemTime(Date.now() + 11 * 60 * 1000);
 
-    expect(await read(token, { userId: "another-owner" })).toEqual({
+    expect(await read(token, { userId: OTHER_USER })).toEqual({
       ok: false,
       reason: "expired",
       provider: "facebook",
@@ -172,6 +196,17 @@ describe("Page choice hand-off", () => {
     expect(row.used_at).not.toBeNull();
     expect(row.auth_code).toBeNull();
     expect(await read(token)).toMatchObject({ ok: false, reason: "used", provider: "facebook" });
+  });
+
+  it("claims only a row started by the person readPageChoice checked", async () => {
+    const token = await createPageChoice(db.client(), input());
+    const result = await read(token);
+    if (!result.ok) throw new Error("expected a readable choice");
+    db.tables.oauth_states[0].created_by = OTHER_USER;
+
+    expect(await claimPageChoice(db.client(), result.choice)).toBe(false);
+    expect(db.rows("oauth_states")[0].used_at).toBeNull();
+    expect(db.rows("oauth_states")[0].auth_code).not.toBeNull();
   });
 
   it("will not claim an expired choice", async () => {

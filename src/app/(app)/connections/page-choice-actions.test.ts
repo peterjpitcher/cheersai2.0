@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto';
 
+import { redirect } from 'next/navigation';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ManagedPage } from '@/lib/connections/page-selection';
@@ -38,7 +39,9 @@ const { decrypt } = await import('@/lib/token-vault');
 
 const ACCOUNT = '11111111-1111-4111-8111-111111111111';
 const OTHER_ACCOUNT = '22222222-2222-4222-8222-222222222222';
-const USER = 'user-owner';
+// Supabase auth user ids are uuids, and oauth_states.created_by is a uuid column.
+const USER = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+const OTHER_USER = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 const USER_TOKEN = 'EAAB-user-token-never-shown';
 
 type Role = 'owner' | 'member';
@@ -149,7 +152,7 @@ describe('choosePageForConnection: connecting the chosen Page', () => {
     const row = connectionRow('facebook');
     expect(row).toMatchObject({ status: 'active', platform_account_id: '2', metadata: { pageId: '2' }, meta_user_id: 'meta-user-1' });
     expect(storedToken(row?.id)).toBe('page-token-2');
-    expect(handOff()).toMatchObject({ auth_code: null });
+    expect(handOff()).toMatchObject({ auth_code: null, created_by: USER });
     expect(handOff().used_at).not.toBeNull();
     expect(db.rejected).toEqual([]);
   });
@@ -311,14 +314,47 @@ describe('choosePageForConnection: fails closed', () => {
 
   it("refuses another owner's choice, even in the same brand", async () => {
     const token = await pendingChoice([page('1'), page('2')]);
-    mockRequireAuthContext.mockResolvedValue(authContext('another-owner'));
+    mockRequireAuthContext.mockResolvedValue(authContext(OTHER_USER));
 
     const result = await choosePageForConnection({ choice: token, pageId: '1' });
 
     expect(result.success).toBe(false);
     expect(result.error).toBe('We could not find this Page choice. Start again from the Connections screen.');
     expect(handOff().used_at).toBeNull();
+    expect(mockFetchManagedPages).not.toHaveBeenCalled();
     expect(loggedText()).toContain('forbidden');
+    expect(loggedText()).toContain(OTHER_USER);
+    expect(loggedText()).not.toContain(token);
+  });
+
+  it('refuses a choice without created_by (made before it was recorded), using nothing up', async () => {
+    const token = await pendingChoice([page('1'), page('2')]);
+    db.tables.oauth_states[0].created_by = null;
+    mockFetchManagedPages.mockResolvedValue([page('1'), page('2')]);
+
+    const result = await choosePageForConnection({ choice: token, pageId: '1' });
+
+    expect(result).toEqual({
+      success: false,
+      error: 'We could not find this Page choice. Start again from the Connections screen.',
+      provider: undefined,
+    });
+    expect(handOff().used_at).toBeNull();
+    expect(mockFetchManagedPages).not.toHaveBeenCalled();
+    expect(db.rows('social_connections')).toHaveLength(0);
+    expect(loggedText()).toContain('forbidden');
+    expect(loggedText()).not.toContain(USER_TOKEN);
+  });
+
+  it('sends a signed-out visitor to sign in, touching nothing', async () => {
+    const token = await pendingChoice([page('1'), page('2')]);
+    const queriesBefore = db.queries.length;
+    mockRequireAuthContext.mockImplementation(async () => redirect('/auth/login'));
+
+    await expect(choosePageForConnection({ choice: token, pageId: '1' })).rejects.toThrow('NEXT_REDIRECT');
+    expect(db.queries.length).toBe(queriesBefore);
+    expect(handOff().used_at).toBeNull();
+    expect(mockFetchManagedPages).not.toHaveBeenCalled();
   });
 
   it('refuses, and logs it, when the user is no longer an owner of the brand the choice is for', async () => {

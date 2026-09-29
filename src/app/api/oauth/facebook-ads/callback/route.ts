@@ -1,6 +1,9 @@
+import { unstable_rethrow } from "next/navigation";
 import { NextRequest, NextResponse } from "next/server";
 
 import { env } from "@/env";
+import { getCurrentUser } from "@/lib/auth/server";
+import { createLogger } from "@/lib/logging";
 import { storeMetaAdAccountToken } from "@/lib/meta/ad-account-tokens";
 import { getMetaGraphApiBase } from "@/lib/meta/graph";
 import { redactMetaAccessTokens } from "@/lib/meta/redact";
@@ -9,6 +12,8 @@ import { createServiceSupabaseClient } from "@/lib/supabase/service";
 
 const SITE_URL = env.client.NEXT_PUBLIC_SITE_URL.replace(/\/$/, "");
 const REDIRECT_URI = `${SITE_URL}/api/oauth/facebook-ads/callback`;
+
+const logger = createLogger("connections");
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
   const url = new URL(request.url);
@@ -27,15 +32,41 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   // choice (which carries an encrypted auth_code) is never a login check.
   const { data: oauthState, error: stateError } = await supabase
     .from("oauth_states")
-    .select("account_id, used_at")
+    .select("id, account_id, used_at, created_by")
     .eq("state", state)
     .eq("provider", "facebook")
     .is("auth_code", null)
     .gt("expires_at", new Date().toISOString())
-    .maybeSingle<{ account_id: string | null; used_at: string | null }>();
+    .maybeSingle<{ id: string; account_id: string | null; used_at: string | null; created_by: string | null }>();
 
   if (stateError || !oauthState) {
     console.error("[facebook-ads-callback] state lookup failed", stateError);
+    return NextResponse.redirect(`${SITE_URL}/connections?ads_error=invalid_state`);
+  }
+
+  // Only the signed-in person who started this login (startAdsOAuth recorded
+  // them in created_by) can finish it. Checked before anything is marked used:
+  // no session, someone else, a row without created_by or a failed sign-in check
+  // all get the invalid-state redirect. Ids only in the log, never the state.
+  const refusal = { stateId: oauthState.id, accountId: oauthState.account_id, startedBy: oauthState.created_by };
+  let userId: string | null;
+  try {
+    userId = (await getCurrentUser())?.id ?? null;
+  } catch (error) {
+    // Next's own control-flow signals pass through (as in the Facebook callback).
+    unstable_rethrow(error);
+    logger.error(
+      "Meta Ads login refused: could not check who is signed in",
+      error instanceof Error ? error : new Error(String(error)),
+      refusal,
+    );
+    return NextResponse.redirect(`${SITE_URL}/connections?ads_error=invalid_state`);
+  }
+  if (!userId || oauthState.created_by !== userId) {
+    logger.warn(
+      userId ? "Meta Ads login refused: not started by the signed-in user" : "Meta Ads login refused: not signed in",
+      { ...refusal, userId },
+    );
     return NextResponse.redirect(`${SITE_URL}/connections?ads_error=invalid_state`);
   }
 
@@ -49,7 +80,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     .update({ used_at: new Date().toISOString() })
     .eq("state", state)
     .eq("provider", "facebook")
-    .is("auth_code", null);
+    .is("auth_code", null)
+    .eq("created_by", userId);
 
   if (errorParam || !code) {
     const reason = errorParam ?? "no_code";

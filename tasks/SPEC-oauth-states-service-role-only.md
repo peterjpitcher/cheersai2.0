@@ -34,7 +34,7 @@ Every read and write uses `createServiceSupabaseClient()`: `initiateOAuthConnect
 1. Apply the migration to production through the Supabase MCP `apply_migration` tool, then run the verify check there: it must end with `oauth_states_service_role_only_verify: pass`.
 2. Rename the file to the version production recorded (`list_migrations`), commit that to this branch, then merge. No app deploy is needed, and the order against #158 does not matter: both only use the service role.
 
-Rollback (restores exactly what production had on 29 September 2026):
+Rollback (restores exactly what production had on 29 September 2026). Since `tasks/SPEC-oauth-state-bound-to-user.md` the app sets `created_by`, so these policies would let a signed-in user read their own rows and reset `used_at` or extend `expires_at`: revert that change first.
 
 ```sql
 create policy "oauth_states_select" on public.oauth_states

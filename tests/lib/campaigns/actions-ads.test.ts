@@ -1,4 +1,7 @@
+import { redirect } from "next/navigation";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+
+import { InMemoryConnectionsDb } from "../../helpers/in-memory-connections-db";
 
 const requireAuthContextMock = vi.fn();
 const revalidatePathMock = vi.hoisted(() => vi.fn());
@@ -69,11 +72,83 @@ function useStoredTokens(accessToken: string | null, conversionsApiToken: string
 
 vi.mock("@/lib/meta/graph", () => ({
   getMetaGraphApiBase: () => "https://graph.facebook.com/v24.0",
+  getMetaOAuthBase: () => "https://www.facebook.com/v24.0",
 }));
 
 vi.mock("next/cache", () => ({
   revalidatePath: revalidatePathMock,
 }));
+
+describe("startAdsOAuth", () => {
+  // Supabase auth user ids are uuids, and oauth_states.created_by is a uuid column.
+  const USER = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+  const ACCOUNT = "11111111-1111-4111-8111-111111111111";
+  let db: InMemoryConnectionsDb;
+
+  const ownerContext = (role: "owner" | "member" = "owner") => ({
+    accountId: ACCOUNT,
+    user: { id: USER },
+    features: { paidAds: true, tournaments: true, managementImport: true },
+    role,
+  });
+
+  // oauth_states is the in-memory table with production's constraints.
+  const queueOAuthStates = () =>
+    fromQueue.push({ table: "oauth_states", builder: db.client().from("oauth_states") as unknown as Record<string, unknown> });
+
+  beforeAll(() => {
+    seedBaseEnv();
+  });
+
+  beforeEach(() => {
+    vi.resetModules();
+    requireAuthContextMock.mockReset();
+    fromQueue = [];
+    db = new InMemoryConnectionsDb();
+    db.seed("accounts", [{ id: ACCOUNT }]);
+    requireAuthContextMock.mockResolvedValue(ownerContext());
+  });
+
+  it("stores a login state that only the signed-in owner can finish", async () => {
+    queueOAuthStates();
+    const { startAdsOAuth } = await import("@/app/(app)/connections/actions-ads");
+
+    const { url } = await startAdsOAuth();
+
+    const [row] = db.rows("oauth_states");
+    expect(row).toMatchObject({ provider: "facebook", account_id: ACCOUNT, created_by: USER, used_at: null, auth_code: null });
+    // Expires with the column default (10 minutes), which the callback checks.
+    expect(row.expires_at).not.toBeNull();
+    expect(new URL(url).searchParams.get("state")).toBe(row.state);
+    expect(db.rejected).toEqual([]);
+    expect(fromQueue).toHaveLength(0);
+  });
+
+  it("sends a signed-out visitor to sign in without storing a state", async () => {
+    requireAuthContextMock.mockImplementation(async () => redirect("/auth/login"));
+    const { startAdsOAuth } = await import("@/app/(app)/connections/actions-ads");
+
+    await expect(startAdsOAuth()).rejects.toThrow("NEXT_REDIRECT");
+    expect(db.rows("oauth_states")).toHaveLength(0);
+  });
+
+  it("refuses a member before touching the database", async () => {
+    requireAuthContextMock.mockResolvedValue(ownerContext("member"));
+    const { startAdsOAuth } = await import("@/app/(app)/connections/actions-ads");
+
+    await expect(startAdsOAuth()).rejects.toThrow("Only an owner of this brand can do that.");
+    expect(db.rows("oauth_states")).toHaveLength(0);
+  });
+
+  it("fails loudly, storing nothing and returning no Meta link, when the state cannot be saved", async () => {
+    queueOAuthStates();
+    db.fail("oauth_states", "insert", 1);
+    const { startAdsOAuth } = await import("@/app/(app)/connections/actions-ads");
+
+    await expect(startAdsOAuth()).rejects.toMatchObject({ message: "connection refused" });
+    expect(db.rows("oauth_states")).toHaveLength(0);
+  });
+});
 
 describe("selectAdAccount", () => {
   beforeAll(() => {
