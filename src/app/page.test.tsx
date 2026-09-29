@@ -218,6 +218,8 @@ describe("the homepage content", () => {
       expect(cardText).toContain(`${plan.limits?.postsPerMonth} published posts a month`);
       expect(cardText).toContain(`${plan.limits?.aiGenerationsPerMonth} AI generations a month`);
       expect(cardText).toContain(`${plan.limits?.seats} team seats`);
+      // WhatsApp support is on every plan; Professional's is priority (terms section 16).
+      expect(cardText).toContain(id === "starter" ? "Email and WhatsApp support" : "Priority email and WhatsApp support");
     }
     const group = container.querySelector('[aria-labelledby="plan-group"]')?.textContent ?? "";
     expect(group).toContain("Contact us");

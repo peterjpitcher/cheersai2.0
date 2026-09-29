@@ -38,7 +38,7 @@ const NOT_SET_UP = 'Billing is not set up yet. Please contact Cheers support.';
 const BRAND_SWITCHED = 'You switched brand in another tab. Refresh the page and try again.';
 const TERMS_ACCEPTANCE =
   'I agree to the [Terms of Service](https://cheers.orangejelly.co.uk/terms) and the ' +
-  '[Data Processing Agreement](https://cheers.orangejelly.co.uk/data-processing) (version 2026-09-28.4), ' +
+  '[Data Processing Agreement](https://cheers.orangejelly.co.uk/data-processing) (version 2026-09-29.1), ' +
   'and I am buying for my business.';
 
 let db: InMemoryBillingDb;
@@ -154,7 +154,7 @@ describe('startCheckout: the Checkout Session', () => {
 
     const [params, options] = fake.sessionsCreate.mock.calls[0] as [Record<string, unknown>, { idempotencyKey: string }];
     // legal_version records which terms and DPA the owner accepted at the tick box (spec §4.13).
-    const metadata = { app: 'cheersai', account_id: BRAND, plan: 'starter', interval: 'month', legal_version: '2026-09-28.4' };
+    const metadata = { app: 'cheersai', account_id: BRAND, plan: 'starter', interval: 'month', legal_version: '2026-09-29.1' };
     expect(params).toEqual({
       mode: 'subscription',
       customer: 'cus_test_new',
@@ -187,7 +187,7 @@ describe('startCheckout: the Checkout Session', () => {
         .terms_of_service_acceptance;
       expect(message).toContain('(https://cheers.orangejelly.co.uk/terms)');
       expect(message).toContain('(https://cheers.orangejelly.co.uk/data-processing)');
-      expect(message).toContain('version 2026-09-28.4');
+      expect(message).toContain('version 2026-09-29.1');
       // Stripe's limit for this text.
       expect(message.length).toBeLessThanOrEqual(1200);
     }
@@ -201,8 +201,8 @@ describe('startCheckout: the Checkout Session', () => {
     const sessionMetadata = params.metadata as Record<string, string>;
     const subscriptionMetadata = (params.subscription_data as { metadata: Record<string, string> }).metadata;
 
-    expect(sessionMetadata.legal_version).toBe('2026-09-28.4');
-    expect(subscriptionMetadata.legal_version).toBe('2026-09-28.4');
+    expect(sessionMetadata.legal_version).toBe('2026-09-29.1');
+    expect(subscriptionMetadata.legal_version).toBe('2026-09-29.1');
     expect(message).toContain(`version ${sessionMetadata.legal_version}`);
   });
 

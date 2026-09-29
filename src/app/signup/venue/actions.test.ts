@@ -161,7 +161,7 @@ describe('createSelfServeVenue: the happy path', () => {
           p_venue_name: 'The Crown & Anchor',
           p_business_type: 'pub',
           p_email: 'owner@venue.test',
-          p_legal_version: '2026-09-28.4',
+          p_legal_version: '2026-09-29.1',
         },
       ],
     ]);
