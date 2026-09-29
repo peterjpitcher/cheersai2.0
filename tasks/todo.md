@@ -14,7 +14,9 @@ Spec: `tasks/SPEC-facebook-page-chooser.md`; branch `feat/facebook-page-chooser`
       no token in the page, a failed Meta check showed its reason with Start again (running it caught the
       server re-render hiding that reason; fixed), used and expired choices, Change Page wrote a forcing
       state and went to Facebook. Local test data removed afterwards.
-- [ ] `npm run ci:verify` (includes `test:utc`); draft PR
+- [x] lint:ci, typecheck, test:ci and test:utc (3,892 tests each), build with CI's variables; draft
+      PR #158, CI green
+- [ ] A real multi-Page Facebook login and pick (not possible locally)
 - [ ] Peter's yes, then merge and deploy
 
 # Self-serve sign-up PR 6: venue creation (2026-09-28)
