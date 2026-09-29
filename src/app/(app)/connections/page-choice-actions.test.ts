@@ -321,7 +321,7 @@ describe('choosePageForConnection: fails closed', () => {
     expect(loggedText()).toContain('forbidden');
   });
 
-  it('refuses when the user is no longer an owner of the brand the choice is for', async () => {
+  it('refuses, and logs it, when the user is no longer an owner of the brand the choice is for', async () => {
     const token = await pendingChoice([page('1'), page('2')]);
     mockRequireAuthContext.mockResolvedValue(
       authContext(USER, [
@@ -334,6 +334,25 @@ describe('choosePageForConnection: fails closed', () => {
 
     expect(result.error).toBe('We could not find this Page choice. Start again from the Connections screen.');
     expect(db.rows('social_connections')).toHaveLength(0);
+    expect(handOff().used_at).toBeNull();
+    expect(loggedText()).toContain('Page choice refused');
+  });
+
+  it("lets an owner finish after switching to a brand where they are only a member", async () => {
+    const token = await pendingChoice([page('1'), page('2')]);
+    // The brand selected now comes first; the choice is for ACCOUNT, which they own.
+    mockRequireAuthContext.mockResolvedValue(
+      authContext(USER, [
+        { accountId: OTHER_ACCOUNT, role: 'member' },
+        { accountId: ACCOUNT, role: 'owner' },
+      ]),
+    );
+    mockFetchManagedPages.mockResolvedValue([page('1'), page('2')]);
+
+    const result = await choosePageForConnection({ choice: token, pageId: '2' });
+
+    expect(result).toEqual({ success: true, provider: 'facebook', notice: undefined });
+    expect(connectionRow('facebook')).toMatchObject({ account_id: ACCOUNT, metadata: { pageId: '2' } });
   });
 
   it('refuses malformed input without touching the database', async () => {
@@ -442,12 +461,63 @@ describe('choosePageForConnection: fails closed', () => {
     expect(loggedText()).not.toContain('page-token');
   });
 
-  it('refuses members before touching the database', async () => {
+  it('refuses a member who owns no brand before touching the database, with a logged reason', async () => {
     const token = await pendingChoice([page('1'), page('2')]);
     const queriesBefore = db.queries.length;
     mockRequireAuthContext.mockResolvedValue(authContext(USER, [{ accountId: ACCOUNT, role: 'member' }]));
 
-    await expect(choosePageForConnection({ choice: token, pageId: '1' })).rejects.toThrow('Only an owner of this brand can do that.');
+    const result = await choosePageForConnection({ choice: token, pageId: '1' });
+
+    expect(result).toEqual({
+      success: false,
+      error: 'We could not find this Page choice. Start again from the Connections screen.',
+      provider: undefined,
+    });
     expect(db.queries.length).toBe(queriesBefore);
+    expect(loggedText()).toContain('not_found');
+  });
+});
+
+describe('choosePageForConnection: the Instagram notes must still be true', () => {
+  it('refuses when Instagram was connected after the login', async () => {
+    const token = await pendingChoice([withInstagram('1'), withInstagram('2')]);
+    seedConnection('instagram', { pageId: '1', igBusinessId: 'ig-1' });
+    mockFetchManagedPages.mockResolvedValue([withInstagram('1'), withInstagram('2')]);
+
+    const result = await choosePageForConnection({ choice: token, pageId: '2' });
+
+    expect(result).toEqual({
+      success: false,
+      provider: 'facebook',
+      error: 'Your Instagram connection changed while you were choosing, so the Instagram notes on this screen are out of date. Start again.',
+    });
+    expect(connectionRow('facebook')).toBeUndefined();
+    expect(connectionRow('instagram')).toMatchObject({ metadata: { pageId: '1', igBusinessId: 'ig-1' } });
+    expect(loggedText()).toContain('instagram_changed');
+  });
+
+  it('refuses when Instagram moved to another Page after the login', async () => {
+    seedConnection('instagram', { pageId: '3', igBusinessId: 'ig-3' });
+    const token = await pendingChoice([withInstagram('1'), withInstagram('2')], { instagramPageId: '1' });
+    mockFetchManagedPages.mockResolvedValue([withInstagram('1'), withInstagram('2')]);
+
+    const result = await choosePageForConnection({ choice: token, pageId: '2' });
+
+    expect(result.error).toContain('Your Instagram connection changed while you were choosing');
+    expect(connectionRow('facebook')).toBeUndefined();
+    expect(connectionRow('instagram')).toMatchObject({ status: 'active', metadata: { pageId: '3', igBusinessId: 'ig-3' } });
+  });
+
+  it('refuses when Instagram was disconnected after the login', async () => {
+    db.seed('social_connections', [
+      { id: 'instagram-conn', account_id: ACCOUNT, provider: 'instagram', status: 'needs_action', metadata: { pageId: '1', igBusinessId: 'ig-1' } },
+    ]);
+    const token = await pendingChoice([withInstagram('1'), page('2')], { instagramPageId: '1' });
+    mockFetchManagedPages.mockResolvedValue([withInstagram('1'), page('2')]);
+
+    const result = await choosePageForConnection({ choice: token, pageId: '2' });
+
+    expect(result.error).toContain('Your Instagram connection changed while you were choosing');
+    expect(connectionRow('facebook')).toBeUndefined();
   });
 });

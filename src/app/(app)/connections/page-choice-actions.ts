@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
-import { ownedBrandIds, requireOwnerContext } from "@/lib/auth/roles";
+import { ownedBrandIds } from "@/lib/auth/roles";
+import { requireAuthContext } from "@/lib/auth/server";
 import { FACEBOOK_SCOPE_LIST, type Provider } from "@/lib/connections/oauth";
 import { claimPageChoice, readPageChoice } from "@/lib/connections/page-choice";
 import { PAGE_CHOICE_FAILURE_MESSAGES } from "@/lib/connections/page-choice-view";
@@ -51,6 +52,11 @@ const START_AGAIN = "Please start again.";
  * choice must be theirs, unused and unexpired, the Page one they were shown,
  * still managed by them according to Meta and still one CheersAI can post to.
  * Page tokens are fetched here, on the server, and go straight to the vault.
+ *
+ * Ownership is checked on the brand the choice is for (readPageChoice only
+ * looks at brands the user owns, or all for a super-admin), not on the brand
+ * selected now, as the chooser page does: an owner who switched brand while
+ * choosing still finishes, and anyone else is refused with a logged reason.
  */
 export async function choosePageForConnection(input: unknown): Promise<PageChoiceActionResult> {
   const parsed = choiceSchema.safeParse(input);
@@ -59,7 +65,7 @@ export async function choosePageForConnection(input: unknown): Promise<PageChoic
   }
   const { choice: token, pageId } = parsed.data;
 
-  const ctx = await requireOwnerContext();
+  const ctx = await requireAuthContext();
   const supabase = createServiceSupabaseClient();
 
   const read = await readPageChoice(supabase, {
@@ -139,6 +145,15 @@ export async function choosePageForConnection(input: unknown): Promise<PageChoic
         "facebook_moved",
       );
     }
+  }
+
+  // The Instagram notes on the chooser came from the login. If Instagram was
+  // connected, disconnected or moved since, what the owner agreed to is out of date.
+  if (provider === "facebook" && linkedPageIdFor("facebook", connections) !== payload.instagramPageId) {
+    return refuse(
+      "Your Instagram connection changed while you were choosing, so the Instagram notes on this screen are out of date. Start again.",
+      "instagram_changed",
+    );
   }
 
   const auth: Pick<MetaUserAuth, "expiresAt" | "metaUserId"> = {
