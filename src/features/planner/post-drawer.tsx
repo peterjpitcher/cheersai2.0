@@ -30,6 +30,7 @@ import { useNowMinute } from '@/lib/hooks/use-now-minute';
 import { extractCampaignTiming } from '@/lib/scheduling/campaign-timing';
 import { getProximityLabel } from '@/lib/scheduling/proximity-label';
 import type { PlannerContentDetail } from '@/lib/planner/data';
+import { publishFailureText } from '@/lib/publishing/failure-messages';
 
 interface PostDrawerProps {
   contentId: string | null;
@@ -338,7 +339,14 @@ function DrawerContent({
             Error
           </h4>
           <div className="rounded-lg border border-destructive/20 bg-destructive/5 p-3">
-            <p className="text-sm text-destructive">{content.lastError}</p>
+            {/* Plain words; Meta's own text stays in the database (tasks/SPEC-plain-publish-failures.md). */}
+            <p className="text-sm text-destructive">
+              {publishFailureText({
+                error: content.lastError,
+                platform: content.platform,
+                placement: content.placement,
+              })}
+            </p>
           </div>
         </div>
       )}

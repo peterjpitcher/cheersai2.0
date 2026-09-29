@@ -131,7 +131,7 @@ describe('notify-failures cron route', () => {
   });
 
   describe('failed job with error_message', () => {
-    it('should include error_message and error_code in the email body', async () => {
+    it('explains error_message in plain words and never quotes it or the error code', async () => {
       const failedJob = {
         id: JOB_ID,
         error_message: 'Token expired',
@@ -154,14 +154,16 @@ describe('notify-failures cron route', () => {
       expect(body.emailed).toBe(1);
       expect(body.errors).toBe(0);
 
-      // Verify email was sent with error details
+      // The email says what happened and what to do, in plain words
       expect(sendEmail).toHaveBeenCalledOnce();
       const emailCall = vi.mocked(sendEmail).mock.calls[0][0];
       expect(emailCall.to).toBe('owner@test.com');
-      expect(emailCall.html).toContain('Token expired');
-      expect(emailCall.html).toContain('[AUTH_ERROR]');
+      expect(emailCall.html).toContain('Reconnect Instagram on the Connections page, then try again.');
+      expect(emailCall.html).not.toContain('Token expired');
+      expect(emailCall.html).not.toContain('AUTH_ERROR');
+      expect(emailCall.html).not.toContain('Error details');
 
-      // Verify the in-app alert was stored with a headline and the error details
+      // The in-app alert gets the same plain words
       const alerts = table.rows.filter((row) => row.category === 'publish_failed');
       expect(alerts).toHaveLength(1);
       expect(alerts[0]).toMatchObject({
@@ -170,8 +172,9 @@ describe('notify-failures cron route', () => {
         resource_type: 'content_item',
         resource_id: CONTENT_ITEM_ID,
       });
-      expect(alerts[0].body).toContain('Token expired');
-      expect(alerts[0].body).toContain('[AUTH_ERROR]');
+      expect(alerts[0].body).toContain('Reconnect Instagram on the Connections page');
+      expect(alerts[0].body).not.toContain('Token expired');
+      expect(alerts[0].body).not.toContain('AUTH_ERROR');
     });
   });
 
@@ -206,6 +209,105 @@ describe('notify-failures cron route', () => {
       const alert = table.rows.find((row) => row.category === 'publish_failed');
       expect(alert?.message).toBe('Facebook post failed to publish');
       expect(alert?.body).toContain('Publishing failed');
+    });
+  });
+
+  describe('owner email wording', () => {
+    // Stored texts in the live formats. The publish-queue edge function writes
+    // last_error; its refusals and the Next.js path write error_message.
+    const FIXTURES = [
+      {
+        name: 'Instagram media fetch (last_error)',
+        job: {
+          last_error:
+            '[instagram_create_container] status=400 OAuthException: Only photo or video can be accepted as media type. (code 9004, subcode 2207052) trace=AbC123',
+          error_message: null,
+          error_code: null,
+        },
+        content: { platform: 'instagram', placement: 'story' },
+        plain: 'Instagram could not collect the image from us this time.',
+        hidden: ['OAuthException', 'code 9004', 'trace=', 'instagram_create_container'],
+      },
+      {
+        name: 'Facebook expired token (last_error)',
+        job: {
+          last_error:
+            '[facebook_feed_publish] status=400 OAuthException: Error validating access token: Session has expired. (code 190, subcode 463) trace=AbC123',
+          error_message: null,
+          error_code: null,
+        },
+        content: { platform: 'facebook', placement: 'feed' },
+        plain: 'Reconnect Facebook on the Connections page, then try again.',
+        hidden: ['Error validating access token', 'code 190', 'OAuthException'],
+      },
+      {
+        name: 'Facebook Page no longer reachable (last_error)',
+        job: {
+          last_error:
+            "GraphMethodException: Unsupported post request. Object with ID '100000000000000' does not exist, cannot be loaded due to missing permissions, or does not support this operation.",
+          error_message: null,
+          error_code: null,
+        },
+        content: { platform: 'facebook', placement: 'story' },
+        plain: 'Cheers can no longer reach your Facebook Page.',
+        hidden: ['GraphMethodException', '100000000000000'],
+      },
+      {
+        name: 'unknown text (last_error)',
+        job: { last_error: 'safeJson is not defined', error_message: null, error_code: null },
+        content: { platform: 'instagram', placement: 'feed' },
+        plain: 'Instagram did not accept this post. We will look into it; you can try again or contact Cheers support.',
+        hidden: ['safeJson'],
+      },
+      {
+        name: 'a refused post keeps its plain wording (error_message)',
+        job: {
+          last_error: null,
+          error_message: 'Not published: this post is still a draft. Approve it in the planner to schedule it.',
+          error_code: 'CONTENT_NOT_PUBLISHABLE',
+        },
+        content: { platform: 'facebook', placement: 'feed' },
+        plain: 'Not published: this post is still a draft. Approve it in the planner to schedule it.',
+        hidden: ['CONTENT_NOT_PUBLISHABLE'],
+      },
+    ];
+
+    it.each(FIXTURES)('$name', async ({ job, content, plain, hidden }) => {
+      const mockDb = createMockDb({
+        publish_jobs: {
+          data: [{ id: JOB_ID, updated_at: '2026-10-03T11:01:00.000Z', content_item_id: CONTENT_ITEM_ID, ...job }],
+          error: null,
+        },
+        content_items: { data: { account_id: ACCOUNT_ID, ...content }, error: null },
+        posting_defaults: { data: { notifications: { emailFailures: true } }, error: null },
+        accounts: { data: { email: 'owner@venue.test', display_name: 'The Anchor & Co' }, error: null },
+      });
+      vi.mocked(tryCreateServiceSupabaseClient).mockReturnValue(mockDb as never);
+      vi.mocked(sendEmail).mockResolvedValue(undefined);
+
+      const res = await GET(makeRequest({ 'x-cron-secret': 'test-secret' }));
+      expect(await res.json()).toMatchObject({ emailed: 1, errors: 0 });
+
+      const { html, subject } = vi.mocked(sendEmail).mock.calls[0][0];
+      expect(html).toContain(plain.replace(/'/g, '&#39;'));
+      expect(html).toContain('Hi The Anchor &amp; Co,');
+      const rawText = job.last_error ?? job.error_message;
+      if (rawText && !rawText.startsWith('Not published')) {
+        expect(html).not.toContain(rawText);
+      }
+      for (const fragment of hidden) {
+        expect(html).not.toContain(fragment);
+      }
+      // A template that renders these has reached customers before.
+      for (const rendered of [html, subject]) {
+        expect(rendered).not.toMatch(/undefined|Invalid Date|NaN|\bnull\b/);
+      }
+
+      const alert = table.rows.find((row) => row.category === 'publish_failed');
+      expect(alert?.body).toContain(plain);
+      for (const fragment of hidden) {
+        expect(alert?.body).not.toContain(fragment);
+      }
     });
   });
 

@@ -157,6 +157,28 @@ describe("<PostDrawer /> media editing", () => {
   });
 });
 
+describe("<PostDrawer /> failure text", () => {
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+    vi.clearAllMocks();
+  });
+
+  it("shows the owner plain words for a failed post, never Meta's own text", async () => {
+    // Stored by the publish-queue edge function (live format, trace id replaced).
+    const metaText =
+      "[instagram_container_status] status=400 GraphMethodException: Authorization Error (code 100, subcode 33) trace=AbC123";
+    renderDrawer(makeContent({ status: "failed", lastError: metaText }));
+
+    expect(await screen.findByText(/Instagram refused access while we were posting this/)).toBeInTheDocument();
+    const drawer = document.body.textContent ?? "";
+    expect(drawer).not.toContain(metaText);
+    for (const fragment of ["GraphMethodException", "Authorization Error", "code 100", "trace="]) {
+      expect(drawer).not.toContain(fragment);
+    }
+  });
+});
+
 /*
  * Pinning tests for the `canEdit={canEdit && content.placement !== 'story'}`
  * guard in post-drawer.tsx. That guard is on <InlineCopyEditor>, so it gates

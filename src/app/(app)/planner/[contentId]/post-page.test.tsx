@@ -125,3 +125,44 @@ describe("planner post page actions", () => {
     expect(buttonLabels()).not.toContain("Publish now");
   });
 });
+
+describe("planner post page failure text", () => {
+  // Stored by the publish-queue edge function (live format, trace id replaced).
+  const META_TEXT =
+    "[instagram_create_container] status=400 OAuthException: Only photo or video can be accepted as media type. (code 9004, subcode 2207052) trace=AbC123";
+
+  it("shows the owner plain words, never Meta's own text", async () => {
+    await renderPage(makeDetail({ platform: "instagram", status: "failed", lastError: META_TEXT }));
+
+    expect(screen.getByText(/Instagram could not collect the image from us this time/)).toBeInTheDocument();
+    const page = document.body.textContent ?? "";
+    expect(page).not.toContain(META_TEXT);
+    for (const fragment of ["OAuthException", "code 9004", "subcode", "trace=", "status=400", "instagram_create_container"]) {
+      expect(page).not.toContain(fragment);
+    }
+  });
+
+  it("says what to do next for an expired connection", async () => {
+    await renderPage(
+      makeDetail({
+        status: "failed",
+        lastError:
+          "[facebook_feed_publish] status=400 OAuthException: Error validating access token: Session has expired. (code 190, subcode 463) trace=AbC123",
+      }),
+    );
+
+    expect(
+      screen.getByText(
+        "Cheers can no longer post to Facebook because the connection has expired or been cancelled. Reconnect Facebook on the Connections page, then try again.",
+      ),
+    ).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain("Error validating access token");
+  });
+
+  it("keeps the wording of a billing hold", async () => {
+    const hold = "On hold: this brand has not finished setting up billing. An owner can finish it from Billing.";
+    await renderPage(makeDetail({ status: "scheduled", lastError: hold }));
+
+    expect(screen.getByText(hold)).toBeInTheDocument();
+  });
+});

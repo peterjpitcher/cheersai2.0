@@ -18,6 +18,7 @@ import { createServiceSupabaseClient } from '@/lib/supabase/service';
 import { STATUS_QUERY_ALIASES } from '@/features/planner/status-filter-options';
 import type { PlannerActivityItem } from '@/features/planner/activity-feed';
 import { formatUkDateTime } from '@/lib/utils/date';
+import { publishFailureText } from '@/lib/publishing/failure-messages';
 
 /** Force dynamic rendering — planner shows personalised data (PERF-01) */
 export const dynamic = 'force-dynamic';
@@ -129,24 +130,33 @@ function FailedPostsList({ posts }: { posts: ActiveFailedPost[] }) {
         Active failed posts
       </h2>
       <div className="mt-3 divide-y" style={{ borderColor: 'var(--c-line)' }}>
-        {posts.map((post) => (
-          <a
-            key={post.id}
-            href={`/planner/${post.id}`}
-            className="block py-3 text-sm hover:underline"
-            style={{ color: 'var(--c-ink)' }}
-          >
-            <span className="font-medium capitalize">{post.platform} {post.placement}</span>
-            {post.scheduledFor ? (
-              <span style={{ color: 'var(--c-ink-3)' }}> · {formatUkDateTime(post.scheduledFor)}</span>
-            ) : null}
-            {post.lastError ? (
-              <span className="mt-1 block truncate" style={{ color: 'var(--c-claret)' }}>
-                {post.lastError}
-              </span>
-            ) : null}
-          </a>
-        ))}
+        {posts.map((post) => {
+          // Plain words; Meta's own text stays in the database (tasks/SPEC-plain-publish-failures.md).
+          // Not truncated: the second sentence is what the owner should do next.
+          const failureText = publishFailureText({
+            error: post.lastError,
+            platform: post.platform,
+            placement: post.placement,
+          });
+          return (
+            <a
+              key={post.id}
+              href={`/planner/${post.id}`}
+              className="block py-3 text-sm hover:underline"
+              style={{ color: 'var(--c-ink)' }}
+            >
+              <span className="font-medium capitalize">{post.platform} {post.placement}</span>
+              {post.scheduledFor ? (
+                <span style={{ color: 'var(--c-ink-3)' }}> · {formatUkDateTime(post.scheduledFor)}</span>
+              ) : null}
+              {failureText ? (
+                <span className="mt-1 block" style={{ color: 'var(--c-claret)' }}>
+                  {failureText}
+                </span>
+              ) : null}
+            </a>
+          );
+        })}
       </div>
     </section>
   );
