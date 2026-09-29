@@ -249,6 +249,8 @@ describe('a guide while sign-up is open', () => {
 
     const region = container.querySelector('[role="region"]');
     expect(region?.getAttribute('aria-label')).toBe('A sample week of posts');
+    // The visible caption sits above the scroll box so it wraps on a phone.
+    expect(region?.previousElementSibling?.textContent).toBe('A sample week of posts');
     expect(region?.getAttribute('tabindex')).toBe('0');
     const table = region?.querySelector('table');
     expect(table?.querySelector('caption')?.textContent).toBe('A sample week of posts');

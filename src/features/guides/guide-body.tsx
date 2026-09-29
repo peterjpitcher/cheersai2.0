@@ -11,8 +11,10 @@ const PARAGRAPH = 'text-[17px] leading-[1.7] text-ink-2';
  * component. Blocks are data, never HTML, so an article cannot inject markup.
  */
 export function GuideBody({ guide }: { guide: Guide }): React.JSX.Element {
+  // Long unbroken strings (a tracking link, a hashtag run) wrap instead of
+  // pushing the page sideways on a phone.
   return (
-    <div className="space-y-12">
+    <div className="space-y-12 [overflow-wrap:break-word]">
       {guide.intro?.length ? (
         <div className="space-y-5">
           {guide.intro.map((paragraph, index) => (
@@ -96,45 +98,45 @@ function GuideBlockView({ block }: { block: GuideBlock }): React.JSX.Element {
       );
     case 'table':
       // A wide table scrolls inside its own box, never the page; the box is
-      // focusable so keyboard users can scroll it too.
+      // focusable so keyboard users can scroll it too. The caption shows above
+      // the box so it wraps on a phone; screen readers get the table's own
+      // <caption> and the region's label instead.
       return (
-        <div
-          role="region"
-          aria-label={block.caption}
-          tabIndex={0}
-          className="overflow-x-auto rounded-[var(--r-xl)] border border-line bg-card"
-        >
-          <table className="w-full min-w-[480px] border-collapse text-left text-[15px] leading-snug">
-            <caption className="border-b border-line px-4 py-3 text-left text-sm font-semibold text-ink">
-              {block.caption}
-            </caption>
-            <thead>
-              <tr className="bg-paper-2">
-                {block.head.map((cell, index) => (
-                  <th key={index} scope="col" className="border-b border-line px-4 py-3 font-semibold text-ink">
-                    {cell}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {block.rows.map((row, rowIndex) => (
-                <tr key={rowIndex} className="border-b border-line last:border-b-0">
-                  {row.map((cell, cellIndex) =>
-                    cellIndex === 0 ? (
-                      <th key={cellIndex} scope="row" className="px-4 py-3 align-top font-semibold text-ink">
-                        <RichTextView value={cell} />
-                      </th>
-                    ) : (
-                      <td key={cellIndex} className="px-4 py-3 align-top text-ink-2">
-                        <RichTextView value={cell} />
-                      </td>
-                    ),
-                  )}
+        <div className="rounded-[var(--r-xl)] border border-line bg-card">
+          <p aria-hidden="true" className="border-b border-line px-4 py-3 text-sm font-semibold text-ink">
+            {block.caption}
+          </p>
+          <div role="region" aria-label={block.caption} tabIndex={0} className="overflow-x-auto">
+            <table className="w-full min-w-[480px] border-collapse text-left text-[15px] leading-snug">
+              <caption className="sr-only">{block.caption}</caption>
+              <thead>
+                <tr className="bg-paper-2">
+                  {block.head.map((cell, index) => (
+                    <th key={index} scope="col" className="border-b border-line px-4 py-3 font-semibold text-ink">
+                      {cell}
+                    </th>
+                  ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {block.rows.map((row, rowIndex) => (
+                  <tr key={rowIndex} className="border-b border-line last:border-b-0">
+                    {row.map((cell, cellIndex) =>
+                      cellIndex === 0 ? (
+                        <th key={cellIndex} scope="row" className="px-4 py-3 align-top font-semibold text-ink">
+                          <RichTextView value={cell} />
+                        </th>
+                      ) : (
+                        <td key={cellIndex} className="px-4 py-3 align-top text-ink-2">
+                          <RichTextView value={cell} />
+                        </td>
+                      ),
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       );
   }
