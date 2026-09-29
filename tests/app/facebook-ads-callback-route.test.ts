@@ -1,10 +1,17 @@
 import { NextRequest } from 'next/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { InMemoryConnectionsDb } from '../helpers/in-memory-connections-db';
+
 const mocks = vi.hoisted(() => ({
   storeMetaAdAccountToken: vi.fn(),
   adAccountUpsert: vi.fn(),
 }));
+
+// oauth_states is the in-memory table with production's constraints; the rest stays mocked.
+let db: InMemoryConnectionsDb;
+const ACCOUNT = 'account-1';
+const CHOICE_REFERENCE = 'C'.repeat(43);
 
 vi.mock('@/env', () => ({
   env: {
@@ -25,16 +32,7 @@ vi.mock('@/lib/supabase/service', () => ({
   createServiceSupabaseClient: () => ({
     from: (table: string) => {
       if (table === 'oauth_states') {
-        return {
-          select: () => ({
-            eq: () => ({
-              eq: () => ({
-                maybeSingle: async () => ({ data: { account_id: 'account-1', used_at: null }, error: null }),
-              }),
-            }),
-          }),
-          update: () => ({ eq: async () => ({ error: null }) }),
-        };
+        return db.client().from('oauth_states');
       }
       if (table === 'accounts') {
         return {
@@ -55,8 +53,8 @@ vi.mock('@/lib/supabase/service', () => ({
 
 import { GET } from '@/app/api/oauth/facebook-ads/callback/route';
 
-function callbackRequest() {
-  return new NextRequest('https://cheers.test/api/oauth/facebook-ads/callback?code=abc&state=state-1');
+function callbackRequest(state = 'state-1') {
+  return new NextRequest(`https://cheers.test/api/oauth/facebook-ads/callback?code=abc&state=${state}`);
 }
 
 describe('GET /api/oauth/facebook-ads/callback', () => {
@@ -64,6 +62,25 @@ describe('GET /api/oauth/facebook-ads/callback', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    db = new InMemoryConnectionsDb();
+    db.seed('accounts', [{ id: ACCOUNT }]);
+    db.seed('oauth_states', [
+      { state: 'state-1', provider: 'facebook', account_id: ACCOUNT },
+      {
+        state: 'expired-state',
+        provider: 'facebook',
+        account_id: ACCOUNT,
+        expires_at: new Date(Date.now() - 60 * 1000).toISOString(),
+      },
+      // A pending Page choice lives in the same table with an encrypted payload.
+      {
+        state: CHOICE_REFERENCE,
+        provider: 'facebook',
+        account_id: ACCOUNT,
+        redirect_to: '/connections/choose-page',
+        auth_code: '{"ciphertext":"c","iv":"i","tag":"t","keyVersion":1}',
+      },
+    ]);
     vi.stubGlobal('fetch', fetchMock);
     vi.spyOn(console, 'error').mockImplementation(() => {});
     fetchMock
@@ -113,5 +130,46 @@ describe('GET /api/oauth/facebook-ads/callback', () => {
 
     expect(response.headers.get('location')).toBe('https://cheers.test/connections?ads_error=db_error');
     expect(mocks.storeMetaAdAccountToken).not.toHaveBeenCalled();
+  });
+
+  it('marks the login state used', async () => {
+    await GET(callbackRequest());
+
+    expect(db.rows('oauth_states').find((row) => row.state === 'state-1')?.used_at).not.toBeNull();
+  });
+
+  it('never accepts a pending Page choice as its login check, and leaves it untouched', async () => {
+    const before = db.rows('oauth_states').find((row) => row.state === CHOICE_REFERENCE);
+
+    const response = await GET(callbackRequest(CHOICE_REFERENCE));
+
+    expect(response.headers.get('location')).toBe('https://cheers.test/connections?ads_error=invalid_state');
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(db.rows('oauth_states').find((row) => row.state === CHOICE_REFERENCE)).toEqual(before);
+  });
+
+  it('refuses an expired login state', async () => {
+    const response = await GET(callbackRequest('expired-state'));
+
+    expect(response.headers.get('location')).toBe('https://cheers.test/connections?ads_error=invalid_state');
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('never puts a Meta access token from an error into the redirect or the log', async () => {
+    fetchMock.mockReset();
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({ error: { message: 'Bad token EAABsbCS1iHgBAKZCZBZCxyz0123456789', type: 'OAuthException', code: 190 } }),
+        { status: 400 },
+      ),
+    );
+
+    const response = await GET(callbackRequest());
+
+    const location = response.headers.get('location') ?? '';
+    expect(decodeURIComponent(location)).toContain('Bad token [redacted token]');
+    expect(location).not.toContain('EAABsbCS1iHg');
+    const logged = vi.mocked(console.error).mock.calls.flat().map(String).join('\n');
+    expect(logged).not.toContain('EAABsbCS1iHg');
   });
 });

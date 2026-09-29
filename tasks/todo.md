@@ -1,3 +1,26 @@
+# Facebook Page chooser (2026-09-29)
+
+Spec: `tasks/SPEC-facebook-page-chooser.md`; branch `feat/facebook-page-chooser` (draft PR, not approved to ship).
+
+- [x] Read-only check of production's oauth_states and social_connections columns, constraints,
+      policies and grants; every brand's Facebook and Instagram hold the same pageId
+- [x] Selection rules module and tests
+- [x] Hand-off store (create, read, claim) and tests
+- [x] Token exchange split (user token, Pages with tasks and paging, build connection) and tests
+- [x] Shared persistence helpers; `completeOAuthConnect` uses the rules; callback redirects to the chooser
+- [x] `choosePageForConnection` with Instagram following a Facebook choice; tests with failing dependencies
+- [x] Chooser page, Change Page buttons, success notice; component tests
+- [x] Local run (worktree dev server, local Supabase, test owner): chooser listed from the encrypted row,
+      no token in the page, a failed Meta check showed its reason with Start again (running it caught the
+      server re-render hiding that reason; fixed), used and expired choices, Change Page wrote a forcing
+      state and went to Facebook. Local test data removed afterwards.
+- [x] lint:ci, typecheck, test:ci and test:utc (3,892 tests each), build with CI's variables; draft
+      PR #158, CI green
+- [ ] A real multi-Page Facebook login and pick (not possible locally)
+- [x] Peter's yes (29 September 2026); the independent review's eight code findings fixed in the same PR
+      (spec, "Review fixes"); contrast, focus and the expired-choice clean-up re-checked in the browser
+- [ ] Merge and deploy (the main agent merges)
+
 # Self-serve sign-up PR 6: venue creation (2026-09-28)
 
 Spec: `tasks/SPEC-self-serve-signup.md` §4.4, §4.3 (switch gate), §4.9, §4.10, P10; branch `feat/signup-venue`.

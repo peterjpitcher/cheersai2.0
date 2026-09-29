@@ -1,25 +1,18 @@
 import { env } from "@/env";
 import { getMetaGraphApiBase } from "@/lib/meta/graph";
+import { redactMetaAccessTokens } from "@/lib/meta/redact";
 import type { Provider } from "@/lib/connections/oauth";
+import { toManagedPage, type ManagedPage } from "@/lib/connections/page-selection";
 
 const SITE_URL = env.client.NEXT_PUBLIC_SITE_URL.replace(/\/$/, "");
 const GRAPH_BASE = getMetaGraphApiBase();
+const GRAPH_HOST = "graph.facebook.com";
 
-interface ExchangeOptions {
-  existingMetadata?: Record<string, unknown> | null;
-  existingDisplayName?: string | null;
-}
-
-interface FacebookPage {
-  id?: string;
-  name?: string;
-  access_token?: string;
-  instagram_business_account?: {
-    id?: string;
-    username?: string;
-    name?: string;
-  } | null;
-}
+/**
+ * `/me/accounts` returns 25 Pages a request. Four requests cover 100 Pages,
+ * far more than a venue owner manages, and bound the callback's time.
+ */
+const MAX_PAGE_LIST_REQUESTS = 4;
 
 export interface ProviderTokenExchange {
   accessToken: string;
@@ -35,25 +28,20 @@ export interface ProviderTokenExchange {
   metaUserId?: string | null;
 }
 
-export async function exchangeProviderAuthCode(
-  provider: Provider,
-  authCode: string,
-  options: ExchangeOptions = {},
-): Promise<ProviderTokenExchange> {
-  switch (provider) {
-    case "facebook":
-    case "instagram":
-      return exchangeFacebookFamilyCode(provider, authCode, options.existingMetadata ?? null);
-    default:
-      throw new Error(`Unsupported provider ${provider}`);
-  }
+/** What the login itself yields, before a Page is chosen. Server only. */
+export interface MetaUserAuth {
+  /** Long-lived Meta user token (the short-lived one if the upgrade failed). Never log it. */
+  userAccessToken: string;
+  /** When the user token expires; stored as the connection's token_expires_at, as before. */
+  expiresAt: string | null;
+  metaUserId: string | null;
 }
 
-async function exchangeFacebookFamilyCode(
-  provider: "facebook" | "instagram",
-  code: string,
-  existingMetadata: Record<string, unknown> | null,
-): Promise<ProviderTokenExchange> {
+/**
+ * Swaps the OAuth code for a Meta user token (long-lived when Meta allows it)
+ * and reads the Meta user id. Page selection happens separately.
+ */
+export async function exchangeCodeForUserToken(provider: Provider, code: string): Promise<MetaUserAuth> {
   const redirectUri = `${SITE_URL}/api/oauth/${provider}/callback`;
   const params = new URLSearchParams({
     client_id: env.client.NEXT_PUBLIC_FACEBOOK_APP_ID,
@@ -91,90 +79,63 @@ async function exchangeFacebookFamilyCode(
     console.warn("[connections] failed to obtain long-lived Facebook token", error);
   }
 
-  const expiresAt = expiresIn ? toIsoExpiry(expiresIn) : null;
-  const metaUserId = await fetchMetaUserId(userAccessToken);
-  const pages = await fetchManagedPages(userAccessToken);
+  return {
+    userAccessToken,
+    expiresAt: expiresIn ? toIsoExpiry(expiresIn) : null,
+    metaUserId: await fetchMetaUserId(userAccessToken),
+  };
+}
 
-  if (!pages.length) {
-    throw new Error("No Facebook Pages found for the connected account.");
-  }
-
-  const metadata: Record<string, unknown> = {};
-
+/**
+ * The connection to store for a chosen Page: the Page token plus the ids
+ * publishing reads (Facebook: pageId; Instagram: igBusinessId and pageId).
+ * Throws with an owner-readable message when the Page cannot be used.
+ */
+export function buildPageConnection(
+  provider: Provider,
+  page: ManagedPage,
+  auth: Pick<MetaUserAuth, "expiresAt" | "metaUserId">,
+): ProviderTokenExchange {
   if (provider === "facebook") {
-    const desiredPageId = getString(existingMetadata?.pageId);
-    const page = selectFacebookPage(pages, desiredPageId);
-    if (!page) {
-      throw new Error(
-        desiredPageId
-          ? `Could not find Facebook Page ${desiredPageId}. Check that the account still has access to it.`
-          : "No Facebook Page with publishing access was returned.",
-      );
-    }
-
-    const accessToken = getString(page.access_token);
-    if (!accessToken) {
+    if (!page.accessToken) {
       throw new Error("Selected Facebook Page is missing an access token. Try reconnecting and granting publish permissions.");
     }
 
-    if (getString(page.id)) {
-      metadata.pageId = page.id;
+    const metadata: Record<string, unknown> = { pageId: page.id };
+    if (page.instagram) {
+      metadata.igBusinessId = page.instagram.id;
     }
-
-    if (page.instagram_business_account?.id) {
-      metadata.igBusinessId = page.instagram_business_account.id;
-    }
-
-    const displayName = getString(page.name);
 
     return {
-      accessToken,
+      accessToken: page.accessToken,
       refreshToken: null,
-      expiresAt,
-      displayName: displayName ?? null,
-      metadata: Object.keys(metadata).length ? metadata : null,
-      metaUserId,
+      expiresAt: auth.expiresAt,
+      displayName: page.name,
+      metadata,
+      metaUserId: auth.metaUserId,
     };
   }
 
-  const desiredIgId = getString(existingMetadata?.igBusinessId);
-  const instagramSelection = selectInstagramAccount(pages, desiredIgId);
-
-  if (!instagramSelection) {
-    throw new Error(
-      desiredIgId
-        ? `Could not find Instagram Business Account ${desiredIgId}. Ensure it is linked to the selected Facebook Page.`
-        : "No Instagram Business Account was linked to the Facebook Pages returned by Facebook."
-    );
+  const instagram = page.instagram;
+  if (!instagram) {
+    throw new Error("No Instagram Business Account is linked to the selected Facebook Page.");
   }
-
-  const pageToken = getString(instagramSelection.page.access_token);
-  if (!pageToken) {
+  if (!page.accessToken) {
     throw new Error("Instagram publishing requires a Page access token. Grant the 'pages_manage_posts' permission and reconnect.");
   }
 
-  if (getString(instagramSelection.page.id)) {
-    metadata.pageId = instagramSelection.page.id;
+  const metadata: Record<string, unknown> = { pageId: page.id, igBusinessId: instagram.id };
+  if (instagram.username) {
+    metadata.instagramUsername = instagram.username;
   }
-
-  metadata.igBusinessId = instagramSelection.instagram.id;
-
-  if (getString(instagramSelection.instagram.username)) {
-    metadata.instagramUsername = instagramSelection.instagram.username;
-  }
-
-  const displayName =
-    getString(instagramSelection.instagram.username) ??
-    getString(instagramSelection.instagram.name) ??
-    getString(instagramSelection.page.name);
 
   return {
-    accessToken: pageToken,
+    accessToken: page.accessToken,
     refreshToken: null,
-    expiresAt,
-    displayName: displayName ?? null,
+    expiresAt: auth.expiresAt,
+    displayName: instagram.username ?? instagram.name ?? page.name,
     metadata,
-    metaUserId,
+    metaUserId: auth.metaUserId,
   };
 }
 
@@ -223,72 +184,56 @@ export async function fetchMetaUserId(userAccessToken: string): Promise<string |
   }
 }
 
-async function fetchManagedPages(userAccessToken: string) {
+/**
+ * Every Page the person manages, with its token, their tasks on it and any
+ * linked Instagram professional account. Follows Meta's paging (Graph host
+ * only) up to MAX_PAGE_LIST_REQUESTS requests.
+ */
+export async function fetchManagedPages(userAccessToken: string): Promise<ManagedPage[]> {
   const params = new URLSearchParams({
     access_token: userAccessToken,
-    fields: "id,name,access_token,instagram_business_account{id,username,name}",
+    fields: "id,name,access_token,tasks,instagram_business_account{id,username,name}",
   });
 
-  const response = await fetch(
-    `${GRAPH_BASE}/me/accounts?${params.toString()}`,
-  );
-  const json = await safeJson(response);
+  const pages: ManagedPage[] = [];
+  const seen = new Set<string>();
+  let url: string | null = `${GRAPH_BASE}/me/accounts?${params.toString()}`;
 
-  if (!response.ok) {
-    throw new Error(resolveGraphError(json));
+  for (let request = 0; url && request < MAX_PAGE_LIST_REQUESTS; request += 1) {
+    const response = await fetch(url);
+    const json = await safeJson(response);
+
+    if (!response.ok) {
+      throw new Error(resolveGraphError(json));
+    }
+
+    const data: unknown[] = Array.isArray(json?.data) ? json.data : [];
+    for (const raw of data) {
+      const page = toManagedPage(raw);
+      if (page && !seen.has(page.id)) {
+        seen.add(page.id);
+        pages.push(page);
+      }
+    }
+
+    url = nextGraphPageUrl(json);
   }
 
-  const data = Array.isArray(json?.data) ? (json.data as FacebookPage[]) : [];
-  return data.filter((page) => page && typeof page === "object");
+  return pages;
 }
 
-function selectFacebookPage(pages: FacebookPage[], desiredPageId: string | null) {
-  if (desiredPageId) {
-    const matched = pages.find((page) => getString(page.id) === desiredPageId);
-    if (matched) {
-      return matched;
-    }
-  }
-  return pages[0] ?? null;
-}
-
-function selectInstagramAccount(pages: FacebookPage[], desiredInstagramId: string | null) {
-  const pagesWithInstagram = pages
-    .map((page) => ({
-      page,
-      instagram: page.instagram_business_account,
-    }))
-    .filter((entry) => entry.instagram && getString(entry.instagram?.id));
-
-  if (desiredInstagramId) {
-    const match = pagesWithInstagram.find(
-      (entry) => getString(entry.instagram?.id) === desiredInstagramId,
-    );
-    if (match) {
-      return {
-        page: match.page,
-        instagram: {
-          id: getString(match.instagram?.id)!,
-          username: getString(match.instagram?.username) ?? undefined,
-          name: getString(match.instagram?.name) ?? undefined,
-        },
-      };
-    }
-  }
-
-  const first = pagesWithInstagram[0];
-  if (!first) {
+/** Meta's `paging.next`, only when it points back at the Graph API over https. */
+function nextGraphPageUrl(payload: unknown): string | null {
+  const next = (payload as { paging?: { next?: unknown } } | null)?.paging?.next;
+  if (typeof next !== "string") {
     return null;
   }
-
-  return {
-    page: first.page,
-    instagram: {
-      id: getString(first.instagram?.id)!,
-      username: getString(first.instagram?.username) ?? undefined,
-      name: getString(first.instagram?.name) ?? undefined,
-    },
-  };
+  try {
+    const parsed = new URL(next);
+    return parsed.protocol === "https:" && parsed.hostname === GRAPH_HOST ? parsed.toString() : null;
+  } catch {
+    return null;
+  }
 }
 
 async function safeJson(response: Response) {
@@ -299,13 +244,14 @@ async function safeJson(response: Response) {
   }
 }
 
+/** Meta's error as text, with any access token it echoes removed (it is logged and shown). */
 function resolveGraphError(payload: unknown) {
   if (payload && typeof payload === "object" && "error" in payload) {
     const err = (payload as { error: { message?: string; type?: string; code?: number } }).error;
     const message = err?.message ?? "Unknown Graph API error";
     const type = err?.type ? `${err.type}: ` : "";
     const code = err?.code ? ` (code ${err.code})` : "";
-    return `${type}${message}${code}`;
+    return redactMetaAccessTokens(`${type}${message}${code}`);
   }
   return "Facebook token exchange failed";
 }

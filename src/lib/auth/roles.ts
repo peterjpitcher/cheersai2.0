@@ -21,6 +21,20 @@ export function isOwner(ctx: Pick<AuthContext, 'role'>): boolean {
   return ctx.role === 'owner';
 }
 
+/**
+ * Owner (or super-admin) of one particular brand, which may not be the active
+ * one: an OAuth flow is attributed to the brand that started it, even if the
+ * user switches brand mid-flow.
+ */
+export function ownsBrand(ctx: Pick<AuthContext, 'brands' | 'isSuperAdmin'>, accountId: string): boolean {
+  return ctx.isSuperAdmin || ctx.brands.some((brand) => brand.accountId === accountId && brand.role === 'owner');
+}
+
+/** Every brand the caller owns (all brands for a super-admin). */
+export function ownedBrandIds(ctx: Pick<AuthContext, 'brands' | 'isSuperAdmin'>): string[] {
+  return ctx.brands.filter((brand) => ctx.isSuperAdmin || brand.role === 'owner').map((brand) => brand.accountId);
+}
+
 /** Throws OwnerRequiredError (fail closed) unless the caller owns the active brand. */
 export function assertOwner(ctx: Pick<AuthContext, 'role'>): void {
   if (!isOwner(ctx)) throw new OwnerRequiredError();
