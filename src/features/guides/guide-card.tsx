@@ -10,17 +10,21 @@ interface GuideCardProps {
   guide: Guide;
   /** The card title's heading level, so it fits the page's outline. */
   headingLevel: 'h2' | 'h3';
+  /** Leave the category out where a heading above already names it. */
+  showCategory?: boolean;
 }
 
 /** A guide in a list: the whole card is one link (the title's link stretches over it). */
-export function GuideCard({ guide, headingLevel }: GuideCardProps): React.JSX.Element {
+export function GuideCard({ guide, headingLevel, showCategory = true }: GuideCardProps): React.JSX.Element {
   const Heading = headingLevel;
   return (
     <article className="relative flex w-full flex-col rounded-[var(--r-xl)] border border-line bg-card p-6 transition-shadow duration-150 hover:shadow-[var(--sh-md)]">
-      <p className="font-mono text-[11px] font-medium uppercase tracking-[0.14em] text-orange-hi">
-        {guideCategory(guide.category).label}
-      </p>
-      <Heading className="mt-3 text-lg font-semibold leading-snug text-ink">
+      {showCategory ? (
+        <p className="mb-3 font-mono text-[11px] font-medium uppercase tracking-[0.14em] text-orange-hi">
+          {guideCategory(guide.category).label}
+        </p>
+      ) : null}
+      <Heading className="text-lg font-semibold leading-snug text-ink">
         <Link
           href={guidePath(guide.slug)}
           className="underline-offset-4 after:absolute after:inset-0 after:rounded-[var(--r-xl)] after:content-[''] hover:underline"

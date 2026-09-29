@@ -286,11 +286,25 @@ h1, h2, h3, h4 {
   mask-image: linear-gradient(to bottom, transparent, black 25%, black 65%, transparent);
 }
 
-/* A warm orange glow, like light from the bar. */
+/*
+ * A warm orange glow, like light from the bar. "closest-side" ends each glow
+ * before it reaches any edge, so bands of ink sitting next to each other
+ * (header, hero, closing call to action, footer) never show a seam.
+ */
 .site-glow {
   background:
-    radial-gradient(55% 60% at 85% 15%, color-mix(in srgb, var(--c-orange) 30%, transparent), transparent 70%),
-    radial-gradient(40% 45% at 5% 95%, color-mix(in srgb, var(--c-orange-hi) 18%, transparent), transparent 70%);
+    radial-gradient(
+      closest-side at 78% 42%,
+      color-mix(in srgb, var(--c-orange) 40%, transparent) 0%,
+      color-mix(in srgb, var(--c-orange) 12%, transparent) 55%,
+      transparent 100%
+    ),
+    radial-gradient(
+      closest-side at 16% 70%,
+      color-mix(in srgb, var(--c-orange-hi) 20%, transparent) 0%,
+      color-mix(in srgb, var(--c-orange-hi) 6%, transparent) 55%,
+      transparent 100%
+    );
 }
 
 /* Interactive elements always show pointer cursor */

@@ -132,8 +132,11 @@ export const AUDIENCE_SECTION = {
   intro: 'Tell Cheers what kind of place you run and it writes for it.',
 } as const;
 
+/** The venue types the homepage names: every sign-up venue type except "other". */
+export type NamedVenueType = Exclude<VenueType, 'other'>;
+
 /** What each venue type might post about, keyed by the sign-up form's venue types. */
-const AUDIENCE_EXAMPLES: Record<Exclude<VenueType, 'other'>, { heading: string; examples: string }> = {
+const AUDIENCE_EXAMPLES: Record<NamedVenueType, { heading: string; examples: string }> = {
   pub: {
     heading: 'Pubs',
     examples: 'Quiz nights, live sport, Sunday roasts and the first sunny day in the beer garden.',
@@ -151,7 +154,7 @@ const AUDIENCE_EXAMPLES: Record<Exclude<VenueType, 'other'>, { heading: string; 
 };
 
 export interface Audience {
-  readonly type: VenueType;
+  readonly type: NamedVenueType;
   readonly heading: string;
   readonly examples: string;
 }

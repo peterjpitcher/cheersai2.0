@@ -1,11 +1,15 @@
 import {
   BadgeCheck,
+  Beer,
   Building2,
   CalendarDays,
   Check,
+  Coffee,
+  Hotel,
   Images,
   Link2,
   LockKeyhole,
+  Martini,
   MessageCircle,
   PartyPopper,
   PenLine,
@@ -14,6 +18,7 @@ import {
   ScrollText,
   Send,
   Users,
+  UtensilsCrossed,
   type LucideIcon,
 } from 'lucide-react';
 import Link from 'next/link';
@@ -38,6 +43,7 @@ import {
   whatYouNeed,
   type FaqItem,
   type FeatureIcon,
+  type NamedVenueType,
   type TrustIcon,
 } from '@/content/homepage';
 import type { Guide } from '@/content/guides/types';
@@ -82,6 +88,14 @@ const FEATURE_ICONS: Record<FeatureIcon, LucideIcon> = {
   library: Images,
   link: Link2,
   team: Users,
+};
+
+const VENUE_ICONS: Record<NamedVenueType, LucideIcon> = {
+  pub: Beer,
+  bar: Martini,
+  restaurant: UtensilsCrossed,
+  cafe: Coffee,
+  hotel: Hotel,
 };
 
 const TRUST_ICONS: Record<TrustIcon, LucideIcon> = {
@@ -131,7 +145,7 @@ function SectionHeading({
   return (
     <div className="max-w-[640px]">
       <p className={`${EYEBROW} text-orange-hi`}>{eyebrow}</p>
-      <h2 id={id} className="mt-3 text-3xl font-semibold leading-tight tracking-[-0.02em] text-ink sm:text-4xl">
+      <h2 id={id} className="mt-3 text-balance text-3xl font-semibold leading-tight tracking-[-0.02em] text-ink sm:text-4xl">
         {title}
       </h2>
       {intro ? <p className="mt-4 text-lg leading-relaxed text-ink-2">{intro}</p> : null}
@@ -151,7 +165,7 @@ function Hero({ cta }: { cta: FrontDoorCta }): React.JSX.Element {
           <p className={`${EYEBROW} text-orange`}>{HERO.eyebrow}</p>
           <h1
             id="hero-title"
-            className="mt-5 text-4xl font-semibold leading-[1.06] tracking-[-0.03em] text-white sm:text-5xl lg:text-[3.6rem]"
+            className="mt-5 text-balance text-4xl font-semibold leading-[1.06] tracking-[-0.03em] text-white sm:text-5xl lg:text-[3.6rem]"
           >
             {HERO.title} <span className="block text-orange">{HERO.titleAccent}</span>
           </h1>
@@ -205,7 +219,10 @@ function HowItWorks(): React.JSX.Element {
         <ol className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {HOW_IT_WORKS.steps.map((step, index) => (
             <li key={step.title} className="rounded-[var(--r-xl)] border border-line bg-card p-6">
-              <span aria-hidden="true" className="font-mono text-sm font-semibold text-orange-hi">
+              <span
+                aria-hidden="true"
+                className="inline-flex h-9 w-9 items-center justify-center rounded-[var(--r-pill)] bg-orange-soft font-mono text-sm font-semibold text-orange-hi"
+              >
                 {String(index + 1).padStart(2, '0')}
               </span>
               <h3 className="mt-4 text-lg font-semibold leading-snug text-ink">{step.title}</h3>
@@ -264,12 +281,18 @@ function Audiences(): React.JSX.Element {
           intro={AUDIENCE_SECTION.intro}
         />
         <ul className="mt-10 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-          {audiences().map((audience) => (
-            <li key={audience.type} className="rounded-[var(--r-xl)] border border-orange-soft bg-card p-5">
-              <h3 className={`${EYEBROW} text-orange-hi`}>{audience.heading}</h3>
-              <p className="mt-3 text-[15px] leading-relaxed text-ink-2">{audience.examples}</p>
-            </li>
-          ))}
+          {audiences().map((audience) => {
+            const Icon = VENUE_ICONS[audience.type];
+            return (
+              <li key={audience.type} className="rounded-[var(--r-xl)] border border-orange-soft bg-card p-5">
+                <div className="flex items-center gap-2.5">
+                  <Icon aria-hidden="true" className="h-5 w-5 text-orange-hi" strokeWidth={1.75} />
+                  <h3 className={`${EYEBROW} text-orange-hi`}>{audience.heading}</h3>
+                </div>
+                <p className="mt-3 text-[15px] leading-relaxed text-ink-2">{audience.examples}</p>
+              </li>
+            );
+          })}
         </ul>
         <p className="mt-6 text-sm text-ink-2">{otherVenueNote()}</p>
       </div>
@@ -410,7 +433,11 @@ function GuidesTeaser({ guidesHref, guides }: { guidesHref: string; guides: read
 
 function Questions({ faq }: { faq: readonly FaqItem[] }): React.JSX.Element {
   return (
-    <section id="questions" aria-labelledby="questions-title" className="scroll-mt-4 bg-card py-16 sm:py-24">
+    <section
+      id="questions"
+      aria-labelledby="questions-title"
+      className="scroll-mt-4 border-t border-line bg-card py-16 sm:py-24"
+    >
       <div className={`${CONTAINER} grid gap-10 lg:grid-cols-12`}>
         <div className="lg:col-span-4">
           <SectionHeading id="questions-title" eyebrow={FAQ_SECTION.eyebrow} title={FAQ_SECTION.heading} />

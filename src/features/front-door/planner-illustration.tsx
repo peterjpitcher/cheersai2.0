@@ -145,7 +145,7 @@ export function PlannerIllustration(): React.JSX.Element {
 
       <p
         aria-hidden="true"
-        className="absolute -left-4 top-24 hidden -rotate-3 items-center gap-1.5 rounded-[var(--r-pill)] bg-card px-3 py-1.5 text-xs font-semibold text-ink shadow-[var(--sh-md)] ring-1 ring-line lg:flex"
+        className="absolute -top-4 right-5 hidden rotate-2 items-center gap-1.5 rounded-[var(--r-pill)] bg-card px-3 py-1.5 text-xs font-semibold text-ink shadow-[var(--sh-md)] ring-1 ring-line lg:flex"
       >
         <Sparkles className="h-3.5 w-3.5 text-orange-hi" strokeWidth={2} />
         Written in your voice

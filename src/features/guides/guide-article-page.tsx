@@ -46,7 +46,7 @@ export function GuideArticlePage({ guide, related, cta }: GuideArticlePageProps)
               <p className="font-mono text-xs font-medium uppercase tracking-[0.14em] text-orange-hi">
                 {guideCategory(guide.category).label}
               </p>
-              <h1 className="mt-3 text-4xl font-semibold leading-[1.1] tracking-[-0.02em] text-ink sm:text-5xl">
+              <h1 className="mt-3 text-balance text-4xl font-semibold leading-[1.1] tracking-[-0.02em] text-ink sm:text-5xl">
                 {guide.title}
               </h1>
               <p className="mt-5 text-xl leading-relaxed text-ink-2">{guide.summary}</p>

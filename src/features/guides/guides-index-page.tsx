@@ -43,7 +43,7 @@ export function GuidesIndexPage({ guides, cta }: GuidesIndexPageProps): React.JS
             </p>
             <h1
               id="guides-title"
-              className="mt-4 max-w-[760px] text-4xl font-semibold leading-[1.08] tracking-[-0.03em] text-white sm:text-5xl"
+              className="mt-4 max-w-[760px] text-balance text-4xl font-semibold leading-[1.08] tracking-[-0.03em] text-white sm:text-5xl"
             >
               {GUIDES_SEO.heading}
             </h1>
@@ -67,7 +67,7 @@ export function GuidesIndexPage({ guides, cta }: GuidesIndexPageProps): React.JS
                 <ul className="mt-6 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                   {group.guides.map((guide) => (
                     <li key={guide.slug} className="flex">
-                      <GuideCard guide={guide} headingLevel="h3" />
+                      <GuideCard guide={guide} headingLevel="h3" showCategory={false} />
                     </li>
                   ))}
                 </ul>
