@@ -1,6 +1,6 @@
 # SPEC: Facebook Page chooser
 
-Status: built on `feat/facebook-page-chooser` as a draft PR, 29 September 2026. Not approved for shipping yet: no merge, deploy or production change until Peter says yes.
+Status: approved for shipping by Peter on 29 September 2026 (PR #158, `feat/facebook-page-chooser`), after an independent review said merge with small findings; those fixes are recorded under "Review fixes" below.
 
 ## Why
 
@@ -48,15 +48,31 @@ For every brand in production today, Facebook and Instagram hold the same `pageI
 5. **No schema change.** The record is an `oauth_states` row: `state` is the random reference (unique), `account_id` the brand, `provider` the platform, `auth_code` the AES-256-GCM payload from `src/lib/token-vault`, `redirect_to` is `/connections/choose-page`, `expires_at` is 10 minutes, `used_at` marks it used. `created_by` is left empty on purpose: production's `oauth_states_select` and `oauth_states_update` policies let a signed-in user read and update rows whose `created_by` is their own id, which would let them reset `used_at` or extend `expires_at`. The app reaches this table only with the service role.
 6. **Single use, bound to the owner and the brand.** Reading requires the row's brand to be one the user owns (or super-admin), the decrypted payload's user id to be the signed-in user and its brand and platform to match the row. Picking first claims the row with a conditional update (`used_at is null`, not expired) that also clears the encrypted payload, so a double submit or a replay gets "already used". A row with no payload is refused, so an OAuth state can never be used as a choice, and the OAuth callback now ignores rows that carry a payload, so a choice can never be used as an OAuth state.
 7. **Checked again when the owner picks.** The Page must be one they were shown, still returned by Meta for that login, and still pickable (fresh token, `tasks` and Instagram link). Any failure shows the reason and a Start again button, and logs a warning through `createLogger("connections")` (Axiom and Vercel logs) with the brand, platform and reason, never a token.
-8. **Owner of the initiating brand.** `completeOAuthConnect` checked only membership of the brand that started the flow; it now requires owner (or super-admin), matching decision D4, and the chooser uses the same check. This only refuses more: an owner who started the flow still passes.
+8. **Owner of the initiating brand.** `completeOAuthConnect` checked only membership of the brand that started the flow; it now requires owner (or super-admin), matching decision D4. This only refuses more: an owner who started the flow still passes. The chooser page and the pick both check ownership of the brand the choice is for, not of the brand selected now (review fix 4).
 9. **Change Page on a one-Page login still shows the chooser**, with a note that Facebook only shared one Page and how to share more.
 10. **The chooser keeps its own result.** Picking a Page uses the choice up, and Next.js re-renders the page after the server action (seen when the session cookie is refreshed), which on its own would replace a specific error, or the success, with "already used". Found by running the page locally; one client component now renders every case and its own outcome wins. On a later reload a used choice says: "This Page choice has already been used. If your Page is not connected yet, start again from the Connections screen."
 
 ## Security notes
 
-- Tokens stay encrypted at rest (the hand-off payload with the vault key, connection tokens in `token_vault` as now) and are never logged. The chooser page sets `referrer: same-origin`.
+- Tokens stay encrypted at rest (the hand-off payload with the vault key, connection tokens in `token_vault` as now) and are never logged. Graph error text passes through `redactMetaAccessTokens` (`src/lib/meta/redact.ts`) before it is logged or shown. The chooser page sets `referrer: same-origin`.
 - Every new service-role query is scoped by `account_id` (`token_vault` by the brand's own connection ids, as `disconnectProvider` does).
-- An expired record that was never used keeps its encrypted payload until the existing data-retention cron deletes `oauth_states` rows 24 hours after expiry.
+- Every `oauth_states` read and write in this change uses the service role; nothing relies on the table's user-scoped policies or grants, which a separate PR removes.
+- An expired choice has its encrypted payload dropped the first time it is read after expiry (the chooser page or a pick). A choice nobody opens again keeps it until the existing data-retention cron deletes `oauth_states` rows 24 hours after expiry.
+
+## Review fixes (29 September 2026)
+
+From the independent review of PR #158, all in the same PR:
+
+1. The Ads OAuth callback (`/api/oauth/facebook-ads/callback`) only accepts an unexpired login state without an `auth_code`, and marks used only that row, so a pending Page choice can never pass as its login check.
+2. `markOAuthStateFailed` in the Facebook and Instagram callback skips rows with an `auth_code`, so an error callback naming a choice's reference cannot use the choice up.
+3. A Facebook pick is refused, with Start again, when Instagram was connected, disconnected or moved since the login, because the chooser's Instagram notes came from the login: "Your Instagram connection changed while you were choosing, so the Instagram notes on this screen are out of date. Start again."
+4. The pick checks ownership of the brand the choice is for (as the chooser page does), not of the brand selected now, so an owner who switched brand while choosing can finish; anyone else is refused with a logged reason.
+5. A Page that cannot be picked dims only its radio and name, so the reason (6.6:1) and the Instagram line (5.0:1) keep full contrast.
+6. After a failed pick, focus moves to the reason.
+7. An expired choice has its encrypted payload dropped as soon as it is read (see Security notes). Start again is offered only on that first look, when the flow's mode is still known; later looks say "This Page choice has expired. Start again from the Connections screen." with Back to Connections.
+8. Graph error text from the connection, Ads callback and Ads setup code has anything shaped like a Meta access token (`EAA` plus token characters) replaced with "[redacted token]" before it is logged or put in an address.
+
+Binding the OAuth state to the user who started the flow is a separate follow-up, not part of this PR.
 
 ## Not handled
 
