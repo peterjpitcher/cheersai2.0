@@ -35,7 +35,6 @@ project: cheersai-2.0
 | Webhook handler | `src/app/api/webhooks/qstash-publish/route.ts` | Process publish jobs |
 | Failure handler | `src/app/api/webhooks/qstash-publish/failure/route.ts` | Handle failed jobs |
 | Scheduler | `src/app/api/cron/publish-scheduler/route.ts` | Dispatch due jobs |
-| Retry action | `src/app/actions/publish.ts` | Manual retry |
 
 ### Auth rate limits (Supabase)
 
