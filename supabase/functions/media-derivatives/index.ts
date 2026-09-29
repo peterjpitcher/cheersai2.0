@@ -3,6 +3,7 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { createFFmpeg, fetchFile } from "https://esm.sh/@ffmpeg/ffmpeg@0.12.6";
+import { isServiceRoleCaller } from "./caller-auth.ts";
 
 interface Payload {
   assetId: string;
@@ -122,6 +123,12 @@ function normaliseError(error: unknown) {
 
 
 Deno.serve(async (request: Request) => {
+  // Only our own service-role callers may run this (see caller-auth.ts). Checked before
+  // anything else, so a refused request never has its body read or reaches the database.
+  if (!(await isServiceRoleCaller(request.headers.get("Authorization"), serviceRoleKey))) {
+    return new Response(null, { status: 401 });
+  }
+
   if (request.method !== "POST") {
     return new Response("Method not allowed", { status: 405 });
   }
