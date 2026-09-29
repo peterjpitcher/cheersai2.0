@@ -106,6 +106,29 @@ describe("PageChooser", () => {
     expect(screen.getByText("Your Facebook profile cannot post to this Page.")).not.toBeNull();
   });
 
+  it("dims only the radio and the name of a Page that cannot be picked, so the reason keeps full contrast", () => {
+    render(<PageChooser state={choose()} />);
+
+    const events = screen.getByLabelText(/Crown Events/) as HTMLInputElement;
+    const row = events.closest("label") as HTMLLabelElement;
+    expect(row.className).not.toContain("opacity");
+    expect(events.className).toContain("opacity-70");
+    expect(screen.getByText("Crown Events").className).toContain("opacity-70");
+
+    // Nothing around the reason or the Instagram line is dimmed.
+    for (const text of ["Your Facebook profile cannot post to this Page.", "No Instagram account linked"]) {
+      let node: HTMLElement | null = screen.getByText(text);
+      while (node && node !== row) {
+        expect(node.className).not.toContain("opacity");
+        node = node.parentElement;
+      }
+    }
+
+    // A Page that can be picked is not dimmed at all.
+    const crown = screen.getByLabelText(/The Crown/) as HTMLInputElement;
+    expect(crown.className).not.toContain("opacity");
+  });
+
   it("keeps the button disabled until the owner picks a Page", () => {
     render(<PageChooser state={choose()} />);
 
@@ -140,6 +163,8 @@ describe("PageChooser", () => {
 
     const alert = await screen.findByRole("alert");
     expect(alert.textContent).toBe("This Page choice has expired. Start again to see your Pages.");
+    // The Connect button that had focus is gone: focus moves to the reason.
+    await waitFor(() => expect(document.activeElement).toBe(alert));
     expect(replaceMock).not.toHaveBeenCalled();
     expect(screen.getByRole("link", { name: "Back to Connections" }).getAttribute("href")).toBe("/connections");
 
@@ -200,6 +225,8 @@ describe("PageChooser", () => {
   it("shows the server's reason on a fresh load, with Start again only when it helps", () => {
     const { rerender } = render(<PageChooser state={usedUp} />);
     expect(screen.getByRole("alert").textContent).toContain("already been used");
+    // A fresh page load leaves focus where the browser puts it.
+    expect(document.activeElement).not.toBe(screen.getByRole("alert"));
     expect(screen.queryByRole("button", { name: "Start again" })).toBeNull();
 
     rerender(

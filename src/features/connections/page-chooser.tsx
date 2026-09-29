@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, useTransition, type FormEvent } from "react";
+import { useEffect, useRef, useState, useTransition, type FormEvent } from "react";
 
 import { choosePageForConnection } from "@/app/(app)/connections/page-choice-actions";
 import { ChangePageButton } from "@/features/connections/change-page-button";
@@ -38,12 +38,14 @@ export function PageChooser({ state }: PageChooserProps) {
   const [isPending, startTransition] = useTransition();
 
   if (outcome.phase === "failed") {
+    // The button that had focus is gone: move focus to the reason.
     return (
       <Refusal
         message={outcome.error}
         provider={outcome.provider}
         changePage={outcome.changePage}
         canStartAgain
+        focusOnMount
       />
     );
   }
@@ -112,11 +114,14 @@ export function PageChooser({ state }: PageChooserProps) {
         {view.options.map((option) => {
           const inputId = `page-${option.id}`;
           const checked = selectedId === option.id;
+          // Only the radio and the name are dimmed on a Page that cannot be
+          // picked; the reason and the Instagram line keep full contrast.
+          const dimmed = option.selectable ? "" : "opacity-70";
           return (
             <label
               key={option.id}
               htmlFor={inputId}
-              className={`flex items-start gap-3 rounded-xl border p-4 ${option.selectable ? "cursor-pointer" : "cursor-not-allowed opacity-70"}`}
+              className={`flex items-start gap-3 rounded-xl border p-4 ${option.selectable ? "cursor-pointer" : "cursor-not-allowed"}`}
               style={{
                 borderColor: checked ? "var(--c-ink)" : "var(--c-line)",
                 backgroundColor: "var(--c-card)",
@@ -130,11 +135,11 @@ export function PageChooser({ state }: PageChooserProps) {
                 checked={checked}
                 disabled={!option.selectable || isPending}
                 onChange={() => setSelectedId(option.id)}
-                className="mt-1"
+                className={`mt-1 ${dimmed}`}
               />
               <span className="flex min-w-0 flex-col gap-1">
                 <span className="break-words text-sm font-semibold" style={{ color: "var(--c-ink)" }}>
-                  {option.name}
+                  <span className={dimmed}>{option.name}</span>
                   {option.connectedNow ? (
                     <span className="ml-2 text-xs font-medium" style={{ color: "var(--c-ink-3)" }}>
                       Connected now
@@ -205,13 +210,25 @@ interface RefusalProps {
   provider: Provider | null;
   changePage: boolean;
   canStartAgain: boolean;
+  /** After a failed pick: put keyboard and screen reader focus on the reason. */
+  focusOnMount?: boolean;
 }
 
-function Refusal({ message, provider, changePage, canStartAgain }: RefusalProps) {
+function Refusal({ message, provider, changePage, canStartAgain, focusOnMount = false }: RefusalProps) {
+  const alertRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (focusOnMount) {
+      alertRef.current?.focus();
+    }
+  }, [focusOnMount]);
+
   return (
     <div className="space-y-4">
       <div
+        ref={alertRef}
         role="alert"
+        tabIndex={-1}
         className="rounded-xl border px-4 py-3 text-sm"
         style={{ borderColor: "var(--c-claret)", backgroundColor: "var(--c-claret-soft)", color: "var(--c-claret)" }}
       >
