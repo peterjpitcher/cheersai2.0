@@ -176,6 +176,10 @@ export function ScheduleStep({
     // Weekly clashes stay visible and every derived occurrence remains re-addable,
     // so weekly is not deconflicted (unlike event/promotion).
     if (isWeeklyRecurring) return rawSuggestions;
+    // Nothing to deconflict against yet (an empty planner, or one still
+    // loading), so show the suggestions as built. Skipping deconfliction
+    // changes no time: it only drops clashing days, and every time, the
+    // event-day 07:00 included, is set when the suggestions are built.
     if (!rawSuggestions.length || !existingItems.length) return rawSuggestions;
     return deconflictSuggestions(
       rawSuggestions,

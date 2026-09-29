@@ -1,6 +1,6 @@
 import { DateTime } from "luxon";
 
-import { DEFAULT_POST_TIME, DEFAULT_TIMEZONE } from "@/lib/constants";
+import { DEFAULT_POST_TIME, DEFAULT_TIMEZONE, EVENT_DAY_POST_TIME } from "@/lib/constants";
 
 export interface EventCadenceParams {
   startDate: string | Date | undefined;
@@ -20,6 +20,7 @@ const FALLBACK_TIME = DEFAULT_POST_TIME;
 const MAX_WEEKLY_BEATS = 4;
 
 const [POST_HOUR, POST_MINUTE] = DEFAULT_POST_TIME.split(":").map(Number);
+const [EVENT_DAY_HOUR, EVENT_DAY_MINUTE] = EVENT_DAY_POST_TIME.split(":").map(Number);
 
 export function buildEventCadenceSlots(params: EventCadenceParams): EventCadenceSlot[] {
   return resolveEventCadence(params).slots;
@@ -28,7 +29,7 @@ export function buildEventCadenceSlots(params: EventCadenceParams): EventCadence
 export function buildEventScheduleOffsets(params: EventCadenceParams) {
   const { slots, eventStart } = resolveEventCadence(params);
   if (!slots.length) {
-    const fallbackOccurs = applyPostingTime(eventStart);
+    const fallbackOccurs = applyEventDayTime(eventStart);
     return [{ label: "Event day", offsetHours: fallbackOccurs.diff(eventStart, "hours").hours ?? 0 }];
   }
   return slots.map((slot) => ({
@@ -96,7 +97,16 @@ function buildCountdownSlots({
 
   const slots: EventCadenceSlot[] = [];
   for (const def of countdownDefs) {
-    const occurs = scheduleBase.minus(def.shift);
+    const day = scheduleBase.minus(def.shift);
+    // The event-day post goes out first thing (EVENT_DAY_POST_TIME) so people
+    // still have time to see it and book; the days before stay at midday. It
+    // is set here, where every event suggestion is built, so it holds whether
+    // or not the planner already has posts (the wizard only deconflicts when
+    // it does). 07:00 exists exactly once in London on both clock-change days,
+    // whose shifts happen between 01:00 and 02:00, so set() needs no GMT/BST
+    // handling: on Sunday 25 October 2026 it gives 07:00 GMT, the days before
+    // stay 12:00 BST.
+    const occurs = def.id === "event-day" ? applyEventDayTime(day) : day;
     if (occurs < minimumSlot) continue;
     slots.push({ id: def.id, label: def.label, occurs });
   }
@@ -128,6 +138,15 @@ function applyPostingTime(dateTime: DateTime) {
   return dateTime.set({
     hour: POST_HOUR,
     minute: POST_MINUTE,
+    second: 0,
+    millisecond: 0,
+  });
+}
+
+function applyEventDayTime(dateTime: DateTime) {
+  return dateTime.set({
+    hour: EVENT_DAY_HOUR,
+    minute: EVENT_DAY_MINUTE,
     second: 0,
     millisecond: 0,
   });
