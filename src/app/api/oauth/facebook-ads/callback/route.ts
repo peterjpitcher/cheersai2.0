@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { env } from "@/env";
 import { storeMetaAdAccountToken } from "@/lib/meta/ad-account-tokens";
 import { getMetaGraphApiBase } from "@/lib/meta/graph";
+import { redactMetaAccessTokens } from "@/lib/meta/redact";
 import { fetchMetaUserId } from "@/lib/connections/token-exchange";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
 
@@ -22,12 +23,15 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   const supabase = createServiceSupabaseClient();
 
-  // Validate the state token
+  // Validate the state token. Only an unexpired login state: a pending Page
+  // choice (which carries an encrypted auth_code) is never a login check.
   const { data: oauthState, error: stateError } = await supabase
     .from("oauth_states")
     .select("account_id, used_at")
     .eq("state", state)
     .eq("provider", "facebook")
+    .is("auth_code", null)
+    .gt("expires_at", new Date().toISOString())
     .maybeSingle<{ account_id: string | null; used_at: string | null }>();
 
   if (stateError || !oauthState) {
@@ -39,11 +43,13 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     return NextResponse.redirect(`${SITE_URL}/connections?ads_error=state_already_used`);
   }
 
-  // Mark state as used
+  // Mark state as used (the same row the lookup accepted)
   await supabase
     .from("oauth_states")
     .update({ used_at: new Date().toISOString() })
-    .eq("state", state);
+    .eq("state", state)
+    .eq("provider", "facebook")
+    .is("auth_code", null);
 
   if (errorParam || !code) {
     const reason = errorParam ?? "no_code";
@@ -182,6 +188,7 @@ async function safeJson(response: Response): Promise<unknown> {
   }
 }
 
+/** Meta's error as text, with any access token it echoes removed (it is logged and put in the redirect). */
 function resolveGraphError(payload: unknown): string {
   if (payload && typeof payload === "object" && "error" in payload) {
     const err = (payload as { error: { message?: string; type?: string; code?: number } })
@@ -189,7 +196,7 @@ function resolveGraphError(payload: unknown): string {
     const message = err?.message ?? "Unknown Graph API error";
     const type = err?.type ? `${err.type}: ` : "";
     const code = err?.code ? ` (code ${err.code})` : "";
-    return `${type}${message}${code}`;
+    return redactMetaAccessTokens(`${type}${message}${code}`);
   }
   return "Facebook token exchange failed";
 }

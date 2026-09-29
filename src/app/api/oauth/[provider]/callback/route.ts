@@ -76,6 +76,8 @@ export const dynamic = "force-dynamic";
 
 async function markOAuthStateFailed(state: string, provider: string, reason: string) {
   const supabase = createServiceSupabaseClient();
+  // Login states only: a pending Page choice carries an encrypted auth_code, and
+  // a crafted error callback naming its reference must not use it up.
   const { error } = await supabase
     .from("oauth_states")
     .update({
@@ -83,7 +85,8 @@ async function markOAuthStateFailed(state: string, provider: string, reason: str
       error: reason,
     })
     .eq("state", state)
-    .eq("provider", provider);
+    .eq("provider", provider)
+    .is("auth_code", null);
 
   if (error) {
     console.error("[oauth] failed to mark OAuth state as failed", error);
