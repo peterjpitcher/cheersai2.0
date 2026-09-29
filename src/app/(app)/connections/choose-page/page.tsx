@@ -7,6 +7,7 @@ import { requireAuthContext } from "@/lib/auth/server";
 import { readPageChoice } from "@/lib/connections/page-choice";
 import {
   buildPageChoiceView,
+  PAGE_CHOICE_EXPIRED_FROM_CONNECTIONS,
   PAGE_CHOICE_FAILURE_MESSAGES,
   type PageChooserState,
 } from "@/lib/connections/page-choice-view";
@@ -75,12 +76,18 @@ export default async function ChoosePage({ searchParams }: ChoosePageProps) {
     } else {
       logger.warn("Page chooser refused", details);
     }
+    // Start again only when the flow's mode is known (the first look at the
+    // owner's own expired choice); after that, Back to Connections has both buttons.
+    const canStartAgain = result.reason === "expired" && result.changePage !== null;
     state = {
       kind: "unavailable",
-      message: PAGE_CHOICE_FAILURE_MESSAGES[result.reason],
+      message:
+        result.reason === "expired" && !canStartAgain
+          ? PAGE_CHOICE_EXPIRED_FROM_CONNECTIONS
+          : PAGE_CHOICE_FAILURE_MESSAGES[result.reason],
       provider: result.provider,
-      changePage: result.changePage,
-      canStartAgain: result.reason === "expired",
+      changePage: result.changePage ?? false,
+      canStartAgain,
     };
   }
 

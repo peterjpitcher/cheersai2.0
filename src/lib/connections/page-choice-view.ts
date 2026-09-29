@@ -70,6 +70,9 @@ export const PAGE_CHOICE_FAILURE_MESSAGES: Record<PageChoiceFailure, string> = {
   expired: "This Page choice has expired. Start again to see your Pages.",
 };
 
+/** An expired choice looked at again, once Start again can no longer be offered. */
+export const PAGE_CHOICE_EXPIRED_FROM_CONNECTIONS = "This Page choice has expired. Start again from the Connections screen.";
+
 export function buildPageChoiceView({ token, brandName, payload }: PageChoiceViewInput): PageChoiceView {
   const instagramPageId = payload.provider === "facebook" ? payload.instagramPageId : null;
 

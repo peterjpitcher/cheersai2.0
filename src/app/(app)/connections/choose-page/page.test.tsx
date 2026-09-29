@@ -119,7 +119,7 @@ describe('/connections/choose-page', () => {
     expect(html).not.toContain('Crown Events');
   });
 
-  it('offers Start again once a choice has expired', async () => {
+  it('offers Start again once a choice has expired, and drops the stored token', async () => {
     const token = await choice();
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(Date.now() + 11 * 60 * 1000);
@@ -127,6 +127,13 @@ describe('/connections/choose-page', () => {
     const html = await renderPage(token);
 
     expect(html).toContain('This Page choice has expired. Start again to see your Pages.');
-    expect(html).toContain('Start again');
+    expect(html).toContain('Start again</button>');
+    expect(db.rows('oauth_states')[0].auth_code).toBeNull();
+
+    // A reload no longer knows the flow's mode: only the way back, which has both buttons.
+    const reloaded = await renderPage(token);
+    expect(reloaded).toContain('This Page choice has expired. Start again from the Connections screen.');
+    expect(reloaded).not.toContain('Start again</button>');
+    expect(reloaded).toContain('href="/connections"');
   });
 });

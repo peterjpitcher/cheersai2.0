@@ -111,12 +111,53 @@ describe("Page choice hand-off", () => {
     expect(db.queries).toHaveLength(0);
   });
 
-  it("says expired after 10 minutes, keeping the platform for Start again", async () => {
+  it("says expired after 10 minutes, keeping the platform and mode for Start again", async () => {
     const token = await createPageChoice(db.client(), input({ changePage: true }));
     vi.useFakeTimers();
     vi.setSystemTime(Date.now() + 10 * 60 * 1000 + 1);
 
     expect(await read(token)).toEqual({ ok: false, reason: "expired", provider: "facebook", changePage: true });
+  });
+
+  it("drops the encrypted Meta token as soon as an expired choice is seen", async () => {
+    const token = await createPageChoice(db.client(), input({ changePage: true }));
+    vi.useFakeTimers();
+    vi.setSystemTime(Date.now() + 11 * 60 * 1000);
+
+    await read(token);
+
+    const [row] = db.rows("oauth_states");
+    expect(row.auth_code).toBeNull();
+    // Still unused, so it keeps saying expired, but the mode is no longer known.
+    expect(row.used_at).toBeNull();
+    expect(await read(token)).toEqual({ ok: false, reason: "expired", provider: "facebook", changePage: null });
+  });
+
+  it("drops another owner's expired payload too, without revealing its mode", async () => {
+    const token = await createPageChoice(db.client(), input({ changePage: true }));
+    vi.useFakeTimers();
+    vi.setSystemTime(Date.now() + 11 * 60 * 1000);
+
+    expect(await read(token, { userId: "another-owner" })).toEqual({
+      ok: false,
+      reason: "expired",
+      provider: "facebook",
+      changePage: null,
+    });
+    expect(db.rows("oauth_states")[0].auth_code).toBeNull();
+  });
+
+  it("still says expired, and logs it, when the payload cannot be dropped", async () => {
+    const token = await createPageChoice(db.client(), input());
+    vi.useFakeTimers();
+    vi.setSystemTime(Date.now() + 11 * 60 * 1000);
+    db.fail("oauth_states", "update", 1);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    expect(await read(token)).toMatchObject({ ok: false, reason: "expired" });
+    expect(db.rows("oauth_states")[0].auth_code).not.toBeNull();
+    expect(warn.mock.calls.flat().map(String).join("\n")).toContain("could not clear an expired Page choice");
+    expect(warn.mock.calls.flat().map(String).join("\n")).not.toContain(USER_TOKEN);
   });
 
   it("is single use: the first claim wins and clears the encrypted payload", async () => {

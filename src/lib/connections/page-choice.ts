@@ -28,7 +28,10 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 
 import { canPostToFacebook, canPostToInstagram, type ManagedPage } from "@/lib/connections/page-selection";
+import { createLogger } from "@/lib/logging";
 import { decrypt, encrypt } from "@/lib/token-vault";
+
+const logger = createLogger("connections");
 
 export const PAGE_CHOICE_PATH = "/connections/choose-page";
 export const PAGE_CHOICE_TTL_MS = 10 * 60 * 1000;
@@ -83,7 +86,13 @@ export type PageChoiceFailure = "not_found" | "invalid" | "forbidden" | "used" |
 
 export type ReadPageChoiceResult =
   | { ok: true; choice: PendingPageChoice }
-  | { ok: false; reason: PageChoiceFailure; provider: "facebook" | "instagram" | null; changePage: boolean };
+  | {
+      ok: false;
+      reason: PageChoiceFailure;
+      provider: "facebook" | "instagram" | null;
+      /** Whether the flow was Change Page (for Start again); null when that is not known. */
+      changePage: boolean | null;
+    };
 
 /** What the chooser may show for a Page, and whether it can be picked: never its token. */
 export function toPageChoiceOption(page: ManagedPage): PageChoiceOption {
@@ -136,7 +145,7 @@ export async function createPageChoice(
 /**
  * Reads a pending choice for the signed-in user. Only rows in brands they own
  * are looked at; the decrypted payload must name the same user, brand and
- * platform as the row.
+ * platform as the row. An expired row has its payload dropped on the spot.
  */
 export async function readPageChoice(
   supabase: SupabaseClient,
@@ -145,7 +154,7 @@ export async function readPageChoice(
   const refuse = (
     reason: PageChoiceFailure,
     provider: "facebook" | "instagram" | null = null,
-    changePage = false,
+    changePage: boolean | null = null,
   ): ReadPageChoiceResult => ({ ok: false, reason, provider, changePage });
 
   if (!TOKEN_PATTERN.test(token) || !ownedAccountIds.length) {
@@ -173,10 +182,28 @@ export async function readPageChoice(
   if (data.used_at) {
     return refuse("used", provider);
   }
-  if (!data.auth_code || !data.account_id || !provider) {
+  if (!data.account_id || !provider) {
     return refuse("invalid");
   }
 
+  if (!data.expires_at || new Date(data.expires_at).getTime() <= Date.now()) {
+    // Expired: drop the encrypted Meta user token now rather than leaving it
+    // for the retention cron. The flow's mode (for Start again) is read first,
+    // and only for the owner who started it; later reads no longer know it.
+    let changePage: boolean | null = null;
+    if (data.auth_code) {
+      const payload = openPayload(data.auth_code);
+      if (payload && payload.userId === userId && payload.accountId === data.account_id) {
+        changePage = payload.changePage;
+      }
+      await dropExpiredPayload(supabase, data.id, data.account_id);
+    }
+    return refuse("expired", provider, changePage);
+  }
+
+  if (!data.auth_code) {
+    return refuse("invalid");
+  }
   const payload = openPayload(data.auth_code);
   if (!payload) {
     return refuse("invalid");
@@ -184,11 +211,22 @@ export async function readPageChoice(
   if (payload.userId !== userId || payload.accountId !== data.account_id || payload.provider !== provider) {
     return refuse("forbidden");
   }
-  if (!data.expires_at || new Date(data.expires_at).getTime() <= Date.now()) {
-    return refuse("expired", provider, payload.changePage);
-  }
 
   return { ok: true, choice: { rowId: data.id, expiresAt: data.expires_at, payload } };
+}
+
+/** Best effort: a failure leaves the payload for the retention cron, and is logged. */
+async function dropExpiredPayload(supabase: SupabaseClient, rowId: string, accountId: string): Promise<void> {
+  const { error } = await supabase
+    .from("oauth_states")
+    .update({ auth_code: null })
+    .eq("id", rowId)
+    .eq("account_id", accountId)
+    .is("used_at", null);
+
+  if (error) {
+    logger.warn("could not clear an expired Page choice", { accountId, message: error.message });
+  }
 }
 
 /**
