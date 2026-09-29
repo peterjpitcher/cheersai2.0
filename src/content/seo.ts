@@ -12,10 +12,11 @@ import { TRIAL_DAYS } from '@/lib/billing/plans';
 export const BRAND_NAME = 'Cheers by Orange Jelly';
 
 export const HOME_SEO = {
-  title: 'Social media for pubs, bars and restaurants | Cheers',
+  /** Leads with the keyword plan's head term for the homepage, "social media scheduler" (cluster cl_0001). */
+  title: 'Social media scheduler for pubs and restaurants | Cheers',
   /** The description's first sentence; homeDescription() adds the price and the trial. */
   descriptionLead:
-    'Cheers writes, schedules and publishes Facebook and Instagram posts for pubs, bars and restaurants.',
+    'A social media scheduler for pubs, bars and restaurants that writes your Facebook and Instagram posts.',
   /** The title shared on Facebook, X and in messaging apps. */
   socialTitle: 'Cheers: social media for pubs, bars and restaurants',
   /** Words drawn on the share image (src/app/og/route.tsx). */
