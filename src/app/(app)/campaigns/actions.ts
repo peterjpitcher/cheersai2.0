@@ -1,6 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { unstable_rethrow } from 'next/navigation';
 import { z } from 'zod';
 
 import { requireFeatureContext } from '@/lib/auth/features';
@@ -791,6 +792,7 @@ export async function generateCampaignAction(
       interestResolutionWarning,
     };
   } catch (err) {
+    unstable_rethrow(err);
     const message = err instanceof Error ? err.message : 'Failed to generate campaign.';
     return { error: message };
   }
@@ -1706,6 +1708,7 @@ export async function runCampaignDashboardOptimisation(
       failedActions: result.failedActions,
     };
   } catch (error) {
+    unstable_rethrow(error);
     if (isMissingOptimisationRecommendationSchemaError(error)) {
       return { error: 'Database migration missing: apply the conversion-first optimiser migration before running recommendations.' };
     }
@@ -2119,6 +2122,17 @@ export async function applyOptimisationRecommendation(
   } catch (error) {
     if (replacementAdId && !metaAdCreated) {
       await supabase.from('ads').delete().eq('id', replacementAdId);
+    }
+    try {
+      unstable_rethrow(error);
+    } catch (signInRedirect) {
+      // The session ended mid-apply. The only sign-in check in this block is the click-link
+      // step, which runs before anything is written or sent to Meta, so hand the claim back
+      // (the owner can apply it again after signing in) and let the redirect through.
+      const message = 'Your session ended before this was applied. Sign in and apply it again.';
+      await recordFailure(message);
+      await releaseClaim(message);
+      throw signInRedirect;
     }
     return fail(error instanceof Error ? error.message : String(error));
   }

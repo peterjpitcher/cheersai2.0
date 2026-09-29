@@ -1,3 +1,4 @@
+import { redirect } from 'next/navigation';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // Meta Ads tokens come from encrypted storage (src/lib/meta/ad-account-tokens.ts,
@@ -1128,6 +1129,78 @@ describe('publishCampaign', () => {
     const result = await publishCampaign('campaign-123');
 
     expect(result.error).toContain('UK town or city');
+    expect(marketing.createMetaCampaign).not.toHaveBeenCalled();
+  });
+
+  it('sends the owner to sign in, without saving NEXT_REDIRECT as the publish error, when the session ends mid-publish', async () => {
+    mockSingle.mockResolvedValueOnce({
+      data: {
+        id: 'campaign-123',
+        account_id: 'account-123',
+        name: 'Test',
+        objective: 'OUTCOME_LEADS',
+        special_ad_category: 'NONE',
+        budget_type: 'DAILY',
+        budget_amount: 10,
+        geo_radius_miles: 3,
+        start_date: '2026-04-01',
+        end_date: null,
+        destination_url: 'https://vip-club.uk/ma123',
+      },
+    });
+    mockSingle.mockResolvedValueOnce({
+      data: { access_token: 'token', meta_account_id: 'act_123' },
+    });
+    mockSingle.mockResolvedValueOnce({
+      data: { token_expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString() },
+    });
+    mockSingle.mockResolvedValueOnce({
+      data: { metadata: { pageId: 'page_123' } },
+    });
+    mockEq.mockReturnValue({
+      eq: mockEq,
+      single: mockSingle,
+      maybeSingle: mockMaybeSingle,
+      data: [
+        {
+          id: 'adset-1',
+          meta_adset_id: null,
+          name: 'Evergreen Test',
+          targeting: { age_min: 18, age_max: 65, geo_locations: { countries: ['GB'] } },
+          optimisation_goal: 'LINK_CLICKS',
+          bid_strategy: 'LOWEST_COST_WITHOUT_CAP',
+          budget_amount: null,
+          phase_start: '2026-04-01',
+          phase_end: '2026-04-10',
+          adset_media_asset_id: 'asset-1',
+          ads: [
+            {
+              id: 'ad-1',
+              meta_ad_id: null,
+              name: 'Ad 1',
+              headline: 'Test',
+              primary_text: 'Primary text',
+              description: 'Description',
+              cta: 'LEARN_MORE',
+              media_asset_id: null,
+            },
+          ],
+        },
+      ],
+    });
+    // The click-link step re-checks sign-in (requireFeatureContext), which redirects by throwing.
+    let signInRedirect: unknown;
+    try {
+      redirect('/auth/login');
+    } catch (error) {
+      signInRedirect = error;
+    }
+    vi.mocked(getManagementConnectionConfig).mockRejectedValueOnce(signInRedirect);
+
+    await expect(publishCampaign('campaign-123')).rejects.toBe(signInRedirect);
+
+    expect(getManagementConnectionConfig).toHaveBeenCalled();
+    expect(mockUpdate).not.toHaveBeenCalledWith(expect.objectContaining({ publish_error: expect.anything() }));
     expect(marketing.createMetaCampaign).not.toHaveBeenCalled();
   });
 
