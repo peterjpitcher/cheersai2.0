@@ -21,6 +21,7 @@ import {
   UtensilsCrossed,
   type LucideIcon,
 } from 'lucide-react';
+import Image from 'next/image';
 import Link from 'next/link';
 
 import {
@@ -526,7 +527,16 @@ function Closing({ cta }: { cta: FrontDoorCta }): React.JSX.Element {
     <section aria-labelledby="closing-title" className="relative isolate overflow-hidden bg-ink py-16 sm:py-24">
       <div aria-hidden="true" className="site-glow pointer-events-none absolute inset-0 -z-10" />
       <div className="mx-auto max-w-[760px] px-4 text-center sm:px-6">
-        <h2 id="closing-title" className="text-3xl font-semibold text-white sm:text-4xl">
+        {/* The brand mark, two glasses raised: decorative, as the heading below says it all. */}
+        <Image
+          src="/brand/cheers-icon.png"
+          alt=""
+          width={1167}
+          height={972}
+          sizes="(min-width: 640px) 120px, 96px"
+          className="mx-auto h-20 w-auto sm:h-[100px]"
+        />
+        <h2 id="closing-title" className="mt-6 text-3xl font-semibold text-white sm:text-4xl">
           {trial ? CLOSING.trialHeading : CLOSING.talkHeading}
         </h2>
         <p className="mt-4 text-lg leading-relaxed text-[var(--c-line-2)]">

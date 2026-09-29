@@ -64,9 +64,17 @@ export function SiteFooter({ guidesHref }: SiteFooterProps): React.JSX.Element {
       <div className="mx-auto max-w-[1160px] px-4 pb-10 pt-14 sm:px-6">
         <div className="grid gap-10 sm:grid-cols-2 lg:grid-cols-[1.5fr_1fr_1fr_1fr]">
           <div className="space-y-4">
-            <Image src="/brand/cheers-logo-horizontal-on-dark-480.png" alt="Cheers" width={117} height={40} />
+            {/* 234 by 80 CSS pixels, twice the old size; the 1600px file keeps it sharp on any screen. */}
+            <Image
+              src="/brand/cheers-logo-horizontal-on-dark.png"
+              alt="Cheers by Orange Jelly"
+              width={1600}
+              height={547}
+              sizes="234px"
+              className="h-20 w-auto"
+            />
             <p className="max-w-[280px] text-sm leading-relaxed">
-              Social media for pubs, bars, restaurants, cafes and hotels.
+              Social media made for pubs, bars, restaurants, cafes and hotels.
             </p>
           </div>
           <FooterColumn title="Cheers" links={cheersLinks} />

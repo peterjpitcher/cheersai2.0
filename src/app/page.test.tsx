@@ -161,6 +161,23 @@ describe("/ in production once the sign-up switch is on", () => {
     );
   });
 
+  it("shortens the header's trial button to Free trial on a phone, so it fits beside the larger logo", async () => {
+    signedOut("open");
+    const { container } = await renderHome();
+    const labels = Array.from(container.querySelectorAll('header a[href="/signup"] span')).map((span) => [
+      span.textContent,
+      span.getAttribute("class"),
+    ]);
+
+    expect(labels).toEqual([
+      ["Free trial", "sm:hidden"],
+      ["Start your free trial", "hidden sm:inline"],
+    ]);
+    // Everywhere else the button keeps its full words.
+    const hero = container.querySelector('section[aria-labelledby="hero-title"] a[href="/signup"]');
+    expect(hero?.textContent).toBe("Start your free trial");
+  });
+
   it("has its own title, description, canonical URL and share cards, and may be indexed", async () => {
     mocks.switchState.mockResolvedValue("open");
     const metadata = await generateMetadata();
@@ -203,6 +220,34 @@ describe("the guides links on the homepage", () => {
 
 describe("the homepage content", () => {
   beforeEach(() => signedOut("open"));
+
+  it("shows the logo larger in the header and the footer, sharp on high-density screens", async () => {
+    const { container } = await renderHome();
+    const header = container.querySelector("header img");
+    const footer = container.querySelector("footer img");
+    const widestCopy = (img: Element | null) =>
+      Math.max(...(img?.getAttribute("srcset") ?? "").split(",").map((entry) => parseInt(entry.trim().split(" ")[1] ?? "0", 10)));
+
+    expect(header?.getAttribute("alt")).toBe("Cheers home");
+    expect(header?.closest("a")?.getAttribute("href")).toBe("/");
+    expect(decodeURIComponent(header?.getAttribute("src") ?? "")).toContain("/brand/cheers-logo-horizontal-on-dark.png");
+    // 164 by 56 on a phone, 211 by 72 from md (it was 117 by 40), with copies up to 3x.
+    expect(header?.getAttribute("sizes")).toBe("(min-width: 768px) 211px, 164px");
+    expect(header?.getAttribute("class")).toBe("h-14 w-auto md:h-[72px]");
+    expect(widestCopy(header)).toBeGreaterThanOrEqual(3 * 211);
+
+    expect(footer?.getAttribute("alt")).toBe("Cheers by Orange Jelly");
+    expect(footer?.getAttribute("sizes")).toBe("234px");
+    expect(widestCopy(footer)).toBeGreaterThanOrEqual(3 * 234);
+  });
+
+  it("raises the brand mark over the closing call to action, as decoration", async () => {
+    const { container } = await renderHome();
+    const mark = container.querySelector('section[aria-labelledby="closing-title"] img');
+
+    expect(decodeURIComponent(mark?.getAttribute("src") ?? "")).toContain("/brand/cheers-icon.png");
+    expect(mark?.getAttribute("alt")).toBe("");
+  });
 
   it("takes every price from PLANS and marks each one ex VAT", async () => {
     const { container, text } = await renderHome();

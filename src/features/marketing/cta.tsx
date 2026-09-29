@@ -36,13 +36,25 @@ interface PrimaryCtaProps {
   cta: FrontDoorCta;
   /** "sm" for the header, "lg" by default, "block" to fill its container. */
   size?: keyof typeof SIZES;
+  /**
+   * For the header: below sm the trial button reads "Free trial", so it fits
+   * beside the logo on a 320px phone. "Talk to us" is short enough already.
+   */
+  compact?: boolean;
 }
 
-export function PrimaryCta({ cta, size = 'lg' }: PrimaryCtaProps): React.JSX.Element {
+export function PrimaryCta({ cta, size = 'lg', compact = false }: PrimaryCtaProps): React.JSX.Element {
   if (cta === 'trial') {
     return (
       <Link href={SIGNUP_PATH} className={SIZES[size]}>
-        Start your free trial
+        {compact ? (
+          <>
+            <span className="sm:hidden">Free trial</span>
+            <span className="hidden sm:inline">Start your free trial</span>
+          </>
+        ) : (
+          'Start your free trial'
+        )}
       </Link>
     );
   }
