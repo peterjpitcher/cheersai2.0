@@ -29,6 +29,10 @@ vi.mock("@/features/connections/connection-disconnect-button", () => ({
   ),
 }));
 
+vi.mock("@/features/connections/change-page-button", () => ({
+  ChangePageButton: ({ provider }: { provider: string }) => <div data-testid={`change-page-${provider}`} />,
+}));
+
 // Mock listConnectionSummaries
 const mockListConnectionSummaries = vi.fn();
 vi.mock("@/lib/connections/data", () => ({
@@ -167,5 +171,51 @@ describe("ConnectionCards: disconnect control", () => {
     render(element);
 
     expect(screen.queryByTestId("disconnect-button-facebook")).toBeNull();
+  });
+});
+
+describe("ConnectionCards: Change Page", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  const facebookHint = "Uses the Page connected to Facebook. To change it, use Change Page on the Facebook card.";
+
+  it("offers Change Page on the Facebook card, and keeps Instagram on Facebook's Page", async () => {
+    mockListConnectionSummaries.mockResolvedValue([
+      makeConnection({ provider: "facebook", hasAccessToken: true }),
+      makeConnection({ provider: "instagram", hasAccessToken: true }),
+    ]);
+
+    render(await ConnectionCards({ canDisconnect: true, canChangePage: true }));
+
+    expect(screen.queryByTestId("change-page-facebook")).not.toBeNull();
+    expect(screen.queryByTestId("change-page-instagram")).toBeNull();
+    expect(screen.getByText(facebookHint)).toBeDefined();
+  });
+
+  it("offers Change Page on Instagram only while Facebook is not connected", async () => {
+    mockListConnectionSummaries.mockResolvedValue([
+      makeConnection({ provider: "facebook", hasAccessToken: false, status: "needs_action" }),
+      makeConnection({ provider: "instagram", hasAccessToken: true }),
+    ]);
+
+    render(await ConnectionCards({ canDisconnect: true, canChangePage: true }));
+
+    expect(screen.queryByTestId("change-page-facebook")).toBeNull();
+    expect(screen.queryByTestId("change-page-instagram")).not.toBeNull();
+    expect(screen.queryByText(facebookHint)).toBeNull();
+  });
+
+  it("never offers Change Page to a member", async () => {
+    mockListConnectionSummaries.mockResolvedValue([makeConnection({ provider: "facebook", hasAccessToken: true })]);
+
+    render(await ConnectionCards({ canDisconnect: false }));
+
+    expect(screen.queryByTestId("change-page-facebook")).toBeNull();
   });
 });

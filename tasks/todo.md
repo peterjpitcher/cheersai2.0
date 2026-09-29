@@ -13,7 +13,30 @@ Spec: `tasks/SPEC-homepage-hospitality-and-logo.md`; branch `feat/homepage-hospi
 - [x] Local production build: screenshots at 375 and 1440, no sideways scroll at 320/375/768/1440
       (homepage, /guides, a guide), axe 0 violations at 375 and 1440 (colour contrast on 262 text nodes)
 - [x] Commit, push, PR (claims with proof files, before and after hero wording); no merge, no deploy
-- [ ] Peter's yes, then merge and deploy
+- [x] Peter asked for this (29 September 2026); merge and deploy by the main agent
+
+# Facebook Page chooser (2026-09-29)
+
+Spec: `tasks/SPEC-facebook-page-chooser.md`; branch `feat/facebook-page-chooser` (PR #158, approved by Peter 29 September 2026).
+
+- [x] Read-only check of production's oauth_states and social_connections columns, constraints,
+      policies and grants; every brand's Facebook and Instagram hold the same pageId
+- [x] Selection rules module and tests
+- [x] Hand-off store (create, read, claim) and tests
+- [x] Token exchange split (user token, Pages with tasks and paging, build connection) and tests
+- [x] Shared persistence helpers; `completeOAuthConnect` uses the rules; callback redirects to the chooser
+- [x] `choosePageForConnection` with Instagram following a Facebook choice; tests with failing dependencies
+- [x] Chooser page, Change Page buttons, success notice; component tests
+- [x] Local run (worktree dev server, local Supabase, test owner): chooser listed from the encrypted row,
+      no token in the page, a failed Meta check showed its reason with Start again (running it caught the
+      server re-render hiding that reason; fixed), used and expired choices, Change Page wrote a forcing
+      state and went to Facebook. Local test data removed afterwards.
+- [x] lint:ci, typecheck, test:ci and test:utc (3,892 tests each), build with CI's variables; draft
+      PR #158, CI green
+- [ ] A real multi-Page Facebook login and pick (not possible locally)
+- [x] Peter's yes (29 September 2026); the independent review's eight code findings fixed in the same PR
+      (spec, "Review fixes"); contrast, focus and the expired-choice clean-up re-checked in the browser
+- [x] Merged as #158 and live 29 September 2026 (dpl_91HwgcPgw5rmRzw7ZjgXUDevAxLo)
 
 # Self-serve sign-up PR 6: venue creation (2026-09-28)
 

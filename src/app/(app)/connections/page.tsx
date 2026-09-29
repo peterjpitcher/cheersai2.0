@@ -41,7 +41,7 @@ export default async function ConnectionsPage() {
             <h3 className="text-lg font-semibold" style={{ color: "var(--c-ink)" }}>Connected accounts</h3>
             <p className="text-sm" style={{ color: "var(--c-ink-3)" }}>Status, tokens, and reconnect controls for each provider.</p>
           </div>
-          <ConnectionCards canDisconnect={isOwner(ctx)} />
+          <ConnectionCards canDisconnect={isOwner(ctx)} canChangePage={isOwner(ctx)} />
         </section>
 
         {adAccountStatus ? (

@@ -5,18 +5,33 @@ import { randomUUID } from "crypto";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
-import { requireOwnerContext } from "@/lib/auth/roles";
+import { ownsBrand, requireOwnerContext } from "@/lib/auth/roles";
 import { evaluateConnectionMetadata } from "@/lib/connections/metadata";
+import { buildOAuthRedirectUrl } from "@/lib/connections/oauth";
+import { createPageChoice, PAGE_CHOICE_PATH, toPageChoiceOption } from "@/lib/connections/page-choice";
+import { resolvePageSelection, type ManagedPage } from "@/lib/connections/page-selection";
 import {
-  buildOAuthRedirectUrl,
-  FACEBOOK_SCOPE_LIST,
-  INSTAGRAM_SCOPE_LIST,
-} from "@/lib/connections/oauth";
+  clearProviderTokens,
+  linkedPageIdFor,
+  loadBrandConnections,
+  metadataString,
+  saveProviderConnection,
+  scopesForProvider,
+  type BrandConnections,
+} from "@/lib/connections/persist";
 import { deriveConnectionReadiness, hasTokenValue } from "@/lib/connections/readiness";
-import { exchangeProviderAuthCode } from "@/lib/connections/token-exchange";
-import { storeEncryptedToken } from "@/lib/providers/token-helpers";
+import {
+  buildPageConnection,
+  exchangeCodeForUserToken,
+  fetchManagedPages,
+  type MetaUserAuth,
+  type ProviderTokenExchange,
+} from "@/lib/connections/token-exchange";
+import { createLogger } from "@/lib/logging";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
 import { isSchemaMissingError } from "@/lib/supabase/errors";
+
+const logger = createLogger("connections");
 
 // ---------------------------------------------------------------------------
 // Schemas
@@ -43,21 +58,48 @@ const payloadSchema = z.object({
   metadataValue: z.string().optional(),
 });
 
+const initiateOptionsSchema = z
+  .object({ changePage: z.boolean().optional() })
+  .optional();
+
 // ---------------------------------------------------------------------------
-// OAuth Connect — v2 schema with oauth_states + token vault
+// OAuth Connect: v2 schema with oauth_states + token vault
 // ---------------------------------------------------------------------------
 
 /**
  * Initiate an OAuth connect flow by creating a session-bound state in
  * the oauth_states table and returning the redirect URL.
  * Uses PLAT-09 session-bound state to prevent state fixation attacks.
+ *
+ * `changePage` (the Change Page button) makes the callback show the Page
+ * chooser even when a stored Page matches. It is recorded on the state row as
+ * redirect_to = PAGE_CHOICE_PATH, never taken from the callback URL.
  */
 export async function initiateOAuthConnect(
   providerInput: string,
+  optionsInput?: unknown,
 ): Promise<{ success: boolean; redirectUrl?: string; error?: string }> {
   const provider = providerSchema.parse(providerInput);
+  const changePage = initiateOptionsSchema.parse(optionsInput)?.changePage === true;
   const { accountId } = await requireOwnerContext();
   const supabase = createServiceSupabaseClient();
+
+  if (changePage && provider === "instagram") {
+    // Facebook is the anchor: Instagram always uses the Page Facebook is on.
+    let connections: BrandConnections;
+    try {
+      connections = await loadBrandConnections(supabase, accountId);
+    } catch (error) {
+      logger.error("could not check connections before Change Page", toError(error), { accountId, provider });
+      return { success: false, error: "Failed to initiate OAuth flow" };
+    }
+    if (connections.facebook?.hasAccessToken) {
+      return {
+        success: false,
+        error: "Instagram uses the Page connected to Facebook. To change it, use Change Page on the Facebook card.",
+      };
+    }
+  }
 
   const state = randomUUID();
   const expiresAt = new Date(Date.now() + OAUTH_STATE_EXPIRY_MS).toISOString();
@@ -70,6 +112,7 @@ export async function initiateOAuthConnect(
     provider,
     expires_at: expiresAt,
     account_id: accountId,
+    ...(changePage ? { redirect_to: PAGE_CHOICE_PATH } : {}),
   });
 
   if (error) {
@@ -83,18 +126,24 @@ export async function initiateOAuthConnect(
 
 /**
  * Complete an OAuth connect flow by validating state, exchanging the auth
- * code for tokens, and storing them exclusively in the token vault.
+ * code for a Meta user token, choosing the Page (tasks/SPEC-facebook-page-chooser.md)
+ * and storing its token exclusively in the token vault.
  *
  * Security checks (PLAT-09):
  * - State must exist in oauth_states
  * - State must not be already used (replay prevention)
  * - State must not be expired (10-minute window)
+ * - State must not be a pending Page choice (those carry an auth_code)
+ *
+ * When the owner has to choose, nothing is connected yet: the result carries
+ * `pageChoice`, the reference for /connections/choose-page, and the Meta user
+ * token waits encrypted in oauth_states.
  */
 export async function completeOAuthConnect(
   providerInput: string,
   code: string,
   stateParam: string,
-): Promise<{ success: boolean; error?: string }> {
+): Promise<{ success: boolean; error?: string; pageChoice?: string }> {
   const provider = providerSchema.parse(providerInput);
   const ctx = await requireOwnerContext();
   const supabase = createServiceSupabaseClient();
@@ -104,10 +153,11 @@ export async function completeOAuthConnect(
   //    to -- never the callback-time active brand.
   const { data: oauthState, error: stateError } = await supabase
     .from("oauth_states")
-    .select("id, provider, used_at, expires_at, account_id")
+    .select("id, provider, used_at, expires_at, account_id, redirect_to")
     .eq("state", stateParam)
     .eq("provider", provider)
     .is("used_at", null)
+    .is("auth_code", null)
     .gt("expires_at", new Date().toISOString())
     .maybeSingle();
 
@@ -121,109 +171,110 @@ export async function completeOAuthConnect(
   }
 
   // Attribute to the initiating brand, and fail safe if the caller is no longer
-  // a member of it (e.g. access revoked during the OAuth round-trip).
-  const initiatingAccountId = (oauthState as { account_id: string | null }).account_id;
+  // an owner of it (e.g. access revoked or role changed during the round-trip).
+  const state = oauthState as { id: string; account_id: string | null; redirect_to?: string | null };
+  const initiatingAccountId = state.account_id;
   if (!initiatingAccountId) {
     return { success: false, error: "This connection is missing its brand. Please start it again." };
   }
-  const isMember =
-    ctx.isSuperAdmin || ctx.brands.some((brand) => brand.accountId === initiatingAccountId);
-  if (!isMember) {
-    return { success: false, error: "You no longer have access to the brand that started this connection." };
+  if (!ownsBrand(ctx, initiatingAccountId)) {
+    return { success: false, error: "You no longer have owner access to the brand that started this connection." };
   }
   const accountId = initiatingAccountId;
+  const forceChoice = state.redirect_to === PAGE_CHOICE_PATH;
 
   // 2. Mark state as used before proceeding (prevents replay)
   const { error: markError } = await supabase
     .from("oauth_states")
     .update({ used_at: new Date().toISOString() })
-    .eq("id", oauthState.id);
+    .eq("id", state.id)
+    .eq("account_id", accountId);
 
   if (markError) {
     console.error("[connections] failed to mark oauth_states used", markError);
     return { success: false, error: "Failed to process OAuth state" };
   }
 
-  const existingConnection = await loadExistingConnection(supabase, accountId, provider);
-
-  // 3. Exchange auth code for tokens
-  let exchange: Awaited<ReturnType<typeof exchangeProviderAuthCode>>;
+  // 3. Exchange the auth code for a user token and list the Pages it manages
+  let auth: MetaUserAuth;
+  let pages: ManagedPage[];
   try {
-    exchange = await exchangeProviderAuthCode(provider, code, {
-      existingMetadata: existingConnection?.metadata ?? null,
-      existingDisplayName:
-        existingConnection?.display_name ?? existingConnection?.platform_account_name ?? null,
-    });
+    auth = await exchangeCodeForUserToken(provider, code);
+    pages = await fetchManagedPages(auth.userAccessToken);
   } catch (error) {
     const message = error instanceof Error ? error.message : "OAuth token exchange failed";
     console.error("[connections] OAuth token exchange failed", error);
     return { success: false, error: message };
   }
 
-  // 4. Derive platform account ID from metadata
-  const platformAccountId = derivePlatformAccountId(provider, exchange.metadata);
-  const metadataEvaluation = evaluateUpdatedMetadata(provider, exchange.metadata ?? {});
-
-  // 5. Upsert social_connections. Keep it needs_action until token vault writes succeed.
-  const { data: connection, error: upsertError } = await supabase
-    .from("social_connections")
-    .upsert(
-      {
-        account_id: accountId,
-        provider,
-        platform_account_id: platformAccountId,
-        platform_account_name: exchange.displayName ?? null,
-        status: "needs_action",
-        scopes: getScopesForProvider(provider),
-        token_expires_at: exchange.expiresAt ?? null,
-        metadata: exchange.metadata ?? {},
-        display_name: exchange.displayName ?? null,
-        last_synced_at: new Date().toISOString(),
-        // Lets the Meta deletion and deauthorise callbacks find this connection.
-        // Only written when known, so a failed lookup never erases a stored id.
-        ...(exchange.metaUserId ? { meta_user_id: exchange.metaUserId } : {}),
-      },
-      { onConflict: "account_id,provider" },
-    )
-    .select("id")
-    .single();
-
-  if (upsertError) {
-    console.error("[connections] social_connections upsert failed", upsertError);
-    return { success: false, error: "Failed to save connection" };
-  }
-
-  // 6. Store tokens exclusively in token vault (PLAT-09 / C-3)
+  // 4. Choose the Page: linked (same Page as the other platform), stored, only, or the owner's choice
+  let connections: BrandConnections;
   try {
-    await storeEncryptedToken(connection.id, "access", exchange.accessToken);
-
-    if (exchange.refreshToken) {
-      await storeEncryptedToken(connection.id, "refresh", exchange.refreshToken);
-    }
+    connections = await loadBrandConnections(supabase, accountId);
   } catch (error) {
-    console.error("[connections] token vault write failed", error);
-    return { success: false, error: resolveTokenVaultStorageError(error) };
+    logger.error("could not load connections to choose a Page", toError(error), { accountId, provider });
+    return { success: false, error: "We could not check this brand's connections. Please try again." };
   }
 
-  const readiness = deriveConnectionReadiness({
+  const own = connections[provider];
+  const linkedPageId = linkedPageIdFor(provider, connections);
+  const selection = resolvePageSelection({
     provider,
-    storedStatus: "active",
-    metadataComplete: metadataEvaluation.complete,
-    hasAccessToken: true,
-    expiresAt: exchange.expiresAt ?? null,
+    pages,
+    storedPageId: metadataString(own, "pageId"),
+    storedInstagramId: provider === "instagram" ? metadataString(own, "igBusinessId") : null,
+    linkedPageId,
+    forceChoice,
   });
 
-  const { error: statusError } = await supabase
-    .from("social_connections")
-    .update({ status: readiness.status })
-    .eq("id", connection.id);
-
-  if (statusError) {
-    console.error("[connections] failed to activate connection", statusError);
-    return { success: false, error: "Failed to activate connection" };
+  if (selection.kind === "error") {
+    logger.warn("no Page could be connected", { accountId, provider, code: selection.code, pageCount: pages.length });
+    return { success: false, error: selection.message };
   }
 
-  // 7. Invalidate caches
+  if (selection.kind === "choose") {
+    try {
+      const pageChoice = await createPageChoice(supabase, {
+        userId: ctx.user.id,
+        accountId,
+        provider,
+        changePage: forceChoice,
+        userAccessToken: auth.userAccessToken,
+        expiresAt: auth.expiresAt,
+        metaUserId: auth.metaUserId,
+        currentPageId: own?.hasAccessToken ? metadataString(own, "pageId") : null,
+        instagramPageId: provider === "facebook" ? linkedPageId : null,
+        pages: selection.pages.map(toPageChoiceOption),
+      });
+      logger.info("Page choice needed", { accountId, provider, pageCount: selection.pages.length, changePage: forceChoice });
+      return { success: true, pageChoice };
+    } catch (error) {
+      logger.error("could not store the Page choice", toError(error), { accountId, provider });
+      return { success: false, error: "We could not save your list of Pages. Please try again." };
+    }
+  }
+
+  // 5. Store the selected Page's token, as before
+  let exchange: ProviderTokenExchange;
+  try {
+    exchange = buildPageConnection(provider, selection.page, auth);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "OAuth token exchange failed";
+    logger.warn("selected Page cannot be connected", { accountId, provider, message });
+    return { success: false, error: message };
+  }
+
+  const saved = await saveProviderConnection(supabase, {
+    accountId,
+    provider,
+    exchange,
+    scopes: scopesForProvider(provider),
+  });
+  if (!saved.success) {
+    return saved;
+  }
+
+  // 6. Invalidate caches
   revalidatePath("/connections");
   revalidatePath("/");
 
@@ -243,51 +294,10 @@ export async function disconnectProvider(
   const provider = providerSchema.parse(providerInput);
   const { accountId } = await requireOwnerContext();
   const supabase = createServiceSupabaseClient();
-  const failure = { success: false, error: "Failed to disconnect provider" };
 
-  const { data: connections, error: lookupError } = await supabase
-    .from("social_connections")
-    .select("id")
-    .eq("account_id", accountId)
-    .eq("provider", provider);
-
-  if (lookupError) {
-    console.error("[connections] disconnectProvider lookup failed", lookupError);
-    return failure;
-  }
-
-  const connectionIds = ((connections ?? []) as Array<{ id: string }>).map((row) => row.id);
-  if (!connectionIds.length) {
-    return { success: true };
-  }
-
-  // token_vault has no account_id; the ids above are already brand-scoped.
-  const { error: vaultError } = await supabase
-    .from("token_vault")
-    .delete()
-    .in("social_connection_id", connectionIds);
-
-  if (vaultError) {
-    console.error("[connections] disconnectProvider token_vault delete failed", vaultError);
-    return failure;
-  }
-
-  const { error: updateError } = await supabase
-    .from("social_connections")
-    .update({
-      status: "needs_action",
-      access_token: null,
-      refresh_token: null,
-      token_expires_at: null,
-      expires_at: null,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("account_id", accountId)
-    .eq("provider", provider);
-
-  if (updateError) {
-    console.error("[connections] disconnectProvider update failed", updateError);
-    return failure;
+  const result = await clearProviderTokens(supabase, accountId, provider);
+  if (!result.success) {
+    return result;
   }
 
   revalidatePath("/connections");
@@ -398,28 +408,8 @@ export async function updateConnectionMetadata(input: unknown) {
 // Internal helpers
 // ---------------------------------------------------------------------------
 
-async function loadExistingConnection(
-  supabase: ReturnType<typeof createServiceSupabaseClient>,
-  accountId: string,
-  provider: Provider,
-) {
-  const { data, error } = await supabase
-    .from("social_connections")
-    .select("id, metadata, display_name, platform_account_name")
-    .eq("account_id", accountId)
-    .eq("provider", provider)
-    .maybeSingle<{
-      id: string;
-      metadata: Record<string, unknown> | null;
-      display_name: string | null;
-      platform_account_name: string | null;
-    }>();
-
-  if (error && !isSchemaMissingError(error)) {
-    throw error;
-  }
-
-  return data ?? null;
+function toError(error: unknown): Error {
+  return error instanceof Error ? error : new Error(String(error));
 }
 
 async function hasVaultAccessToken(
@@ -448,47 +438,4 @@ function evaluateUpdatedMetadata(
   metadata: Record<string, unknown>,
 ) {
   return evaluateConnectionMetadata(provider, metadata);
-}
-
-function resolveTokenVaultStorageError(error: unknown) {
-  const message = error instanceof Error ? error.message : "";
-  if (/TOKEN_VAULT_KEY|encryption key/i.test(message)) {
-    return "Token vault is not configured. Set TOKEN_VAULT_KEY to a 64-character hex secret in Vercel and Supabase Edge Function secrets, then reconnect.";
-  }
-  return "Failed to store connection tokens";
-}
-
-/**
- * Derive the platform_account_id from exchange metadata.
- * Falls back to 'default' when no platform-specific ID is available.
- */
-function derivePlatformAccountId(
-  provider: Provider,
-  metadata: Record<string, unknown> | null | undefined,
-): string {
-  if (!metadata) return "default";
-
-  switch (provider) {
-    case "facebook":
-      return typeof metadata.pageId === "string" ? metadata.pageId : "default";
-    case "instagram":
-      return typeof metadata.igBusinessId === "string" ? metadata.igBusinessId : "default";
-    default:
-      return "default";
-  }
-}
-
-/**
- * Return the OAuth scopes requested for each provider (the same lists the
- * OAuth URL uses, so the stored record cannot drift from the request).
- */
-function getScopesForProvider(provider: Provider): string[] {
-  switch (provider) {
-    case "facebook":
-      return [...FACEBOOK_SCOPE_LIST];
-    case "instagram":
-      return [...INSTAGRAM_SCOPE_LIST];
-    default:
-      return [];
-  }
 }
