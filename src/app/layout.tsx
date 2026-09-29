@@ -20,8 +20,7 @@ const ibmPlexMono = IBM_Plex_Mono({
 
 export const metadata: Metadata = {
   title: "Cheers by Orange Jelly",
-  description:
-    "Plan, generate, and publish social content for your venue across Facebook, Instagram, and Google.",
+  description: "Plan, generate, and publish social content for your venue across Facebook and Instagram.",
   robots: {
     index: false,
     follow: false,

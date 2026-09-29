@@ -13,12 +13,18 @@
  *   and the live check only speaks when it is pointed at a real project.
  *
  * WHY IT EXISTS
- *   The anon surface widens on its own. `pg_default_acl` on this project has
+ *   The anon surface widened on its own. `pg_default_acl` on this project had
  *   `postgres` granting anon every table privilege on every NEW table in
  *   `public`, EXECUTE on every NEW function, and rwU on every NEW sequence.
  *   Nobody writes those grants. They arrive with the object. So a migration that
  *   adds a table or a function hands anon a key to it in the same breath, and no
  *   line of SQL in this repository records that it happened.
+ *
+ *   20260905053036 took anon out of those `postgres` defaults, which stopped it
+ *   for tables and sequences. It did not stop it for functions: its per-schema
+ *   revoke from PUBLIC cannot remove the built-in global EXECUTE that PUBLIC
+ *   gets, and anon is a member of PUBLIC. 20260929112511 revokes that globally
+ *   for postgres.
  *
  *   Two attempts to close specific holes are already in the migration history and
  *   BOTH failed, in mirror-image ways, because a Supabase function carries two

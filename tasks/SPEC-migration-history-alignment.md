@@ -1,8 +1,11 @@
 # SPEC: align production migration history with the repo
 
-Status: proposal, revised 29 September 2026 after an independent review. Nothing has been written
-to production. The change below needs Peter's explicit yes before it runs, and the GitHub
-integration pre-condition (section 0) must be checked first.
+Status: done. Peter said yes on 29 September 2026 and the change in section 2 ran on production
+that afternoon, after the GitHub integration pre-condition (section 0) was met. The pre-flight
+returned exactly 34 / 0 / 66 beforehand; no guard raised. Validation (section 3): the pre-flight
+re-run returned 0 / 34 / 66, and every live row's `<version>_<name>` equals a file in
+`supabase/migrations` on `main` (66 rows, 66 files, none extra on either side). The rollback below
+was not needed.
 
 ## Problem
 
@@ -166,6 +169,13 @@ migrations. Option D leaves `db push` unusable and the drift growing, which hide
 ## Proposal: option B, plus a rule that stops it recurring
 
 ### 0. Pre-condition: the GitHub integration (Peter checks, before the change)
+
+**Met on 29 September 2026.** Peter switched the integration's "Deploy to production" and
+"Automatic branching" off. The repository stays connected, so pull requests still show a
+"Supabase Preview" check, now answering "skipping" (seen on #156 the same day). Merging to `main`
+therefore no longer applies migrations, and aligning the history cannot turn merges into
+production deploys. The repair itself (sections 1 to 3) still needs Peter's explicit yes before
+it runs.
 
 Supabase dashboard, project `nbkjciurhvkfpcpatbnt`, Settings, Integrations, GitHub: look at
 "Deploy to production".
@@ -527,7 +537,8 @@ text that ran, not the file's text.
 
 1. Merge this PR: the spec and the forward rule in `CLAUDE.md` (documentation only; nothing
    deploys). The forward rule applies from merge, whether or not the change below has run.
-2. Peter checks the GitHub integration pre-condition (section 0) and acts on it.
+2. Peter checks the GitHub integration pre-condition (section 0) and acts on it. Done
+   29 September 2026: "Deploy to production" and "Automatic branching" are off.
 3. With Peter's yes: pre-flight, the change, validation, all through MCP.
 
 No app code depends on any of this, so no deploy has to happen before or after the change.

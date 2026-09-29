@@ -17,6 +17,14 @@ export const COMPANY = {
   siteHost: "cheers.orangejelly.co.uk",
 } as const;
 
+/**
+ * The company details sentence the law asks for on the website, written once
+ * for the legal pages' footer and the public site's footer.
+ */
+export function companyDetailsLine(): string {
+  return `${COMPANY.tradingName} is a trading name of ${COMPANY.legalName}, a company registered in ${COMPANY.registeredIn}, company number ${COMPANY.companyNumber}. Registered office: ${COMPANY.registeredOffice}. Trading address: ${COMPANY.tradingAddress}. VAT number ${COMPANY.vatNumber}.`;
+}
+
 /** One contact route for support, privacy requests and complaints. */
 export const CONTACT = {
   email: "peter@orangejelly.co.uk",
@@ -30,8 +38,8 @@ export const CONTACT = {
  * such as .2); the Checkout acceptance text quotes
  * the version, so Stripe's record of acceptance names the text accepted.
  */
-export const LEGAL_VERSION = "2026-09-28.4";
-export const LEGAL_UPDATED = "28 September 2026";
+export const LEGAL_VERSION = "2026-09-29.1";
+export const LEGAL_UPDATED = "29 September 2026";
 
 export type LegalDocumentId = "terms" | "privacy" | "dpa";
 

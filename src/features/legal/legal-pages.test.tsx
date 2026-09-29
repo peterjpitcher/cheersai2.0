@@ -36,8 +36,8 @@ describe.each(PAGES)("the $name page", ({ Page, title }) => {
   it("shows its title, date and version", () => {
     const { container, text } = renderPage();
     expect(container.querySelector("h1")?.textContent).toBe(title);
-    expect(text).toContain("Last updated 28 September 2026");
-    expect(text).toContain("Version 2026-09-28.4");
+    expect(text).toContain("Last updated 29 September 2026");
+    expect(text).toContain("Version 2026-09-29.1");
   });
 
   it("shows the company details and contacts", () => {
@@ -68,6 +68,14 @@ describe.each(PAGES)("the $name page", ({ Page, title }) => {
 });
 
 describe("the terms", () => {
+  it("offer WhatsApp support on every plan, with priority on Professional (Peter, 29 September 2026)", () => {
+    const { container } = render(<TermsPage />);
+    const text = container.textContent ?? "";
+    expect(text).toContain("Starter includes email and WhatsApp support. Professional includes priority email and WhatsApp support.");
+    expect(text).not.toContain("Starter includes email support.");
+    cleanup();
+  });
+
   it("state the approved prices, trial and refund rules", () => {
     const { container } = render(<TermsPage />);
     const text = container.textContent ?? "";
@@ -156,22 +164,18 @@ describe("the self-serve wording (spec §4.13), true while sign-up is closed", (
   });
 });
 
-describe("legal page indexing follows the sign-up switch (P11)", () => {
+describe("legal page indexing (SPEC-homepage-and-guides §3)", () => {
   const METADATA = [termsMetadata, privacyMetadata, dpaMetadata];
 
-  it("keeps the site-wide noindex while the switch is off or unreadable", async () => {
-    for (const state of ["closed", "unavailable"]) {
+  it("may be indexed whatever the sign-up switch says, keeping each page's title", async () => {
+    for (const state of ["open", "closed", "enforcement_off", "unavailable"]) {
       switchState.mockResolvedValue(state);
-      for (const generate of METADATA) expect((await generate()).robots).toBeUndefined();
+      for (const generate of METADATA) {
+        const metadata = await generate();
+        expect(metadata.robots).toEqual({ index: true, follow: true });
+        expect(String(metadata.title)).toMatch(/\| Cheers$/);
+      }
     }
-  });
-
-  it("may be indexed once the switch is on, keeping each page's title", async () => {
-    switchState.mockResolvedValue("open");
-    for (const generate of METADATA) {
-      const metadata = await generate();
-      expect(metadata.robots).toEqual({ index: true, follow: true });
-      expect(String(metadata.title)).toMatch(/\| Cheers$/);
-    }
+    expect(switchState).not.toHaveBeenCalled();
   });
 });

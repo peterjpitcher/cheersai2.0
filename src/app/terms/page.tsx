@@ -10,8 +10,7 @@ import {
   LegalTable,
 } from "@/features/legal/legal-page";
 import { COMPANY, LEGAL_DOCUMENTS } from "@/lib/legal/company";
-import { indexableWhenOpen } from "@/lib/signup/front-door";
-import { getSelfServeSignupSwitch } from "@/lib/signup/switch";
+import { indexable } from "@/lib/signup/front-door";
 
 const DESCRIPTION =
   "The terms for using Cheers by Orange Jelly: plans, prices, the free trial, renewal, cancellation, refunds and liability.";
@@ -26,15 +25,9 @@ const METADATA: Metadata = {
   },
 };
 
-/**
- * Indexable only once the self-serve sign-up switch is on (P11); until then it
- * keeps the site-wide noindex. Rendered per request (one small read) so a flip
- * in either direction shows at once, never a stale cached copy.
- */
-export const dynamic = "force-dynamic";
-
-export async function generateMetadata(): Promise<Metadata> {
-  return indexableWhenOpen(METADATA, await getSelfServeSignupSwitch());
+/** Public, and search engines may index it (SPEC-homepage-and-guides §3). */
+export function generateMetadata(): Metadata {
+  return indexable(METADATA);
 }
 
 const { dpa, privacy } = LEGAL_DOCUMENTS;
@@ -47,7 +40,7 @@ const PLAN_ROWS = [
   ["AI generations a month", "150", "500", "Agreed"],
   ["Media storage", "2 GB", "10 GB", "Agreed"],
   ["Team seats", "2", "5", "Agreed"],
-  ["Support", "Email", "Priority email and WhatsApp", "Named contact"],
+  ["Support", "Email and WhatsApp", "Priority email and WhatsApp", "Named contact"],
 ] as const;
 
 export default function TermsPage() {
@@ -253,7 +246,7 @@ export default function TermsPage() {
       <LegalSection id="support" title="16. Support">
         <LegalList>
           <li>
-            Starter includes email support. Professional includes priority email and WhatsApp support. Group includes
+            Starter includes email and WhatsApp support. Professional includes priority email and WhatsApp support. Group includes
             a named contact.
           </li>
           <li>We provide support on working days. We reply as soon as we can, but we do not promise a response time.</li>

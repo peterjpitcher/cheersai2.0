@@ -276,6 +276,58 @@ h1, h2, h3, h4 {
 .type-badge-adset { background: var(--c-orange-soft); color: var(--c-orange-hi); }
 .type-badge-ad { background: var(--c-paper-2); color: var(--c-ink-3); }
 
+/* ── Public site (homepage and guides): backgrounds on the ink band ── */
+/*
+ * A faint planner grid that fades in and out, so it never shows a seam. The
+ * lines are 4% white: 12px orange eyebrow text crossing a line then still
+ * passes 4.5:1 (at 7% it fell to 4.2:1).
+ */
+.site-grid {
+  background-image:
+    linear-gradient(color-mix(in srgb, var(--c-card) 4%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--c-card) 4%, transparent) 1px, transparent 1px);
+  background-size: 44px 44px;
+  mask-image: linear-gradient(to bottom, transparent, black 25%, black 65%, transparent);
+}
+
+/*
+ * A warm orange glow, like light from the bar. Each glow is a circle sized to
+ * the closest side, so it fades out before it reaches any edge (bands of ink
+ * next to each other, such as header, hero, closing call to action and
+ * footer, never show a seam) and keeps its shape whatever the band's
+ * proportions: an ellipse sized the same way became a tall streak behind the
+ * text on a phone. Below lg (64rem) the hero stacks, so one glow sits in the
+ * middle at the top edge of the planner card, lighting it from behind; from
+ * lg it sits behind the card on the right, with a softer one low on the left.
+ * Only white and --c-line-2 text may cross a glow (6.8:1 at its centre).
+ */
+.site-glow {
+  background: radial-gradient(
+    circle closest-side at 50% 62%,
+    color-mix(in srgb, var(--c-orange) 40%, transparent) 0%,
+    color-mix(in srgb, var(--c-orange) 12%, transparent) 55%,
+    transparent 100%
+  );
+}
+
+@media (min-width: 64rem) {
+  .site-glow {
+    background:
+      radial-gradient(
+        circle closest-side at 78% 42%,
+        color-mix(in srgb, var(--c-orange) 40%, transparent) 0%,
+        color-mix(in srgb, var(--c-orange) 12%, transparent) 55%,
+        transparent 100%
+      ),
+      radial-gradient(
+        circle closest-side at 16% 70%,
+        color-mix(in srgb, var(--c-orange-hi) 20%, transparent) 0%,
+        color-mix(in srgb, var(--c-orange-hi) 6%, transparent) 55%,
+        transparent 100%
+      );
+  }
+}
+
 /* Interactive elements always show pointer cursor */
 button:not(:disabled),
 [role="button"]:not(:disabled) {

@@ -10,8 +10,7 @@ import {
   LegalTable,
 } from "@/features/legal/legal-page";
 import { COMPANY, LEGAL_DOCUMENTS } from "@/lib/legal/company";
-import { indexableWhenOpen } from "@/lib/signup/front-door";
-import { getSelfServeSignupSwitch } from "@/lib/signup/switch";
+import { indexable } from "@/lib/signup/front-door";
 import { SUB_PROCESSOR_ROWS } from "@/lib/legal/sub-processors";
 
 const DESCRIPTION =
@@ -27,15 +26,9 @@ const METADATA: Metadata = {
   },
 };
 
-/**
- * Indexable only once the self-serve sign-up switch is on (P11); until then it
- * keeps the site-wide noindex. Rendered per request (one small read) so a flip
- * in either direction shows at once, never a stale cached copy.
- */
-export const dynamic = "force-dynamic";
-
-export async function generateMetadata(): Promise<Metadata> {
-  return indexableWhenOpen(METADATA, await getSelfServeSignupSwitch());
+/** Public, and search engines may index it (SPEC-homepage-and-guides §3). */
+export function generateMetadata(): Metadata {
+  return indexable(METADATA);
 }
 
 const { terms, dpa } = LEGAL_DOCUMENTS;

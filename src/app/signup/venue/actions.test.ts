@@ -25,7 +25,7 @@ async function runAfter(): Promise<void> {
   for (const callback of callbacks) await callback();
 }
 
-type SwitchState = 'open' | 'closed' | 'unavailable';
+type SwitchState = 'open' | 'closed' | 'enforcement_off' | 'unavailable';
 const mockSwitch = vi.fn<() => Promise<SwitchState>>(async () => 'open');
 vi.mock('@/lib/signup/switch', () => ({ getSelfServeSignupSwitch: () => mockSwitch() }));
 
@@ -161,7 +161,7 @@ describe('createSelfServeVenue: the happy path', () => {
           p_venue_name: 'The Crown & Anchor',
           p_business_type: 'pub',
           p_email: 'owner@venue.test',
-          p_legal_version: '2026-09-28.4',
+          p_legal_version: '2026-09-29.1',
         },
       ],
     ]);
@@ -305,13 +305,16 @@ describe('createSelfServeVenue: the gate for confirmed sign-up links (spec §4.3
     expect(provisionCalls()).toHaveLength(0);
   });
 
-  it('refuses while the switch is off, and changes nothing (no password, no brand)', async () => {
-    mockSwitch.mockResolvedValue('closed');
-    const result = await createSelfServeVenue(form());
-    expect(result).toEqual({ error: VENUE_MESSAGES.notOpen });
-    expect(result.error).toContain(CONTACT_EMAIL);
+  it('refuses while the switch is off, or on without billing enforcement, and changes nothing (no password, no brand)', async () => {
+    for (const state of ['closed', 'enforcement_off'] as const) {
+      mockSwitch.mockResolvedValue(state);
+      const result = await createSelfServeVenue(form());
+      expect(result, state).toEqual({ error: VENUE_MESSAGES.notOpen });
+      expect(result.error).toContain(CONTACT_EMAIL);
+    }
     expect(mockReadLogin).not.toHaveBeenCalled();
     expect(mockUpdateUser).not.toHaveBeenCalled();
+    // provision_self_serve_brand re-reads only self_serve_signup, so this app gate is what stops it.
     expect(provisionCalls()).toHaveLength(0);
     expect(mockReport).not.toHaveBeenCalled();
   });

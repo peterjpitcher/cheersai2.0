@@ -113,7 +113,7 @@ export default async function LegacyHelpPage({ params }: LegacyHelpPageProps): P
               <Link
                 href="/login"
                 className="inline-flex items-center gap-1 text-sm font-semibold hover:underline"
-                style={{ color: "var(--c-orange)" }}
+                style={{ color: "var(--c-orange-hi)" }}
               >
                 Go to login
               </Link>
@@ -195,7 +195,7 @@ export default async function LegacyHelpPage({ params }: LegacyHelpPageProps): P
               <a
                 href="mailto:peter@orangejelly.co.uk"
                 className="inline-flex items-center gap-1 text-sm font-semibold hover:underline"
-                style={{ color: "var(--c-orange)" }}
+                style={{ color: "var(--c-orange-hi)" }}
               >
                 Email support
               </a>
