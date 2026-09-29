@@ -7,6 +7,8 @@
  * regenerateWithModifier: regenerates with an appended instruction modifier
  */
 
+import { unstable_rethrow } from 'next/navigation';
+
 import type { ContentBrief } from '@/features/create/schemas/content-schemas';
 import { generatePlatformCopy } from '@/lib/ai/generate';
 import type { PostprocessResult } from '@/lib/ai/postprocess';
@@ -143,6 +145,7 @@ export async function generateContent(
 
     return { data: processed };
   } catch (error) {
+    unstable_rethrow(error);
     const message = error instanceof Error
       ? error.message
       : 'Content generation failed. Please try again.';
@@ -232,6 +235,7 @@ export async function regenerateWithModifier(
 
     return { data: processed };
   } catch (error) {
+    unstable_rethrow(error);
     const message = error instanceof Error
       ? error.message
       : 'Content regeneration failed. Please try again.';

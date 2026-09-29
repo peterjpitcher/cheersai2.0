@@ -1,5 +1,6 @@
 "use server";
 
+import { unstable_rethrow } from "next/navigation";
 import { z } from "zod";
 
 import {
@@ -140,6 +141,7 @@ export async function listManagementEventOptions(payload?: unknown): Promise<Man
       data: options,
     };
   } catch (error) {
+    unstable_rethrow(error);
     console.warn("[management-import] list-events failed", {
       errorType: error instanceof Error ? error.constructor.name : "unknown",
     });
@@ -209,6 +211,7 @@ export async function getManagementEventPrefill(
       data: mapped,
     };
   } catch (error) {
+    unstable_rethrow(error);
     console.warn("[management-import] get-event-detail failed", {
       errorType: error instanceof Error ? error.constructor.name : "unknown",
       eventIdPresent: Boolean(eventId),
@@ -242,6 +245,7 @@ export async function listManagementPromotionOptions(): Promise<
       data: options,
     };
   } catch (error) {
+    unstable_rethrow(error);
     return {
       ok: false,
       error: mapManagementActionError(error),
@@ -274,6 +278,7 @@ export async function getManagementPromotionPrefill(
       data: mapped,
     };
   } catch (error) {
+    unstable_rethrow(error);
     return {
       ok: false,
       error: mapManagementActionError(error),

@@ -1,6 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { unstable_rethrow } from 'next/navigation';
 import { DateTime } from 'luxon';
 
 import { requireAuthContext } from '@/lib/auth/server';
@@ -156,6 +157,7 @@ export async function createDraft(
 
     return { success: true, id: (data as { id: string }).id };
   } catch (err) {
+    unstable_rethrow(err);
     return { error: err instanceof Error ? err.message : String(err) };
   }
 }
@@ -190,6 +192,7 @@ export async function saveDraft(
 
     return { success: true };
   } catch (err) {
+    unstable_rethrow(err);
     return { error: err instanceof Error ? err.message : String(err) };
   }
 }
@@ -221,6 +224,7 @@ export async function getDraft(
 
     return { data: mapContentItem(data as Record<string, unknown>) };
   } catch (err) {
+    unstable_rethrow(err);
     return { error: err instanceof Error ? err.message : String(err) };
   }
 }
@@ -255,6 +259,7 @@ export async function listDrafts(): Promise<{
     const items = (data as Record<string, unknown>[]).map(mapContentItem);
     return { data: items };
   } catch (err) {
+    unstable_rethrow(err);
     return { error: err instanceof Error ? err.message : String(err) };
   }
 }
@@ -288,6 +293,7 @@ export async function deleteDraft(
 
     return { success: true };
   } catch (err) {
+    unstable_rethrow(err);
     return { error: err instanceof Error ? err.message : String(err) };
   }
 }
@@ -310,6 +316,7 @@ export async function getScheduledContentAction(
     const items = await getContentForCalendar(accountId, startDate, endDate);
     return { data: items };
   } catch (err) {
+    unstable_rethrow(err);
     return { error: err instanceof Error ? err.message : String(err) };
   }
 }
@@ -359,6 +366,7 @@ export async function scheduleContent(
 
     return { success: true };
   } catch (err) {
+    unstable_rethrow(err);
     return { error: err instanceof Error ? err.message : String(err) };
   }
 }
@@ -395,6 +403,7 @@ export async function approveForQueue(
 
     return { success: true };
   } catch (err) {
+    unstable_rethrow(err);
     return { error: err instanceof Error ? err.message : String(err) };
   }
 }
@@ -578,6 +587,7 @@ export async function getCalendarItemsAction(
 
     return { data: items };
   } catch (err) {
+    unstable_rethrow(err);
     return { error: err instanceof Error ? err.message : String(err) };
   }
 }
@@ -1144,6 +1154,7 @@ export async function createScheduledBatch(
       campaignId: campaignId ?? undefined,
     };
   } catch (err) {
+    unstable_rethrow(err);
     return { error: err instanceof Error ? err.message : String(err) };
   }
 }
