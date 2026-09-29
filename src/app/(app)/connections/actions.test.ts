@@ -136,6 +136,11 @@ function warnings(): string {
   return vi.mocked(console.warn).mock.calls.flat().map(String).join('\n');
 }
 
+/** Everything logged at error level (createLogger writes JSON lines to console.error). */
+function errorLog(): string {
+  return vi.mocked(console.error).mock.calls.flat().map(String).join('\n');
+}
+
 /** A connection that currently holds a token (a token_vault access row). */
 function seedConnection(provider: 'facebook' | 'instagram', metadata: Record<string, unknown>, withToken = true) {
   const id = `${provider}-conn`;
@@ -252,10 +257,13 @@ describe('initiateOAuthConnect', () => {
 
     const result = await initiateOAuthConnect('instagram');
 
-    expect(result).toEqual({ success: false, error: 'Failed to initiate OAuth flow' });
+    expect(result).toEqual({ success: false, error: 'We could not start the connection. Please try again.' });
     expect(db.rows('oauth_states')).toHaveLength(0);
     expect(mockBuildOAuthRedirectUrl).not.toHaveBeenCalled();
-    expect(consoleError).toHaveBeenCalledWith('[connections] failed to insert oauth_states', expect.anything());
+    // The owner gets plain words; the log keeps the database's own message.
+    const logged = consoleError.mock.calls.flat().map(String).join('\n');
+    expect(logged).toContain('could not store the OAuth state');
+    expect(logged).toContain('connection refused');
     consoleError.mockRestore();
   });
 
@@ -452,7 +460,7 @@ describe('completeOAuthConnect', () => {
 
     const result = await completeOAuthConnect('facebook', 'auth-code-123', 'valid-state');
 
-    expect(result).toEqual({ success: false, error: 'Invalid or expired OAuth state' });
+    expect(result).toEqual({ success: false, error: 'This connection link has expired or was already used. Please click Connect again.' });
     expect(mockExchangeCodeForUserToken).not.toHaveBeenCalled();
   });
 
@@ -461,14 +469,14 @@ describe('completeOAuthConnect', () => {
 
     const result = await completeOAuthConnect('facebook', 'auth-code-123', 'valid-state');
 
-    expect(result.error).toContain('Invalid');
+    expect(result.error).toBe('This connection link has expired or was already used. Please click Connect again.');
     expect(mockExchangeCodeForUserToken).not.toHaveBeenCalled();
   });
 
   it('should return error for non-existent state (state fixation prevention)', async () => {
     const result = await completeOAuthConnect('instagram', 'auth-code-123', 'fake-state');
 
-    expect(result.error).toContain('Invalid');
+    expect(result.error).toBe('This connection link has expired or was already used. Please click Connect again.');
     expect(mockStoreEncryptedToken).not.toHaveBeenCalled();
   });
 
@@ -480,7 +488,7 @@ describe('completeOAuthConnect', () => {
 
     const replay = await completeOAuthConnect('facebook', 'code', first.pageChoice!);
 
-    expect(replay).toEqual({ success: false, error: 'Invalid or expired OAuth state' });
+    expect(replay).toEqual({ success: false, error: 'This connection link has expired or was already used. Please click Connect again.' });
     expect(mockExchangeCodeForUserToken).not.toHaveBeenCalled();
   });
 
@@ -496,7 +504,7 @@ describe('completeOAuthConnect', () => {
 
     const result = await completeOAuthConnect(provider, 'code', 'valid-state');
 
-    expect(result).toEqual({ success: false, error: 'Invalid or expired OAuth state' });
+    expect(result).toEqual({ success: false, error: 'This connection link has expired or was already used. Please click Connect again.' });
     expect(mockExchangeCodeForUserToken).not.toHaveBeenCalled();
     expect(db.rows('social_connections')).toHaveLength(0);
     // No Page choice was made, and the state is still there for the person who started it.
@@ -518,7 +526,7 @@ describe('completeOAuthConnect', () => {
 
     const result = await completeOAuthConnect('facebook', 'code', 'valid-state');
 
-    expect(result).toEqual({ success: false, error: 'Invalid or expired OAuth state' });
+    expect(result).toEqual({ success: false, error: 'This connection link has expired or was already used. Please click Connect again.' });
     expect(mockExchangeCodeForUserToken).not.toHaveBeenCalled();
     expect(db.rows('social_connections')).toHaveLength(0);
     expect(db.rows('oauth_states')[0].used_at).toBeNull();
@@ -542,10 +550,11 @@ describe('completeOAuthConnect', () => {
 
     const result = await completeOAuthConnect('facebook', 'code', 'valid-state');
 
-    expect(result).toEqual({ success: false, error: 'OAuth state validation failed' });
+    expect(result).toEqual({ success: false, error: 'We could not finish connecting. Please click Connect again.' });
     expect(mockExchangeCodeForUserToken).not.toHaveBeenCalled();
     expect(db.rows('oauth_states')[0].used_at).toBeNull();
-    expect(console.error).toHaveBeenCalledWith('[connections] oauth_states lookup failed', expect.anything());
+    expect(errorLog()).toContain('oauth_states lookup failed');
+    expect(errorLog()).toContain('connection refused');
   });
 
   it('fails closed, connecting nothing, when the state cannot be marked used', async () => {
@@ -554,9 +563,10 @@ describe('completeOAuthConnect', () => {
 
     const result = await completeOAuthConnect('facebook', 'code', 'valid-state');
 
-    expect(result).toEqual({ success: false, error: 'Failed to process OAuth state' });
+    expect(result).toEqual({ success: false, error: 'We could not finish connecting. Please click Connect again.' });
     expect(mockExchangeCodeForUserToken).not.toHaveBeenCalled();
     expect(db.rows('social_connections')).toHaveLength(0);
+    expect(errorLog()).toContain('could not mark the OAuth state used');
   });
 
   it('refuses a user who is only a member of the brand that started the flow', async () => {
@@ -574,7 +584,7 @@ describe('completeOAuthConnect', () => {
     expect(mockExchangeCodeForUserToken).not.toHaveBeenCalled();
   });
 
-  it('should return an actionable error when token vault config is missing, leaving the connection needs_action', async () => {
+  it('tells the owner plainly, and the log names the missing key, when the token vault key is missing', async () => {
     mockStoreEncryptedToken.mockRejectedValue(
       new Error('Missing encryption key: TOKEN_VAULT_KEY environment variable is not set'),
     );
@@ -583,19 +593,26 @@ describe('completeOAuthConnect', () => {
 
     const result = await completeOAuthConnect('instagram', 'auth-code-123', 'valid-state');
 
-    expect(result.success).toBe(false);
-    expect(result.error).toContain('TOKEN_VAULT_KEY');
-    expect(result.error).toContain('Supabase Edge Function secrets');
+    expect(result).toEqual({
+      success: false,
+      error:
+        'We could not save this connection securely. Please try connecting again, and contact Cheers support if it keeps happening.',
+    });
+    expect(result.error).not.toContain('TOKEN_VAULT_KEY');
+    expect(errorLog()).toContain('token vault write failed: TOKEN_VAULT_KEY is missing or invalid');
+    expect(errorLog()).toContain('Missing encryption key');
     expect(connectionRow('instagram')?.status).toBe('needs_action');
   });
 
-  it('returns Meta errors from the login to the owner', async () => {
+  it('keeps Meta errors from the login out of the owner message and in the log', async () => {
     seedState();
     mockExchangeCodeForUserToken.mockRejectedValue(new Error('OAuthException: Code expired (code 100)'));
 
     const result = await completeOAuthConnect('facebook', 'code', 'valid-state');
 
-    expect(result).toEqual({ success: false, error: 'OAuthException: Code expired (code 100)' });
+    expect(result).toEqual({ success: false, error: 'Facebook did not finish the sign-in. Please click Connect again.' });
+    expect(errorLog()).toContain('Meta login or Page list failed');
+    expect(errorLog()).toContain('OAuthException: Code expired (code 100)');
   });
 
   it('refuses a Page that came back without a token, as before', async () => {
@@ -604,8 +621,11 @@ describe('completeOAuthConnect', () => {
 
     const result = await completeOAuthConnect('facebook', 'code', 'valid-state');
 
-    expect(result.success).toBe(false);
-    expect(result.error).toContain('missing an access token');
+    expect(result).toEqual({
+      success: false,
+      error:
+        'Facebook did not give CheersAI permission to post to this Page. Please click Connect again and allow posting when Facebook asks.',
+    });
     expect(connectionRow('facebook')).toBeUndefined();
   });
 
@@ -830,7 +850,7 @@ describe('disconnectProvider', () => {
 
     const result = await disconnectProvider('facebook');
 
-    expect(result).toEqual({ success: false, error: 'Failed to disconnect provider' });
+    expect(result).toEqual({ success: false, error: 'We could not disconnect this account. Please try again.' });
     expect(vaultIds()).toHaveLength(4);
     expect(row('fb-1')).toMatchObject({ status: 'active', access_token: 'plain-fb-1' });
     expect(consoleError).toHaveBeenCalled();
@@ -843,7 +863,7 @@ describe('disconnectProvider', () => {
 
     const result = await disconnectProvider('facebook');
 
-    expect(result).toEqual({ success: false, error: 'Failed to disconnect provider' });
+    expect(result).toEqual({ success: false, error: 'We could not disconnect this account. Please try again.' });
     expect(vaultIds()).toContain('v-fb-access');
     expect(row('fb-1')).toMatchObject({ status: 'active', access_token: 'plain-fb-1' });
     expect(consoleError).toHaveBeenCalled();
@@ -856,7 +876,7 @@ describe('disconnectProvider', () => {
 
     const result = await disconnectProvider('facebook');
 
-    expect(result).toEqual({ success: false, error: 'Failed to disconnect provider' });
+    expect(result).toEqual({ success: false, error: 'We could not disconnect this account. Please try again.' });
     expect(row('fb-1')?.access_token).toBe('plain-fb-1');
     expect(consoleError).toHaveBeenCalled();
     consoleError.mockRestore();

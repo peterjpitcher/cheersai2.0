@@ -51,10 +51,6 @@ function getBrandProfileDefaultValues(data: BrandProfile): BrandProfileFormValue
   };
 }
 
-function getErrorMessage(error: unknown, fallback: string) {
-  return error instanceof Error ? error.message : fallback;
-}
-
 export function BrandVoiceForm({ data }: BrandVoiceFormProps) {
   const router = useRouter();
   const toast = useToast();
@@ -78,9 +74,10 @@ export function BrandVoiceForm({ data }: BrandVoiceFormProps) {
         reset(values);
         router.refresh();
         toast.success("Brand voice saved");
-      } catch (error) {
+      } catch {
+        // A thrown server action reaches the browser as technical text: never show it.
         toast.error("Could not save brand voice", {
-          description: getErrorMessage(error, "Please try again."),
+          description: "Please try again.",
         });
       }
     });

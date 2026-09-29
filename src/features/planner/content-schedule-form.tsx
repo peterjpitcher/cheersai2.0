@@ -102,8 +102,9 @@ export function PlannerContentScheduleForm({
         } else {
           router.refresh();
         }
-      } catch (err) {
-        const message = err instanceof Error ? err.message : "Unable to update schedule.";
+      } catch {
+        // A thrown server action reaches the browser as technical text: never show it.
+        const message = "We could not update the schedule. Please try again.";
         setError(message);
         toast.error("Could not update", { description: message });
       }

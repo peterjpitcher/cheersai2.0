@@ -438,7 +438,7 @@ export function CreateWizard({ initialDraftId, accountId, onClose }: CreateWizar
       if (draftId) {
         const result = await attachMediaToContent(draftId, selectedMediaIds);
         if (result.error) {
-          toast.error(`Failed to attach media: ${result.error}`);
+          toast.error('Could not add your images', { description: result.error });
         }
       }
       save(buildDraftState(2));

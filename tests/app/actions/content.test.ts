@@ -1375,8 +1375,7 @@ describe('createScheduledBatch', () => {
     });
 
     // Must return a hard error with no contentItemIds
-    expect(result.error).toBeDefined();
-    expect(result.error).toContain('Publish job creation failed');
+    expect(result.error).toBe('We could not schedule your posts, so nothing was scheduled. Please try again.');
     expect(result.contentItemIds).toBeUndefined();
     expect(result.success).toBeUndefined();
 
@@ -1522,7 +1521,7 @@ describe('getCalendarItemsAction', () => {
       const { getCalendarItemsAction } = await import('@/app/actions/content');
       const result = await getCalendarItemsAction('2026-06-01T00:00:00Z', '2026-06-30T23:59:59Z');
       if (scenario === 'failed asset lookup') {
-        expect(result.error).toBe('Asset lookup failed');
+        expect(result.error).toBe('We could not load your scheduled posts. Please refresh the page to try again.');
         expect(createSignedUrls).not.toHaveBeenCalled();
       } else {
         expect(result.error).toBeUndefined();

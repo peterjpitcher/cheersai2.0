@@ -56,28 +56,29 @@ describe("ConnectionDisconnectButton", () => {
   });
 
   it("shows the failure when the disconnect does not complete", async () => {
-    disconnectProviderMock.mockResolvedValue({ success: false, error: "Failed to disconnect provider" });
+    disconnectProviderMock.mockResolvedValue({ success: false, error: "We could not disconnect this account. Please try again." });
     render(<ConnectionDisconnectButton provider="facebook" />);
 
     fireEvent.click(screen.getByRole("button", { name: "Disconnect Facebook" }));
 
     await waitFor(() =>
       expect(toastErrorMock).toHaveBeenCalledWith("Could not disconnect Facebook", {
-        description: "Failed to disconnect provider",
+        description: "We could not disconnect this account. Please try again.",
       }),
     );
     expect(toastSuccessMock).not.toHaveBeenCalled();
   });
 
-  it("shows the failure when the server action throws", async () => {
-    disconnectProviderMock.mockRejectedValue(new Error("Only an owner of this brand can do that."));
+  it("shows a plain failure, never the thrown text, when the server action throws", async () => {
+    // Production turns a thrown action into React's generic technical sentence.
+    disconnectProviderMock.mockRejectedValue(new Error("An error occurred in the Server Components render."));
     render(<ConnectionDisconnectButton provider="facebook" />);
 
     fireEvent.click(screen.getByRole("button", { name: "Disconnect Facebook" }));
 
     await waitFor(() =>
       expect(toastErrorMock).toHaveBeenCalledWith("Could not disconnect Facebook", {
-        description: "Only an owner of this brand can do that.",
+        description: "Please try again.",
       }),
     );
     expect(toastSuccessMock).not.toHaveBeenCalled();

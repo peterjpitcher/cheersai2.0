@@ -20,8 +20,11 @@ import {
   mapManagementEventToEventCampaignPrefill,
   mapManagementSpecialToPromotionPrefill,
 } from "@/lib/management-app/mappers";
+import { createLogger } from "@/lib/logging";
+import { toLoggableError } from "@/lib/logging/to-error";
 import { isSchemaMissingError } from "@/lib/supabase/errors";
 
+const logger = createLogger("management-import");
 
 export interface ManagementActionError {
   code:
@@ -169,14 +172,19 @@ export async function getManagementEventPrefill(
         fallbackSlug: eventSlug,
       });
     } catch (error) {
+      // The management API's own text (and the operator's fix: deploy its
+      // latest updates) goes to the log; the owner gets plain words.
       const isMissingDetail = error instanceof ManagementApiError && error.status === 404;
       if (isMissingDetail) {
+        logger.warn("event detail returned 404: the management API may need its latest updates deployed", {
+          eventIdPresent: Boolean(eventId),
+          detail: error.message,
+        });
         return {
           ok: false,
           error: {
             code: "FAILED",
-            message:
-              "Detailed event import data is unavailable (management API returned 404 for this event). Deploy the latest management API updates, then reload events and try again.",
+            message: "We could not load this event's details from your management app. Reload the events and try again.",
           },
         };
       }
@@ -184,12 +192,12 @@ export async function getManagementEventPrefill(
       const isServerDetailFailure =
         error instanceof ManagementApiError && typeof error.status === "number" && error.status >= 500;
       if (isServerDetailFailure) {
+        logger.error("event detail failed on the management API", error, { status: error.status });
         return {
           ok: false,
           error: {
             code: "FAILED",
-            message:
-              "Detailed event import data is unavailable because the management API failed. Deploy the latest management API updates, then reload events and try again.",
+            message: "Your management app could not send this event's details. Please try again in a few minutes.",
           },
         };
       }
@@ -290,93 +298,80 @@ function findSpecialById(items: ManagementMenuSpecialItem[], specialId: string) 
   return items.find((item) => item.id === specialId) ?? null;
 }
 
+/**
+ * Plain words for a failed import (tasks/SPEC-plain-error-messages.md). The
+ * codes are unchanged; the management API's or the database's own text goes
+ * to the log, never to the page.
+ */
+const IMPORT_MESSAGES = {
+  notSetUp: "Event import is not set up for this brand yet. Please contact Cheers support.",
+  notConfigured: "Event import is not set up yet. Add your management app details in Settings.",
+  disabled: "Event import is switched off. Turn it on under Management app connection in Settings.",
+  notFound: "We could not find that event in your management app. Reload the events and try again.",
+  unauthorised: "Your management app did not accept the saved API key. Check it under Management app connection in Settings.",
+  forbidden: "The saved API key is not allowed to read events or menus. Update its permissions in your management app, then try again.",
+  rateLimited: "Your management app is busy. Please try again in a minute.",
+  unreachable: "We could not reach your management app. Check the Base URL under Management app connection in Settings, then try again.",
+  unreadable: "Your management app sent something we could not read. Please try again, and contact Cheers support if it keeps happening.",
+  failed: "We could not import from your management app. Please try again.",
+} as const;
+
 function mapManagementActionError(error: unknown): ManagementActionError {
+  const result = describeManagementActionError(error);
+  logger.warn("import failed", {
+    code: result.code,
+    errorType: error instanceof Error ? error.constructor.name : typeof error,
+    detail: error instanceof Error ? error.message : toLoggableError(error).message,
+  });
+  return result;
+}
+
+function describeManagementActionError(error: unknown): ManagementActionError {
   if (isSchemaMissingError(error)) {
-    return {
-      code: "NOT_CONFIGURED",
-      message: "Management connection schema is missing. Run the latest Supabase migrations, then configure it in Settings.",
-    };
+    return { code: "NOT_CONFIGURED", message: IMPORT_MESSAGES.notSetUp };
   }
 
   if (error instanceof ManagementApiError) {
     if (error.status === 404) {
-      return {
-        code: "FAILED",
-        message: "Selected event was not found in the management app. Reload events and try again.",
-      };
+      return { code: "FAILED", message: IMPORT_MESSAGES.notFound };
     }
 
     if (error.code === "UNAUTHORIZED") {
-      return {
-        code: "UNAUTHORIZED",
-        message: "Management API rejected the credentials. Check the stored API key.",
-      };
+      return { code: "UNAUTHORIZED", message: IMPORT_MESSAGES.unauthorised };
     }
 
     if (error.code === "FORBIDDEN") {
-      return {
-        code: "FORBIDDEN",
-        message: "Management API key is missing read:events/read:menu permissions.",
-      };
+      return { code: "FORBIDDEN", message: IMPORT_MESSAGES.forbidden };
     }
 
     if (error.code === "RATE_LIMITED") {
-      return {
-        code: "RATE_LIMITED",
-        message: "Management API rate limit exceeded. Try again in a moment.",
-      };
+      return { code: "RATE_LIMITED", message: IMPORT_MESSAGES.rateLimited };
     }
 
     if (error.code === "NETWORK") {
-      return {
-        code: "NETWORK",
-        message: "Management API is unreachable. Verify base URL and network access.",
-      };
+      return { code: "NETWORK", message: IMPORT_MESSAGES.unreachable };
     }
 
     if (error.code === "INVALID_RESPONSE") {
-      return {
-        code: "INVALID_RESPONSE",
-        message: "Management API returned an unexpected response format.",
-      };
+      return { code: "INVALID_RESPONSE", message: IMPORT_MESSAGES.unreadable };
     }
 
-    return {
-      code: "FAILED",
-      message: error.message,
-    };
+    return { code: "FAILED", message: IMPORT_MESSAGES.failed };
   }
 
   if (error instanceof Error) {
     if (/schema is missing|latest supabase migrations|database schema is missing/i.test(error.message)) {
-      return {
-        code: "NOT_CONFIGURED",
-        message: "Management connection schema is missing. Run the latest Supabase migrations, then configure it in Settings.",
-      };
+      return { code: "NOT_CONFIGURED", message: IMPORT_MESSAGES.notSetUp };
     }
 
     if (/not configured/i.test(error.message)) {
-      return {
-        code: "NOT_CONFIGURED",
-        message: "Management connection is not configured. Add credentials in Settings.",
-      };
+      return { code: "NOT_CONFIGURED", message: IMPORT_MESSAGES.notConfigured };
     }
 
     if (/disabled/i.test(error.message)) {
-      return {
-        code: "DISABLED",
-        message: "Management connection is disabled. Enable it in Settings.",
-      };
+      return { code: "DISABLED", message: IMPORT_MESSAGES.disabled };
     }
-
-    return {
-      code: "FAILED",
-      message: error.message,
-    };
   }
 
-  return {
-    code: "FAILED",
-    message: "Management import failed.",
-  };
+  return { code: "FAILED", message: IMPORT_MESSAGES.failed };
 }

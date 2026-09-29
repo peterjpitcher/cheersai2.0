@@ -24,8 +24,9 @@ export function RestoreContentButton({ contentId, className }: RestoreContentBut
       try {
         await restorePlannerContent({ contentId });
         toast.success("Post restored", { description: "The post is back in your planner." });
-      } catch (error) {
-        const message = error instanceof Error ? error.message : "Something went wrong";
+      } catch {
+        // A thrown server action reaches the browser as technical text: never show it.
+        const message = "Please try again.";
         toast.error("Could not restore post", { description: message });
       }
     });
@@ -63,8 +64,9 @@ export function PermanentlyDeleteContentButton({ contentId, className }: Permane
       try {
         await permanentlyDeletePlannerContent({ contentId });
         toast.success("Post deleted", { description: "The post has been removed permanently." });
-      } catch (error) {
-        const message = error instanceof Error ? error.message : "Something went wrong";
+      } catch {
+        // A thrown server action reaches the browser as technical text: never show it.
+        const message = "Please try again.";
         toast.error("Could not delete", { description: message });
       }
     });
@@ -110,8 +112,9 @@ export function PermanentlyDeleteAllTrashButton({ className }: PermanentlyDelete
               ? "1 post was deleted permanently."
               : `${result.deletedCount} posts were deleted permanently.`,
         });
-      } catch (error) {
-        const message = error instanceof Error ? error.message : "Something went wrong";
+      } catch {
+        // A thrown server action reaches the browser as technical text: never show it.
+        const message = "Please try again.";
         toast.error("Could not clear trash", { description: message });
       }
     });

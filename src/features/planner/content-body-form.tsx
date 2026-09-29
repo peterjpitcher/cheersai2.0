@@ -60,8 +60,9 @@ export function PlannerContentBodyForm({ contentId, initialBody, status, placeme
           description: "Your changes have been saved.",
         });
         setShouldReturnToPlanner(true);
-      } catch (err) {
-        const message = err instanceof Error ? err.message : "Unable to save changes.";
+      } catch {
+        // A thrown server action reaches the browser as technical text: never show it.
+        const message = "We could not save your changes. Please try again.";
         setError(message);
         toast.error("Save failed", { description: message });
       }

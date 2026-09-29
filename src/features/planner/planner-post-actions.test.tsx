@@ -75,14 +75,14 @@ describe("<PublishNowButton />", () => {
     expect(mocks.refresh).not.toHaveBeenCalled();
   });
 
-  it("shows an error when the action fails outright", async () => {
+  it("shows a plain error, never the thrown text, when the action fails outright", async () => {
     mocks.publishPlannerContentNow.mockRejectedValue(new Error("Content item not found"));
 
     render(<PublishNowButton contentId={CONTENT_ID} />);
     fireEvent.click(screen.getByRole("button", { name: "Publish now" }));
 
     await waitFor(() => expect(mocks.toast.error).toHaveBeenCalledWith("Could not publish", {
-      description: "Content item not found",
+      description: "Please try again.",
     }));
     expect(mocks.refresh).not.toHaveBeenCalled();
   });
@@ -179,7 +179,7 @@ describe("<CancelPostButton />", () => {
     expect(mocks.refresh).toHaveBeenCalled();
   });
 
-  it("stays on the page and shows the error when the post cannot be cancelled", async () => {
+  it("stays on the page and shows a plain error when the post cannot be cancelled", async () => {
     vi.stubGlobal("confirm", vi.fn(() => true));
     mocks.deletePlannerContent.mockRejectedValue(new Error("Content item not found"));
 
@@ -187,7 +187,7 @@ describe("<CancelPostButton />", () => {
     fireEvent.click(screen.getByRole("button", { name: "Cancel this post" }));
 
     await waitFor(() => expect(mocks.toast.error).toHaveBeenCalledWith("Could not cancel post", {
-      description: "Content item not found",
+      description: "Please try again.",
     }));
     expect(mocks.push).not.toHaveBeenCalled();
     expect(mocks.toast.success).not.toHaveBeenCalled();
@@ -204,8 +204,9 @@ describe("<CancelPostButton />", () => {
 
     await mocks.toast.success.mock.calls[0][1].action.onClick();
 
+    // A thrown action reaches the browser as React's generic text in production.
     expect(mocks.toast.error).toHaveBeenCalledWith("Could not restore post", {
-      description: "Your subscription does not allow this.",
+      description: "Please try again.",
     });
   });
 });

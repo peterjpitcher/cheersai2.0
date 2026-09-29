@@ -10,7 +10,7 @@
 import { unstable_rethrow } from 'next/navigation';
 
 import type { ContentBrief } from '@/features/create/schemas/content-schemas';
-import { generatePlatformCopy } from '@/lib/ai/generate';
+import { AI_OWNER_MESSAGES, generatePlatformCopy } from '@/lib/ai/generate';
 import type { PostprocessResult } from '@/lib/ai/postprocess';
 import { postprocessCopy } from '@/lib/ai/postprocess';
 import { buildSystemPrompt, buildUserPrompt } from '@/lib/ai/prompts';
@@ -21,6 +21,23 @@ import { buildGenerationTemporalContext } from '@/lib/create/temporal-context';
 import type { GenerationTemporalContext } from '@/lib/create/temporal-context';
 import type { BrandProfile } from '@/lib/settings/data';
 import { requireEntitledContext } from '@/lib/billing/entitlement-server';
+import { ownerMessage } from '@/lib/errors/owner-message';
+import { createLogger } from '@/lib/logging';
+import { toLoggableError } from '@/lib/logging/to-error';
+
+const logger = createLogger('ai-generate');
+
+const AI_OWNER_MESSAGE_SET = new Set<string>(Object.values(AI_OWNER_MESSAGES));
+
+/**
+ * What the create screen shows when generation fails: a message written for
+ * owners as it is (plan on hold, AI timed out), otherwise plain words. OpenAI's
+ * and the database's own text goes to the log (tasks/SPEC-plain-error-messages.md).
+ */
+function generationFailureMessage(error: unknown, fallback: string): string {
+  if (error instanceof Error && AI_OWNER_MESSAGE_SET.has(error.message)) return error.message;
+  return ownerMessage(error, fallback);
+}
 
 /**
  * Optional media + schedule context passed from the create wizard.
@@ -146,11 +163,8 @@ export async function generateContent(
     return { data: processed };
   } catch (error) {
     unstable_rethrow(error);
-    const message = error instanceof Error
-      ? error.message
-      : 'Content generation failed. Please try again.';
-    console.error('[ai-generate] generateContent error:', message);
-    return { error: message };
+    logger.error('generateContent failed', toLoggableError(error), { contentId });
+    return { error: generationFailureMessage(error, 'We could not write the copy just now. Please try again.') };
   }
 }
 
@@ -236,11 +250,8 @@ export async function regenerateWithModifier(
     return { data: processed };
   } catch (error) {
     unstable_rethrow(error);
-    const message = error instanceof Error
-      ? error.message
-      : 'Content regeneration failed. Please try again.';
-    console.error('[ai-generate] regenerateWithModifier error:', message);
-    return { error: message };
+    logger.error('regenerateWithModifier failed', toLoggableError(error), { contentId });
+    return { error: generationFailureMessage(error, 'We could not rewrite the copy just now. Please try again.') };
   }
 }
 

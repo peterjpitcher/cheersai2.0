@@ -12,6 +12,8 @@ interface ChangePageButtonProps {
   label?: string;
 }
 
+const TRY_AGAIN = "Please try again.";
+
 /**
  * Sends the owner back through the Facebook login. With `changePage` the
  * callback always shows the Page chooser, even when a stored Page matches.
@@ -25,12 +27,13 @@ export function ChangePageButton({ provider, changePage = true, label = "Change 
       try {
         const result = await initiateOAuthConnect(provider, { changePage });
         if (!result?.success || !result.redirectUrl) {
-          throw new Error(result?.error ?? "Missing redirect URL");
+          toast.error("Could not open Facebook", { description: result?.error ?? TRY_AGAIN });
+          return;
         }
         window.location.href = result.redirectUrl;
-      } catch (error) {
-        const message = error instanceof Error ? error.message : "Something went wrong";
-        toast.error("Could not open Facebook", { description: message });
+      } catch {
+        // A thrown server action reaches the browser as technical text: never show it.
+        toast.error("Could not open Facebook", { description: TRY_AGAIN });
       }
     });
   };

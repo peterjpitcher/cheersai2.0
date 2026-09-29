@@ -8,6 +8,8 @@ import { useToast } from "@/components/providers/toast-provider";
 
 type Provider = "facebook" | "instagram";
 
+const SAVE_FAILED = "We could not save this. Please try again.";
+
 interface ConnectionMetadataFormProps {
   provider: Provider;
   label: string;
@@ -45,17 +47,17 @@ export function ConnectionMetadataForm({ provider, label, helper, placeholder, d
             description: result.value ? `Saved ${label} (${result.value}).` : "Cleared stored metadata.",
           });
         } else {
-          toast.error("Could not save metadata", {
-            description: "Unexpected response. Please try again.",
-          });
+          const message = result?.error ?? SAVE_FAILED;
+          toast.error("Could not save metadata", { description: message });
+          setError(message);
         }
 
         router.refresh();
-      } catch (err) {
-        const message = err instanceof Error ? err.message : "Something went wrong";
+      } catch {
+        // A thrown server action reaches the browser as technical text: never show it.
         toast.dismiss(optimisticId);
-        toast.error("Could not save metadata", { description: message });
-        setError(message);
+        toast.error("Could not save metadata", { description: SAVE_FAILED });
+        setError(SAVE_FAILED);
       }
     });
   };

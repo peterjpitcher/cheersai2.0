@@ -73,8 +73,9 @@ export function PublishNowButton({
         }
 
         router.refresh();
-      } catch (err) {
-        const message = err instanceof Error ? err.message : "Unable to publish this post.";
+      } catch {
+        // A thrown server action reaches the browser as technical text: never show it.
+        const message = "Please try again.";
         toast.error("Could not publish", { description: message });
       }
     });
@@ -110,8 +111,9 @@ export function CancelPostButton({ contentId }: CancelPostButtonProps): React.JS
       await restorePlannerContent({ contentId });
       router.refresh();
       toast.success("Post restored", { description: "The post is back in your planner." });
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Unable to restore post.";
+    } catch {
+      // A thrown server action reaches the browser as technical text: never show it.
+      const message = "Please try again.";
       toast.error("Could not restore post", { description: message });
     }
   };
@@ -137,8 +139,9 @@ export function CancelPostButton({ contentId }: CancelPostButtonProps): React.JS
         });
         // The post page only shows live posts, so go back to the planner.
         router.push("/planner");
-      } catch (err) {
-        const message = err instanceof Error ? err.message : "Unable to cancel post.";
+      } catch {
+        // A thrown server action reaches the browser as technical text: never show it.
+        const message = "Please try again.";
         toast.error("Could not cancel post", { description: message });
       }
     });

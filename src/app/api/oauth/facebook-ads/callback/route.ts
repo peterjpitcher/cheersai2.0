@@ -122,11 +122,13 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const shortJson = (await safeJson(shortResponse)) as Record<string, unknown> | null;
 
     if (!shortResponse.ok) {
-      const reason = resolveGraphError(shortJson);
-      console.error("[facebook-ads-callback] short-lived token exchange failed", reason);
-      return NextResponse.redirect(
-        `${SITE_URL}/connections?ads_error=${encodeURIComponent(reason)}`,
-      );
+      // Meta's text (token-redacted) goes to the log; the page gets a code it
+      // turns into plain words (AdAccountSetup).
+      logger.error("Meta Ads short-lived token exchange failed", new Error(resolveGraphError(shortJson)), {
+        accountId,
+        status: shortResponse.status,
+      });
+      return NextResponse.redirect(`${SITE_URL}/connections?ads_error=token_exchange_failed`);
     }
 
     const shortToken =
@@ -220,7 +222,7 @@ async function safeJson(response: Response): Promise<unknown> {
   }
 }
 
-/** Meta's error as text, with any access token it echoes removed (it is logged and put in the redirect). */
+/** Meta's error as text, with any access token it echoes removed (it is logged, never put in the redirect). */
 function resolveGraphError(payload: unknown): string {
   if (payload && typeof payload === "object" && "error" in payload) {
     const err = (payload as { error: { message?: string; type?: string; code?: number } })

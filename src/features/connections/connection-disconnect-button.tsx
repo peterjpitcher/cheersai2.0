@@ -14,6 +14,8 @@ const PLATFORM_NAMES = {
   instagram: "Instagram",
 } as const;
 
+const TRY_AGAIN = "Please try again.";
+
 export function ConnectionDisconnectButton({ provider }: ConnectionDisconnectButtonProps) {
   const [isPending, startTransition] = useTransition();
   const toast = useToast();
@@ -29,12 +31,13 @@ export function ConnectionDisconnectButton({ provider }: ConnectionDisconnectBut
       try {
         const result = await disconnectProvider(provider);
         if (!result.success) {
-          throw new Error(result.error ?? "Failed to disconnect provider");
+          toast.error(`Could not disconnect ${platform}`, { description: result.error ?? TRY_AGAIN });
+          return;
         }
         toast.success(`${platform} disconnected`);
-      } catch (error) {
-        const message = error instanceof Error ? error.message : "Something went wrong";
-        toast.error(`Could not disconnect ${platform}`, { description: message });
+      } catch {
+        // A thrown server action reaches the browser as technical text: never show it.
+        toast.error(`Could not disconnect ${platform}`, { description: TRY_AGAIN });
       }
     });
   };

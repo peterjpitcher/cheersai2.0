@@ -150,6 +150,24 @@ describe("updatePlannerBannerConfig", () => {
     expect(updatePayload(calls)).toBeUndefined();
   });
 
+  it("tells the owner in plain words, and logs the database detail, when the save fails", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    const mock = createSupabaseMock({
+      content_items: [{ data: { id: contentItemId, account_id: "account-1", status: "scheduled" }, error: null }],
+      content_variants: [{ error: { message: "permission denied for table content_variants", code: "42501" } }],
+    });
+    requireAuthContextMock.mockResolvedValue({ accountId: "account-1", supabase: mock.supabase });
+
+    const { updatePlannerBannerConfig } = await import("@/app/(app)/planner/actions");
+    const result = await updatePlannerBannerConfig({ ...base, enabled: true, textOverride: null });
+
+    expect(result).toEqual({ error: "We could not save the date strip settings. Please try again." });
+    const logged = consoleError.mock.calls.flat().map(String).join("\n");
+    expect(logged).toContain("[planner] banner settings: save failed");
+    expect(logged).toContain("permission denied for table content_variants (code 42501)");
+    consoleError.mockRestore();
+  });
+
   it("refuses to edit a post that has already published", async () => {
     const { calls } = stub("posted");
 

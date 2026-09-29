@@ -153,8 +153,9 @@ export function PlannerContentMediaEditor({
           router.refresh();
         }
         onUpdated?.(contentId);
-      } catch (err) {
-        const message = err instanceof Error ? err.message : "Unable to update media";
+      } catch {
+        // A thrown server action reaches the browser as technical text: never show it.
+        const message = "We could not update the images. Please try again.";
         setError(message);
         toast.dismiss(toastId);
         toast.error("Media update failed", {

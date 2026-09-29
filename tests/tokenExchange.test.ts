@@ -252,10 +252,12 @@ describe("Meta login helpers", () => {
 
     it("refuses a Page that came back without a token", () => {
       expect(() => buildPageConnection("facebook", managedPage({ accessToken: null }), auth)).toThrow(
-        /missing an access token/,
+        "Facebook did not give CheersAI permission to post to this Page. Please click Connect again and allow posting when Facebook asks.",
       );
       const igPage = managedPage({ accessToken: null, instagram: { id: "ig-1", username: null, name: null } });
-      expect(() => buildPageConnection("instagram", igPage, auth)).toThrow(/requires a Page access token/);
+      expect(() => buildPageConnection("instagram", igPage, auth)).toThrow(
+        "Facebook did not give CheersAI permission to post to Instagram for this Page. Please click Connect again and allow posting when Facebook asks.",
+      );
       expect(() => buildPageConnection("instagram", managedPage(), auth)).toThrow(/No Instagram Business Account/);
     });
   });

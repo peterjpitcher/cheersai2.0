@@ -24,8 +24,9 @@ export function DismissNotificationButton({ notificationId, onDismiss }: Dismiss
         toast.success("Notification dismissed");
         onDismiss?.(notificationId);
         router.refresh();
-      } catch (error) {
-        const message = error instanceof Error ? error.message : "Something went wrong";
+      } catch {
+        // A thrown server action reaches the browser as technical text: never show it.
+        const message = "Please try again.";
         toast.error("Could not dismiss notification", { description: message });
       }
     });

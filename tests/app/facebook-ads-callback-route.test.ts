@@ -257,7 +257,7 @@ describe('GET /api/oauth/facebook-ads/callback', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('never puts a Meta access token from an error into the redirect or the log', async () => {
+  it('puts only a code in the redirect, and Meta\'s error (token redacted) in the log', async () => {
     fetchMock.mockReset();
     fetchMock.mockResolvedValueOnce(
       new Response(
@@ -268,10 +268,10 @@ describe('GET /api/oauth/facebook-ads/callback', () => {
 
     const response = await GET(callbackRequest());
 
-    const location = response.headers.get('location') ?? '';
-    expect(decodeURIComponent(location)).toContain('Bad token [redacted token]');
-    expect(location).not.toContain('EAABsbCS1iHg');
+    expect(response.headers.get('location')).toBe('https://cheers.test/connections?ads_error=token_exchange_failed');
     const logged = vi.mocked(console.error).mock.calls.flat().map(String).join('\n');
+    expect(logged).toContain('Meta Ads short-lived token exchange failed');
+    expect(logged).toContain('Bad token [redacted token]');
     expect(logged).not.toContain('EAABsbCS1iHg');
   });
 });

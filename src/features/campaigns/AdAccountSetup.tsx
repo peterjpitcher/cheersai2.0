@@ -11,6 +11,10 @@ import {
   type AdAccountSetupStatus,
 } from "@/app/(app)/connections/actions-ads";
 import { useToast } from "@/components/providers/toast-provider";
+import { adsConnectErrorMessage } from "@/lib/connections/messages";
+
+const TRY_AGAIN = "Please try again.";
+const ACCOUNTS_LOAD_FAILED = "We could not load your ad accounts. Please refresh the page to try again.";
 
 interface AdAccountSetupProps {
   initialStatus: AdAccountSetupStatus;
@@ -48,10 +52,10 @@ export function AdAccountSetup({ initialStatus, canDisconnect }: AdAccountSetupP
   const adsError = searchParams.get("ads_error");
   const isConnected = initialStatus.connected || adsStep === "select_account";
 
-  // Show error from OAuth callback if present
+  // Show the OAuth callback's failure, as plain words for its code
   useEffect(() => {
     if (adsError) {
-      toast.error("Meta Ads connection failed", { description: adsError.replace(/_/g, " ") });
+      toast.error("Meta Ads connection failed", { description: adsConnectErrorMessage(adsError) });
     }
   }, [adsError, toast]);
 
@@ -68,9 +72,9 @@ export function AdAccountSetup({ initialStatus, canDisconnect }: AdAccountSetupP
           setAccountsError(result.error);
         }
       })
-      .catch((err) => {
-        const message = err instanceof Error ? err.message : "Failed to load ad accounts.";
-        setAccountsError(message);
+      .catch(() => {
+        // A thrown server action reaches the browser as technical text: never show it.
+        setAccountsError(ACCOUNTS_LOAD_FAILED);
       })
       .finally(() => {
         setLoadingAccounts(false);
@@ -82,13 +86,13 @@ export function AdAccountSetup({ initialStatus, canDisconnect }: AdAccountSetupP
       try {
         const result = await startAdsOAuth();
         if (!result?.url) {
-          throw new Error("Missing redirect URL");
+          toast.error("Could not open Facebook", { description: TRY_AGAIN });
+          return;
         }
         toast.success("Redirecting to Meta…");
         window.location.href = result.url;
-      } catch (error) {
-        const message = error instanceof Error ? error.message : "Something went wrong";
-        toast.error("Could not start Meta Ads OAuth flow", { description: message });
+      } catch {
+        toast.error("Could not open Facebook", { description: TRY_AGAIN });
       }
     });
   };
@@ -108,9 +112,8 @@ export function AdAccountSetup({ initialStatus, canDisconnect }: AdAccountSetupP
           router.replace("/connections");
           router.refresh();
         }
-      } catch (error) {
-        const message = error instanceof Error ? error.message : "Something went wrong";
-        toast.error("Could not select ad account", { description: message });
+      } catch {
+        toast.error("Could not select ad account", { description: TRY_AGAIN });
       } finally {
         setSelectingAccountId(null);
       }
@@ -132,9 +135,8 @@ export function AdAccountSetup({ initialStatus, canDisconnect }: AdAccountSetupP
         // account picker showing.
         router.replace("/connections");
         router.refresh();
-      } catch (error) {
-        const message = error instanceof Error ? error.message : "Something went wrong";
-        toast.error("Could not disconnect Meta Ads", { description: message });
+      } catch {
+        toast.error("Could not disconnect Meta Ads", { description: TRY_AGAIN });
       }
     });
   };

@@ -58,8 +58,9 @@ export function ApproveDraftButton({ contentId, disableRefresh = false, onApprov
           router.refresh();
         }
         onApproved?.({ status: result?.status ?? "unknown", scheduledFor: scheduledFor?.toISOString() ?? null });
-      } catch (err) {
-        const message = err instanceof Error ? err.message : "Something went wrong";
+      } catch {
+        // A thrown server action reaches the browser as technical text: never show it.
+        const message = "We could not approve this draft. Please try again.";
         setError(message);
         toast.dismiss(optimisticToastId);
         toast.error("Approval failed", {

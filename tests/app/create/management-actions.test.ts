@@ -90,7 +90,8 @@ describe("create actions: management imports", () => {
     expect(result.error.code).toBe("NOT_CONFIGURED");
   });
 
-  it("returns NOT_CONFIGURED with migration guidance when schema is missing", async () => {
+  it("returns NOT_CONFIGURED in plain words, logging the database detail, when the schema is missing", async () => {
+    const consoleWarn = vi.spyOn(console, "warn").mockImplementation(() => {});
     getManagementConnectionConfigMock.mockRejectedValue({
       code: "PGRST205",
       message: "Could not find the table",
@@ -104,7 +105,11 @@ describe("create actions: management imports", () => {
       throw new Error("Expected schema-missing failure");
     }
     expect(result.error.code).toBe("NOT_CONFIGURED");
-    expect(result.error.message).toContain("latest Supabase migrations");
+    expect(result.error.message).toBe("Event import is not set up for this brand yet. Please contact Cheers support.");
+    const logged = consoleWarn.mock.calls.flat().map(String).join("\n");
+    expect(logged).toContain("[management-import] import failed");
+    expect(logged).toContain("Could not find the table");
+    consoleWarn.mockRestore();
   });
 
   it("surfaces UNAUTHORIZED when management API rejects the key", async () => {
@@ -249,7 +254,9 @@ describe("create actions: management imports", () => {
       throw new Error("Expected 404 detail failure");
     }
     expect(result.error.code).toBe("FAILED");
-    expect(result.error.message).toContain("returned 404");
+    expect(result.error.message).toBe(
+      "We could not load this event's details from your management app. Reload the events and try again.",
+    );
   });
 
   it("returns actionable failure when event detail endpoint returns 500", async () => {
@@ -281,7 +288,9 @@ describe("create actions: management imports", () => {
       throw new Error("Expected 500 detail failure");
     }
     expect(result.error.code).toBe("FAILED");
-    expect(result.error.message).toContain("management API failed");
-    expect(result.error.message).toContain("Deploy the latest management API updates");
+    expect(result.error.message).toBe(
+      "Your management app could not send this event's details. Please try again in a few minutes.",
+    );
+    expect(result.error.message).not.toContain("Management API");
   });
 });
