@@ -67,7 +67,7 @@ describe('/og/guides/<slug> (a guide share image)', () => {
   it('is drawn with the guide title and category, without reading the switch', async () => {
     expect((await guideRequest(planningGuide.slug)).status).toBe(200);
     expect(mocks.render).toHaveBeenCalledWith({
-      eyebrow: 'Guide: Planning your posts',
+      eyebrow: 'Guide: Planning and scheduling',
       title: planningGuide.title,
       footer: 'cheers.orangejelly.co.uk/guides',
     });

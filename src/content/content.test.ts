@@ -6,10 +6,10 @@ import { describe, expect, it } from 'vitest';
 import { bannedClaimsIn } from '@/content/claims';
 import { listGuides } from '@/content/guides';
 import { GUIDE_PAGE_COPY } from '@/content/guides/page-copy';
-import type { Guide, GuideBlock } from '@/content/guides/types';
-import { linkTargets, plainText, type RichText } from '@/content/rich-text';
+import type { Guide } from '@/content/guides/types';
+import { linkTargets, plainText } from '@/content/rich-text';
 import { GUIDES_SEO, guideSeoTitle, HOME_SEO, homeDescription } from '@/content/seo';
-import { guideProblems } from '@/lib/guides/define-guide';
+import { blockTexts, guideProblems } from '@/lib/guides/define-guide';
 import { LEGAL_DOCUMENTS } from '@/lib/legal/company';
 
 import { SAMPLE_GUIDES } from '../../tests/fixtures/guides/sample-guides';
@@ -53,20 +53,11 @@ const EM_DASH = String.fromCharCode(0x2014);
 /** Pages a guide may link to besides other guides. */
 const SITE_PATHS = new Set(['/', '/signup', '/login', '/help', '/guides', ...Object.values(LEGAL_DOCUMENTS).map((doc) => doc.path)]);
 
-function blockTexts(block: GuideBlock): RichText[] {
-  switch (block.type) {
-    case 'paragraph':
-    case 'subheading':
-      return [block.text];
-    case 'list':
-      return [...block.items];
-    case 'tip':
-      return block.title ? [block.title, block.text] : [block.text];
-  }
-}
-
 function guideLinks(guide: Guide): string[] {
-  return guide.sections.flatMap((section) => section.blocks.flatMap(blockTexts).flatMap(linkTargets));
+  return [
+    ...(guide.intro ?? []).flatMap(linkTargets),
+    ...guide.sections.flatMap((section) => section.blocks.flatMap(blockTexts).flatMap(linkTargets)),
+  ];
 }
 
 /** Every rule a guide must meet, given the other guides it may link to. */
@@ -89,7 +80,16 @@ function guideRuleBreaks(guide: Guide, all: readonly Guide[]): string[] {
       breaks.push(`${guide.slug}: links to ${href}, which is not a page`);
     }
   }
-  const words = [guide.title, guide.description, guide.summary, ...guide.sections.flatMap((s) => [s.heading, ...s.blocks.flatMap(blockTexts).map(plainText)])];
+  const words = [
+    guide.title,
+    guide.seoTitle ?? '',
+    guide.description,
+    guide.summary,
+    ...(guide.intro ?? []).map(plainText),
+    ...guide.sections.flatMap((s) => [s.heading, ...s.blocks.flatMap(blockTexts).map(plainText)]),
+    guide.closing.heading,
+    guide.closing.text,
+  ];
   if (words.some((text) => text.includes(EM_DASH))) breaks.push(`${guide.slug}: contains an em dash`);
   // The closing sells Cheers, so it must not promise what new venues do not get.
   const claims = bannedClaimsIn(`${guide.closing.heading} ${guide.closing.text}`);
@@ -154,6 +154,7 @@ describe('the guides', () => {
       seoTitle: 'A search title that runs on for far longer than sixty characters in total',
       description: 'Too short.',
       related: ['missing-guide'],
+      intro: [],
       sections: [
         {
           id: 'links',

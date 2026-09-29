@@ -40,7 +40,8 @@ export function headingId(text: string): string {
     .replace(/^-+|-+$/g, '');
 }
 
-function blockTexts(block: GuideBlock): RichText[] {
+/** Every piece of text in a block, in reading order (table cells included, even empty ones). */
+export function blockTexts(block: GuideBlock): RichText[] {
   switch (block.type) {
     case 'paragraph':
       return [block.text];
@@ -50,13 +51,23 @@ function blockTexts(block: GuideBlock): RichText[] {
       return [...block.items];
     case 'tip':
       return block.title ? [block.title, block.text] : [block.text];
+    case 'example':
+      return block.label ? [block.label, ...block.lines] : [...block.lines];
+    case 'table':
+      return [block.caption, ...block.head, ...block.rows.flat()];
   }
+}
+
+/** The texts in a block that must not be empty: everything except table cells. */
+function requiredTexts(block: GuideBlock): RichText[] {
+  return block.type === 'table' ? [block.caption, ...block.head] : blockTexts(block);
 }
 
 /** Everything a reader reads below the title, as plain text. */
 export function guideReadableText(input: GuideInput): string[] {
   return [
     input.summary,
+    ...(input.intro ?? []).map(plainText),
     ...input.sections.flatMap((section) => [section.heading, ...section.blocks.flatMap(blockTexts).map(plainText)]),
     input.closing.heading,
     input.closing.text,
@@ -107,6 +118,13 @@ export function guideProblems(input: GuideInput): string[] {
     problems.push('the updated date is before the published date');
   }
 
+  for (const paragraph of input.intro ?? []) {
+    if (!plainText(paragraph).trim()) problems.push('the intro has an empty paragraph');
+    for (const href of linkTargets(paragraph)) {
+      if (!isAllowedHref(href)) problems.push(`the intro links to "${href}", which is not allowed`);
+    }
+  }
+
   if (!input.sections.length) problems.push('there are no sections');
   const anchors = new Set<string>();
   input.sections.forEach((section, index) => {
@@ -124,8 +142,18 @@ export function guideProblems(input: GuideInput): string[] {
     if (!section.blocks.length) problems.push(`${label} has no content`);
     for (const block of section.blocks) {
       if (block.type === 'list' && !block.items.length) problems.push(`a list in ${label} has no items`);
-      for (const text of blockTexts(block)) {
+      if (block.type === 'example' && !block.lines.length) problems.push(`an example in ${label} has no lines`);
+      if (block.type === 'table') {
+        if (!block.head.length) problems.push(`a table in ${label} has no header`);
+        if (!block.rows.length) problems.push(`a table in ${label} has no rows`);
+        if (block.rows.some((row) => row.length !== block.head.length)) {
+          problems.push(`a table in ${label} has a row that does not match its header`);
+        }
+      }
+      for (const text of requiredTexts(block)) {
         if (!plainText(text).trim()) problems.push(`${label} has an empty ${block.type}`);
+      }
+      for (const text of blockTexts(block)) {
         for (const href of linkTargets(text)) {
           if (!isAllowedHref(href)) problems.push(`${label} links to "${href}", which is not allowed`);
         }

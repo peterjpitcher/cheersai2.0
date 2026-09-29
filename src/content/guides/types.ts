@@ -14,7 +14,7 @@ import type { RichText } from '@/content/rich-text';
 export type IsoDate = `${number}-${number}-${number}`;
 
 /** Category ids. Labels, descriptions and order live in categories.ts. */
-export type GuideCategoryId = 'getting-started' | 'planning' | 'writing' | 'photos' | 'events';
+export type GuideCategoryId = 'planning' | 'ideas' | 'events' | 'writing' | 'photos' | 'tools';
 
 export type GuideBlock =
   | { readonly type: 'paragraph'; readonly text: RichText }
@@ -22,7 +22,22 @@ export type GuideBlock =
   | { readonly type: 'subheading'; readonly text: string }
   /** "bullets" for a plain list, "steps" for a numbered one. */
   | { readonly type: 'list'; readonly style: 'bullets' | 'steps'; readonly items: readonly RichText[] }
-  | { readonly type: 'tip'; readonly title?: string; readonly text: RichText };
+  | { readonly type: 'tip'; readonly title?: string; readonly text: RichText }
+  /**
+   * Wording to copy and adapt: a caption, a prompt or a reply. Each line is
+   * its own paragraph; the label (for example "Facebook post") names the box.
+   */
+  | { readonly type: 'example'; readonly label?: string; readonly lines: readonly RichText[] }
+  /**
+   * A small table. The caption says what it shows; the first cell of each row
+   * labels the row. Cells may be empty (a template for the reader to fill in).
+   */
+  | {
+      readonly type: 'table';
+      readonly caption: string;
+      readonly head: readonly string[];
+      readonly rows: readonly (readonly RichText[])[];
+    };
 
 export interface GuideSection {
   /** The section's H2, listed in the table of contents. */
@@ -56,6 +71,8 @@ export interface GuideInput {
   readonly updated: IsoDate;
   /** The standfirst under the H1: one or two sentences saying what the reader will get. */
   readonly summary: string;
+  /** Paragraphs before the first H2 that answer the reader's question straight away. */
+  readonly intro?: readonly RichText[];
   readonly sections: readonly GuideSection[];
   readonly closing: GuideClosing;
   /** Slugs to list first under related guides; the rest are filled by category. */

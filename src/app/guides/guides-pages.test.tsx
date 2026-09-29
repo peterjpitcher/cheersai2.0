@@ -118,8 +118,8 @@ describe('/guides while sign-up is open', () => {
     const { container } = render(await indexPage.default());
 
     const headings = Array.from(container.querySelectorAll('h2')).map((heading) => heading.textContent);
-    expect(headings.indexOf('Planning your posts')).toBeGreaterThanOrEqual(0);
-    expect(headings.indexOf('Planning your posts')).toBeLessThan(headings.indexOf('Photos and video'));
+    expect(headings.indexOf('Planning and scheduling')).toBeGreaterThanOrEqual(0);
+    expect(headings.indexOf('Planning and scheduling')).toBeLessThan(headings.indexOf('Photos and video'));
     expect(container.querySelector('h1')?.textContent).toBe(GUIDES_SEO.heading);
     for (const guide of SAMPLE_GUIDES) expect(hrefs(container)).toContain(`/guides/${guide.slug}`);
   });
@@ -232,6 +232,38 @@ describe('a guide while sign-up is open', () => {
     expect(ids.filter((id) => !sectionIds.has(id)).sort()).toEqual([...RESERVED_ANCHORS].sort());
   });
 
+  it('renders the intro before the first H2, examples to copy and tables', async () => {
+    const { container } = render(await guidePage.default(paramsFor(planningGuide.slug)));
+    const firstHeading = container.querySelector(`h2[id="${planningGuide.sections[0].id}"]`);
+    const body = firstHeading?.closest('section')?.parentElement;
+    const firstParagraph = body?.querySelector(':scope > div > p');
+    expect(firstParagraph?.textContent).toBe(planningGuide.intro?.[0]);
+    expect(body?.querySelector(':scope > div a')?.getAttribute('href')).toBe('/guides/instagram-stories-for-restaurants');
+
+    const example = container.querySelector('figure');
+    expect(example?.querySelector('figcaption')?.textContent).toBe('Facebook post');
+    expect(Array.from(example?.querySelectorAll('p') ?? []).map((p) => p.textContent)).toEqual([
+      'Quiz night is back on Thursday from 8pm.',
+      'Teams of up to six. Book a table through the link.',
+    ]);
+
+    const region = container.querySelector('[role="region"]');
+    expect(region?.getAttribute('aria-label')).toBe('A sample week of posts');
+    expect(region?.getAttribute('tabindex')).toBe('0');
+    const table = region?.querySelector('table');
+    expect(table?.querySelector('caption')?.textContent).toBe('A sample week of posts');
+    expect(Array.from(table?.querySelectorAll('thead th') ?? []).map((th) => [th.textContent, th.getAttribute('scope')])).toEqual([
+      ['Day', 'col'],
+      ['Post', 'col'],
+      ['Its job', 'col'],
+    ]);
+    const rows = Array.from(table?.querySelectorAll('tbody tr') ?? []);
+    expect(rows).toHaveLength(3);
+    expect(rows[0].querySelector('th')?.getAttribute('scope')).toBe('row');
+    expect(rows[1].querySelector('strong')?.textContent).toBe('booking details');
+    expect(Array.from(rows[2].querySelectorAll('td')).map((td) => td.textContent)).toEqual(['', '']);
+  });
+
   it('describes itself in Article and BreadcrumbList JSON-LD', async () => {
     const { container } = render(await guidePage.default(paramsFor(planningGuide.slug)));
     const items = jsonLd(container);
@@ -244,7 +276,7 @@ describe('a guide while sign-up is open', () => {
       mainEntityOfPage: url,
       datePublished: '2026-09-01',
       dateModified: '2026-09-29',
-      articleSection: 'Planning your posts',
+      articleSection: 'Planning and scheduling',
       wordCount: planningGuide.wordCount,
       image: `${SITE}/og/guides/${planningGuide.slug}`,
       author: { '@type': 'Organization', name: 'Orange Jelly Limited' },
