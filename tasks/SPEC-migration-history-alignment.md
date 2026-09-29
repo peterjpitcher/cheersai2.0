@@ -1,7 +1,8 @@
 # SPEC: align production migration history with the repo
 
-Status: proposal. Nothing has been written to production. The change below needs Peter's explicit
-yes before it runs.
+Status: proposal, revised 29 September 2026 after an independent review. Nothing has been written
+to production. The change below needs Peter's explicit yes before it runs, and the GitHub
+integration pre-condition (section 0) must be checked first.
 
 ## Problem
 
@@ -11,7 +12,7 @@ assigns (the apply time, in UTC), not the timestamp in the file name. For exampl
 `20260928170000_self_serve_signups.sql` is recorded as `20260928124011`.
 
 The Supabase CLI matches repo and production by version only, so the two histories no longer
-line up: `npx supabase migration list` would show 32 matched rows, 33 local-only versions and 33
+line up: `npx supabase migration list` would show 32 matched rows, 34 local-only versions and 34
 remote-only versions (derived from the data below; not run, as it needs the database password).
 Every new MCP migration adds another pair.
 
@@ -20,31 +21,37 @@ What `npx supabase db push` does today (read from the CLI source,
 database password):
 
 - It stops before running anything, with "Remote migration versions not found in local migrations
-  directory", and suggests `supabase migration repair --status reverted` for the 33 remote-only
+  directory", and suggests `supabase migration repair --status reverted` for the 34 remote-only
   versions.
-- Following only that hint and then running `db push --include-all` would run all 33 files again
+- Following only that hint and then running `db push --include-all` would run all 34 files again
   against live data. Several update live rows (`clear_meta_ad_plaintext_tokens`,
   `accounts_feature_flags`) or change grants (`data_retention`, `team_invitations`), and none was
   written or reviewed to run twice. That suggested fix is the real hazard.
 
-## Findings (read only, 28 September 2026)
+## Findings (read only, 28 September 2026, recomputed 29 September 2026)
 
 Method: `list_migrations`, then SELECT-only queries on `supabase_migrations.schema_migrations`.
-Each repo file was matched to its live row by name. Content was confirmed by sha256: the stored
-statement against the file minus its final newline, and against the whole file (MCP stored the
-final newline on 21 of them). Where that failed (CLI pushes store the file split into statements),
-both sides were normalised the same way (comments, whitespace and semicolons removed, a wrapping
-`BEGIN`/`COMMIT` dropped) and compared again.
+Each repo file was matched to its live row by name. Content was confirmed by sha256 of the stored
+statements joined with `''`, against the file minus its final newline and against the whole file
+(MCP stored the final newline on 21 of them). Where that failed (CLI pushes store the file split
+into statements), both sides were normalised the same way (comments, whitespace and semicolons
+removed, a wrapping `BEGIN`/`COMMIT` dropped) and compared again.
 
-- 65 files in `supabase/migrations` on `main` (after #146), 65 live rows. Every file has a live
-  row and every live row has a file. No file is missing live, including the local-rebuild no-ops:
+Recomputed on 29 September 2026 against `main` at `afc59459` (after #152). The only change since
+28 September is `trial_card_checks`: file `20260928200000`, recorded in production as
+`20260928224702` (applied 28 September 22:47 UTC), content identical to the file.
+
+- 66 files in `supabase/migrations` on `main`, 66 live rows. Every file has a live row and every
+  live row has a file. No file is missing live, including the local-rebuild no-ops:
   `20260926130000_local_rebuild_matches_production.sql` and
   `20260928180000_auth_users_snapshot_triggers.sql` are both recorded.
 - 32 files have the same version live: 24 CLI pushes, 2 rows recorded without SQL, and 6 MCP
   applies whose files were already named with the assigned version.
-- **33 files have a different version live.** All 33 were applied through MCP. 29 are exact
-  matches by sha256; 4 differ only in comments (the files' comments were rewritten after apply).
-- 39 of the 65 live rows came through MCP (`created_by` is set); 24 came from `db push`
+- **34 files have a different version live.** All 34 were applied through MCP. 30 are exact
+  matches by sha256; 4 are identical once comments are removed (the files' comments were
+  rewritten after apply), and `link_in_bio_analytics_service_role_insert` also drops a
+  `BEGIN`/`COMMIT` wrapper that the file has and the live row does not.
+- 40 of the 66 live rows came through MCP (`created_by` is set); 24 came from `db push`
   (`created_by` is null); 2 hold no statements.
 - The staged v1 baseline (`20260519230001_v1_baseline.sql`) is never committed and has no live
   row, as intended.
@@ -84,15 +91,15 @@ production recorded instead; it is the only place that apply time survives once 
 | 26 | `20260714120000_multibrand_foundation.sql` | same | CLI push | same SQL, comments or whitespace differ |
 | 27 | `20260714130000_multibrand_rls_membership.sql` | same | CLI push | same SQL, comments or whitespace differ |
 | 28 | `20260714140000_booking_ingest_per_brand.sql` | same | CLI push | same SQL, comments or whitespace differ |
-| 29 | `20260809120000_campaign_kind_food_booking.sql` | **20260809074632** | MCP | same SQL, comments or whitespace differ |
+| 29 | `20260809120000_campaign_kind_food_booking.sql` | **20260809074632** | MCP | identical once comments are removed |
 | 30 | `20260825090338_media_asset_provenance.sql` | same | MCP | exact |
 | 31 | `20260905052738_revoke_anon_execute_on_tenant_functions.sql` | same | MCP | same SQL, comments or whitespace differ |
 | 32 | `20260905053036_default_privileges_stop_anon_inheriting.sql` | same | MCP | same SQL, comments or whitespace differ |
 | 33 | `20260905053345_revoke_anon_grants_on_secret_bearing_tables.sql` | same | MCP | exact |
-| 34 | `20260905055500_restore_anon_execute_on_tenant_predicates.sql` | **20260905053659** | MCP | same SQL, comments or whitespace differ |
-| 35 | `20260905063918_link_in_bio_analytics_service_role_insert.sql` | **20260905054514** | MCP | same SQL, comments or whitespace differ |
+| 34 | `20260905055500_restore_anon_execute_on_tenant_predicates.sql` | **20260905053659** | MCP | identical once comments are removed |
+| 35 | `20260905063918_link_in_bio_analytics_service_role_insert.sql` | **20260905054514** | MCP | identical once comments and the file's `BEGIN`/`COMMIT` wrapper are removed |
 | 36 | `20260905071016_nations_championship_screenings.sql` | **20260905075919** | MCP | exact |
-| 37 | `20260905071500_revoke_anon_execute_on_trigger_functions.sql` | **20260905054726** | MCP | same SQL, comments or whitespace differ |
+| 37 | `20260905071500_revoke_anon_execute_on_trigger_functions.sql` | **20260905054726** | MCP | identical once comments are removed |
 | 38 | `20260905072213_tournament_screening_revision_guard.sql` | **20260905075927** | MCP | exact |
 | 39 | `20260910103048_meta_campaigns_delivery_schedule.sql` | **20260910113202** | MCP | exact |
 | 40 | `20260922034915_campaign_engagement_metrics.sql` | **20260922040934** | MCP | exact |
@@ -121,6 +128,7 @@ production recorded instead; it is the only place that apply time survives once 
 | 63 | `20260928170000_self_serve_signups.sql` | **20260928124011** | MCP | exact |
 | 64 | `20260928180000_auth_users_snapshot_triggers.sql` | **20260928120538** | MCP | exact |
 | 65 | `20260928190000_provision_self_serve_brand.sql` | **20260928142314** | MCP | exact |
+| 66 | `20260928200000_trial_card_checks.sql` | **20260928224702** | MCP | exact |
 
 Notes:
 
@@ -139,31 +147,53 @@ Notes:
 
 ## Options considered
 
-| | A. CLI `migration repair` | B. Rewrite the version in place (recommended) | C. Rename the 33 files | D. Leave it, document the rule |
+| | A. CLI `migration repair` | B. Rewrite the version in place (recommended) | C. Rename the 34 files | D. Leave it, document the rule |
 |---|---|---|---|---|
-| Production write | 33 inserts, 33 deletes | 33 single-column updates | none | none |
+| Production write | 34 inserts, 34 deletes | 34 single-column updates | none | none |
 | Runs any migration SQL | no | no | no | no |
 | All or nothing | no: two commands, each its own transaction | yes: one statement with guards | n/a | n/a |
 | Keeps the SQL production actually ran, and `created_by` | no: replaced by the file text, `created_by` lost | yes | yes | yes |
 | Needs the database password | yes (Peter types it) | no (MCP, as today) | no | no |
-| Repo change | none | none | 33 renames; 46 other files mention the old names, mostly in comments (14 `supabase/tests` checks, 13 source and test files, 18 docs) | none |
+| Repo change | none | none | 34 renames; 48 other files mention the old versions, mostly in comments (16 `supabase/tests` checks, 14 source and test files, 18 docs) | none |
 | Effect on CI migration-check and `db:rebuild` | none | none | changes the apply order in two places (below); needs a full rebuild and parity proof | none |
 | `db push` usable afterwards | yes | yes | yes | no |
 
 Option C would run `revoke_anon_execute_on_trigger_functions` before
 `nations_championship_screenings`, and `auth_users_snapshot_triggers` before `self_serve_signups`,
-on every local rebuild and in CI, and would make each developer's local database see 33 "new"
+on every local rebuild and in CI, and would make each developer's local database see 34 "new"
 migrations. Option D leaves `db push` unusable and the drift growing, which hides real drift.
 
 ## Proposal: option B, plus a rule that stops it recurring
 
+### 0. Pre-condition: the GitHub integration (Peter checks, before the change)
+
+Supabase dashboard, project `nbkjciurhvkfpcpatbnt`, Settings, Integrations, GitHub: look at
+"Deploy to production".
+
+Why it matters: branching is enabled on this project (`list_branches` shows a default `main`
+branch record created 14 July 2026 and never updated since), and none of the 34 file versions is
+present in production, so the integration has not recorded any of these files. If "Deploy to
+production" is on, it is most likely failing today on this mismatch (a push stops at the same
+"Remote migration versions not found" check as `db push`). Aligning the history would remove what
+stops it: from then on, any migration file merged to `main` that had not already been applied
+would be applied to production automatically on merge.
+
+- **Off:** proceed with section 1.
+- **On:** switch it off before the change, then proceed. Keep it on only as an explicit decision
+  that merging to `main` becomes a way migrations reach production; in that case, update the forward
+  rule (below and in `CLAUDE.md`) to match before the change runs.
+
 ### 1. Pre-flight (read only)
 
-Run immediately before the change. Expected: `at_apply_time_versions = 33`,
-`file_versions_taken = 0`, `total_rows = 65`. It returned exactly that on 28 September 2026. If
-another migration has been applied since, `total_rows` will be higher; that is fine as long as the
-first two numbers hold. If a newer MCP migration's file version differs from its live version, add
-it to the map (and set `expected` to match) before running the change.
+Run immediately before the change. Expected: `at_apply_time_versions = 34`,
+`file_versions_taken = 0`, `total_rows = 66`. It returned exactly that on production on
+29 September 2026 at 07:16 UTC.
+
+If `total_rows` is not 66, a migration has been applied or removed since this map was made, and the
+change will refuse to run (guard 0). Refresh the map first: for every new row, compare its live
+version with its file version; add it to all three maps (the pre-flight query, which validation
+re-runs, the change and the rollback) if they differ, and set `expected` and `expected_total` in
+the change and the rollback to the new counts.
 
 ```sql
 with migration_version_map(live_version, file_version, name) as (values
@@ -199,7 +229,8 @@ with migration_version_map(live_version, file_version, name) as (values
     ('20260928111735', '20260928161500', 'team_invitations'),
     ('20260928124011', '20260928170000', 'self_serve_signups'),
     ('20260928120538', '20260928180000', 'auth_users_snapshot_triggers'),
-    ('20260928142314', '20260928190000', 'provision_self_serve_brand')
+    ('20260928142314', '20260928190000', 'provision_self_serve_brand'),
+    ('20260928224702', '20260928200000', 'trial_card_checks')
 )
 select
   (select count(*) from supabase_migrations.schema_migrations s
@@ -212,17 +243,33 @@ select
 ### 2. The change (one statement, needs Peter's yes)
 
 Run once through MCP `execute_sql` (or the SQL editor). It changes only the `version` column of
-the 33 rows. If any guard fails it raises, and the whole statement rolls back with nothing changed.
+the 34 rows. If any guard fails it raises, and the whole statement rolls back with nothing changed.
 Running it a second time fails guard 1 and changes nothing.
+
+It first takes `LOCK TABLE supabase_migrations.schema_migrations IN EXCLUSIVE MODE`, held until
+the statement commits. Reads carry on, but no migration can be recorded (by MCP `apply_migration`,
+the CLI or an integration) between the guards and the update; any such write waits a few
+milliseconds and then lands after the change. Guard 0 then requires exactly 66 rows, so any
+migration recorded after this map was made makes the run fail until the map is refreshed.
 
 ```sql
 DO $$
 DECLARE
-  expected constant integer := 33;
+  expected constant integer := 34;
+  expected_total constant integer := 66;
+  total_rows integer;
   found_rows integer;
   collisions integer;
   moved integer;
 BEGIN
+  LOCK TABLE supabase_migrations.schema_migrations IN EXCLUSIVE MODE;
+
+  -- Guard 0: the history holds exactly the rows this map was made from.
+  SELECT count(*) INTO total_rows FROM supabase_migrations.schema_migrations;
+  IF total_rows <> expected_total THEN
+    RAISE EXCEPTION 'Expected % rows in the history, found %. Refresh the map. Nothing changed.', expected_total, total_rows;
+  END IF;
+
   CREATE TEMP TABLE migration_version_map (
     live_version text PRIMARY KEY,
     file_version text NOT NULL UNIQUE,
@@ -262,9 +309,10 @@ BEGIN
     ('20260928111735', '20260928161500', 'team_invitations'),
     ('20260928124011', '20260928170000', 'self_serve_signups'),
     ('20260928120538', '20260928180000', 'auth_users_snapshot_triggers'),
-    ('20260928142314', '20260928190000', 'provision_self_serve_brand');
+    ('20260928142314', '20260928190000', 'provision_self_serve_brand'),
+    ('20260928224702', '20260928200000', 'trial_card_checks');
 
-  -- Guard 1: all 33 rows sit at their apply-time versions under the expected names.
+  -- Guard 1: all 34 rows sit at their apply-time versions under the expected names.
   SELECT count(*) INTO found_rows
     FROM supabase_migrations.schema_migrations s
     JOIN migration_version_map m ON m.live_version = s.version AND m.name = s.name;
@@ -291,19 +339,29 @@ BEGIN
 END $$;
 ```
 
-Tested on the local database inside a transaction that was rolled back (history rebuilt as
-production's 65 rows): the change moved all 33 rows, left statements and `created_by` intact and
-the row count at 65; a second run failed guard 1; a stray row at a file version failed guard 2;
-a missing live row failed guard 1; the rollback below restored the apply-time versions. The local
-history was unchanged afterwards.
+Tested on 29 September 2026 on the local database, the change and rollback blocks taken verbatim
+from this file, each case in its own transaction that was rolled back, with the history rebuilt as
+production's 66 rows (versions and names from the live table, `created_by` on the 40 MCP rows):
+
+- The pre-flight returned 34 / 0 / 66; the change moved all 34 rows (pre-flight then 0 / 34 / 66),
+  kept every row's statements and `created_by`, and left 66 rows; the rollback, in the same
+  transaction, returned the pre-flight to 34 / 0 / 66.
+- A second run of the change failed guard 1 (found 0).
+- A 67th row failed guard 0, both before the change and before the rollback.
+- A stray row at a file version, with the total kept at 66, failed guard 2.
+- A missing mapped row, with the total kept at 66, failed guard 1 (found 33).
+- While one session held the change's lock, a second session could still read the table, but its
+  insert waited and was cancelled by a 2 second `lock_timeout`.
+
+The local history was unchanged afterwards (64 rows before and after).
 
 ### Exact effect on `supabase_migrations.schema_migrations`
 
-- 33 rows change their `version` value from the apply-time version to the file version.
+- 34 rows change their `version` value from the apply-time version to the file version.
 - `name`, `statements`, `created_by`, `idempotency_key` and `rollback` are untouched on every row.
-- The row count stays the same; no row is inserted or deleted.
-- No DDL and no migration SQL runs. No other table is touched. The update holds row locks on the
-  33 rows for milliseconds, so there is no downtime.
+- The row count stays at 66; no row is inserted or deleted.
+- No DDL and no migration SQL runs. No other table is touched. The statement holds an `EXCLUSIVE`
+  lock on this one table (reads allowed, writes wait) for milliseconds, so there is no downtime.
 - The history's order becomes the file order, which differs from apply order in the two places
   listed under option C. Nothing in the app or scripts reads this table (no reference to
   `schema_migrations` in `src`, `tests`, `scripts` or `supabase/functions`).
@@ -317,34 +375,51 @@ push, the CLI refuses it as an out-of-order migration unless `--include-all` is 
 
 ### 3. Validation (read only, after the change)
 
-- Re-run the pre-flight: expect `at_apply_time_versions = 0` and `file_versions_taken = 33`.
+- Re-run the pre-flight: expect `at_apply_time_versions = 0`, `file_versions_taken = 34` and
+  `total_rows = 66`.
 - `list_migrations`: every version equals a file version in `supabase/migrations` on `main`, with
   the same name, and there are no extra rows.
 - Optional, Peter only (needs the database password), from the main checkout, which is already
   linked to `nbkjciurhvkfpcpatbnt`:
-  - `npx supabase migration list --linked`: 65 rows, local and remote identical.
+  - `npx supabase migration list --linked`: 66 rows, local and remote identical.
   - `npx supabase db push --dry-run --linked`: reports nothing to push.
 
 ### Rollback
 
-The same statement in reverse, with the same guards. It returns the 33 rows to their apply-time
-versions, which this spec's table records.
+The same statement in reverse, with the same lock and guards. It returns the 34 rows to their
+apply-time versions, which this spec's table records.
+
+It uses its own temporary table name (`migration_version_rollback_map`). Both statements create
+their map with `ON COMMIT DROP`, which drops it only at commit, so with the same name the change
+and the rollback could not run in one transaction: the second `CREATE TEMP TABLE` would fail. With
+different names they can (the local test above ran both in one transaction). In production each
+runs on its own.
 
 ```sql
 DO $$
 DECLARE
-  expected constant integer := 33;
+  expected constant integer := 34;
+  expected_total constant integer := 66;
+  total_rows integer;
   found_rows integer;
   collisions integer;
   moved integer;
 BEGIN
-  CREATE TEMP TABLE migration_version_map (
+  LOCK TABLE supabase_migrations.schema_migrations IN EXCLUSIVE MODE;
+
+  -- Guard 0: the history holds exactly the rows this map was made from.
+  SELECT count(*) INTO total_rows FROM supabase_migrations.schema_migrations;
+  IF total_rows <> expected_total THEN
+    RAISE EXCEPTION 'Expected % rows in the history, found %. Refresh the map. Nothing changed.', expected_total, total_rows;
+  END IF;
+
+  CREATE TEMP TABLE migration_version_rollback_map (
     live_version text PRIMARY KEY,
     file_version text NOT NULL UNIQUE,
     name text NOT NULL
   ) ON COMMIT DROP;
 
-  INSERT INTO migration_version_map (live_version, file_version, name) VALUES
+  INSERT INTO migration_version_rollback_map (live_version, file_version, name) VALUES
     ('20260809074632', '20260809120000', 'campaign_kind_food_booking'),
     ('20260905053659', '20260905055500', 'restore_anon_execute_on_tenant_predicates'),
     ('20260905054514', '20260905063918', 'link_in_bio_analytics_service_role_insert'),
@@ -377,12 +452,13 @@ BEGIN
     ('20260928111735', '20260928161500', 'team_invitations'),
     ('20260928124011', '20260928170000', 'self_serve_signups'),
     ('20260928120538', '20260928180000', 'auth_users_snapshot_triggers'),
-    ('20260928142314', '20260928190000', 'provision_self_serve_brand');
+    ('20260928142314', '20260928190000', 'provision_self_serve_brand'),
+    ('20260928224702', '20260928200000', 'trial_card_checks');
 
-  -- Guard 1: all 33 rows sit at their file versions under the expected names.
+  -- Guard 1: all 34 rows sit at their file versions under the expected names.
   SELECT count(*) INTO found_rows
     FROM supabase_migrations.schema_migrations s
-    JOIN migration_version_map m ON m.file_version = s.version AND m.name = s.name;
+    JOIN migration_version_rollback_map m ON m.file_version = s.version AND m.name = s.name;
   IF found_rows <> expected THEN
     RAISE EXCEPTION 'Expected % rows at their file versions, found %. Nothing changed.', expected, found_rows;
   END IF;
@@ -390,14 +466,14 @@ BEGIN
   -- Guard 2: none of the apply-time versions is already taken.
   SELECT count(*) INTO collisions
     FROM supabase_migrations.schema_migrations s
-    JOIN migration_version_map m ON m.live_version = s.version;
+    JOIN migration_version_rollback_map m ON m.live_version = s.version;
   IF collisions <> 0 THEN
     RAISE EXCEPTION '% apply-time versions already exist. Nothing changed.', collisions;
   END IF;
 
   UPDATE supabase_migrations.schema_migrations s
      SET version = m.live_version
-    FROM migration_version_map m
+    FROM migration_version_rollback_map m
    WHERE s.version = m.file_version AND s.name = m.name;
   GET DIAGNOSTICS moved = ROW_COUNT;
   IF moved <> expected THEN
@@ -408,16 +484,18 @@ END $$;
 
 ### Alternative: option A with the CLI
 
-Only if the CLI route is preferred. Peter runs these from a clean checkout of `main` (all 65
-files present, no staged `20260519230001_v1_baseline.sql`), typing the database password when
-asked. Run `applied` first so that no migration ever looks unapplied between the two commands.
+Only if the CLI route is preferred. The section 0 pre-condition applies here too. Peter runs these
+from a clean checkout of `main` (all 66 files present, no staged
+`20260519230001_v1_baseline.sql`), typing the database password when asked. Run `applied` first so
+that no migration ever looks unapplied between the two commands. These commands have no row-count
+guard or lock, so run the pre-flight immediately before them and stop unless it returns 34 / 0 / 66.
 
 ```bash
-npx supabase migration repair --linked --status applied 20260809120000 20260905055500 20260905063918 20260905071016 20260905071500 20260905072213 20260910103048 20260922034915 20260922120000 20260922140000 20260922150000 20260922160000 20260924090000 20260924100000 20260924120000 20260924130000 20260924140000 20260924141000 20260924150000 20260925090000 20260925100000 20260925180000 20260925181000 20260926070000 20260926120000 20260926130000 20260927120000 20260928120000 20260928153000 20260928161500 20260928170000 20260928180000 20260928190000
+npx supabase migration repair --linked --status applied 20260809120000 20260905055500 20260905063918 20260905071016 20260905071500 20260905072213 20260910103048 20260922034915 20260922120000 20260922140000 20260922150000 20260922160000 20260924090000 20260924100000 20260924120000 20260924130000 20260924140000 20260924141000 20260924150000 20260925090000 20260925100000 20260925180000 20260925181000 20260926070000 20260926120000 20260926130000 20260927120000 20260928120000 20260928153000 20260928161500 20260928170000 20260928180000 20260928190000 20260928200000
 ```
 
 ```bash
-npx supabase migration repair --linked --status reverted 20260809074632 20260905053659 20260905054514 20260905075919 20260905054726 20260905075927 20260910113202 20260922040934 20260922124618 20260922130310 20260922140726 20260922150937 20260924073244 20260924081719 20260924085419 20260924101504 20260924101514 20260924101519 20260924110731 20260925165504 20260925165509 20260925172639 20260925172645 20260926070109 20260926121228 20260926131137 20260927123048 20260928104602 20260928110409 20260928111735 20260928124011 20260928120538 20260928142314
+npx supabase migration repair --linked --status reverted 20260809074632 20260905053659 20260905054514 20260905075919 20260905054726 20260905075927 20260910113202 20260922040934 20260922124618 20260922130310 20260922140726 20260922150937 20260924073244 20260924081719 20260924085419 20260924101504 20260924101514 20260924101519 20260924110731 20260925165504 20260925165509 20260925172639 20260925172645 20260926070109 20260926121228 20260926131137 20260927123048 20260928104602 20260928110409 20260928111735 20260928124011 20260928120538 20260928142314 20260928224702
 ```
 
 From the CLI source (`apps/cli-go/internal/migration/repair/repair.go`): `applied` reads each file
@@ -426,16 +504,18 @@ the listed versions. Neither executes migration SQL. The cost against option B: 
 recorded as actually run, and `created_by`, are deleted with the old rows, and the two commands
 are separate transactions.
 
-## Forward rule (a follow-up PR adds it to `CLAUDE.md`, Supabase specifics)
+## Forward rule (in `CLAUDE.md`, Known gotchas, from this PR)
 
-When a migration is applied with MCP `apply_migration`:
+The short form is in the project `CLAUDE.md` under "Known gotchas", added in this PR as its own
+commit. In full, when a migration is applied with MCP `apply_migration`:
 
 1. Pass the file's name part (after the timestamp) as `name`, and the file's content unchanged as
    `query`.
-2. Read the version MCP assigned from `list_migrations`.
+2. Read the version MCP assigned from `list_migrations` (read only).
 3. In the same PR, before merge, `git mv` the file to `<assigned version>_<name>.sql` and update
    any references to the old file name.
-4. Confirm the file version, name and content match the live row before merging.
+4. Before merging any migration PR, compare `list_migrations` with `supabase/migrations`: the file
+   version, name and content must match the live row.
 
 This is the pattern the six files that already match followed (for example
 `20260905052738_revoke_anon_execute_on_tenant_functions.sql`). It keeps production writes to
@@ -445,9 +525,10 @@ text that ran, not the file's text.
 
 ## Deployment order
 
-1. Merge this spec (documentation only; nothing deploys).
-2. With Peter's yes: pre-flight, the change, validation, all through MCP.
-3. Follow-up PR: the forward rule in `CLAUDE.md`.
+1. Merge this PR: the spec and the forward rule in `CLAUDE.md` (documentation only; nothing
+   deploys). The forward rule applies from merge, whether or not the change below has run.
+2. Peter checks the GitHub integration pre-condition (section 0) and acts on it.
+3. With Peter's yes: pre-flight, the change, validation, all through MCP.
 
 No app code depends on any of this, so no deploy has to happen before or after the change.
 
@@ -457,9 +538,8 @@ No app code depends on any of this, so no deploy has to happen before or after t
   play no part in `migration list` or `db push`. Read from source, not from a run against
   production.
 - Nothing else writes to `supabase_migrations.schema_migrations` on this project except MCP
-  `apply_migration` and the CLI. The project has a Supabase branching record for `main` (created
-  14 July 2026, never updated); whether the GitHub integration deploys migrations on merge was not
-  checked.
-- Other sessions are applying migrations today (`provision_self_serve_brand` was applied at 14:23
-  UTC and merged in #146 during this investigation). The guards make a stale map fail safely
-  rather than apply half a change.
+  `apply_migration`, the CLI and possibly the GitHub integration, which section 0 settles before
+  the change runs.
+- Other sessions keep applying migrations: `trial_card_checks` was applied at 22:47 UTC on
+  28 September, after this spec was first written, and had to be added to the map on review. The
+  lock and guard 0 make a stale map fail safely rather than apply half a change.
