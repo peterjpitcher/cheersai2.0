@@ -1,3 +1,16 @@
+# OAuth state bound to the person who started it (2026-09-29)
+
+Spec: `tasks/SPEC-oauth-state-bound-to-user.md`; branch `fix/oauth-state-bound-to-user` (finding 9 of the #158 review).
+
+- [x] Read-only check of production's oauth_states: created_by uuid, nullable, no default, no foreign key; 0 rows
+- [x] Start paths store created_by: initiateOAuthConnect (Facebook, Instagram, Change Page), startAdsOAuth, createPageChoice
+- [x] Finish paths refuse unless created_by is the signed-in user: completeOAuthConnect, readPageChoice and
+      claimPageChoice, the Facebook Ads callback (now reads the cookie session)
+- [x] Tests per path: happy path, another signed-in user, no session, null created_by, failing dependency;
+      in-memory database refuses a non-uuid created_by
+- [ ] lint, typecheck, tests in London and UTC, build (`npm run ci:verify`)
+- [ ] Commit, push, open the PR; no merge, no deploy, no database writes
+
 # Homepage: a bigger logo and "made for hospitality" (2026-09-29)
 
 Spec: `tasks/SPEC-homepage-hospitality-and-logo.md`; branch `feat/homepage-hospitality-and-logo`.
