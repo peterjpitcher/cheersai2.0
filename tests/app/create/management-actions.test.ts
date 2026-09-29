@@ -18,10 +18,6 @@ vi.mock("@/lib/planner/data", () => ({
   getPlannerContentDetail: vi.fn(),
 }));
 
-vi.mock("@/lib/create/event-cadence", () => ({
-  buildEventScheduleOffsets: vi.fn(() => []),
-}));
-
 vi.mock("@/lib/auth/server", () => ({
   requireAuthContext: (...args: unknown[]) => requireAuthContextMock(...args),
 }));

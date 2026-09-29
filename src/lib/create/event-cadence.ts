@@ -23,22 +23,6 @@ const [POST_HOUR, POST_MINUTE] = DEFAULT_POST_TIME.split(":").map(Number);
 const [EVENT_DAY_HOUR, EVENT_DAY_MINUTE] = EVENT_DAY_POST_TIME.split(":").map(Number);
 
 export function buildEventCadenceSlots(params: EventCadenceParams): EventCadenceSlot[] {
-  return resolveEventCadence(params).slots;
-}
-
-export function buildEventScheduleOffsets(params: EventCadenceParams) {
-  const { slots, eventStart } = resolveEventCadence(params);
-  if (!slots.length) {
-    const fallbackOccurs = applyEventDayTime(eventStart);
-    return [{ label: "Event day", offsetHours: fallbackOccurs.diff(eventStart, "hours").hours ?? 0 }];
-  }
-  return slots.map((slot) => ({
-    label: slot.label,
-    offsetHours: slot.occurs.diff(eventStart, "hours").hours ?? 0,
-  }));
-}
-
-function resolveEventCadence(params: EventCadenceParams) {
   const timezone = params.timezone?.trim().length ? params.timezone : DEFAULT_TIMEZONE;
   const eventStart = resolveEventStart(params.startDate, params.startTime, timezone);
   const scheduleBase = applyPostingTime(eventStart);
@@ -57,7 +41,7 @@ function resolveEventCadence(params: EventCadenceParams) {
   const slots = [...weeklySlots, ...countdownSlots];
   slots.sort((a, b) => a.occurs.toMillis() - b.occurs.toMillis());
 
-  return { slots, eventStart };
+  return slots;
 }
 
 function buildWeeklySlots({
