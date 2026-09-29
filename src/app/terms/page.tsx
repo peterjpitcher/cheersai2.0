@@ -40,7 +40,7 @@ const PLAN_ROWS = [
   ["AI generations a month", "150", "500", "Agreed"],
   ["Media storage", "2 GB", "10 GB", "Agreed"],
   ["Team seats", "2", "5", "Agreed"],
-  ["Support", "Email", "Priority email and WhatsApp", "Named contact"],
+  ["Support", "Email and WhatsApp", "Priority email and WhatsApp", "Named contact"],
 ] as const;
 
 export default function TermsPage() {
@@ -246,7 +246,7 @@ export default function TermsPage() {
       <LegalSection id="support" title="16. Support">
         <LegalList>
           <li>
-            Starter includes email support. Professional includes priority email and WhatsApp support. Group includes
+            Starter includes email and WhatsApp support. Professional includes priority email and WhatsApp support. Group includes
             a named contact.
           </li>
           <li>We provide support on working days. We reply as soon as we can, but we do not promise a response time.</li>

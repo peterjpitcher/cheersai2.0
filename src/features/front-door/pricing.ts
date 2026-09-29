@@ -57,7 +57,7 @@ export function lowestMonthlyPrice(): string | null {
 
 /** Terms section 16. */
 const SUPPORT: Record<PlanId, string> = {
-  starter: 'Email support',
+  starter: 'Email and WhatsApp support',
   professional: 'Priority email and WhatsApp support',
   group: 'A named contact',
 };

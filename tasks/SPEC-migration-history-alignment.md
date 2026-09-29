@@ -1,8 +1,11 @@
 # SPEC: align production migration history with the repo
 
-Status: proposal, revised 29 September 2026 after an independent review. Nothing has been written
-to production. The change below needs Peter's explicit yes before it runs. The GitHub
-integration pre-condition (section 0) was met on 29 September 2026.
+Status: done. Peter said yes on 29 September 2026 and the change in section 2 ran on production
+that afternoon, after the GitHub integration pre-condition (section 0) was met. The pre-flight
+returned exactly 34 / 0 / 66 beforehand; no guard raised. Validation (section 3): the pre-flight
+re-run returned 0 / 34 / 66, and every live row's `<version>_<name>` equals a file in
+`supabase/migrations` on `main` (66 rows, 66 files, none extra on either side). The rollback below
+was not needed.
 
 ## Problem
 
