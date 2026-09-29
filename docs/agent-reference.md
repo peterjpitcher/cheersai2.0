@@ -136,16 +136,17 @@ All run with `tsx` against whatever Supabase the environment points at. Read the
 | `ops:backfill-connections` | `scripts/ops/backfill-connections.ts` | Backfills social connection records and metadata |
 | `ops:backfill-link-in-bio-url` | `scripts/ops/backfill-link-in-bio-url.ts` | Backfills link-in-bio profile URLs |
 | `ops:backfill-event-overlays`, `ops:backfill-opt-in-overlays` | `scripts/ops/backfill-*-overlays.ts` | Backfills banner overlay settings on existing content |
-| `ops:regenerate-story-derivatives` | `scripts/ops/regenerate-story-derivatives.ts` | Re-invokes the `media-derivatives` edge function to rebuild story variants |
 | `ops:repair-hidden-media-references` | `scripts/ops/repair-hidden-media-references.ts` | Repairs content that references hidden media |
 | `ops:archive-planner-failures` | `scripts/ops/archive-planner-failures.ts` | Archives failed planner jobs |
 | `ops:search-meta-interests` | `scripts/ops/search-meta-interests.ts` | Searches Meta interest targeting options |
-| `ops:invoke` | `scripts/ops/invoke-function.ts` | Invokes a Supabase edge function by name |
+| `ops:invoke` | `scripts/ops/invoke-function.ts` | Invokes a Supabase edge function by name (`publish-queue` is the only one) |
 | `ops:seed-world-cup` | `scripts/ops/seed-world-cup-2026.ts` | Seeds the World Cup 2026 tournament fixtures |
 | (none) | `scripts/ops/cleanup-banner-storage.ts`, `diagnose-publishing.ts`, `remove-slot-language.ts` | Storage cleanup, stuck-job diagnosis, copy clean-up |
 | `db:rebuild` | `scripts/db-local-rebuild.sh` | Local `supabase db reset` with the v1 baseline staged and then removed |
 | `perf:load-test` | `scripts/load-test-planner.ts` | Autocannon load test of the planner |
 | (none) | `scripts/build-v1-baseline.py`, `scripts/export-social-copy-csv.mjs`, `scripts/sql/artwork-coverage.sql` | Baseline builder, copy export, artwork coverage query |
+
+`ops:regenerate-story-derivatives` was removed on 29 September 2026 with the `media-derivatives` edge function it called. That function was retired because nothing in the app used it, it had failed to start on every call for about a year, and library uploads build their image sizes in the browser (`tasks/SPEC-retire-media-derivatives.md`).
 
 ## 8. Conventions
 
