@@ -131,6 +131,24 @@ function eventBrief(eventDate: string, eventTime: string): ContentBrief {
   } as ContentBrief;
 }
 
+function offerBrief(endDate: string): ContentBrief {
+  return {
+    contentType: "promotion",
+    title: "Two for one",
+    prompt: "",
+    platforms: ["facebook", "instagram"],
+    tone: "friendly_warm",
+    lengthPreference: "standard",
+    includeHashtags: true,
+    includeEmojis: true,
+    ctaStyle: "default",
+    proofPoints: [],
+    offerSummary: "Two mains for the price of one",
+    endDate,
+    placements: ["feed", "story"],
+  } as ContentBrief;
+}
+
 function existingPost(id: string, scheduledFor: string): ExistingPlannerItemDisplay {
   return {
     id,
@@ -272,5 +290,61 @@ describe("<ScheduleStep /> event timing", () => {
     expect(screen.getByText("Loading existing schedule...")).toBeInTheDocument();
     expect(suggestedSlots()).toContain("Event day · 07:00");
     expect(suggestedSlots()).not.toContain("Event day · 12:00");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Offer (promotion) suggestions: each day offered once, planner empty or not
+// ---------------------------------------------------------------------------
+
+describe("<ScheduleStep /> offer suggestions", () => {
+  afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
+    vi.clearAllMocks();
+  });
+
+  it("offers the same suggestions on an empty planner as on one with an unrelated post", async () => {
+    // Monday 12 October 2026, 09:00 BST; the offer ends tomorrow.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-12T08:00:00.000Z"));
+    const offer = offerBrief("2026-10-13");
+
+    render(<EventScheduleHarness brief={offer} onSlotsChange={vi.fn()} />);
+    await plannerLoaded();
+    const onEmptyPlanner = suggestedSlots();
+    cleanup();
+
+    getCalendarItemsActionMock.mockResolvedValue({
+      // Tuesday 20 October, 12:00 BST: no offer suggestion falls on that day.
+      data: [existingPost("existing-1", "2026-10-20T11:00:00.000Z")],
+    });
+    render(<EventScheduleHarness brief={offer} onSlotsChange={vi.fn()} />);
+    await plannerLoaded();
+    expect(screen.getByText("Quiz night")).toBeInTheDocument();
+    const withUnrelatedPost = suggestedSlots();
+
+    expect(onEmptyPlanner).toEqual(["Launch · 12:00", "Last chance · 12:00"]);
+    expect(withUnrelatedPost).toEqual(onEmptyPlanner);
+  });
+
+  it("offers each day once when the offer ends on the day the clocks go back", async () => {
+    // Saturday 24 October 2026, 09:00 BST; the offer ends on Sunday 25 October.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-24T08:00:00.000Z"));
+    const onSlotsChange = vi.fn();
+
+    render(<EventScheduleHarness brief={offerBrief("2026-10-25")} onSlotsChange={onSlotsChange} />);
+    await plannerLoaded();
+
+    expect(suggestedSlots()).toEqual(["Launch · 12:00", "Last chance · 12:00"]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Add suggested slot · Launch · 12:00" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add suggested slot · Last chance · 12:00" }));
+
+    expect(onSlotsChange).toHaveBeenLastCalledWith([
+      expect.objectContaining({ date: "2026-10-24", time: "12:00", label: "Launch", source: "suggestion" }),
+      expect.objectContaining({ date: "2026-10-25", time: "12:00", label: "Last chance", source: "suggestion" }),
+    ]);
   });
 });
