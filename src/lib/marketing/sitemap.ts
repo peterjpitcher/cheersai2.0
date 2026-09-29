@@ -5,20 +5,16 @@ import type { Guide } from '@/content/guides/types';
 import { byNewest, GUIDES_PATH, guidePath, lastUpdated } from '@/lib/guides/guides';
 import { LEGAL_DOCUMENTS, LEGAL_UPDATED } from '@/lib/legal/company';
 import { absoluteUrl } from '@/lib/marketing/site';
-import type { SelfServeSignupSwitch } from '@/lib/signup/switch';
 import { ukLongDateToIso } from '@/lib/utils/date';
 
 /**
- * sitemap.xml (SPEC-homepage-and-guides §3). Empty while the sign-up switch is
- * off, so it names nothing that is not public (the route answers a server
- * error instead when the switch cannot be read). Once the switch is on: the
- * homepage, /guides and every guide (only when there are guides), and the
- * three legal pages, each dated by its content (the homepage copy date, a
- * guide's updated date, the legal pages' LEGAL_UPDATED).
+ * sitemap.xml (SPEC-homepage-and-guides §3): the homepage, /guides and every
+ * guide (only when there are guides), and the three legal pages, each dated
+ * by its content (the homepage copy date, a guide's updated date, the legal
+ * pages' LEGAL_UPDATED). It lists the pages robots.txt allows, whatever the
+ * sign-up switch says.
  */
-export function sitemapFor(state: SelfServeSignupSwitch, guides: readonly Guide[]): MetadataRoute.Sitemap {
-  if (state !== 'open') return [];
-
+export function sitemapFor(guides: readonly Guide[]): MetadataRoute.Sitemap {
   const entries: MetadataRoute.Sitemap = [{ url: absoluteUrl('/'), lastModified: HOME_CONTENT_UPDATED }];
 
   const newest = lastUpdated(guides);

@@ -14,14 +14,12 @@ import type { SelfServeSignupSwitch } from "@/lib/signup/switch";
 import { SAMPLE_GUIDES } from "../../tests/fixtures/guides/sample-guides";
 
 /**
- * `/` (SPEC-self-serve-signup §4.1, SPEC-homepage-and-guides): signed-in
- * visitors go to the app with a 307; while the sign-up switch is off or
- * unreadable, production behaves as before (the login page); the homepage
- * shows prices from PLANS, each "ex VAT", never mentions paid ads or
- * tournaments, offers sign-up only when the switch is on, and links the
- * guides only while they are public.
+ * `/` (SPEC-homepage-and-guides §3): signed-in visitors go to the app with a
+ * 307; everyone else sees the homepage, which may be indexed whatever the
+ * sign-up switch says. It shows prices from PLANS, each "ex VAT", never
+ * mentions paid ads or tournaments, offers sign-up only when the switch is
+ * open ("Talk to us" otherwise), and links the guides once there are guides.
  */
-
 const mocks = vi.hoisted(() => ({
   getUser: vi.fn(),
   switchState: vi.fn(),
@@ -94,35 +92,50 @@ describe("/ for a signed-in visitor", () => {
   });
 });
 
-describe("/ in production while the sign-up switch is off", () => {
-  it("sends a signed-out visitor to the login page, as before, with a 307", async () => {
+describe("/ while sign-up is closed, or the switch cannot be read", () => {
+  it("shows a signed-out visitor the homepage with Talk to us and never offers sign-up", async () => {
+    for (const state of ["closed", "enforcement_off", "unavailable"] as const) {
+      signedOut(state);
+      const { container, text, html } = await renderHome();
+
+      expect(text).toContain("Talk to us");
+      expect(text).not.toContain("Start your free trial");
+      expect(hrefs(container)).not.toContain("/signup");
+      expect(html).toContain('href="mailto:peter@orangejelly.co.uk"');
+      expect(text).toContain("07990 587315");
+      cleanup();
+    }
+  });
+
+  it("keeps Sign in in the header for existing venues", async () => {
     signedOut("closed");
-    expect(await redirectOf(() => Home())).toEqual({ path: "/login", status: 307 });
-  });
+    const { container } = await renderHome();
+    const header = container.querySelector("header");
 
-  it("does the same when the switch cannot be read", async () => {
-    signedOut("unavailable");
-    expect(await redirectOf(() => Home())).toEqual({ path: "/login", status: 307 });
-  });
-
-  it("does the same when the switch is on but billing enforcement is off", async () => {
-    signedOut("enforcement_off");
-    expect(await redirectOf(() => Home())).toEqual({ path: "/login", status: 307 });
+    expect(header?.textContent).toContain("Sign in");
+    expect(Array.from(header?.querySelectorAll("a") ?? []).map((a) => a.getAttribute("href"))).toContain("/login");
   });
 
   it("treats a session that cannot be read as signed out", async () => {
     mocks.getUser.mockRejectedValue(new Error("supabase down"));
     mocks.switchState.mockResolvedValue("closed");
-    expect(await redirectOf(() => Home())).toEqual({ path: "/login", status: 307 });
+    const { text } = await renderHome();
+    expect(text).toContain("Talk to us");
   });
 
-  it("keeps the site-wide metadata: no new title, no price, still noindex", async () => {
-    for (const state of ["closed", "enforcement_off", "unavailable"] as const) {
-      mocks.switchState.mockResolvedValue(state);
-      const metadata = await generateMetadata();
-      expect(metadata).toEqual({});
-      expect(JSON.stringify(metadata)).not.toMatch(/£|ex VAT|Social media for/);
-    }
+  it("has the same indexable metadata as when sign-up is open, without reading the switch", async () => {
+    mocks.switchState.mockResolvedValue("closed");
+    const metadata = await generateMetadata();
+    expect(metadata.title).toBe(HOME_SEO.title);
+    expect(metadata.robots).toEqual({ index: true, follow: true });
+    expect(mocks.switchState).not.toHaveBeenCalled();
+  });
+
+  it("shows the same on a Vercel Preview as in production", async () => {
+    mocks.serverEnv.VERCEL_ENV = "preview";
+    signedOut("closed");
+    const { text } = await renderHome();
+    expect(text).toContain("Talk to us");
   });
 });
 
@@ -162,84 +175,29 @@ describe("/ in production once the sign-up switch is on", () => {
   });
 });
 
-describe("/ on a Vercel Preview (copy approval) while the switch is off", () => {
-  beforeEach(() => {
-    mocks.serverEnv.VERCEL_ENV = "preview";
+describe("the guides links on the homepage", () => {
+  it("are left out while there are no guides", async () => {
+    signedOut("open");
+    const { container } = await renderHome();
+    expect(hrefs(container).filter((href) => href.startsWith("/guides"))).toEqual([]);
   });
 
-  it("shows the homepage with Talk to us and never offers sign-up", async () => {
-    signedOut("closed");
-    const { container, text, html } = await renderHome();
-
-    expect(text).toContain("Talk to us");
-    expect(text).not.toContain("Start your free trial");
-    expect(hrefs(container)).not.toContain("/signup");
-    expect(html).toContain('href="mailto:peter@orangejelly.co.uk"');
-    expect(text).toContain("07990 587315");
-  });
-
-  it("carries the new title for review but stays noindex", async () => {
-    mocks.switchState.mockResolvedValue("closed");
-    const metadata = await generateMetadata();
-    expect(metadata.title).toBe(HOME_SEO.title);
-    expect(metadata.robots).toBeUndefined();
-  });
-
-  it("shows Talk to us when the switch cannot be read", async () => {
-    signedOut("unavailable");
-    const { container, text } = await renderHome();
-
-    expect(text).toContain("Talk to us");
-    expect(hrefs(container)).not.toContain("/signup");
-  });
-
-  it("links the guides when guides exist, as the guides show on a Preview too", async () => {
+  it("appear in the header, the footer and a newest-guides section once guides exist, whatever the switch says", async () => {
     mocks.guides = SAMPLE_GUIDES;
-    for (const state of ["closed", "unavailable"] as const) {
+    for (const state of ["open", "closed", "unavailable"] as const) {
       signedOut(state);
       const { container, text } = await renderHome();
-      expect(container.querySelector('header a[href="/guides"]')?.textContent).toBe("Guides");
+
+      const header = container.querySelector("header");
+      const footer = container.querySelector("footer");
+      expect(Array.from(header?.querySelectorAll("a") ?? []).map((a) => a.textContent)).toContain("Guides");
+      // The homepage is not the guides section, so nothing in the header is marked current.
+      expect(header?.querySelector("[aria-current]")).toBeNull();
+      expect(footer?.querySelector('a[href="/guides"]')?.textContent).toBe("Guides");
       expect(text).toContain("Guides for hospitality social media");
+      for (const guide of SAMPLE_GUIDES) expect(hrefs(container)).toContain(`/guides/${guide.slug}`);
       cleanup();
     }
-  });
-
-  it("leaves the guides links out while there are no guides", async () => {
-    signedOut("closed");
-    const { container } = await renderHome();
-    expect(hrefs(container).filter((href) => href.startsWith("/guides"))).toEqual([]);
-  });
-
-  it("shows Talk to us when the switch is on but billing enforcement is off", async () => {
-    signedOut("enforcement_off");
-    const { container, text } = await renderHome();
-
-    expect(text).toContain("Talk to us");
-    expect(text).not.toContain("Start your free trial");
-    expect(hrefs(container)).not.toContain("/signup");
-  });
-});
-
-describe("the guides links on the homepage", () => {
-  it("are left out while there are no guides, even with the switch on", async () => {
-    signedOut("open");
-    const { container } = await renderHome();
-    expect(hrefs(container).filter((href) => href.startsWith("/guides"))).toEqual([]);
-  });
-
-  it("appear in the header, the footer and a newest-guides section once the switch is on and guides exist", async () => {
-    mocks.guides = SAMPLE_GUIDES;
-    signedOut("open");
-    const { container, text } = await renderHome();
-
-    const header = container.querySelector("header");
-    const footer = container.querySelector("footer");
-    expect(Array.from(header?.querySelectorAll("a") ?? []).map((a) => a.textContent)).toContain("Guides");
-    // The homepage is not the guides section, so nothing in the header is marked current.
-    expect(header?.querySelector("[aria-current]")).toBeNull();
-    expect(footer?.querySelector('a[href="/guides"]')?.textContent).toBe("Guides");
-    expect(text).toContain("Guides for hospitality social media");
-    for (const guide of SAMPLE_GUIDES) expect(hrefs(container)).toContain(`/guides/${guide.slug}`);
   });
 });
 

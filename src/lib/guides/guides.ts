@@ -4,9 +4,7 @@ import type { Guide, IsoDate } from '@/content/guides/types';
 /**
  * Lookups the guide pages, the homepage, the sitemap and the share images
  * share. Everything takes the list of guides as an argument, so tests can pass
- * a fixture instead of the real (empty) list. Whether the guides are shown at
- * all follows the sign-up switch: guidesVisibility() in
- * src/lib/signup/front-door.ts.
+ * a fixture instead of the real list.
  */
 
 export const GUIDES_PATH = '/guides';
@@ -18,6 +16,15 @@ export function guidePath(slug: string): string {
 /** The guide's share image (src/app/og/guides/[slug]/route.tsx). */
 export function guideImagePath(slug: string): string {
   return `/og/guides/${slug}`;
+}
+
+/**
+ * Whether the guides are public: they are whenever there is at least one, so
+ * an empty /guides is never shown or linked (the sign-up switch plays no part,
+ * SPEC-homepage-and-guides §3).
+ */
+export function guidesVisible(guides: readonly Guide[]): boolean {
+  return guides.length > 0;
 }
 
 export function findGuide(guides: readonly Guide[], slug: string): Guide | undefined {

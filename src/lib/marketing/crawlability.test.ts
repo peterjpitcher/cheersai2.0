@@ -4,14 +4,14 @@ import { describe, expect, it, vi } from 'vitest';
 import { guideMetadata, homeMetadata } from '@/lib/marketing/metadata';
 import { sitemapFor } from '@/lib/marketing/sitemap';
 import { articleJsonLd, organizationJsonLd } from '@/lib/marketing/structured-data';
-import { robotsFor } from '@/lib/signup/front-door';
+import { publicRobots } from '@/lib/signup/front-door';
 
 import { SAMPLE_GUIDES } from '../../../tests/fixtures/guides/sample-guides';
 import { headersFor } from '../../../tests/helpers/security-headers';
 
 /**
- * Once the sign-up switch is on, robots.txt, the sitemap, the structured data
- * and the X-Robots-Tag header must agree: everything the sitemap lists and
+ * robots.txt, the sitemap, the structured data and the X-Robots-Tag header
+ * must agree (they no longer depend on the sign-up switch): everything the sitemap lists and
  * every image the structured data names can be fetched and indexed, the
  * sitemap itself can be fetched, and the app stays closed. Checked with
  * Google's own robots.txt matching, so the allow list and the sitemap cannot
@@ -79,17 +79,17 @@ function shareImageUrl(metadata: ReturnType<typeof homeMetadata>): string {
   return url.toString();
 }
 
-const OPEN = robotsFor('open');
+const OPEN = publicRobots();
 const GROUP = everyCrawler(OPEN);
 
-describe('once the sign-up switch is on', () => {
+describe('the public site', () => {
   it('robots.txt lets search engines fetch the sitemap it names', () => {
     expect(OPEN.sitemap).toBe('https://cheers.orangejelly.co.uk/sitemap.xml');
     expect(googleMayCrawl(GROUP, pathOf(String(OPEN.sitemap)))).toBe(true);
   });
 
   it('every page in the sitemap can be crawled and carries no X-Robots-Tag', () => {
-    const pages = sitemapFor('open', SAMPLE_GUIDES).map((entry) => pathOf(entry.url));
+    const pages = sitemapFor(SAMPLE_GUIDES).map((entry) => pathOf(entry.url));
     expect(pages).toEqual(expect.arrayContaining(['/', '/guides', '/terms', `/guides/${SAMPLE_GUIDES[0].slug}`]));
     for (const path of pages) {
       expect(googleMayCrawl(GROUP, path), path).toBe(true);
@@ -117,15 +117,6 @@ describe('once the sign-up switch is on', () => {
   it('the app, sign-up, sign-in, help and the API stay closed to crawlers', () => {
     for (const path of ['/planner', '/signup', '/login', '/help', '/settings', '/auth/confirm', '/api/cron/publish-scheduler', '/l/the-anchor']) {
       expect(googleMayCrawl(GROUP, path), path).toBe(false);
-    }
-  });
-});
-
-describe('while the sign-up switch is off', () => {
-  it('robots.txt lets search engines fetch nothing', () => {
-    const closed = everyCrawler(robotsFor('closed'));
-    for (const path of ['/', '/sitemap.xml', '/guides', '/og', '/brand/cheers-icon-512.png', '/terms']) {
-      expect(googleMayCrawl(closed, path), path).toBe(false);
     }
   });
 });

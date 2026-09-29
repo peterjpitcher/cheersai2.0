@@ -2,17 +2,15 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { HOME_CONTENT_UPDATED } from "@/content/homepage";
 import { LEGAL_UPDATED } from "@/lib/legal/company";
-import { CRAWLABLE_FILES, SwitchUnavailableError } from "@/lib/signup/front-door";
+import { CRAWLABLE_FILES } from "@/lib/signup/front-door";
 import { ukLongDateToIso } from "@/lib/utils/date";
 
 import { SAMPLE_GUIDES } from "../../tests/fixtures/guides/sample-guides";
 
 /**
- * robots.txt, sitemap.xml and the legacy /auth/signup URL follow the sign-up
- * switch (SPEC-self-serve-signup §4.1 and P11, SPEC-homepage-and-guides §3).
- * robots.txt and sitemap.xml answer a server error when the switch cannot be
- * read, so search engines retry instead of caching "disallow everything" or
- * an empty sitemap.
+ * robots.txt and sitemap.xml name the public pages whatever the sign-up
+ * switch says, without reading it (SPEC-homepage-and-guides §3); the legacy
+ * /auth/signup URL still follows the switch (SPEC-self-serve-signup §4.1).
  */
 
 const switchState = vi.hoisted(() => vi.fn());
@@ -48,48 +46,26 @@ beforeEach(() => {
 });
 
 describe("robots.txt", () => {
-  it("disallows the whole site while the switch is off or on without billing enforcement, as before", async () => {
-    for (const state of ["closed", "enforcement_off"]) {
+  it("allows the home page, the legal pages and the guides whatever the switch says, and names the sitemap", async () => {
+    for (const state of ["open", "closed", "enforcement_off", "unavailable"]) {
       switchState.mockResolvedValue(state);
-      expect(await robots()).toEqual({ rules: [{ userAgent: "*", disallow: "/" }] });
+      expect(await robots()).toEqual({
+        rules: [
+          {
+            userAgent: "*",
+            allow: ["/$", "/terms", "/privacy", "/data-processing", "/guides", ...CRAWLABLE_FILES],
+            disallow: "/",
+          },
+        ],
+        sitemap: `${SITE}/sitemap.xml`,
+      });
     }
-  });
-
-  it("fails with a server error, not a cacheable disallow, when the switch cannot be read", async () => {
-    switchState.mockResolvedValue("unavailable");
-    await expect(robots()).rejects.toThrow(SwitchUnavailableError);
-  });
-
-  it("allows the home page, the legal pages and the guides once the switch is on, and names the sitemap", async () => {
-    switchState.mockResolvedValue("open");
-    expect(await robots()).toEqual({
-      rules: [
-        {
-          userAgent: "*",
-          allow: ["/$", "/terms", "/privacy", "/data-processing", "/guides", ...CRAWLABLE_FILES],
-          disallow: "/",
-        },
-      ],
-      sitemap: `${SITE}/sitemap.xml`,
-    });
+    expect(switchState).not.toHaveBeenCalled();
   });
 });
 
 describe("sitemap.xml", () => {
-  it("is empty while the switch is off, even when guides exist", async () => {
-    registry.guides = SAMPLE_GUIDES;
-    switchState.mockResolvedValue("closed");
-    expect(await sitemap()).toEqual([]);
-  });
-
-  it("fails with a server error, not an empty sitemap, when the switch cannot be read", async () => {
-    registry.guides = SAMPLE_GUIDES;
-    switchState.mockResolvedValue("unavailable");
-    await expect(sitemap()).rejects.toThrow(SwitchUnavailableError);
-  });
-
   it("lists the home page and the legal pages, dated by their content, while there are no guides", async () => {
-    switchState.mockResolvedValue("open");
     expect(LEGAL).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     expect(await sitemap()).toEqual([
       { url: `${SITE}/`, lastModified: HOME },
@@ -99,18 +75,21 @@ describe("sitemap.xml", () => {
     ]);
   });
 
-  it("adds /guides and every guide, each dated by its last update, once there are guides", async () => {
+  it("adds /guides and every guide, each dated by its last update, once there are guides, whatever the switch says", async () => {
     registry.guides = SAMPLE_GUIDES;
-    switchState.mockResolvedValue("open");
-    expect(await sitemap()).toEqual([
-      { url: `${SITE}/`, lastModified: HOME },
-      { url: `${SITE}/guides`, lastModified: "2026-09-29" },
-      { url: `${SITE}/guides/plan-a-week-of-pub-posts`, lastModified: "2026-09-29" },
-      { url: `${SITE}/guides/instagram-stories-for-restaurants`, lastModified: "2026-09-10" },
-      { url: `${SITE}/terms`, lastModified: LEGAL },
-      { url: `${SITE}/privacy`, lastModified: LEGAL },
-      { url: `${SITE}/data-processing`, lastModified: LEGAL },
-    ]);
+    for (const state of ["open", "closed", "enforcement_off", "unavailable"]) {
+      switchState.mockResolvedValue(state);
+      expect(await sitemap()).toEqual([
+        { url: `${SITE}/`, lastModified: HOME },
+        { url: `${SITE}/guides`, lastModified: "2026-09-29" },
+        { url: `${SITE}/guides/plan-a-week-of-pub-posts`, lastModified: "2026-09-29" },
+        { url: `${SITE}/guides/instagram-stories-for-restaurants`, lastModified: "2026-09-10" },
+        { url: `${SITE}/terms`, lastModified: LEGAL },
+        { url: `${SITE}/privacy`, lastModified: LEGAL },
+        { url: `${SITE}/data-processing`, lastModified: LEGAL },
+      ]);
+    }
+    expect(switchState).not.toHaveBeenCalled();
   });
 });
 

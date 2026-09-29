@@ -3,40 +3,25 @@ import { redirect } from "next/navigation";
 
 import { listGuides } from "@/content/guides";
 import { FrontDoorPage } from "@/features/front-door/front-door-page";
-import { GUIDES_PATH, latestGuides } from "@/lib/guides/guides";
+import { GUIDES_PATH, guidesVisible, latestGuides } from "@/lib/guides/guides";
 import { homeMetadata } from "@/lib/marketing/metadata";
-import {
-  currentDeployment,
-  frontDoorCta,
-  frontDoorVisible,
-  guidesVisibility,
-  indexableWhenOpen,
-} from "@/lib/signup/front-door";
+import { frontDoorCta, indexable } from "@/lib/signup/front-door";
 import { getSelfServeSignupSwitch } from "@/lib/signup/switch";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 
 /**
- * `/` (SPEC-self-serve-signup §4.1, SPEC-homepage-and-guides).
+ * `/` (SPEC-homepage-and-guides §3).
  *
- * - Signed in: straight to the app with a temporary (307) redirect. The old
- *   permanent 308 is gone so browsers stop caching it.
- * - Signed out, sign-up switch off or unreadable: the login page (307), as
- *   before this change. Nothing new is public until Peter turns the switch on.
- * - Signed out, switch on: the homepage.
- *
- * Vercel Preview and local development show the homepage with the switch
- * off, so the copy can be approved on the PR preview (see front-door.ts). The
- * guides links appear only while the guides themselves are shown
- * (guidesVisibility).
+ * - Signed in: straight to the app with a temporary (307) redirect.
+ * - Signed out: the homepage, which search engines may index. Its call to
+ *   action follows the sign-up switch: "Start your free trial" while sign-up
+ *   is open, "Talk to us" otherwise. The guides links appear only once there
+ *   are guides.
  */
 export const dynamic = "force-dynamic";
 
-export async function generateMetadata(): Promise<Metadata> {
-  const state = await getSelfServeSignupSwitch();
-  // A closed front door is only a redirect to /login: its response must carry
-  // nothing new (no title, no price), so it keeps the site-wide metadata.
-  if (!frontDoorVisible(state, currentDeployment())) return {};
-  return indexableWhenOpen(homeMetadata(), state);
+export function generateMetadata(): Metadata {
+  return indexable(homeMetadata());
 }
 
 async function isSignedIn(): Promise<boolean> {
@@ -57,17 +42,11 @@ export default async function Home(): Promise<React.JSX.Element> {
     redirect("/planner");
   }
 
-  const state = await getSelfServeSignupSwitch();
-  const deployment = currentDeployment();
-  if (!frontDoorVisible(state, deployment)) {
-    redirect("/login");
-  }
-
   const guides = listGuides();
-  const showGuides = guidesVisibility(state, guides, deployment) === "visible";
+  const showGuides = guidesVisible(guides);
   return (
     <FrontDoorPage
-      cta={frontDoorCta(state)}
+      cta={frontDoorCta(await getSelfServeSignupSwitch())}
       guidesHref={showGuides ? GUIDES_PATH : null}
       latestGuides={showGuides ? latestGuides(guides) : []}
     />

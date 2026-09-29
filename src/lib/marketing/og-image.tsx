@@ -123,29 +123,10 @@ export function renderShareImage({ eyebrow, title, footer }: ShareImageText): Im
   );
 }
 
-/** The response for a share image that is not public (switch off, unknown guide). */
+/** The response for a guide share image whose guide does not exist. */
 export function shareImageNotFound(): Response {
   return new Response('Not found', {
     status: 404,
     headers: { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store' },
-  });
-}
-
-/** Seconds a crawler is asked to wait before trying a share image again. */
-export const SHARE_IMAGE_RETRY_AFTER_SECONDS = 60;
-
-/**
- * The response for a share image while the sign-up switch cannot be read:
- * a temporary 503 that draws nothing, so crawlers retry instead of treating
- * the image as gone (see SwitchUnavailableError in front-door.ts).
- */
-export function shareImageUnavailable(): Response {
-  return new Response('Temporarily unavailable', {
-    status: 503,
-    headers: {
-      'content-type': 'text/plain; charset=utf-8',
-      'cache-control': 'no-store',
-      'retry-after': String(SHARE_IMAGE_RETRY_AFTER_SECONDS),
-    },
   });
 }

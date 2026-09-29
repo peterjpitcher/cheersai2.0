@@ -9,8 +9,8 @@ import { absoluteUrl } from '@/lib/marketing/site';
 /**
  * Page metadata for the public pages: title, description, canonical URL,
  * Open Graph and Twitter cards. Every URL is absolute on the canonical host
- * (src/lib/marketing/site.ts). Callers add indexing with indexableWhenOpen(),
- * and return nothing new at all while the page is hidden.
+ * (src/lib/marketing/site.ts). Callers add indexing with indexable(), and
+ * return nothing new at all for a page that is not found.
  */
 
 /** Share images are drawn at the size Facebook, LinkedIn and X all accept. */

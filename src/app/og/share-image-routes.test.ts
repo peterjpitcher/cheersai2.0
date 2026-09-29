@@ -5,12 +5,10 @@ import { HOME_SEO } from '@/content/seo';
 import { planningGuide, SAMPLE_GUIDES } from '../../../tests/fixtures/guides/sample-guides';
 
 /**
- * The share images follow their pages: /og follows the homepage and
- * /og/guides/<slug> follows the guides (both shown on a Preview or local dev
- * server for copy approval). Hidden ones answer 404 and draw nothing; while
- * the switch cannot be read in production they answer 503, so crawlers retry.
+ * The share images are public like their pages, whatever the sign-up switch
+ * says, and never read it: /og always, /og/guides/<slug> for a real guide. An
+ * unknown guide answers 404 and draws nothing.
  */
-
 const mocks = vi.hoisted(() => ({
   switchState: vi.fn(),
   render: vi.fn(() => new Response('png', { status: 200, headers: { 'content-type': 'image/png' } })),
@@ -44,25 +42,7 @@ beforeEach(() => {
 });
 
 describe('/og (the homepage share image)', () => {
-  it('is not found in production while the switch is off', async () => {
-    mocks.switchState.mockResolvedValue('closed');
-    const response = await homeImage.GET();
-    expect(response.status).toBe(404);
-    expect(response.headers.get('cache-control')).toBe('no-store');
-    expect(mocks.render).not.toHaveBeenCalled();
-  });
-
-  it('answers 503 with Retry-After in production when the switch cannot be read', async () => {
-    mocks.switchState.mockResolvedValue('unavailable');
-    const response = await homeImage.GET();
-    expect(response.status).toBe(503);
-    expect(response.headers.get('retry-after')).toBe('60');
-    expect(response.headers.get('cache-control')).toBe('no-store');
-    expect(mocks.render).not.toHaveBeenCalled();
-  });
-
-  it('is drawn once the switch is on, with the homepage headline', async () => {
-    mocks.switchState.mockResolvedValue('open');
+  it('is drawn with the homepage headline, without reading the switch', async () => {
     const response = await homeImage.GET();
     expect(response.status).toBe(200);
     expect(mocks.render).toHaveBeenCalledWith({
@@ -70,52 +50,27 @@ describe('/og (the homepage share image)', () => {
       title: HOME_SEO.imageHeadline,
       footer: 'cheers.orangejelly.co.uk',
     });
-  });
-
-  it('is drawn on a Vercel Preview with the switch off, like the homepage', async () => {
-    mocks.serverEnv.VERCEL_ENV = 'preview';
-    mocks.switchState.mockResolvedValue('closed');
-    expect((await homeImage.GET()).status).toBe(200);
+    expect(mocks.switchState).not.toHaveBeenCalled();
   });
 });
 
 describe('/og/guides/<slug> (a guide share image)', () => {
-  it('is not found in production while the switch is off', async () => {
-    mocks.switchState.mockResolvedValue('closed');
-    expect((await guideRequest(planningGuide.slug)).status).toBe(404);
-    expect(mocks.render).not.toHaveBeenCalled();
-  });
-
-  it('answers 503 with Retry-After in production when the switch cannot be read', async () => {
-    mocks.switchState.mockResolvedValue('unavailable');
-    const response = await guideRequest(planningGuide.slug);
-    expect(response.status).toBe(503);
-    expect(response.headers.get('retry-after')).toBe('60');
-    expect(response.headers.get('cache-control')).toBe('no-store');
-    expect(mocks.render).not.toHaveBeenCalled();
-  });
-
-  it.each(['closed', 'unavailable'])('is drawn on a Vercel Preview while the switch is %s, like the guide', async (state) => {
-    mocks.serverEnv.VERCEL_ENV = 'preview';
-    mocks.switchState.mockResolvedValue(state);
-    expect((await guideRequest(planningGuide.slug)).status).toBe(200);
-  });
-
   it('is not found for a slug that is not a guide, or while there are no guides', async () => {
-    mocks.switchState.mockResolvedValue('open');
-    expect((await guideRequest('no-such-guide')).status).toBe(404);
+    const response = await guideRequest('no-such-guide');
+    expect(response.status).toBe(404);
+    expect(response.headers.get('cache-control')).toBe('no-store');
     mocks.guides = [];
     expect((await guideRequest(planningGuide.slug)).status).toBe(404);
     expect(mocks.render).not.toHaveBeenCalled();
   });
 
-  it('is drawn with the guide title and category once public', async () => {
-    mocks.switchState.mockResolvedValue('open');
+  it('is drawn with the guide title and category, without reading the switch', async () => {
     expect((await guideRequest(planningGuide.slug)).status).toBe(200);
     expect(mocks.render).toHaveBeenCalledWith({
       eyebrow: 'Guide: Planning your posts',
       title: planningGuide.title,
       footer: 'cheers.orangejelly.co.uk/guides',
     });
+    expect(mocks.switchState).not.toHaveBeenCalled();
   });
 });

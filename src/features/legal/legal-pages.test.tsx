@@ -156,22 +156,18 @@ describe("the self-serve wording (spec §4.13), true while sign-up is closed", (
   });
 });
 
-describe("legal page indexing follows the sign-up switch (P11)", () => {
+describe("legal page indexing (SPEC-homepage-and-guides §3)", () => {
   const METADATA = [termsMetadata, privacyMetadata, dpaMetadata];
 
-  it("keeps the site-wide noindex while the switch is off, unreadable or on without billing enforcement", async () => {
-    for (const state of ["closed", "enforcement_off", "unavailable"]) {
+  it("may be indexed whatever the sign-up switch says, keeping each page's title", async () => {
+    for (const state of ["open", "closed", "enforcement_off", "unavailable"]) {
       switchState.mockResolvedValue(state);
-      for (const generate of METADATA) expect((await generate()).robots).toBeUndefined();
+      for (const generate of METADATA) {
+        const metadata = await generate();
+        expect(metadata.robots).toEqual({ index: true, follow: true });
+        expect(String(metadata.title)).toMatch(/\| Cheers$/);
+      }
     }
-  });
-
-  it("may be indexed once the switch is on, keeping each page's title", async () => {
-    switchState.mockResolvedValue("open");
-    for (const generate of METADATA) {
-      const metadata = await generate();
-      expect(metadata.robots).toEqual({ index: true, follow: true });
-      expect(String(metadata.title)).toMatch(/\| Cheers$/);
-    }
+    expect(switchState).not.toHaveBeenCalled();
   });
 });
