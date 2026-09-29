@@ -180,6 +180,20 @@ describe('readSelfServeSignupSwitch', () => {
     );
   });
 
+  it('matches each flag by name, whatever order the rows come back in', async () => {
+    const reversed = (signup: boolean, enforcement: boolean) =>
+      service({
+        data: [
+          { name: 'billing_enforcement', enabled: enforcement },
+          { name: 'self_serve_signup', enabled: signup },
+        ],
+        error: null,
+      }).client as never;
+    expect(await readSelfServeSignupSwitch(reversed(true, true))).toBe('open');
+    expect(await readSelfServeSignupSwitch(reversed(true, false))).toBe('enforcement_off');
+    expect(await readSelfServeSignupSwitch(reversed(false, true))).toBe('closed');
+  });
+
   it('does not alert when sign-up is open or closed', async () => {
     await readSelfServeSignupSwitch(flags(true, true).client as never);
     await readSelfServeSignupSwitch(flags(false, false).client as never);

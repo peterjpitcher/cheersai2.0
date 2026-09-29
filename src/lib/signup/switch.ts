@@ -80,8 +80,10 @@ function alertSignupWithoutEnforcement(billingEnforcement: 'off' | 'missing'): v
     // After the response, so no page waits for the alert's database writes and email.
     after(send);
   } catch {
-    // Outside a request there is no after(): send it now without waiting (it never throws).
-    void send();
+    // Outside a request there is no after(): send it now without waiting. The
+    // helper never rejects today; the catch keeps a future rejection from going
+    // unhandled.
+    void send().catch(() => undefined);
   }
 }
 
