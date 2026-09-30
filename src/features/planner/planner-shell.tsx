@@ -153,7 +153,7 @@ export function PlannerShell({
         {/* Left side: eyebrow + h1 + summary */}
         <div className="min-w-0">
           <p className="eyebrow">
-            {dayLine} &middot; Europe/London
+            {dayLine}{" "}&middot; Europe/London
           </p>
           <h1
             className="mt-1 text-[22px] font-semibold leading-tight"

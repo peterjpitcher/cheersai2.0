@@ -56,7 +56,7 @@ export default function DataProcessingPage() {
   return (
     <LegalPage current="dpa">
       <p>
-        This agreement is between {COMPANY.legalName} (&ldquo;we&rdquo;, the processor) and the business that uses
+        This agreement is between {COMPANY.legalName}{" "}(&ldquo;we&rdquo;, the processor) and the business that uses
         Cheers (&ldquo;you&rdquo;, the controller). It forms part of our{" "}
         <LegalLink href={terms.path}>{terms.title}</LegalLink>, and you accept it when you accept those terms,
         including by ticking the box at checkout. If you would like a signed copy, email <ContactEmail />.
@@ -154,7 +154,7 @@ export default function DataProcessingPage() {
             affecting your data, with the information you need to deal with it.
           </li>
           <li>
-            <strong>Other help.</strong> We help you with security, breach reporting, data protection impact
+            <strong>Other help.</strong>{" "}We help you with security, breach reporting, data protection impact
             assessments and any consultation with the Information Commissioner&apos;s Office, as far as the
             processing requires.
           </li>
@@ -189,7 +189,7 @@ export default function DataProcessingPage() {
           </li>
         </LegalList>
         <p>
-          <strong>Not sub-processors.</strong> Stripe takes payments and is an independent controller for card data,
+          <strong>Not sub-processors.</strong>{" "}Stripe takes payments and is an independent controller for card data,
           under its own terms. Meta runs the Facebook and Instagram accounts you connect, under Meta&apos;s own terms
           with you; booking data sent to Meta&apos;s Conversions API is covered by the Business Tools Terms between
           you and Meta (section 3).
