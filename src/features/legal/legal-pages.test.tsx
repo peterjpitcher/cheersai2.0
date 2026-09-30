@@ -168,6 +168,8 @@ describe("legal page indexing (SPEC-homepage-and-guides §3)", () => {
   const METADATA = [termsMetadata, privacyMetadata, dpaMetadata];
 
   it("may be indexed whatever the sign-up switch says, keeping each page's title", async () => {
+    // The pages' header reads the switch when rendered above; the metadata must not.
+    switchState.mockClear();
     for (const state of ["open", "closed", "enforcement_off", "unavailable"]) {
       switchState.mockResolvedValue(state);
       for (const generate of METADATA) {

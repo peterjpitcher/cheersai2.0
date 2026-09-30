@@ -5,7 +5,11 @@ import { LOGIN_PATH, PrimaryCta } from '@/features/marketing/cta';
 import type { FrontDoorCta } from '@/lib/signup/front-door';
 
 interface SiteHeaderProps {
-  cta: FrontDoorCta;
+  /**
+   * The call to action, or null for none: PublicPage shows the header without
+   * it while the sign-up switch is read, so the page never waits on the read.
+   */
+  cta: FrontDoorCta | null;
   /** "/guides" while the guides are shown; null leaves the link out entirely. */
   guidesHref: string | null;
   /**
@@ -89,7 +93,7 @@ export function SiteHeader({ cta, guidesHref, current }: SiteHeaderProps): React
             ))}
           </ul>
         </nav>
-        <PrimaryCta cta={cta} size="sm" compact />
+        {cta ? <PrimaryCta cta={cta} size="sm" compact /> : null}
       </div>
     </header>
   );

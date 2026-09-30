@@ -43,12 +43,29 @@ Buttons and links follow the homepage's accessible colours:
 Two existing faults go with it: `/no-access` and the venue page's "Signed in as" box used colour tokens that do not
 exist (`--c-fg`, `--c-fg-muted`, `--c-surface-2`), so their text and box fell back to unstyled defaults.
 
+## Decisions after the first review (Peter, 30 September 2026)
+
+1. Push and open a PR.
+2. The legal pages (`/terms`, `/privacy`, `/data-processing`), the Help Centre (`/help`) and the first-post guide
+   (`/help/first-post`) get the homepage's header and footer too. They share `PublicPage`
+   (`src/features/marketing/public-page.tsx`): the site header, a title band like the guides index's hero, the body
+   on paper, and the site footer, which already carries the company details, contacts and legal links, so the old
+   legal footer goes. The Help Centre's questions open and close like the homepage's.
+3. The sign-in page's "Don't have an account?" line follows the sign-up switch, like the homepage's call to action:
+   "Start your free trial" (to `/signup`) while sign-up is open, otherwise "Contact support" by email.
+
+The header's call to action and the sign-in line read the sign-up switch, which can take up to 3 seconds to time
+out. Neither page waits for it: each sits in its own Suspense boundary (the header shows without its button, the
+line keeps its place blank), as the Help Centre's first-post link already did. The legal pages are now rendered per
+request, like the homepage, because their header follows the switch.
+
+The legal tables' sideways-scrolling box now takes keyboard focus (axe `scrollable-region-focusable`, WCAG 2.1.1),
+which it failed on phones before.
+
 ## Not changed
 
 - The in-app pages and the shared `PendingInvitations` list (also used inside the app).
-- The legal pages (`/terms`, `/privacy`, `/data-processing`) and `/help`: they are content pages, not service pages.
-- The sign-in page still offers "Contact support" to someone without an account; it does not read the sign-up
-  switch, so the sign-in page gains no database read.
+- The words of the legal pages and the Help Centre.
 
 ## Rollback
 

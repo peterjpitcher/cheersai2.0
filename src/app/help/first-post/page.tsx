@@ -3,8 +3,12 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import type { ReactNode } from 'react';
 
+import { PublicPage } from '@/features/marketing/public-page';
 import { getFirstPostHelpHref } from '@/lib/help/first-post';
 import { CONTACT } from '@/lib/legal/company';
+
+/** A link in the text, as the homepage writes them (--c-orange-hi is 5.2:1 on paper). */
+const LINK = 'font-medium text-orange-hi underline underline-offset-[3px]';
 
 // ---------------------------------------------------------------------------
 // "How to publish your first post" (tasks/SPEC-self-serve-signup.md, P10).
@@ -24,18 +28,16 @@ export const metadata: Metadata = {
 
 function Step({ number, title, children }: { number: number; title: string; children: ReactNode }) {
   return (
-    <li className="flex gap-3">
+    <li className="flex gap-4">
+      {/* The homepage's step badge (How it works). */}
       <span
         aria-hidden="true"
-        className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold"
-        style={{ backgroundColor: 'var(--c-orange-soft)', color: 'var(--c-ink)' }}
+        className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-[var(--r-pill)] bg-orange-soft font-mono text-sm font-semibold text-orange-hi"
       >
-        {number}
+        {String(number).padStart(2, '0')}
       </span>
-      <div className="min-w-0 space-y-2">
-        <h3 className="text-base font-semibold" style={{ color: 'var(--c-ink)' }}>
-          {title}
-        </h3>
+      <div className="min-w-0 space-y-2 pt-1.5">
+        <h3 className="text-lg font-semibold leading-snug text-ink">{title}</h3>
         {children}
       </div>
     </li>
@@ -43,38 +45,35 @@ function Step({ number, title, children }: { number: number; title: string; chil
 }
 
 function Label({ children }: { children: ReactNode }) {
-  return <strong style={{ color: 'var(--c-ink)' }}>{children}</strong>;
+  return <strong className="font-semibold text-ink">{children}</strong>;
 }
 
 export default async function FirstPostHelpPage(): Promise<React.JSX.Element> {
   if (!(await getFirstPostHelpHref())) notFound();
 
   return (
-    <main className="mx-auto max-w-[720px] px-4 py-12 sm:py-16" style={{ color: 'var(--c-ink)' }}>
-      <p className="text-sm">
-        <Link href="/help" className="hover:underline" style={{ color: 'var(--c-ink-3)' }}>
+    <PublicPage
+      eyebrow={
+        <Link href="/help" className="underline underline-offset-4">
           Help Centre
         </Link>
-      </p>
-
-      <header className="mt-4 space-y-3">
-        <h1 className="text-2xl font-semibold sm:text-3xl" style={{ color: 'var(--c-ink)' }}>
-          How to publish your first post
-        </h1>
-        <p className="text-base leading-relaxed" style={{ color: 'var(--c-ink-2)' }}>
+      }
+      title="How to publish your first post"
+      intro={
+        <p className="text-lg leading-relaxed">
           Cheers writes the words for you. You check them, approve them and choose when the post goes out.
         </p>
-      </header>
-
-      <div className="mt-8 space-y-8 text-sm leading-relaxed" style={{ color: 'var(--c-ink-2)' }}>
-        <section className="space-y-2">
-          <h2 className="text-lg font-semibold" style={{ color: 'var(--c-ink)' }}>
+      }
+    >
+      <div className="max-w-[760px] space-y-12 text-[15px] leading-relaxed text-ink-2">
+        <section className="space-y-3">
+          <h2 className="text-2xl font-semibold leading-tight text-ink">
             Before you start
           </h2>
-          <ul className="list-disc space-y-2 pl-5">
+          <ul className="list-disc space-y-2 pl-5 marker:text-orange">
             <li>
               Connect Facebook, Instagram or both on the{' '}
-              <Link href="/connections" className="font-semibold hover:underline" style={{ color: 'var(--c-orange-hi)' }}>
+              <Link href="/connections" className={LINK}>
                 Connections
               </Link>{' '}
               page. One of the two is enough. Only an owner of the venue can connect them.
@@ -87,7 +86,7 @@ export default async function FirstPostHelpPage(): Promise<React.JSX.Element> {
         </section>
 
         <section className="space-y-4">
-          <h2 className="text-lg font-semibold" style={{ color: 'var(--c-ink)' }}>
+          <h2 className="text-2xl font-semibold leading-tight text-ink">
             Step by step
           </h2>
           <ol className="space-y-6">
@@ -136,8 +135,8 @@ export default async function FirstPostHelpPage(): Promise<React.JSX.Element> {
           </ol>
         </section>
 
-        <section className="space-y-2">
-          <h2 className="text-lg font-semibold" style={{ color: 'var(--c-ink)' }}>
+        <section className="space-y-3">
+          <h2 className="text-2xl font-semibold leading-tight text-ink">
             After you approve it
           </h2>
           <p>
@@ -148,8 +147,8 @@ export default async function FirstPostHelpPage(): Promise<React.JSX.Element> {
           </p>
         </section>
 
-        <section className="space-y-2">
-          <h2 className="text-lg font-semibold" style={{ color: 'var(--c-ink)' }}>
+        <section className="space-y-3">
+          <h2 className="text-2xl font-semibold leading-tight text-ink">
             If it does not go out
           </h2>
           <p>
@@ -159,17 +158,13 @@ export default async function FirstPostHelpPage(): Promise<React.JSX.Element> {
           </p>
           <p>
             Still stuck? Email{' '}
-            <a
-              href={`mailto:${CONTACT.email}`}
-              className="font-semibold hover:underline"
-              style={{ color: 'var(--c-orange-hi)' }}
-            >
+            <a href={`mailto:${CONTACT.email}`} className={LINK}>
               {CONTACT.email}
             </a>{' '}
             and we will help.
           </p>
         </section>
       </div>
-    </main>
+    </PublicPage>
   );
 }

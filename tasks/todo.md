@@ -10,7 +10,13 @@ Spec: `tasks/SPEC-service-pages-homepage-style.md`; branch `feat/service-pages-h
       local login signed in through the new sign-in page, then signed out and deleted): every page seen at 1440px
       and 375px, sign-in at 320px; axe (WCAG 2.2 A and AA) reports no violations and nothing scrolls sideways
 - [x] lint, typecheck, 4,317 tests in London and UTC, build with CI's placeholder env
-- [ ] Push and PR (waiting for Peter)
+- [x] Peter's answers: sign-in line follows the sign-up switch; legal pages and Help get the homepage header and
+      footer (`PublicPage`); push and PR
+- [x] Tests: sign-in line per switch state and never waits on the read; `PublicPage` never waits on the read and its
+      header button follows the switch; legal and help tests still pass
+- [x] Local run: sign-up off and on (local flags restored to off), header button and sign-in line follow it,
+      first-post guide 404 while off; axe clean at 1440px and 375px on every changed page after the table fix
+- [ ] Full checks, push, PR
 
 # OAuth state bound to the person who started it (2026-09-29)
 

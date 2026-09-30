@@ -1,87 +1,58 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 
-import {
-  companyDetailsLine,
-  CONTACT,
-  LEGAL_DOCUMENTS,
-  LEGAL_UPDATED,
-  LEGAL_VERSION,
-  type LegalDocumentId,
-} from "@/lib/legal/company";
+import { PublicPage } from "@/features/marketing/public-page";
+import { CONTACT, LEGAL_DOCUMENTS, LEGAL_UPDATED, LEGAL_VERSION, type LegalDocumentId } from "@/lib/legal/company";
 
 /**
- * Shared shell for the three public legal pages (terms, privacy notice, DPA):
- * the same header, cross-links and company details footer on each, so the
- * details the law requires on the site are written once.
+ * Shared shell for the three public legal pages (terms, privacy notice, DPA)
+ * in the homepage's look (PublicPage): the site header, the title, date,
+ * version and cross-links on the ink band, and the site footer, which carries
+ * the company details and contacts the law requires on the site, so they are
+ * written once.
  */
 
-const linkStyle = { color: "var(--c-orange-hi)" } as const;
-const headingStyle = { color: "var(--c-ink)" } as const;
-const mutedStyle = { color: "var(--c-ink-3)" } as const;
+/** A link in the text, as the homepage writes them (--c-orange-hi is 5.2:1 on paper). */
+const LINK = "font-medium text-orange-hi underline underline-offset-[3px]";
+
+/** A link on the ink band. */
+const LINK_ON_DARK = "font-medium text-white underline underline-offset-4";
 
 interface LegalPageProps {
   current: LegalDocumentId;
   children: ReactNode;
 }
 
-export function LegalPage({ current, children }: LegalPageProps) {
+export function LegalPage({ current, children }: LegalPageProps): React.JSX.Element {
   const doc = LEGAL_DOCUMENTS[current];
   const others = Object.values(LEGAL_DOCUMENTS).filter((other) => other.id !== current);
 
   return (
-    <main className="mx-auto max-w-[720px] px-4 py-16" style={{ color: "var(--c-ink)" }}>
-      <header className="space-y-4 text-center">
-        <p className="eyebrow" style={mutedStyle}>
-          Cheers by Orange Jelly
-        </p>
-        <h1 className="text-3xl font-semibold" style={headingStyle}>
-          {doc.title}
-        </h1>
-        <p className="text-sm" style={mutedStyle}>
-          Last updated {LEGAL_UPDATED} &middot; Version {LEGAL_VERSION}
-        </p>
-        <p className="text-sm" style={mutedStyle}>
-          See also:{" "}
-          {others.map((other, index) => (
-            <span key={other.id}>
-              {index > 0 ? " and " : null}
-              <Link href={other.path} className="hover:underline" style={linkStyle}>
-                {other.title}
-              </Link>
-            </span>
-          ))}
-        </p>
-      </header>
-
+    <PublicPage
+      eyebrow="Legal"
+      title={doc.title}
+      intro={
+        <>
+          <p className="text-sm">
+            Last updated {LEGAL_UPDATED} &middot; <span className="whitespace-nowrap">Version {LEGAL_VERSION}</span>
+          </p>
+          <p className="text-sm">
+            See also:{" "}
+            {others.map((other, index) => (
+              <span key={other.id}>
+                {index > 0 ? " and " : null}
+                <Link href={other.path} className={LINK_ON_DARK}>
+                  {other.title}
+                </Link>
+              </span>
+            ))}
+          </p>
+        </>
+      }
+    >
       {/* break-words: long URLs and permission names must wrap, not widen the page on a phone. */}
-      <div className="mt-12 space-y-6 break-words text-base" style={{ lineHeight: "1.55" }}>
-        {children}
-      </div>
-
-      <LegalFooter />
-    </main>
-  );
-}
-
-/** Company details and contacts, shown at the foot of every legal page. */
-export function LegalFooter() {
-  return (
-    <footer className="mt-16 border-t pt-6 text-sm" style={{ ...mutedStyle, borderColor: "var(--c-line)" }}>
-      <address className="not-italic space-y-2 leading-relaxed">
-        <p>{companyDetailsLine()}</p>
-        <p>
-          Email <ContactEmail /> or message us on WhatsApp at <ContactWhatsApp />.
-        </p>
-      </address>
-      <nav aria-label="Legal documents" className="mt-4 flex flex-wrap gap-x-4 gap-y-1">
-        {Object.values(LEGAL_DOCUMENTS).map((doc) => (
-          <Link key={doc.id} href={doc.path} className="hover:underline" style={linkStyle}>
-            {doc.title}
-          </Link>
-        ))}
-      </nav>
-    </footer>
+      <div className="max-w-[760px] space-y-6 break-words text-base leading-relaxed text-ink-2">{children}</div>
+    </PublicPage>
   );
 }
 
@@ -92,19 +63,17 @@ interface LegalSectionProps {
 }
 
 /** A numbered or titled section; the id gives each section a stable anchor. */
-export function LegalSection({ id, title, children }: LegalSectionProps) {
+export function LegalSection({ id, title, children }: LegalSectionProps): React.JSX.Element {
   return (
-    <section id={id} className="space-y-4">
-      <h2 className="text-xl font-semibold" style={headingStyle}>
-        {title}
-      </h2>
+    <section id={id} className="scroll-mt-6 space-y-4 pt-4">
+      <h2 className="text-2xl font-semibold leading-tight text-ink">{title}</h2>
       {children}
     </section>
   );
 }
 
-export function LegalList({ children }: { children: ReactNode }) {
-  return <ul className="list-disc space-y-2 pl-6">{children}</ul>;
+export function LegalList({ children }: { children: ReactNode }): React.JSX.Element {
+  return <ul className="list-disc space-y-2 pl-6 marker:text-orange">{children}</ul>;
 }
 
 interface LegalTableProps {
@@ -113,10 +82,19 @@ interface LegalTableProps {
   rows: readonly (readonly ReactNode[])[];
 }
 
-/** A simple bordered table that scrolls sideways on a narrow screen. */
-export function LegalTable({ caption, head, rows }: LegalTableProps) {
+/**
+ * A simple bordered table that scrolls sideways on a narrow screen. The
+ * scrolling box takes keyboard focus and is named by the caption, so it can be
+ * scrolled without a mouse (WCAG 2.1.1).
+ */
+export function LegalTable({ caption, head, rows }: LegalTableProps): React.JSX.Element {
   return (
-    <div className="overflow-x-auto">
+    <div
+      role="region"
+      aria-label={caption}
+      tabIndex={0}
+      className="overflow-x-auto rounded-[var(--r-xl)] border border-line bg-card"
+    >
       <table className="w-full border-collapse text-left text-sm">
         <caption className="sr-only">{caption}</caption>
         <thead>
@@ -125,8 +103,7 @@ export function LegalTable({ caption, head, rows }: LegalTableProps) {
               <th
                 key={cell}
                 scope="col"
-                className="border-b px-2 py-2 align-bottom font-semibold"
-                style={{ ...headingStyle, borderColor: "var(--c-line-2)" }}
+                className="border-b border-line-2 bg-paper px-3 py-2.5 align-bottom font-semibold text-ink"
               >
                 {cell}
               </th>
@@ -135,13 +112,9 @@ export function LegalTable({ caption, head, rows }: LegalTableProps) {
         </thead>
         <tbody>
           {rows.map((row, rowIndex) => (
-            <tr key={rowIndex}>
+            <tr key={rowIndex} className="border-b border-line last:border-b-0">
               {row.map((cell, cellIndex) => (
-                <td
-                  key={cellIndex}
-                  className="border-b px-2 py-2 align-top"
-                  style={{ borderColor: "var(--c-line)" }}
-                >
+                <td key={cellIndex} className="px-3 py-2.5 align-top">
                   {cell}
                 </td>
               ))}
@@ -153,33 +126,33 @@ export function LegalTable({ caption, head, rows }: LegalTableProps) {
   );
 }
 
-export function LegalLink({ href, children }: { href: string; children: ReactNode }) {
+export function LegalLink({ href, children }: { href: string; children: ReactNode }): React.JSX.Element {
   const external = /^https?:\/\//.test(href);
   if (external) {
     return (
-      <a href={href} className="hover:underline" style={linkStyle} target="_blank" rel="noopener noreferrer">
+      <a href={href} className={LINK} target="_blank" rel="noopener noreferrer">
         {children}
       </a>
     );
   }
   return (
-    <Link href={href} className="hover:underline" style={linkStyle}>
+    <Link href={href} className={LINK}>
       {children}
     </Link>
   );
 }
 
-export function ContactEmail() {
+export function ContactEmail(): React.JSX.Element {
   return (
-    <a href={`mailto:${CONTACT.email}`} className="hover:underline" style={linkStyle}>
+    <a href={`mailto:${CONTACT.email}`} className={LINK}>
       {CONTACT.email}
     </a>
   );
 }
 
-export function ContactWhatsApp() {
+export function ContactWhatsApp(): React.JSX.Element {
   return (
-    <a href={`https://wa.me/${CONTACT.whatsappE164.replace("+", "")}`} className="hover:underline" style={linkStyle}>
+    <a href={`https://wa.me/${CONTACT.whatsappE164.replace("+", "")}`} className={LINK}>
       {CONTACT.whatsappDisplay}
     </a>
   );
