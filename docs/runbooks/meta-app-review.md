@@ -61,58 +61,109 @@ Meta's requirements (checked 26 September 2026): Page posts and stories need `pa
 
 | Item | Status on 26 September 2026 | Owner |
 |---|---|---|
-| Privacy policy at `https://cheers.orangejelly.co.uk/privacy` | **Blocking until deployed.** Rewritten on 27 September 2026 (plan item 2.10, branch `feat/legal-terms-privacy-dpa`) with the correct company details, London hosting and a Facebook and Instagram section including deletion steps. The live page keeps the wrong address until that branch is merged and deployed | Claude |
+| Privacy policy at `https://cheers.orangejelly.co.uk/privacy` | Live since 27 September 2026 (#131) with the correct company details, London hosting and a Facebook and Instagram section including deletion steps. Set as the app's privacy policy URL | done |
 | Terms at `https://cheers.orangejelly.co.uk/terms` | Set; rewritten with the privacy policy on the same branch | Claude |
 | Data deletion callback `https://cheers.orangejelly.co.uk/api/social/delete-data` | Set, live; a forged request returns 400 | done |
 | Deauthorise callback | Set by Peter, 26 September 2026 | done |
 | App icon, category, contact email (`peter@orangejelly.co.uk`), app domain | Set | done |
 | Business Verification | Verified | done |
-| A test Facebook Page linked to a test Instagram professional account, held in the Orange Jelly business portfolio | Not yet made. Use it for the recording so no test post reaches The Anchor's followers | Peter |
+| A test Facebook Page linked to a test Instagram professional account | Page **Cheers Test Venue** made 29 September 2026 (https://www.facebook.com/profile.php?id=61594888052765, id 61594888052765, category Pub). Instagram **@cheerstestvenue** (https://www.instagram.com/cheerstestvenue/): Peter links it to the Page (section 4, before you record). The Page is not in the Orange Jelly business portfolio (adding it needs Peter to accept Meta's Commercial Terms; optional). Use them for the recording so no test post reaches The Anchor's followers | Peter (Instagram link) |
 | A CheersAI brand for the review, with paid ads, tournaments and management import off | Done 28 September 2026: **Cheers Test Venue** (`ebbf257d-6b15-4dcd-80bc-ba557d786364`). It was used for the live Stripe sign-up test (trial started and cancelled, nothing charged), then set to comped (question 35) so it stays free, fully usable and off the 90-day lapsed list | done |
-| A CheersAI login for Meta's reviewers with a password, belonging only to Cheers Test Venue | Not yet made. Admin, invite a new email address with access to Cheers Test Venue only, then set the password from the invite email. Give Meta the email and password in the submission form only, never in the repo | Peter |
+| A CheersAI login for Meta's reviewers with a password, belonging only to Cheers Test Venue | Login made 28 September 2026 (owner of Cheers Test Venue only). Its email is in Peter's private note (`docs/runbooks/meta-app-review-private.md`, kept out of git because this repo is public). Peter sets the password with **Forgot password** on the sign-in page. Give Meta the email and password in the submission form only, never in the repo | Peter (password) |
 
 ## 4. The recording
 
-Meta wants a screen recording that shows the whole flow: signing in to CheersAI, Meta's login
-dialog granting each permission, and CheersAI using each one. One recording can cover all six
-permissions; upload the same file against each. Record at 1080p or better, with the browser and
-Meta in English, and add short on-screen captions for each step (Meta's reviewers cannot hear a
-voice-over reliably). Record it as Peter, who has a role on the app, using the test Page.
+Meta wants one screen recording that shows the whole flow: signing in to CheersAI, Meta's dialog
+granting each permission, and CheersAI using each one. The same video is uploaded against all six
+permissions.
 
-1. **Sign in.** Open `https://cheers.orangejelly.co.uk/login`, enter the reviewer email and
-   password, click **Sign in**. Caption: "Venue owner signs in to CheersAI."
+### Everything you need
+
+| What | Where |
+|---|---|
+| CheersAI sign-in page | https://cheers.orangejelly.co.uk/login |
+| Reviewer login (CheersAI) | Email in your private note `docs/runbooks/meta-app-review-private.md` (on your Mac only, not in git). Password: the one you set with **Forgot password** |
+| CheersAI venue it opens | **Cheers Test Venue** (free, fully usable; paid ads, tournaments and event import are off) |
+| Test Facebook Page | **Cheers Test Venue**: https://www.facebook.com/profile.php?id=61594888052765 |
+| Test Instagram account | **@cheerstestvenue**: https://www.instagram.com/cheerstestvenue/ |
+| The saved App Review draft | https://developers.facebook.com/apps/1001401138674450/app-review/submissions/?submission_id=1310539111093983 (or Meta for Developers, CheersAI, **App Review**, **Requests**) |
+| Where Meta sends the result | peter@orange-jelly.com (your Meta developer contact email) |
+
+### Before you record (once)
+
+1. **Make @cheerstestvenue a professional account.** In the Instagram app, signed in as
+   @cheerstestvenue: **Profile**, the menu (three lines), **Account type and tools**, **Switch to
+   professional account**, choose **Business**. Instagram only lets apps publish to professional
+   accounts.
+2. **Link it to the Page.** On Facebook, open the Cheers Test Venue Page, click **Switch** to act as
+   the Page, then **Settings**, **Linked accounts**, **Instagram**, **Connect account**, and sign in
+   as @cheerstestvenue. The Page's Linked accounts screen should then show @cheerstestvenue.
+3. **Set the reviewer login's password.** On https://cheers.orangejelly.co.uk/login click **Forgot
+   password**, enter the reviewer email from your private note, open the email (it arrives in your
+   Outlook inbox) and set a password. Sign in once to check it opens Cheers Test Venue.
+4. **Have an image ready**: a square JPG of food or drink, about 1080 x 1080 pixels and under 8 MB.
+   Instagram needs an image on every post.
+5. **Set up the screen.** Browser and Facebook in English, browser zoom at 100%, close other tabs
+   and notifications (Focus mode on). Sign in to Facebook in the same browser as yourself (your
+   account has a role on the app, so Meta's dialog works before approval).
+
+### How to record and caption
+
+- Record with the Mac's own recorder: press **Cmd + Shift + 5**, choose **Record Selected Portion**
+  (or the whole screen), click **Record**; stop it from the menu bar. Aim for 1080p or better.
+- Add a short on-screen caption for each step below (Meta's reviewers cannot rely on a
+  voice-over). iMovie works: drag the video in, then **Titles**, **Lower Third**, over each step.
+  Export at 1080p as .mp4 or .mov.
+- Cut out waiting time (for example the ten minutes before the story posts).
+
+### The steps (caption for each in quotes)
+
+1. **Sign in.** Open https://cheers.orangejelly.co.uk/login, enter the reviewer email and password,
+   click **Sign in**. Caption: "Venue owner signs in to CheersAI."
 2. **Connect Facebook.** Go to **Connections**. The **Facebook Page** card says "Connect Facebook
    before publishing." Click **Connect**. Caption: "Owner connects their Facebook Page."
-3. **Meta's dialog.** Show the dialog listing the permissions. Choose the test Page (and its
-   business portfolio if asked) and continue. Caption: "CheersAI asks only for the permissions it
-   needs to publish."
-4. **Back in CheersAI.** The toast "Connected facebook successfully" appears and the card shows the
-   Page name, with Publishing "Ready" and Access token "Stored". Caption: "pages_show_list and
+3. **Meta's dialog.** Show the dialog listing the permissions. When it asks which Pages to share,
+   tick **only Cheers Test Venue** (untick The Anchor and Orange Jelly), and if it asks about
+   Instagram accounts or business portfolios, choose only @cheerstestvenue. Continue. Caption:
+   "CheersAI asks only for the permissions it needs to publish." (If you share more than one Page,
+   CheersAI asks you to choose one; choose Cheers Test Venue.)
+4. **Back in CheersAI.** The message "Connected facebook successfully" appears and the card shows
+   the Page name, with Publishing "Ready" and Access token "Stored". Caption: "pages_show_list and
    pages_read_engagement: CheersAI lists the Pages and reads the Page name."
 5. **Connect Instagram.** On the **Instagram Business** card, click **Connect** and complete Meta's
-   dialog the same way. The card then shows the Instagram username. Caption: "instagram_basic:
-   CheersAI reads the linked Instagram account's username."
-6. **Create a post.** Go to **Create** ("Create Content"). On **Brief**, choose **Instant Post**,
-   enter a title and a short brief, tick **Facebook** and **Instagram**, click **Next**. On
-   **Media**, attach an image (Instagram needs one), **Next**. On **Schedule**, choose **Post Now**,
-   **Next**. On **Generate**, click **Generate Content**, then **Approve this post**, then
-   **Post approved (1)**. Caption: "Owner writes, reviews and approves the post before anything is
-   published."
+   dialog the same way, choosing only @cheerstestvenue. The card then shows the Instagram username
+   and says it uses the Page connected to Facebook. Caption: "instagram_basic: CheersAI reads the
+   linked Instagram account's username."
+6. **Create a post.** Go to **Create**. On **Brief**, choose **Instant Post**, enter a title and a
+   short brief, tick **Facebook** and **Instagram**, click **Next**. On **Media**, attach your
+   image, **Next**. On **Schedule**, choose **Post Now**, **Next**. On **Generate**, click
+   **Generate Content**, then **Approve this post**, then **Post approved (1)**. Caption: "Owner
+   writes, reviews and approves the post before anything is published."
 7. **It publishes.** In the **Planner**, open the post; the status moves from "Queued" to
-   "Publishing" to **"Published"**. Caption: "pages_manage_posts and instagram_content_publish:
-   CheersAI publishes the approved post."
-8. **Show it live.** In another tab, open the test Facebook Page and the test Instagram profile and
-   show the post. Caption: "The post is live on the venue's Page and Instagram."
-9. **A story.** Go back to **Create**, choose **Story**, tick Facebook and Instagram, attach an
-   image, and on **Schedule** use the **In 10 min** quick button, then **Generate Content** and
-   **Schedule stories (1)**. When the planner shows "Published", show the story on both. (Stories
-   cannot be posted instantly, so this part takes about ten minutes; cut the wait from the video.)
-   Caption: "CheersAI also publishes approved stories."
+   "Publishing" to **"Published"** (usually within a couple of minutes). Caption:
+   "pages_manage_posts and instagram_content_publish: CheersAI publishes the approved post."
+8. **Show it live.** In new tabs, open https://www.facebook.com/profile.php?id=61594888052765 and
+   https://www.instagram.com/cheerstestvenue/ and show the post on each. Caption: "The post is live
+   on the venue's Page and Instagram."
+9. **A story.** Back in **Create**, choose **Story**, tick Facebook and Instagram, attach an image,
+   on **Schedule** use the **In 10 min** quick button, then **Generate Content** and **Schedule
+   stories (1)**. When the planner shows "Published", show the story on the Page and on Instagram.
+   (Stories cannot be posted instantly; cut the wait from the video.) Caption: "CheersAI also
+   publishes approved stories."
 10. **Disconnect.** On **Connections**, click **Disconnect** on each card and confirm. Caption:
     "Owners can disconnect at any time; CheersAI deletes the stored tokens."
 
-Do not click **Publish now**, **Save changes** or **Cancel this post** at the foot of a single
-post's page (`/planner/<id>`): they do nothing at present.
+### After recording: finish the draft and submit
+
+1. Open the saved draft (link in the table above). **Reviewer instructions**: in the test login
+   box, type the reviewer password after "Password:". Remove the old file "CheersAI Supporting
+   Documentation.pdf" (from August 2025; it describes the old set-up).
+2. **Allowed usage**: for each of the six permissions click **Get started**, upload the video,
+   tick "If approved, I agree...", and **Save**. The descriptions are already filled in.
+3. **Data handling**: check the four boxes about requests from public authorities are still true
+   for Orange Jelly.
+4. Click **Submit for review**. If Meta then asks for **Access Verification**, complete it. Tell
+   Claude the date you submitted (it is recorded in spec D7).
 
 ## 5. Text for the submission form
 
