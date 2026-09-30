@@ -16,7 +16,7 @@ Spec: `tasks/SPEC-service-pages-homepage-style.md`; branch `feat/service-pages-h
       header button follows the switch; legal and help tests still pass
 - [x] Local run: sign-up off and on (local flags restored to off), header button and sign-in line follow it,
       first-post guide 404 while off; axe clean at 1440px and 375px on every changed page after the table fix
-- [ ] Full checks, push, PR
+- [x] Full checks (lint, typecheck, 4,328 tests in London and UTC, build), pushed, PR #179; no merge, no deploy
 
 # OAuth state bound to the person who started it (2026-09-29)
 
