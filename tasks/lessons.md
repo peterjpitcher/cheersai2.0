@@ -8,3 +8,5 @@
 - Menu descriptions in the management app can lag what the kitchen actually serves. On 10 September 2026 the owner confirmed an ad photo showed a pizza the pub sells (mushrooms, rocket, cherry tomatoes) though no menu description listed it. Before calling a food image inaccurate, ask the owner; then get the menu description updated so the ad, the menu and the website agree.
 
 - When replacing scheduled post artwork, update both content_variants.media_ids and content_media_attachments. Calendar thumbnails prioritise attachments while post details and publishing use variants. Verify both views before reporting the replacement complete.
+
+- Before proposing a change to a repository, account or security setting, search earlier sessions and memory for a past decision about it. On 30 September 2026 I proposed turning on GitHub "Allow auto-merge" for this repo; Peter had been advised elsewhere to keep it off. It stays off: merge by hand once CI is green.
