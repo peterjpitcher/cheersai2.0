@@ -51,7 +51,7 @@ export default function TermsPage() {
   return (
     <LegalPage current="terms">
       <p>
-        These terms are the agreement between {COMPANY.legalName} (&ldquo;we&rdquo;, &ldquo;us&rdquo;) and the
+        These terms are the agreement between {COMPANY.legalName}{" "}(&ldquo;we&rdquo;, &ldquo;us&rdquo;) and the
         business that signs up for Cheers (&ldquo;you&rdquo;). Cheers is our software for planning, writing and
         publishing social media posts for hospitality venues, at {COMPANY.siteHost}.
       </p>
@@ -233,7 +233,7 @@ export default function TermsPage() {
             own purposes, such as your account and billing.
           </li>
           <li>
-            Our <LegalLink href={dpa.path}>{dpa.title}</LegalLink> covers the personal data we handle for you, such as
+            Our <LegalLink href={dpa.path}>{dpa.title}</LegalLink>{" "}covers the personal data we handle for you, such as
             your team members&apos; details and the booking data you ask us to send to Meta. It forms part of these
             terms. Email us if you would like a signed copy.
           </li>

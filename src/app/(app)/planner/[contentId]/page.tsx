@@ -194,7 +194,7 @@ export default async function PlannerContentPage({
           <div className="flex flex-col gap-4">
             <div className="flex flex-col gap-2">
               <h2 className="text-[15px] font-semibold" style={{ color: "var(--c-ink)" }}>
-                {formatPlatformLabel(detail.platform)} couldn&apos;t accept this post.
+                {formatPlatformLabel(detail.platform)}{" "}couldn&apos;t accept this post.
               </h2>
               <p className="text-[15px]" style={{ color: "var(--c-ink-2)" }}>
                 {failureText ??

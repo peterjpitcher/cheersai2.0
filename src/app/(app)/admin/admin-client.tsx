@@ -495,7 +495,7 @@ function BookingKeysCard({ brands, ingestEndpoint }: { brands: AdminBrand[]; ing
       {revealed && (
         <div className="mb-3 rounded-md border p-3" style={{ borderColor: 'var(--c-orange)', background: 'var(--c-paper-2)' }}>
           <p className="text-xs font-medium" style={{ color: 'var(--c-ink)' }}>
-            New key for {active.find((b) => b.accountId === revealed.accountId)?.name ?? 'brand'} — copy it now, it won&rsquo;t be shown again.
+            New key for {active.find((b) => b.accountId === revealed.accountId)?.name ?? 'brand'}{' '}— copy it now, it won&rsquo;t be shown again.
           </p>
           <div className="mt-2 flex items-center gap-2">
             <code className="flex-1 overflow-x-auto rounded border px-2 py-1 text-xs" style={CARD_STYLE}>{revealed.key}</code>
