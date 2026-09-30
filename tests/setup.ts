@@ -82,3 +82,20 @@ vi.mock("@/lib/billing/enforcement", () => ({
     BILLING_ENFORCEMENT_FLAG: "billing_enforcement",
     isBillingEnforcementEnabled: vi.fn(async () => false),
 }));
+
+// The public footer's Orange Jelly credit is an async Server Component that
+// reads its line from orangejelly.co.uk. Page tests render synchronously and
+// must never reach the network, so they get the built-in fallback line. The
+// credit's own tests use the real module (see
+// src/features/marketing/orange-jelly-credit.test.tsx).
+vi.mock("@/features/marketing/orange-jelly-credit", async () => {
+    const actual = await vi.importActual<typeof import("@/features/marketing/orange-jelly-credit")>(
+        "@/features/marketing/orange-jelly-credit",
+    );
+    const { FALLBACK_CREDIT } = await import("@/lib/marketing/orange-jelly-credit");
+    return {
+        ...actual,
+        OrangeJellyCredit: (props: Parameters<typeof actual.OrangeJellyCredit>[0]) =>
+            actual.OrangeJellyCreditLine({ credit: FALLBACK_CREDIT, ...props }),
+    };
+});

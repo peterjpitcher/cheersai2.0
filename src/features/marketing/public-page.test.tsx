@@ -65,6 +65,7 @@ describe('PublicPage', () => {
     expect(html).toContain('<main id="main">');
     expect(html).toContain('The body');
     expect(html).toContain('company number 10537179');
+    expect(html).toContain('Built and maintained by <a href="https://www.orangejelly.co.uk/"');
   });
 
   it('offers the free trial in the header while sign-up is open', async () => {

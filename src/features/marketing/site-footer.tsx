@@ -3,6 +3,7 @@ import Link from 'next/link';
 
 import { whatsappUrl } from '@/content/homepage';
 import { LOGIN_PATH } from '@/features/marketing/cta';
+import { OrangeJellyCredit } from '@/features/marketing/orange-jelly-credit';
 import { companyDetailsLine, CONTACT, LEGAL_DOCUMENTS } from '@/lib/legal/company';
 
 interface SiteFooterProps {
@@ -45,8 +46,8 @@ function FooterColumn({ title, links }: { title: string; links: FooterLink[] }):
 
 /**
  * The public site's footer: links (Guides only while the guides are public),
- * the three legal pages, the contacts, and the company details the law asks
- * for on the website (from company.ts).
+ * the three legal pages, the contacts, the company details the law asks for
+ * on the website (from company.ts), and the Orange Jelly credit under them.
  */
 export function SiteFooter({ guidesHref }: SiteFooterProps): React.JSX.Element {
   const { terms, privacy, dpa } = LEGAL_DOCUMENTS;
@@ -101,6 +102,7 @@ export function SiteFooter({ guidesHref }: SiteFooterProps): React.JSX.Element {
         <address className="mt-12 border-t border-white/10 pt-6 text-xs not-italic leading-relaxed">
           {companyDetailsLine()}
         </address>
+        <OrangeJellyCredit className="mt-2 text-xs leading-relaxed" linkClassName={FOOTER_LINK} />
       </div>
     </footer>
   );
