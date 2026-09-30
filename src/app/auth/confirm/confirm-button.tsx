@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 export function ConfirmButton() {
   const { pending } = useFormStatus();
   return (
-    <Button type="submit" variant="primary" size="lg" full disabled={pending}>
+    <Button type="submit" variant="cta" size="xl" full disabled={pending}>
       {pending ? 'Confirming...' : 'Confirm and continue'}
     </Button>
   );

@@ -1,9 +1,12 @@
+import { Plus } from "lucide-react";
 import Link from "next/link";
 import type { Metadata } from "next";
 import { permanentRedirect } from "next/navigation";
-import { Suspense } from "react";
+import { Suspense, type ReactNode } from "react";
 
-import { FirstPostHelpLink } from "@/app/help/first-post-link";
+import { FirstPostHelpLink, HELP_LINK } from "@/app/help/first-post-link";
+import { PublicPage } from "@/features/marketing/public-page";
+import { CONTACT } from "@/lib/legal/company";
 
 interface LegacyHelpPageProps {
   params: Promise<{ slug?: string[] }>;
@@ -31,75 +34,24 @@ export default async function LegacyHelpPage({ params }: LegacyHelpPageProps): P
   }
 
   return (
-    <main
-      className="mx-auto max-w-[720px] px-4 py-16"
-      style={{ color: "var(--c-ink)" }}
+    <PublicPage
+      eyebrow="Cheers by Orange Jelly"
+      title="Help Centre"
+      intro={<p className="text-lg leading-relaxed">Historic help article URLs now route through this support page.</p>}
     >
-      {/* Header */}
-      <header className="space-y-4 text-center">
-        <p
-          className="eyebrow"
-          style={{ color: "var(--c-ink-3)" }}
-        >
-          Cheers by Orange Jelly
-        </p>
-        <h1
-          className="text-3xl font-semibold"
-          style={{ color: "var(--c-ink)" }}
-        >
-          Help Centre
-        </h1>
-        <p className="text-sm" style={{ color: "var(--c-ink-3)" }}>
-          Historic help article URLs now route through this support page.
-        </p>
-      </header>
-
-      {/* Search */}
-      <div className="mt-8">
+      <div className="max-w-[760px]">
+        {/* Search */}
         <input
           type="search"
           placeholder="Search help topics..."
-          className="w-full rounded-[var(--r-lg)] border px-4 py-3 text-sm outline-none transition"
-          style={{
-            borderColor: "var(--c-line)",
-            backgroundColor: "var(--c-card)",
-            color: "var(--c-ink)",
-          }}
+          className="h-12 w-full rounded-[var(--r-lg)] border border-line bg-card px-4 text-base text-ink outline-none placeholder:text-ink-3 disabled:cursor-not-allowed"
           disabled
           title="Search coming soon"
         />
-      </div>
 
-      {/* FAQ sections */}
-      <div className="mt-10 space-y-0">
-        {/* Section 1: Getting Started */}
-        <details className="group">
-          <summary
-            className="flex cursor-pointer items-center justify-between border-b px-4 py-4 text-base font-semibold"
-            style={{
-              color: "var(--c-ink)",
-              borderColor: "var(--c-line)",
-            }}
-          >
-            <span>Getting Started</span>
-            <svg
-              className="h-4 w-4 shrink-0 transition-transform group-open:rotate-180"
-              style={{ color: "var(--c-ink-3)" }}
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={2}
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" d="m6 9 6 6 6-6" />
-            </svg>
-          </summary>
-          <div
-            className="px-4 py-4 text-sm leading-relaxed"
-            style={{
-              backgroundColor: "var(--c-paper)",
-              color: "var(--c-ink-2)",
-            }}
-          >
+        {/* FAQ sections, drawn like the homepage's questions */}
+        <div className="mt-10 divide-y divide-line border-y border-line">
+          <HelpSection title="Getting Started">
             <p>
               Sign in to your command centre to manage content, schedules, and
               settings. If you need help getting started, the Orange Jelly team
@@ -110,113 +62,52 @@ export default async function LegacyHelpPage({ params }: LegacyHelpPageProps): P
               <Suspense fallback={null}>
                 <FirstPostHelpLink />
               </Suspense>
-              <Link
-                href="/login"
-                className="inline-flex items-center gap-1 text-sm font-semibold hover:underline"
-                style={{ color: "var(--c-orange-hi)" }}
-              >
+              <Link href="/login" className={HELP_LINK}>
                 Go to login
               </Link>
             </div>
-          </div>
-        </details>
+          </HelpSection>
 
-        {/* Section 2: Publishing & Scheduling */}
-        <details className="group">
-          <summary
-            className="flex cursor-pointer items-center justify-between border-b px-4 py-4 text-base font-semibold"
-            style={{
-              color: "var(--c-ink)",
-              borderColor: "var(--c-line)",
-            }}
-          >
-            <span>Publishing &amp; Scheduling</span>
-            <svg
-              className="h-4 w-4 shrink-0 transition-transform group-open:rotate-180"
-              style={{ color: "var(--c-ink-3)" }}
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={2}
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" d="m6 9 6 6 6-6" />
-            </svg>
-          </summary>
-          <div
-            className="px-4 py-4 text-sm leading-relaxed"
-            style={{
-              backgroundColor: "var(--c-paper)",
-              color: "var(--c-ink-2)",
-            }}
-          >
+          <HelpSection title="Publishing & Scheduling">
             <p>
               Cheers lets you create content once and publish to Facebook
               and Instagram. Use the planner to
               schedule posts ahead of time, and the publishing queue handles
               delivery automatically.
             </p>
-          </div>
-        </details>
+          </HelpSection>
 
-        {/* Section 3: Account & Support */}
-        <details className="group">
-          <summary
-            className="flex cursor-pointer items-center justify-between border-b px-4 py-4 text-base font-semibold"
-            style={{
-              color: "var(--c-ink)",
-              borderColor: "var(--c-line)",
-            }}
-          >
-            <span>Account &amp; Support</span>
-            <svg
-              className="h-4 w-4 shrink-0 transition-transform group-open:rotate-180"
-              style={{ color: "var(--c-ink-3)" }}
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={2}
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" d="m6 9 6 6 6-6" />
-            </svg>
-          </summary>
-          <div
-            className="px-4 py-4 text-sm leading-relaxed"
-            style={{
-              backgroundColor: "var(--c-paper)",
-              color: "var(--c-ink-2)",
-            }}
-          >
+          <HelpSection title="Account & Support">
             <p>
               If you need support, contact the Orange Jelly team directly. We
               can help with account access, connection issues, billing queries,
               and feature requests.
             </p>
             <div className="mt-4">
-              <a
-                href="mailto:peter@orangejelly.co.uk"
-                className="inline-flex items-center gap-1 text-sm font-semibold hover:underline"
-                style={{ color: "var(--c-orange-hi)" }}
-              >
+              <a href={`mailto:${CONTACT.email}`} className={HELP_LINK}>
                 Email support
               </a>
             </div>
-          </div>
-        </details>
-      </div>
-
-      {/* Footer */}
-      <footer className="mt-16 text-center text-xs" style={{ color: "var(--c-ink-4)" }}>
-        <div className="flex items-center justify-center gap-3">
-          <Link href="/terms" className="hover:underline" style={{ color: "var(--c-ink-4)" }}>
-            Terms
-          </Link>
-          <span>&middot;</span>
-          <Link href="/privacy" className="hover:underline" style={{ color: "var(--c-ink-4)" }}>
-            Privacy
-          </Link>
+          </HelpSection>
         </div>
-        <p className="mt-2">Cheers by Orange Jelly</p>
-      </footer>
-    </main>
+      </div>
+    </PublicPage>
+  );
+}
+
+/** One question, opened and closed like the homepage's questions (front-door-page.tsx). */
+function HelpSection({ title, children }: { title: string; children: ReactNode }): React.JSX.Element {
+  return (
+    <details className="group">
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-4 py-5 text-left text-base font-semibold text-ink [&::-webkit-details-marker]:hidden">
+        <span>{title}</span>
+        <Plus
+          aria-hidden="true"
+          className="h-5 w-5 shrink-0 text-orange-hi transition-transform duration-200 group-open:rotate-45"
+          strokeWidth={2}
+        />
+      </summary>
+      <div className="pb-6 pr-9 text-[15px] leading-relaxed text-ink-2">{children}</div>
+    </details>
   );
 }

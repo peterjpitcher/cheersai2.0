@@ -2,7 +2,8 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
-import { AuthCard } from '@/components/auth/auth-card';
+import { AUTH_LINK, AUTH_QUIET_LINK, AuthAside, AuthCard } from '@/components/auth/auth-card';
+import { CLOSING, HERO, heroTrialNote, whatYouNeed } from '@/content/homepage';
 import { env } from '@/env';
 import { CONTACT } from '@/lib/legal/company';
 import { getSelfServeSignupSwitch } from '@/lib/signup/switch';
@@ -30,30 +31,39 @@ async function isSignedIn(): Promise<boolean> {
 }
 
 function TalkToUs(): React.JSX.Element {
-  const linkStyle = { color: 'var(--c-orange)' };
   return (
-    <div className="space-y-3 text-center text-sm" style={{ color: 'var(--c-ink-2)' }}>
+    <div className="space-y-3 text-center text-sm text-ink-2">
       <p>
         Email{' '}
-        <a href={`mailto:${CONTACT.email}`} className="font-semibold hover:underline" style={linkStyle}>
+        <a href={`mailto:${CONTACT.email}`} className={AUTH_LINK}>
           {CONTACT.email}
         </a>{' '}
         or WhatsApp{' '}
-        <a
-          href={`https://wa.me/${CONTACT.whatsappE164.replace('+', '')}`}
-          className="font-semibold hover:underline"
-          style={linkStyle}
-        >
+        <a href={`https://wa.me/${CONTACT.whatsappE164.replace('+', '')}`} className={AUTH_LINK}>
           {CONTACT.whatsappDisplay}
         </a>
         .
       </p>
       <p>
-        <Link href="/login" className="hover:underline" style={{ color: 'var(--c-ink-3)' }}>
+        <Link href="/login" className={AUTH_QUIET_LINK}>
           Already have a login? Sign in
         </Link>
       </p>
     </div>
+  );
+}
+
+/** Beside the form from lg: the homepage's own trial words, so nothing here can drift from it. */
+function TrialAside(): React.JSX.Element {
+  return (
+    <AuthAside
+      eyebrow={HERO.eyebrow}
+      title={CLOSING.trialHeading}
+      intro={CLOSING.trialText}
+      pointsTitle="What you need"
+      points={whatYouNeed()}
+      note={heroTrialNote()}
+    />
   );
 }
 
@@ -94,6 +104,7 @@ export default async function SignupPage(): Promise<React.JSX.Element> {
     <AuthCard
       title="Start your free trial"
       description="Enter your email and we will send you a link to confirm it. Then you set up your venue and your password."
+      aside={<TrialAside />}
     >
       <SignupForm siteKey={siteKey} preview={preview} />
     </AuthCard>

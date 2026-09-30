@@ -2,7 +2,8 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
-import { AuthCard } from '@/components/auth/auth-card';
+import { AUTH_LINK, AUTH_QUIET_LINK, AuthCard } from '@/components/auth/auth-card';
+import { buttonVariants } from '@/components/ui/button';
 import { env } from '@/env';
 import { signOut } from '@/lib/auth/actions';
 import { CONTACT } from '@/lib/legal/company';
@@ -19,6 +20,7 @@ import {
 } from '@/lib/signup/venue';
 import { createServiceSupabaseClient } from '@/lib/supabase/service';
 import { INVITATIONS_PATH } from '@/lib/team/invitations';
+import { cn } from '@/lib/utils';
 
 import { VenueForm } from './venue-form';
 
@@ -31,17 +33,13 @@ export const metadata: Metadata = {
 
 function ContactLine(): React.JSX.Element {
   return (
-    <p className="text-center text-sm" style={{ color: 'var(--c-ink-2)' }}>
+    <p className="text-center text-sm text-ink-2">
       Questions? Email{' '}
-      <a href={`mailto:${CONTACT.email}`} className="font-semibold hover:underline" style={{ color: 'var(--c-orange)' }}>
+      <a href={`mailto:${CONTACT.email}`} className={AUTH_LINK}>
         {CONTACT.email}
       </a>{' '}
       or WhatsApp{' '}
-      <a
-        href={`https://wa.me/${CONTACT.whatsappE164.replace('+', '')}`}
-        className="font-semibold hover:underline"
-        style={{ color: 'var(--c-orange)' }}
-      >
+      <a href={`https://wa.me/${CONTACT.whatsappE164.replace('+', '')}`} className={AUTH_LINK}>
         {CONTACT.whatsappDisplay}
       </a>
       .
@@ -52,7 +50,7 @@ function ContactLine(): React.JSX.Element {
 function SignOutButton({ label }: { label: string }): React.JSX.Element {
   return (
     <form action={signOut} className="text-center">
-      <button type="submit" className="text-sm underline" style={{ color: 'var(--c-ink-3)' }}>
+      <button type="submit" className={`text-sm ${AUTH_QUIET_LINK}`}>
         {label}
       </button>
     </form>
@@ -107,13 +105,11 @@ export default async function SignupVenuePage(): Promise<React.JSX.Element> {
     return (
       <AuthCard title="Your link has expired" description={VENUE_MESSAGES.signedOut}>
         <div className="space-y-3 text-center text-sm">
+          <Link href="/signup" className={cn(buttonVariants({ variant: 'cta', size: 'xl' }), 'w-full')}>
+            Ask for a new link
+          </Link>
           <p>
-            <Link href="/signup" className="font-semibold underline" style={{ color: 'var(--c-orange)' }}>
-              Ask for a new link
-            </Link>
-          </p>
-          <p>
-            <Link href="/login" className="underline" style={{ color: 'var(--c-ink-3)' }}>
+            <Link href="/login" className={AUTH_QUIET_LINK}>
               Already set a password? Sign in
             </Link>
           </p>
@@ -154,22 +150,18 @@ export default async function SignupVenuePage(): Promise<React.JSX.Element> {
   if (access === 'admin') {
     return (
       <AuthCard title="Not for admin logins" description={VENUE_MESSAGES.admin}>
-        <p className="text-center text-sm">
-          <Link href="/admin" className="font-semibold underline" style={{ color: 'var(--c-orange)' }}>
-            Go to Admin
-          </Link>
-        </p>
+        <Link href="/admin" className={cn(buttonVariants({ variant: 'cta', size: 'xl' }), 'w-full')}>
+          Go to Admin
+        </Link>
       </AuthCard>
     );
   }
   if (access === 'invited') {
     return (
       <AuthCard title="You have an invitation" description={VENUE_MESSAGES.invited}>
-        <p className="text-center text-sm">
-          <Link href={INVITATIONS_PATH} className="font-semibold underline" style={{ color: 'var(--c-orange)' }}>
-            See your invitation
-          </Link>
-        </p>
+        <Link href={INVITATIONS_PATH} className={cn(buttonVariants({ variant: 'cta', size: 'xl' }), 'w-full')}>
+          See your invitation
+        </Link>
         <ContactLine />
         <SignOutButton label="Sign out" />
       </AuthCard>
@@ -178,10 +170,7 @@ export default async function SignupVenuePage(): Promise<React.JSX.Element> {
 
   return (
     <AuthCard title="Set up your venue" description="Tell us about you and your venue, and choose your password. Your free trial starts next.">
-      <div
-        className="space-y-1 rounded-[var(--r-md)] p-3 text-center text-sm"
-        style={{ backgroundColor: 'var(--c-surface-2)', color: 'var(--c-ink-2)' }}
-      >
+      <div className="space-y-1 rounded-[var(--r-lg)] border border-line bg-paper p-3 text-center text-sm text-ink-2">
         <p>
           Signed in as <strong>{user.email}</strong>.
         </p>

@@ -328,6 +328,20 @@ h1, h2, h3, h4 {
   }
 }
 
+/*
+ * The same glow behind one centred card at every width, for the service pages
+ * (sign in, password, invitations): .site-glow moves right from lg, where a
+ * centred card would sit outside it.
+ */
+.site-glow-centre {
+  background: radial-gradient(
+    circle closest-side at 50% 55%,
+    color-mix(in srgb, var(--c-orange) 40%, transparent) 0%,
+    color-mix(in srgb, var(--c-orange) 12%, transparent) 55%,
+    transparent 100%
+  );
+}
+
 /* Interactive elements always show pointer cursor */
 button:not(:disabled),
 [role="button"]:not(:disabled) {

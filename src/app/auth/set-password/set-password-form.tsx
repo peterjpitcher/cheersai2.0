@@ -2,7 +2,7 @@
 
 import { useActionState } from 'react';
 
-import { AuthMessage } from '@/components/auth/auth-card';
+import { AUTH_INPUT, AuthMessage } from '@/components/auth/auth-card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -27,13 +27,30 @@ export function SetPasswordForm() {
     <form action={action} className="space-y-4">
       <div className="space-y-2">
         <Label htmlFor="password">New password</Label>
-        <Input id="password" name="password" type="password" required minLength={12} autoComplete="new-password" autoFocus />
+        <Input
+          id="password"
+          name="password"
+          type="password"
+          required
+          minLength={12}
+          autoComplete="new-password"
+          autoFocus
+          className={AUTH_INPUT}
+        />
       </div>
       <div className="space-y-2">
         <Label htmlFor="confirm">Confirm password</Label>
-        <Input id="confirm" name="confirm" type="password" required minLength={12} autoComplete="new-password" />
+        <Input
+          id="confirm"
+          name="confirm"
+          type="password"
+          required
+          minLength={12}
+          autoComplete="new-password"
+          className={AUTH_INPUT}
+        />
       </div>
-      <Button type="submit" variant="primary" size="lg" full disabled={pending || state?.success === true}>
+      <Button type="submit" variant="cta" size="xl" full disabled={pending || state?.success === true}>
         {pending ? 'Saving...' : 'Save password'}
       </Button>
       {state?.error && <AuthMessage tone="error">{state.error}</AuthMessage>}

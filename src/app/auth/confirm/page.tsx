@@ -60,7 +60,7 @@ export default async function ConfirmPage({ searchParams }: ConfirmPageProps) {
         <input type="hidden" name="next" value={params.next} />
         <ConfirmButton />
       </form>
-      <p className="text-center text-sm" style={{ color: 'var(--c-ink-3)' }}>
+      <p className="text-sm leading-relaxed text-ink-3">
         We ask you to press the button because some email security tools open links on their own, which would use up
         this one-time link before you could.
       </p>

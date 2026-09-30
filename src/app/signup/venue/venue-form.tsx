@@ -3,7 +3,7 @@
 import { useActionState } from 'react';
 import Link from 'next/link';
 
-import { AuthMessage } from '@/components/auth/auth-card';
+import { AUTH_INPUT, AUTH_LINK, AuthMessage } from '@/components/auth/auth-card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -18,7 +18,7 @@ interface FormState extends CreateVenueResult {
 }
 
 const SELECT_CLASS =
-  'flex h-[34px] w-full rounded-md border border-input bg-card px-3 text-sm focus-visible:outline-none focus-visible:border-[var(--c-orange)] focus-visible:shadow-[0_0_0_3px_var(--c-orange-soft)]';
+  'flex h-11 w-full rounded-md border border-input bg-card px-3 text-base focus-visible:outline-none focus-visible:border-[var(--c-orange)] focus-visible:shadow-[0_0_0_3px_var(--c-orange-soft)]';
 
 /**
  * The venue set-up form (spec §4.4). The server action trusts nothing here:
@@ -58,8 +58,9 @@ export function VenueForm(): React.JSX.Element {
           autoFocus
           defaultValue={values?.email ?? ''}
           aria-describedby="email-help"
+          className={AUTH_INPUT}
         />
-        <p id="email-help" className="text-xs" style={{ color: 'var(--c-ink-3)' }}>
+        <p id="email-help" className="text-xs text-ink-3">
           Type the email address you signed up with, to show this is your sign-up.
         </p>
       </div>
@@ -73,6 +74,7 @@ export function VenueForm(): React.JSX.Element {
           maxLength={FULL_NAME_MAX}
           autoComplete="name"
           defaultValue={values?.fullName ?? ''}
+          className={AUTH_INPUT}
         />
       </div>
       <div className="space-y-2">
@@ -86,8 +88,9 @@ export function VenueForm(): React.JSX.Element {
           maxLength={PASSWORD_MAX}
           autoComplete="new-password"
           aria-describedby="password-help"
+          className={AUTH_INPUT}
         />
-        <p id="password-help" className="text-xs" style={{ color: 'var(--c-ink-3)' }}>
+        <p id="password-help" className="text-xs text-ink-3">
           At least {PASSWORD_MIN} characters.
         </p>
       </div>
@@ -101,6 +104,7 @@ export function VenueForm(): React.JSX.Element {
           minLength={PASSWORD_MIN}
           maxLength={PASSWORD_MAX}
           autoComplete="new-password"
+          className={AUTH_INPUT}
         />
       </div>
       <div className="space-y-2">
@@ -113,6 +117,7 @@ export function VenueForm(): React.JSX.Element {
           maxLength={VENUE_NAME_MAX}
           autoComplete="organization"
           defaultValue={values?.venueName ?? ''}
+          className={AUTH_INPUT}
         />
       </div>
       <div className="space-y-2">
@@ -141,19 +146,19 @@ export function VenueForm(): React.JSX.Element {
           name="business"
           type="checkbox"
           required
-          className="mt-0.5 h-4 w-4 shrink-0"
+          className="mt-0.5 h-4 w-4 shrink-0 accent-[var(--c-orange-hi)]"
           defaultChecked={values?.business ?? false}
           key={values?.business ? 'business-on' : 'business-off'}
         />
-        <label htmlFor="business" className="text-sm" style={{ color: 'var(--c-ink-2)' }}>
+        <label htmlFor="business" className="text-sm text-ink-2">
           I am signing up for a business, not as a consumer (see section 2 of the{' '}
-          <Link href="/terms#business-customers" className="underline" target="_blank" rel="noopener">
+          <Link href="/terms#business-customers" className={AUTH_LINK} target="_blank" rel="noopener">
             terms
           </Link>
           ).
         </label>
       </div>
-      <Button type="submit" variant="primary" size="lg" full disabled={pending || done}>
+      <Button type="submit" variant="cta" size="xl" full disabled={pending || done}>
         {pending ? 'Setting up your venue...' : done ? 'Opening Billing...' : 'Set up my venue'}
       </Button>
       {state?.error && <AuthMessage tone="error">{state.error}</AuthMessage>}

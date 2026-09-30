@@ -3,7 +3,7 @@
 import { useActionState } from 'react';
 import Link from 'next/link';
 
-import { AuthCard, AuthMessage } from '@/components/auth/auth-card';
+import { AUTH_INPUT, AUTH_QUIET_LINK, AuthCard, AuthMessage } from '@/components/auth/auth-card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -26,16 +26,25 @@ export default function ForgotPasswordPage() {
         <form action={action} className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="email">Email</Label>
-            <Input id="email" name="email" type="email" placeholder="you@yourvenue.com" required autoComplete="email" autoFocus />
+            <Input
+              id="email"
+              name="email"
+              type="email"
+              placeholder="you@yourvenue.com"
+              required
+              autoComplete="email"
+              autoFocus
+              className={AUTH_INPUT}
+            />
           </div>
-          <Button type="submit" variant="primary" size="lg" full disabled={pending}>
+          <Button type="submit" variant="cta" size="xl" full disabled={pending}>
             {pending ? 'Sending...' : 'Send reset link'}
           </Button>
           {state?.error && <AuthMessage tone="error">{state.error}</AuthMessage>}
         </form>
       )}
       <p className="text-center text-sm">
-        <Link href="/login" className="hover:underline" style={{ color: 'var(--c-ink-3)' }}>
+        <Link href="/login" className={AUTH_QUIET_LINK}>
           Back to sign in
         </Link>
       </p>

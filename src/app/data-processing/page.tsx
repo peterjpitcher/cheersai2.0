@@ -26,6 +26,10 @@ const METADATA: Metadata = {
   },
 };
 
+// Rendered per request: the header's call to action follows the sign-up
+// switch (PublicPage), which must never be baked in at build time.
+export const dynamic = "force-dynamic";
+
 /** Public, and search engines may index it (SPEC-homepage-and-guides §3). */
 export function generateMetadata(): Metadata {
   return indexable(METADATA);
