@@ -2,14 +2,14 @@
 
 import { useActionState, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import Image from 'next/image';
 import Link from 'next/link';
+import { Mail } from 'lucide-react';
 
+import { AUTH_INPUT, AUTH_LINK, AUTH_QUIET_LINK, AuthAside, AuthCard, AuthMessage } from '@/components/auth/auth-card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Mail } from 'lucide-react';
-
+import { HERO } from '@/content/homepage';
 import { sendMagicLink, signInWithPassword } from '@/lib/auth/actions';
 import { safeNextPath } from '@/lib/auth/email-links';
 import { CONTACT } from '@/lib/legal/company';
@@ -20,9 +20,10 @@ const LINK_ERRORS = new Set(['invalid_confirmation', 'confirmation_failed', 'aut
 const LINK_UNAVAILABLE = 'confirmation_unavailable';
 
 /**
- * Login page with email/password as the primary method.
- * Split-screen layout: dark brand panel left, auth form right.
- * Magic link auth is available via a small secondary link.
+ * Login page with email/password as the primary method, in the homepage's
+ * look (AuthCard): from lg the hero-style panel sits left and the form card
+ * right; below lg only the card. Magic link auth is available via a small
+ * secondary link.
  */
 export default function LoginPage() {
   const searchParams = useSearchParams();
@@ -58,248 +59,134 @@ export default function LoginPage() {
   const magicLinkSuccess = magicLinkState?.success === true;
 
   return (
-    <div className="grid min-h-svh lg:grid-cols-2">
-      {/* Left panel — dark brand panel */}
-      <div
-        className="hidden lg:flex flex-col justify-between px-12 py-10 xl:px-16"
-        style={{ backgroundColor: "var(--c-ink)" }}
-      >
-        {/* Brand mark */}
-        <div className="flex items-center">
-          <Image src="/brand/cheers-logo-horizontal-on-dark-480.png" alt="Cheers by Orange Jelly" width={140} height={48} priority />
+    <AuthCard
+      title="Sign in to your account"
+      description={
+        authMode === 'magic-link'
+          ? 'Enter your email to receive a magic link'
+          : 'Enter your email and password to continue'
+      }
+      aside={
+        <AuthAside
+          eyebrow={HERO.eyebrow}
+          title="Your venue's social media,"
+          accent="sorted."
+          intro="Create once, publish everywhere. Cheers adapts your content for Facebook and Instagram, so you can focus on running your venue."
+          points={HERO.points}
+        />
+      }
+    >
+      {linkError && (
+        <AuthMessage tone="error">
+          That link has expired or was already used.{' '}
+          <Link href="/forgot-password" className="underline">
+            Send it again
+          </Link>
+        </AuthMessage>
+      )}
+
+      {linkUnavailable && (
+        <AuthMessage tone="error">
+          We could not check your link just now. Open it from your email again in a minute, or email{' '}
+          <a href={`mailto:${CONTACT.email}`} className="underline">
+            {CONTACT.email}
+          </a>
+          .
+        </AuthMessage>
+      )}
+
+      {/* Magic link form */}
+      {authMode === 'magic-link' && !magicLinkSuccess && (
+        <form action={magicLinkAction} className="space-y-4">
+          <input type="hidden" name="next" value={nextUrl} />
+          <div className="space-y-2">
+            <Label htmlFor="magic-email">Email</Label>
+            <Input
+              id="magic-email"
+              name="email"
+              type="email"
+              placeholder="you@yourvenue.com"
+              required
+              autoComplete="email"
+              autoFocus
+              className={AUTH_INPUT}
+            />
+          </div>
+          <Button type="submit" variant="cta" size="xl" full icon={Mail} disabled={isBusy}>
+            {magicLinkPending ? 'Sending...' : 'Send magic link'}
+          </Button>
+
+          {magicLinkState?.error && <AuthMessage tone="error">{magicLinkState.error}</AuthMessage>}
+        </form>
+      )}
+
+      {/* Magic link sent success */}
+      {magicLinkSuccess && (
+        <AuthMessage tone="success">
+          <span className="mb-1 block font-semibold">Check your email</span>
+          We sent a magic link to your email address. Click the link to sign in.
+        </AuthMessage>
+      )}
+
+      {/* Password form */}
+      {authMode === 'password' && !magicLinkSuccess && (
+        <form action={passwordAction} className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="password-email">Email</Label>
+            <Input
+              id="password-email"
+              name="email"
+              type="email"
+              placeholder="you@yourvenue.com"
+              required
+              autoComplete="email"
+              autoFocus
+              className={AUTH_INPUT}
+            />
+          </div>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label htmlFor="password">Password</Label>
+              <Link href="/forgot-password" className={`text-sm ${AUTH_QUIET_LINK}`}>
+                Forgot password?
+              </Link>
+            </div>
+            <Input
+              id="password"
+              name="password"
+              type="password"
+              required
+              autoComplete="current-password"
+              className={AUTH_INPUT}
+            />
+          </div>
+          <Button type="submit" variant="cta" size="xl" full disabled={isBusy}>
+            {passwordPending ? 'Signing in...' : 'Sign in'}
+          </Button>
+
+          {passwordState?.error && <AuthMessage tone="error">{passwordState.error}</AuthMessage>}
+        </form>
+      )}
+
+      {/* Mode toggle */}
+      {!magicLinkSuccess && (
+        <div className="text-center">
+          <button
+            type="button"
+            onClick={() => setAuthMode((prev) => (prev === 'magic-link' ? 'password' : 'magic-link'))}
+            className={`text-sm transition-colors ${AUTH_QUIET_LINK}`}
+          >
+            {authMode === 'magic-link' ? 'Use password instead' : 'Use magic link instead'}
+          </button>
         </div>
+      )}
 
-        {/* Headline */}
-        <div className="max-w-[420px] space-y-4">
-          <h1 className="text-[28px] font-semibold leading-tight text-white">
-            Your venue&apos;s social media, sorted.
-          </h1>
-          <p className="text-base leading-relaxed" style={{ color: "rgba(255,255,255,0.7)" }}>
-            Create once, publish everywhere. Cheers adapts your content for
-            Facebook and Instagram, so you can focus on running your venue.
-          </p>
-        </div>
-
-        {/* Spacer keeps the headline centred (justify-between) */}
-        <div aria-hidden="true" />
-      </div>
-
-      {/* Right panel — auth form */}
-      <div
-        className="flex items-center justify-center px-6 py-12"
-        style={{ backgroundColor: "var(--c-card)" }}
-      >
-        <div className="w-full max-w-[400px] space-y-8">
-          {/* Mobile brand mark (hidden on lg) */}
-          <div className="flex items-center justify-center lg:hidden">
-            <Image src="/brand/cheers-logo-horizontal-480.png" alt="Cheers by Orange Jelly" width={140} height={48} priority />
-          </div>
-
-          <div className="space-y-2 text-center">
-            <h2
-              className="text-2xl font-semibold tracking-tight"
-              style={{ color: "var(--c-ink)" }}
-            >
-              Sign in to your account
-            </h2>
-            <p className="text-sm" style={{ color: "var(--c-ink-3)" }}>
-              {authMode === 'magic-link'
-                ? 'Enter your email to receive a magic link'
-                : 'Enter your email and password to continue'}
-            </p>
-          </div>
-
-          <div className="space-y-6">
-            {linkError && (
-              <div
-                role="alert"
-                className="rounded-[var(--r-md)] p-3 text-sm text-center font-medium"
-                style={{
-                  backgroundColor: "var(--c-claret-soft)",
-                  color: "var(--c-claret)",
-                }}
-              >
-                That link has expired or was already used.{' '}
-                <Link href="/forgot-password" className="underline">
-                  Send it again
-                </Link>
-              </div>
-            )}
-
-            {linkUnavailable && (
-              <div
-                role="alert"
-                className="rounded-[var(--r-md)] p-3 text-sm text-center font-medium"
-                style={{
-                  backgroundColor: "var(--c-claret-soft)",
-                  color: "var(--c-claret)",
-                }}
-              >
-                We could not check your link just now. Open it from your email again in a minute, or email{' '}
-                <a href={`mailto:${CONTACT.email}`} className="underline">
-                  {CONTACT.email}
-                </a>
-                .
-              </div>
-            )}
-
-            {/* Magic link form */}
-            {authMode === 'magic-link' && !magicLinkSuccess && (
-              <form action={magicLinkAction} className="space-y-4">
-                <input type="hidden" name="next" value={nextUrl} />
-                <div className="space-y-2">
-                  <Label htmlFor="magic-email">Email</Label>
-                  <Input
-                    id="magic-email"
-                    name="email"
-                    type="email"
-                    placeholder="you@yourvenue.com"
-                    required
-                    autoComplete="email"
-                    autoFocus
-                  />
-                </div>
-                <Button
-                  type="submit"
-                  variant="primary"
-                  size="lg"
-                  full
-                  icon={Mail}
-                  disabled={isBusy}
-                >
-                  {magicLinkPending ? 'Sending...' : 'Send magic link'}
-                </Button>
-
-                {magicLinkState?.error && (
-                  <div
-                    className="rounded-[var(--r-md)] p-3 text-sm text-center font-medium"
-                    style={{
-                      backgroundColor: "var(--c-claret-soft)",
-                      color: "var(--c-claret)",
-                    }}
-                  >
-                    {magicLinkState.error}
-                  </div>
-                )}
-              </form>
-            )}
-
-            {/* Magic link sent success */}
-            {magicLinkSuccess && (
-              <div
-                className="rounded-[var(--r-md)] p-4 text-sm text-center font-medium"
-                style={{
-                  backgroundColor: "var(--c-status-posted-bg)",
-                  color: "var(--c-status-posted-fg)",
-                }}
-              >
-                <p className="font-semibold mb-1">Check your email</p>
-                <p>
-                  We sent a magic link to your email address. Click the link to
-                  sign in.
-                </p>
-              </div>
-            )}
-
-            {/* Password form */}
-            {authMode === 'password' && !magicLinkSuccess && (
-              <form action={passwordAction} className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="password-email">Email</Label>
-                  <Input
-                    id="password-email"
-                    name="email"
-                    type="email"
-                    placeholder="you@yourvenue.com"
-                    required
-                    autoComplete="email"
-                    autoFocus
-                  />
-                </div>
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <Label htmlFor="password">Password</Label>
-                    <Link
-                      href="/forgot-password"
-                      className="text-sm underline-offset-4 hover:underline"
-                      style={{ color: "var(--c-ink-3)" }}
-                    >
-                      Forgot password?
-                    </Link>
-                  </div>
-                  <Input
-                    id="password"
-                    name="password"
-                    type="password"
-                    required
-                    autoComplete="current-password"
-                  />
-                </div>
-                <Button
-                  type="submit"
-                  variant="primary"
-                  size="lg"
-                  full
-                  disabled={isBusy}
-                >
-                  {passwordPending ? 'Signing in...' : 'Sign in'}
-                </Button>
-
-                {passwordState?.error && (
-                  <div
-                    className="rounded-[var(--r-md)] p-3 text-sm text-center font-medium"
-                    style={{
-                      backgroundColor: "var(--c-claret-soft)",
-                      color: "var(--c-claret)",
-                    }}
-                  >
-                    {passwordState.error}
-                  </div>
-                )}
-              </form>
-            )}
-
-            {/* Mode toggle */}
-            {!magicLinkSuccess && (
-              <div className="text-center">
-                <button
-                  type="button"
-                  onClick={() =>
-                    setAuthMode((prev) =>
-                      prev === 'magic-link' ? 'password' : 'magic-link',
-                    )
-                  }
-                  className="text-sm underline-offset-4 hover:underline transition-colors"
-                  style={{ color: "var(--c-ink-3)" }}
-                >
-                  {authMode === 'magic-link'
-                    ? 'Use password instead'
-                    : 'Use magic link instead'}
-                </button>
-              </div>
-            )}
-          </div>
-
-          {/* Footer microcopy */}
-          <div className="text-center space-y-2">
-            <p className="text-sm" style={{ color: "var(--c-ink-3)" }}>
-              Don&apos;t have an account?{' '}
-              <a
-                href="mailto:peter@orangejelly.co.uk"
-                className="font-semibold hover:underline"
-                style={{ color: "var(--c-orange)" }}
-              >
-                Contact support
-              </a>
-            </p>
-            <p className="text-xs" style={{ color: "var(--c-ink-4)" }}>
-              <Link href="/terms" className="hover:underline">Terms</Link>
-              {' '}&middot;{' '}
-              <Link href="/privacy" className="hover:underline">Privacy</Link>
-            </p>
-          </div>
-        </div>
-      </div>
-    </div>
+      <p className="border-t border-line pt-6 text-center text-sm text-ink-2">
+        Don&apos;t have an account?{' '}
+        <a href={`mailto:${CONTACT.email}`} className={AUTH_LINK}>
+          Contact support
+        </a>
+      </p>
+    </AuthCard>
   );
 }

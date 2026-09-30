@@ -57,6 +57,17 @@ describe('/signup', () => {
     expect(html).not.toContain('preview deployment');
   });
 
+  it('puts the homepage trial words beside the form, and only beside the form', async () => {
+    const { CLOSING, whatYouNeed } = await import('@/content/homepage');
+    const escape = (text: string): string => renderToStaticMarkup(<>{text}</>);
+    const html = await render();
+    expect(html).toContain(escape(CLOSING.trialHeading));
+    for (const line of whatYouNeed()) expect(html).toContain(escape(line));
+
+    mockSwitch.mockResolvedValue('closed');
+    expect(await render()).not.toContain(escape(CLOSING.trialHeading));
+  });
+
   it('shows "Talk to us" and no form while the switch is off, cannot be read or is on without billing enforcement', async () => {
     for (const state of ['closed', 'enforcement_off', 'unavailable'] as const) {
       mockSwitch.mockResolvedValue(state);

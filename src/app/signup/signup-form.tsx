@@ -3,7 +3,7 @@
 import { useActionState, useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 
-import { AuthMessage } from '@/components/auth/auth-card';
+import { AUTH_INPUT, AUTH_LINK, AUTH_QUIET_LINK, AuthMessage } from '@/components/auth/auth-card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -113,7 +113,7 @@ export function SignupForm({ siteKey, preview }: SignupFormProps): React.JSX.Ele
         <form action={formAction} className="space-y-4">
           <input type="hidden" name="email" value={state.email} />
           {secondsLeft > 0 ? (
-            <p className="text-center text-sm" style={{ color: 'var(--c-ink-3)' }} aria-live="polite">
+            <p className="text-center text-sm text-ink-3" aria-live="polite">
               Nothing yet? You can send it again in {secondsLeft} {secondsLeft === 1 ? 'second' : 'seconds'}.
             </p>
           ) : (
@@ -122,7 +122,7 @@ export function SignupForm({ siteKey, preview }: SignupFormProps): React.JSX.Ele
           <Button
             type="submit"
             variant="secondary"
-            size="lg"
+            size="xl"
             full
             disabled={pending || secondsLeft > 0 || !tokenReady}
           >
@@ -133,8 +133,7 @@ export function SignupForm({ siteKey, preview }: SignupFormProps): React.JSX.Ele
         <p className="text-center text-sm">
           <button
             type="button"
-            className="underline"
-            style={{ color: 'var(--c-ink-3)' }}
+            className={AUTH_QUIET_LINK}
             onClick={() => {
               setView('form');
               setSentAt(null);
@@ -166,16 +165,17 @@ export function SignupForm({ siteKey, preview }: SignupFormProps): React.JSX.Ele
           autoComplete="email"
           autoFocus
           defaultValue={state?.email ?? ''}
+          className={AUTH_INPUT}
         />
       </div>
       {widget}
-      <Button type="submit" variant="primary" size="lg" full disabled={pending || !tokenReady}>
+      <Button type="submit" variant="cta" size="xl" full disabled={pending || !tokenReady}>
         {pending ? 'Sending...' : 'Email me a link'}
       </Button>
       {state?.error && <AuthMessage tone="error">{state.error}</AuthMessage>}
-      <p className="text-center text-sm" style={{ color: 'var(--c-ink-3)' }}>
+      <p className="text-center text-sm text-ink-2">
         Already have a login?{' '}
-        <Link href="/login" className="underline">
+        <Link href="/login" className={AUTH_LINK}>
           Sign in
         </Link>
       </p>

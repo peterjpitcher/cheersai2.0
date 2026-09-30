@@ -1,3 +1,17 @@
+# Service pages in the homepage style (2026-09-30)
+
+Spec: `tasks/SPEC-service-pages-homepage-style.md`; branch `feat/service-pages-homepage-style`.
+
+- [x] Shared shell: `AuthCard` draws the ink band, grid, glow, logo, white card and footer; optional hero panel
+- [x] `Button` gains the homepage call-to-action colours (`cta`) and height (`xl`)
+- [x] Sign in, forgot password, set password, confirm, sign-up, venue set-up, no access and invitations use it
+- [x] Tests for the shell and the sign-up panel; existing page tests still pass
+- [x] Local run (dev server on the local Supabase stack, sign-up switched on locally then off again, a throwaway
+      local login signed in through the new sign-in page, then signed out and deleted): every page seen at 1440px
+      and 375px, sign-in at 320px; axe (WCAG 2.2 A and AA) reports no violations and nothing scrolls sideways
+- [x] lint, typecheck, 4,317 tests in London and UTC, build with CI's placeholder env
+- [ ] Push and PR (waiting for Peter)
+
 # OAuth state bound to the person who started it (2026-09-29)
 
 Spec: `tasks/SPEC-oauth-state-bound-to-user.md`; branch `fix/oauth-state-bound-to-user` (finding 9 of the #158 review).

@@ -1,6 +1,8 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
+import { AuthCard } from '@/components/auth/auth-card';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { env } from '@/env';
 import { signOut } from '@/lib/auth/actions';
 import { SIGNUP_VENUE_PATH } from '@/lib/auth/email-links';
@@ -10,6 +12,10 @@ import { getSelfServeSignupSwitch } from '@/lib/signup/switch';
 import { decideVenueAccess, readVenueSignupState, type VenueAccess } from '@/lib/signup/venue';
 import { createServiceSupabaseClient } from '@/lib/supabase/service';
 import { INVITATIONS_PATH, listPendingInvitationsForUser } from '@/lib/team/invitations';
+import { cn } from '@/lib/utils';
+
+/** The page's main action, in the homepage's call-to-action colours. */
+const PRIMARY_LINK = cn(buttonVariants({ variant: 'cta', size: 'xl' }), 'w-full');
 
 /**
  * Shown to an authenticated user who has not been assigned any brand.
@@ -68,44 +74,35 @@ export default async function NoAccessPage() {
           : null;
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center gap-6 p-6 text-center">
-      <div className="space-y-2">
-        <h1 className="text-xl font-semibold text-[var(--c-fg)]">No brands assigned yet</h1>
-        <p className="text-sm text-[var(--c-fg-muted)]">
-          Your account isn&apos;t connected to any brand. Ask your administrator to give you
-          access, then reload this page.
-        </p>
-      </div>
+    <AuthCard
+      title="No brands assigned yet"
+      description="Your account isn't connected to any brand. Ask your administrator to give you access, then reload this page."
+    >
       {showInvitations ? (
-        <Link
-          href={INVITATIONS_PATH}
-          className="rounded-full px-4 py-2 text-sm font-medium text-white"
-          style={{ backgroundColor: 'var(--c-orange)' }}
-        >
-          {invitationCount > 1 ? `You have ${invitationCount} invitations waiting` : 'You have an invitation waiting'}
-        </Link>
+        <div className="space-y-3">
+          <Link href={INVITATIONS_PATH} className={PRIMARY_LINK}>
+            {invitationCount > 1 ? `You have ${invitationCount} invitations waiting` : 'You have an invitation waiting'}
+          </Link>
+          {access === 'invited' ? (
+            <p className="text-center text-sm text-ink-2">Accept it to join that venue on Cheers.</p>
+          ) : null}
+        </div>
       ) : null}
-      {access === 'invited' ? (
-        <p className="text-sm text-[var(--c-fg-muted)]">Accept it to join that venue on Cheers.</p>
+      {notice ? (
+        <p className="rounded-[var(--r-lg)] border border-orange-soft bg-orange-tint p-3 text-sm leading-relaxed text-ink-2">
+          {notice}
+        </p>
       ) : null}
-      {notice ? <p className="text-sm text-[var(--c-fg-muted)]">{notice}</p> : null}
       {canStartVenue ? (
-        <Link
-          href={SIGNUP_VENUE_PATH}
-          className="rounded-full px-4 py-2 text-sm font-medium text-white"
-          style={{ backgroundColor: 'var(--c-orange)' }}
-        >
+        <Link href={SIGNUP_VENUE_PATH} className={PRIMARY_LINK}>
           Start a free trial for your venue
         </Link>
       ) : null}
       <form action={signOut}>
-        <button
-          type="submit"
-          className="rounded-full border border-[var(--c-line)] px-4 py-2 text-sm text-[var(--c-fg)] transition-colors hover:bg-[var(--c-surface-2)]"
-        >
+        <Button type="submit" variant="secondary" size="xl" full>
           Sign out
-        </button>
+        </Button>
       </form>
-    </main>
+    </AuthCard>
   );
 }

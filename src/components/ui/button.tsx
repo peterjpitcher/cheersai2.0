@@ -47,6 +47,15 @@ const buttonVariants = cva(
           "border",
           "bg-[var(--c-ink)] text-white border-[var(--c-ink)]",
         ],
+        /* The public site's call to action (features/marketing/cta.tsx): ink on
+           orange is 5.1:1, white on --c-orange-hi 5.4:1 (white on orange is 3.5:1). */
+        cta: [
+          "border border-transparent font-semibold",
+          "bg-[var(--c-orange)] text-[var(--c-ink)]",
+          "shadow-[var(--sh-sm)]",
+          "hover:bg-[var(--c-orange-hi)] hover:text-white",
+          "active:bg-[var(--c-orange-lo)] active:text-white",
+        ],
 
         /* --- legacy aliases (map to canonical styles) --- */
         default: [
@@ -83,6 +92,8 @@ const buttonVariants = cva(
         sm: "h-[26px] px-[10px] text-[12px] rounded-[5px]",
         md: "h-[32px] px-[12px] text-[13px] rounded-[var(--r-md,6px)]",
         lg: "h-[40px] px-[18px] text-[14px] rounded-[var(--r-lg,8px)]",
+        /* The public site's button height (48px). */
+        xl: "h-12 px-6 text-base rounded-[var(--r-lg,8px)]",
         /* legacy aliases */
         default: "h-[32px] px-[12px] text-[13px] rounded-[var(--r-md,6px)]",
         icon: "h-[32px] w-[32px] p-0 rounded-[var(--r-md,6px)] justify-center",
@@ -109,12 +120,13 @@ export interface ButtonProps
     | "ghost"
     | "danger"
     | "inkInverse"
+    | "cta"
     | "default"
     | "destructive"
     | "outline"
     | "link"
     | "gloss";
-  size?: "sm" | "md" | "lg" | "default" | "icon";
+  size?: "sm" | "md" | "lg" | "xl" | "default" | "icon";
   icon?: React.ComponentType<{ className?: string }>;
   iconRight?: React.ComponentType<{ className?: string }>;
   full?: boolean;
