@@ -966,7 +966,26 @@ order by m.campaign;
 
 Result on 4 October 2026, 10:40 London: four rows, each 0 bookings over 0 clicks, rate "n/a". The ads do not deliver from Saturday to Monday, so the first clicks counted here will be on Tuesday 6 October.
 
-**The organic check (spec section 6, step 3).** The "walk in" challenger ads may only be switched on after a real booking from the landing page shows the label. 5e-1 returning its first row is that proof. Nobody makes a test booking to force it.
+**The organic check (spec section 6, step 3, revised by D21 on 4 October 2026).** The "walk in" challenger ads may only be switched on after a real website table booking shows a page label. It no longer has to start on the landing page: that page now tells visitors they need not book, so 5e-1 may stay empty to the end of the test. Query 5e-3 is the proof, and nobody makes a test booking to force it. **It cleared on 4 October 2026.** Switching the ads on still needs the owner's yes at the time.
+
+**5e-3. The switch-on proof: any real website table booking carrying a page label.**
+
+```sql
+-- 5e-3. Table bookings made since the label start, by the page label their created-event carries.
+-- Read only. Counts and label values only, no personal data.
+select coalesce(ae.metadata->>'booking_source', '(no label)')        as booking_source,
+       count(distinct ae.table_booking_id)                           as bookings,
+       min(ae.created_at at time zone 'Europe/London')::timestamp(0) as first_london,
+       max(ae.created_at at time zone 'Europe/London')::timestamp(0) as last_london
+from public.analytics_events ae
+where ae.event_type = 'table_booking_created'
+  and ae.created_at >= timestamptz '2026-10-03 22:06 Europe/London'
+  and coalesce(ae.metadata->>'utm_source', '') not ilike 'qa%'
+group by 1
+order by 1;
+```
+
+Result on 4 October 2026, 17:30 London: one row, `direct`, 2 bookings, first at 12:08 and last at 13:14 on 4 October. Both are website bookings (`table_bookings.source = 'brand_site'`) and both also carry the nested `attribution` object. The website sends `direct` when the booking page was opened with no `?source=`. A `(no label)` row would be a booking that did not come through the website form, such as one entered by staff; none has been made since the start. This proves the labels are sent and stored on real bookings. It does not show an ad's `utm_campaign`, `utm_content` or `short_code` arriving, because neither guest came from an ad: 5e-1 will show that if a landing-page booking is ever made.
 
 **How 5e was checked before first use (4 October 2026, read only).** Over 14 September to 3 October the management app held 33 bookings with a `table_booking_created` row: none had more than one row, and none lacked a booking id. All 31 website bookings made through the table booking form had exactly one row (plus 2 staff-entered bookings). The 3 website table bookings with no row were all drinks tables created by an event booking, which use a different route and never pass through the landing page. Statuses seen on those 33: confirmed 13, completed 5, visited_waiting_for_review 6, review_clicked 1, cancelled 8. No booking was awaiting payment in the sample, so that column is untested on live data; the status names come from the `table_booking_status` enum (section 1). Weekend and drinks bookings are kept out of the food columns by the same day, purpose and time tests as query 1a.
 
