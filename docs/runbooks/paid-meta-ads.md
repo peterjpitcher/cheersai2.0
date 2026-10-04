@@ -115,8 +115,10 @@ and cost per extra cover. Secondary: link click-through rate and cost per link c
 food takings, cancellations, no-shows, frequency, complaints, kitchen capacity. Write down the
 attribution rule (section 11) and the stop rule before the first penny is spent. Cheap clicks are
 not the result: in the first week of the weekday food test, 851 link clicks at 14p brought no tagged
-booking and no rise in covers. Before judging copy or adding spend, check in Google Analytics how
-many ad visitors reach the booking page. Brief staff before launch to log every walk-in: on
+booking and no rise in covers. Before judging copy or adding spend, check how many ad visitors reach
+the booking page. Use Microsoft Clarity for this (project "The Anchor", filtered to the landing
+page): it records nearly every visitor, while Google Analytics only sees those who accept cookies,
+which was about 1 in 25 ad visitors in September 2026. Brief staff before launch to log every walk-in: on
 15 September 2026 the cash-up showed £302 of food with no covers logged, so the uplift could not be
 measured for that day.
 
@@ -228,12 +230,14 @@ number, which is the same message in each campaign of a pair.
   `ad_sets.phase_start`, `ad_sets.targeting`, `ad_sets.placements`.
 - Any edit sends the ads back to Meta's review. In September 2026 approval took 10 to 35 minutes;
   plan edits well before the first delivery.
-- Never press Apply on the optimiser's copy rewrite suggestions ("booking rewrite") during a flight.
-  Apply puts a new ad live at once, with no preview, alongside the old ones. Its link is the
-  campaign-level short link (tagged, `utm_content=meta_ads_main`, but not per ad), and on evergreen
-  campaigns its copy is built from the internal campaign name. On 22 September 2026 it put "Book
-  Weekday Lunch A (cod and chips)" live as a headline, and Meta moved the whole ad set's delivery
-  onto it within hours, which also broke the copy test. A fix to the generator is in progress.
+- Never press Apply on the optimiser's copy rewrite suggestions ("booking rewrite") during a test
+  flight: a new ad in a live ad set breaks the comparison even when its copy is right. On
+  22 September 2026 Apply put "Book Weekday Lunch A (cod and chips)" live as a headline, with the
+  campaign-level short link, and Meta moved the whole ad set's delivery onto it within hours. Three
+  fixes followed: rewrites no longer carry internal text and are created paused (#76), the apply
+  path refuses any campaign flagged `controlled_test` (#77; the four Weekday campaigns are), and a
+  replacement ad gets its own tracked link (#79, 23 September). Flag a campaign `controlled_test`
+  for as long as its ads are being compared.
 - Pause and resume whole campaigns through the app. The app cannot pause a single ad: with Peter's
   yes, set the ad's `status` to `PAUSED` through the Graph API, read it back, then set `ads.status`
   and `ads.meta_status` to `PAUSED` in CheersAI. Changing the objective or optimisation goal means a
@@ -241,8 +245,10 @@ number, which is the same message in each campaign of a pair.
 
 ## 10. Read back and pre-launch checks
 
-All read-only. The Meta access token is `meta_ad_accounts.access_token` (read it with the service
-role key from the repo's `.env.local`); use GET requests only and never print the token.
+All read-only. Since 26 September 2026 the Meta access token is stored only encrypted, in
+`meta_ad_account_tokens` (AES-256-GCM, key `TOKEN_VAULT_KEY`); decrypt it as the scheduled task
+`anchor-weekday-food-daily-check` does, with the service role key from the repo's `.env.local`.
+Use GET requests only and never print the token.
 
 1. **Read every setting back from Meta:** campaign status, objective, special ad categories; ad set
    `lifetime_budget`, `start_time`, `end_time`, `pacing_type`, `adset_schedule`,
@@ -263,9 +269,15 @@ role key from the repo's `.env.local`); use GET requests only and never print th
    Marketplace, right column, Messenger and Audience Network formats.
 7. **Public hours:** the Facebook Page's `hours` against the management app; Peter checks Google
    Business Profile. On 10 September 2026 the Page still said 4pm opening while the ads sold lunch.
-8. **Landing page on a phone:** the pop-up is gone; hit-test only the visible Book button (a hidden
-   duplicate of zero size gave a false alarm); the bar that appears on scroll opens the quick booking
-   panel; no choice and reject store nothing, accept saves, withdraw deletes.
+8. **Landing page on a phone** (375 x 812 and one shorter size, trackers blocked, a made-up `qa_`
+   tag, the page address opened directly): the page matches the ad that links to it; stay on it
+   for 15 seconds and confirm **no** pop-up or floating card appears (the 10 September check
+   cleared the "Next event" card and missed the Christmas pop-up, which opens after 10 seconds;
+   some cards show to only half of sessions, so force them on when checking); the main message
+   sits on the first screen above the cookie banner; then tap every booking button and confirm
+   each lands on the booking form with the first field on screen and nothing covering it.
+   Hit-test only the visible Book button (a hidden duplicate of zero size gave a false alarm).
+   No choice and reject store nothing, accept saves, withdraw deletes.
 9. **Booking system:** `/api/table-bookings/availability?date=<day>&party_size=2&purpose=food` for an
    ad day and an excluded day: `kitchen_open` and `bookable_purpose` must match what the ads promise.
 10. **Claims:** every price, dish and time in the copy and on the images against
@@ -344,4 +356,10 @@ brief.
 | 21 Sep | 851 link clicks at 14p brought no tagged booking and no rise in covers in week 1 | Section 4 (measurement): check the path to the booking page before adding spend |
 | 21 Sep | Unlogged walk-ins hid covers (£302 of food, no covers, 15 Sep) | Section 4 (measurement): brief staff before launch |
 | 21 Sep | At about £95 a week, the £1 bar needs about 95 extra covers a week | Section 4 (budget): do the sum in the brief |
-| 22 Sep | The optimiser's rewrite Apply button put a live ad with the internal campaign name as its headline; Meta moved the ad set onto it | Ad paused through the Graph API on 22 Sep; generator fix in progress; section 9 |
+| 22 Sep | The optimiser's rewrite Apply button put a live ad with the internal campaign name as its headline; Meta moved the ad set onto it | Ad paused through the Graph API on 22 Sep; fixed in #76, #77 and #79; section 9 |
+| 3 Oct | Three weeks of cheap clicks landed on a page with a full-screen Christmas pop-up, the wrong dish for the ad and a booking form a screen and a half down. The faults were found on 25 Sep and not fixed until 3 Oct, 584 clicks later | Section 10 step 8: load the landing page at phone size, wait 15 seconds, and tap through to the form before launch. Build agreed fixes before the next delivery day |
+| 3 Oct | Google Analytics saw 66 of about 1,458 ad visits, because almost no ad visitor accepts cookies. Clarity saw 1,759 | Section 4 (measurement): read Clarity for what ad visitors do; treat Google Analytics as a small sample |
+| 3 Oct | Ad tags that need cookie consent could never show an ad booking (about 1 in 25 ad visitors consents) | Weekday food spec W5 and M1: a page-source label read from the page address, stored with the booking; readout query 5e |
+| 3 Oct | Ad visitors gave the page about 13 seconds and 21% scroll, and two of 1,759 reached the booking page. Weekday pub food is walked into, not booked | Say "no need to book" with the times on the first screen, above the buttons; count walk-ins, and make sure staff log them |
+| 3 Oct | A "Next event" card, shown to half of all sessions, sat on top of the booking form's fields on a phone | the-anchor.pub #180: hidden on the booking page |
+| 4 Oct | The spec's single-run lock relied on a Redis client the repository no longer had | Check a spec's dependencies against the current code before building from it |
