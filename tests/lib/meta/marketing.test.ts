@@ -5,12 +5,18 @@ vi.mock('@/lib/meta/graph', () => ({
 }));
 
 import {
+  checkAdReview,
+  checkCreativeCallToAction,
+  checkCreativeEnhancementsOptedOut,
   createMetaAdCreative,
   createMetaCampaign,
   createMetaAdSet,
   fetchMetaAdSetSchedule,
   fetchMetaObjectInsights,
   MetaApiError,
+  normaliseMetaCallToActionType,
+  readMetaAdForLaunch,
+  RECORDED_CREATIVE_FEATURES,
   searchMetaInterests,
   type CreateAdSetParams,
   type MetaAdSetScheduleEntry,
@@ -591,6 +597,441 @@ describe('createMetaAdCreative', () => {
       type: 'BOOK_TRAVEL',
       value: { link: 'https://www.the-anchor.pub/events/quiz-night' },
     });
+  });
+});
+
+describe('createMetaAdCreative creative enhancements opt-out', () => {
+  const baseParams = {
+    accessToken: 'test-token',
+    adAccountId: 'act_123',
+    name: 'Evergreen Test | Walk in | Var 4',
+    pageId: 'page_123',
+    linkUrl: 'https://l.the-anchor.pub/abc123',
+    imageHash: 'image_hash',
+    message: 'Just turn up.',
+    headline: 'Lunch, no booking needed, Tue to Fri',
+    description: 'Walk in 12pm to 3pm',
+    callToActionType: 'BOOK_NOW',
+  };
+
+  // The request exactly as it was built before the flag existed: the token, the name, then the
+  // story spec, and nothing else.
+  const bodyBeforeTheFlag = (() => {
+    const form = new URLSearchParams();
+    form.set('access_token', 'test-token');
+    form.set('name', 'Evergreen Test | Walk in | Var 4');
+    form.set('object_story_spec', JSON.stringify({
+      page_id: 'page_123',
+      link_data: {
+        link: 'https://l.the-anchor.pub/abc123',
+        message: 'Just turn up.',
+        image_hash: 'image_hash',
+        name: 'Lunch, no booking needed, Tue to Fri',
+        description: 'Walk in 12pm to 3pm',
+        call_to_action: { type: 'BOOK_TRAVEL', value: { link: 'https://l.the-anchor.pub/abc123' } },
+      },
+    }));
+    return form.toString();
+  })();
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ id: 'creative_123' }),
+    } as Response);
+  });
+
+  function sentBody(): string {
+    const [, init] = vi.mocked(global.fetch).mock.calls[0];
+    return init?.body as string;
+  }
+
+  it('records 83 distinct features', () => {
+    expect(RECORDED_CREATIVE_FEATURES).toHaveLength(83);
+    expect(new Set(RECORDED_CREATIVE_FEATURES).size).toBe(83);
+    // The bundle is not one of the keys Meta returns, so it is never relied on.
+    expect(RECORDED_CREATIVE_FEATURES).not.toContain('standard_enhancements');
+  });
+
+  it('sends every recorded feature as OPT_OUT when the flag is true', async () => {
+    await createMetaAdCreative({ ...baseParams, optOutCreativeEnhancements: true });
+
+    const body = new URLSearchParams(sentBody());
+    const spec = JSON.parse(body.get('degrees_of_freedom_spec') ?? '{}') as {
+      creative_features_spec?: Record<string, { enroll_status?: string }>;
+    };
+
+    expect(Object.keys(spec.creative_features_spec ?? {}).sort()).toEqual([...RECORDED_CREATIVE_FEATURES].sort());
+    for (const feature of RECORDED_CREATIVE_FEATURES) {
+      expect(spec.creative_features_spec?.[feature]).toEqual({ enroll_status: 'OPT_OUT' });
+    }
+    // Everything else in the request is untouched.
+    expect(body.get('name')).toBe('Evergreen Test | Walk in | Var 4');
+    expect(JSON.parse(body.get('object_story_spec') ?? '{}')).toEqual(
+      JSON.parse(new URLSearchParams(bodyBeforeTheFlag).get('object_story_spec') ?? '{}'),
+    );
+  });
+
+  it('sends a byte-for-byte unchanged body when the flag is omitted', async () => {
+    await createMetaAdCreative(baseParams);
+
+    expect(sentBody()).toBe(bodyBeforeTheFlag);
+    expect(new URLSearchParams(sentBody()).has('degrees_of_freedom_spec')).toBe(false);
+  });
+
+  it('sends a byte-for-byte unchanged body when the flag is false', async () => {
+    await createMetaAdCreative({ ...baseParams, optOutCreativeEnhancements: false });
+
+    expect(sentBody()).toBe(bodyBeforeTheFlag);
+    expect(new URLSearchParams(sentBody()).has('degrees_of_freedom_spec')).toBe(false);
+  });
+});
+
+describe('readMetaAdForLaunch', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    global.fetch = vi.fn();
+  });
+
+  it('reads the ad and its creative in one GET and maps every field', async () => {
+    vi.mocked(global.fetch).mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        id: 'ad_1',
+        name: 'Evergreen Test | Walk in | Var 4',
+        adset_id: 'adset_1',
+        configured_status: 'PAUSED',
+        effective_status: 'PAUSED',
+        creative: {
+          id: 'creative_1',
+          name: 'Evergreen Test | Walk in | Var 4',
+          object_story_spec: {
+            page_id: 'page_123',
+            link_data: {
+              link: 'https://l.the-anchor.pub/abc123',
+              message: 'Just turn up.',
+              name: 'Lunch, no booking needed, Tue to Fri',
+              description: 'Walk in 12pm to 3pm',
+              call_to_action: { type: 'BOOK_TRAVEL', value: { link: 'https://l.the-anchor.pub/abc123' } },
+            },
+          },
+          degrees_of_freedom_spec: {
+            creative_features_spec: { image_enhancement: { enroll_status: 'OPT_OUT' } },
+          },
+        },
+      }),
+    } as Response);
+
+    const readBack = await readMetaAdForLaunch('ad_1', 'test-token');
+
+    expect(vi.mocked(global.fetch)).toHaveBeenCalledTimes(1);
+    const [url, init] = vi.mocked(global.fetch).mock.calls[0];
+    expect(init).toEqual({ method: 'GET' });
+    const parsed = new URL(String(url));
+    expect(parsed.pathname).toBe('/v24.0/ad_1');
+    const fields = parsed.searchParams.get('fields') ?? '';
+    for (const field of ['configured_status', 'effective_status', 'ad_review_feedback', 'object_story_spec', 'degrees_of_freedom_spec']) {
+      expect(fields).toContain(field);
+    }
+
+    expect(readBack).toEqual({
+      adId: 'ad_1',
+      name: 'Evergreen Test | Walk in | Var 4',
+      adSetId: 'adset_1',
+      configuredStatus: 'PAUSED',
+      effectiveStatus: 'PAUSED',
+      reviewFeedback: null,
+      creative: {
+        id: 'creative_1',
+        name: 'Evergreen Test | Walk in | Var 4',
+        pageId: 'page_123',
+        link: 'https://l.the-anchor.pub/abc123',
+        message: 'Just turn up.',
+        headline: 'Lunch, no booking needed, Tue to Fri',
+        description: 'Walk in 12pm to 3pm',
+        callToActionType: 'BOOK_TRAVEL',
+        callToActionLink: 'https://l.the-anchor.pub/abc123',
+        creativeFeaturesSpec: { image_enhancement: { enroll_status: 'OPT_OUT' } },
+      },
+    });
+  });
+
+  it('returns nulls for everything Meta omits, so no check can pass on it', async () => {
+    vi.mocked(global.fetch).mockResolvedValue({
+      ok: true,
+      json: async () => ({ id: 'ad_1', ad_review_feedback: {} }),
+    } as Response);
+
+    const readBack = await readMetaAdForLaunch('ad_1', 'test-token');
+
+    expect(readBack.configuredStatus).toBeNull();
+    expect(readBack.effectiveStatus).toBeNull();
+    expect(readBack.reviewFeedback).toBeNull();
+    expect(readBack.creative).toEqual({
+      id: null,
+      name: null,
+      pageId: null,
+      link: null,
+      message: null,
+      headline: null,
+      description: null,
+      callToActionType: null,
+      callToActionLink: null,
+      creativeFeaturesSpec: null,
+    });
+    expect(checkCreativeEnhancementsOptedOut(readBack.creative.creativeFeaturesSpec).result).toBe('unverified');
+    expect(checkAdReview(readBack, 'PAUSED').result).toBe('fail');
+  });
+
+  it('keeps review feedback whatever shape Meta sends it in', async () => {
+    vi.mocked(global.fetch).mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        id: 'ad_1',
+        configured_status: 'ACTIVE',
+        effective_status: 'DISAPPROVED',
+        ad_review_feedback: { global: { ALCOHOL: 'This ad promotes alcohol.' } },
+      }),
+    } as Response);
+
+    const readBack = await readMetaAdForLaunch('ad_1', 'test-token');
+    expect(readBack.reviewFeedback).toEqual({ global: { ALCOHOL: 'This ad promotes alcohol.' } });
+
+    vi.mocked(global.fetch).mockResolvedValue({
+      ok: true,
+      json: async () => ({ id: 'ad_1', ad_review_feedback: 'Rejected' }),
+    } as Response);
+    expect((await readMetaAdForLaunch('ad_1', 'test-token')).reviewFeedback).toEqual({ feedback: 'Rejected' });
+  });
+
+  it('throws MetaApiError with code 190 when the token has expired', async () => {
+    vi.mocked(global.fetch).mockResolvedValue({
+      ok: false,
+      json: async () => ({
+        error: { message: 'Error validating access token: Session has expired.', code: 190, error_subcode: 463 },
+      }),
+    } as Response);
+
+    const failure = await readMetaAdForLaunch('ad_1', 'test-token').catch((error: unknown) => error);
+
+    expect(failure).toBeInstanceOf(MetaApiError);
+    expect((failure as MetaApiError).code).toBe(190);
+    expect((failure as MetaApiError).subcode).toBe(463);
+  });
+});
+
+describe('checkCreativeEnhancementsOptedOut', () => {
+  const allOptedOut = (): Record<string, { enroll_status: string }> =>
+    Object.fromEntries(RECORDED_CREATIVE_FEATURES.map((feature) => [feature, { enroll_status: 'OPT_OUT' }]));
+
+  it('passes only when every recorded feature is present and OPT_OUT', () => {
+    expect(checkCreativeEnhancementsOptedOut(allOptedOut())).toEqual({ result: 'pass', reasons: [] });
+  });
+
+  it('is unverified, never a pass, when the spec is missing', () => {
+    expect(checkCreativeEnhancementsOptedOut(null).result).toBe('unverified');
+    expect(checkCreativeEnhancementsOptedOut(undefined).result).toBe('unverified');
+  });
+
+  it('is unverified when the spec is empty', () => {
+    expect(checkCreativeEnhancementsOptedOut({}).result).toBe('unverified');
+  });
+
+  it('is unverified when a recorded feature is absent, and names it', () => {
+    const spec = allOptedOut();
+    delete spec.text_generation;
+
+    const check = checkCreativeEnhancementsOptedOut(spec);
+
+    expect(check.result).toBe('unverified');
+    expect(check.reasons.join(' ')).toContain('text_generation');
+  });
+
+  it('fails when any feature is OPT_IN, and names it', () => {
+    const spec = allOptedOut();
+    spec.video_filtering = { enroll_status: 'OPT_IN' };
+
+    const check = checkCreativeEnhancementsOptedOut(spec);
+
+    expect(check.result).toBe('fail');
+    expect(check.reasons.join(' ')).toContain('video_filtering');
+  });
+
+  it('fails on an unknown value rather than treating it as opted out', () => {
+    const spec: Record<string, unknown> = allOptedOut();
+    spec.image_enhancement = { enroll_status: 'DEFAULT_OPT_IN' };
+    expect(checkCreativeEnhancementsOptedOut(spec).result).toBe('fail');
+
+    spec.image_enhancement = {};
+    expect(checkCreativeEnhancementsOptedOut(spec).result).toBe('fail');
+
+    spec.image_enhancement = null;
+    expect(checkCreativeEnhancementsOptedOut(spec).result).toBe('fail');
+  });
+
+  it('fails when a feature Meta added later is opted in', () => {
+    const spec = allOptedOut();
+    spec.some_feature_added_later = { enroll_status: 'OPT_IN' };
+
+    expect(checkCreativeEnhancementsOptedOut(spec).result).toBe('fail');
+  });
+
+  it('fails, rather than reporting unverified, when one feature is OPT_IN and another is absent', () => {
+    const spec = allOptedOut();
+    delete spec.text_generation;
+    spec.image_enhancement = { enroll_status: 'OPT_IN' };
+
+    expect(checkCreativeEnhancementsOptedOut(spec).result).toBe('fail');
+  });
+});
+
+describe('checkCreativeCallToAction', () => {
+  const link = 'https://l.the-anchor.pub/abc123';
+
+  it('normalises both sides, so BOOK_NOW sent and BOOK_TRAVEL returned match', () => {
+    expect(normaliseMetaCallToActionType('BOOK_NOW')).toBe('BOOK_TRAVEL');
+    expect(normaliseMetaCallToActionType('LEARN_MORE')).toBe('LEARN_MORE');
+
+    expect(checkCreativeCallToAction(
+      { link, callToActionType: 'BOOK_TRAVEL', callToActionLink: link },
+      { type: 'BOOK_NOW', link },
+    )).toEqual({ result: 'pass', reasons: [] });
+
+    expect(checkCreativeCallToAction(
+      { link, callToActionType: 'BOOK_NOW', callToActionLink: link },
+      { type: 'BOOK_TRAVEL', link },
+    ).result).toBe('pass');
+  });
+
+  it('fails on a different or missing button', () => {
+    expect(checkCreativeCallToAction(
+      { link, callToActionType: 'LEARN_MORE', callToActionLink: link },
+      { type: 'BOOK_NOW', link },
+    ).result).toBe('fail');
+
+    expect(checkCreativeCallToAction(
+      { link, callToActionType: null, callToActionLink: link },
+      { type: 'BOOK_NOW', link },
+    ).result).toBe('fail');
+  });
+
+  it('fails when the creative link is the campaign-level link, not the ad link', () => {
+    const check = checkCreativeCallToAction(
+      { link: 'https://l.the-anchor.pub/0ai0j0', callToActionType: 'BOOK_TRAVEL', callToActionLink: link },
+      { type: 'BOOK_NOW', link },
+    );
+
+    expect(check.result).toBe('fail');
+    expect(check.reasons.join(' ')).toContain('0ai0j0');
+  });
+
+  it('fails when the button link is mismatched or missing', () => {
+    expect(checkCreativeCallToAction(
+      { link, callToActionType: 'BOOK_TRAVEL', callToActionLink: 'https://l.the-anchor.pub/0ai0j0' },
+      { type: 'BOOK_NOW', link },
+    ).result).toBe('fail');
+
+    expect(checkCreativeCallToAction(
+      { link, callToActionType: 'BOOK_TRAVEL', callToActionLink: null },
+      { type: 'BOOK_NOW', link },
+    ).result).toBe('fail');
+  });
+
+  it('fails on another host or path, and ignores only a trailing slash and host case', () => {
+    expect(checkCreativeCallToAction(
+      { link: 'https://L.The-Anchor.pub/abc123/', callToActionType: 'BOOK_TRAVEL', callToActionLink: link },
+      { type: 'BOOK_NOW', link },
+    ).result).toBe('pass');
+
+    expect(checkCreativeCallToAction(
+      { link: 'https://www.the-anchor.pub/abc123', callToActionType: 'BOOK_TRAVEL', callToActionLink: link },
+      { type: 'BOOK_NOW', link },
+    ).result).toBe('fail');
+
+    expect(checkCreativeCallToAction(
+      { link: 'https://l.the-anchor.pub/ABC123', callToActionType: 'BOOK_TRAVEL', callToActionLink: link },
+      { type: 'BOOK_NOW', link },
+    ).result).toBe('fail');
+
+    expect(checkCreativeCallToAction(
+      { link: 'not a link', callToActionType: 'BOOK_TRAVEL', callToActionLink: link },
+      { type: 'BOOK_NOW', link },
+    ).result).toBe('fail');
+  });
+});
+
+describe('checkAdReview', () => {
+  it('passes when there is no feedback and both statuses are the expected one', () => {
+    expect(checkAdReview(
+      { configuredStatus: 'PAUSED', effectiveStatus: 'PAUSED', reviewFeedback: null },
+      'PAUSED',
+    )).toEqual({ result: 'pass', reasons: [] });
+
+    expect(checkAdReview(
+      { configuredStatus: 'ACTIVE', effectiveStatus: 'ACTIVE', reviewFeedback: null },
+      'ACTIVE',
+    ).result).toBe('pass');
+  });
+
+  it('is pending, never a pass, while Meta has not finished review', () => {
+    for (const effectiveStatus of ['PENDING_REVIEW', 'IN_PROCESS', 'PREAPPROVED']) {
+      expect(checkAdReview(
+        { configuredStatus: 'ACTIVE', effectiveStatus, reviewFeedback: null },
+        'ACTIVE',
+      ).result).toBe('pending');
+    }
+  });
+
+  it('is pending when Meta returns no effective status: no feedback yet is not approval', () => {
+    expect(checkAdReview(
+      { configuredStatus: 'ACTIVE', effectiveStatus: null, reviewFeedback: null },
+      'ACTIVE',
+    ).result).toBe('pending');
+  });
+
+  it('fails on a rejected ad', () => {
+    for (const effectiveStatus of ['DISAPPROVED', 'WITH_ISSUES']) {
+      expect(checkAdReview(
+        { configuredStatus: 'ACTIVE', effectiveStatus, reviewFeedback: null },
+        'ACTIVE',
+      ).result).toBe('fail');
+    }
+  });
+
+  it('fails on any review feedback, even when the status looks fine', () => {
+    const check = checkAdReview(
+      {
+        configuredStatus: 'ACTIVE',
+        effectiveStatus: 'ACTIVE',
+        reviewFeedback: { global: { ALCOHOL: 'This ad promotes alcohol.' } },
+      },
+      'ACTIVE',
+    );
+
+    expect(check.result).toBe('fail');
+    expect(check.reasons.join(' ')).toContain('ALCOHOL');
+  });
+
+  it('fails when the ad is not set to the expected status', () => {
+    expect(checkAdReview(
+      { configuredStatus: 'PAUSED', effectiveStatus: 'PAUSED', reviewFeedback: null },
+      'ACTIVE',
+    ).result).toBe('fail');
+
+    expect(checkAdReview(
+      { configuredStatus: null, effectiveStatus: 'ACTIVE', reviewFeedback: null },
+      'ACTIVE',
+    ).result).toBe('fail');
+  });
+
+  it('fails when the effective status is one review will not resolve', () => {
+    for (const effectiveStatus of ['ADSET_PAUSED', 'CAMPAIGN_PAUSED', 'ARCHIVED', 'DELETED', 'PENDING_BILLING_INFO']) {
+      expect(checkAdReview(
+        { configuredStatus: 'ACTIVE', effectiveStatus, reviewFeedback: null },
+        'ACTIVE',
+      ).result).toBe('fail');
+    }
   });
 });
 
