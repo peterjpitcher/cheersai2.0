@@ -1,6 +1,6 @@
 # SPEC: weekday food ads, mid-flight optimisation
 
-Status: revised after review, 26 September 2026; ready to build on Peter's go-ahead per stage. Nothing in this spec has been built or deployed.
+Status: the website and management app stages (W1 to W7, M1) were built and went live on 3 October 2026; the CheersAI stage (C1 to C4) was approved on 4 October 2026 and is in build. Section 13 is the build record: what shipped, the deployment ids, the owner decisions made on the day and where the build departs from the text below. Where section 13 and an earlier section disagree, section 13 wins.
 Owner: Peter Pitcher. Author: Claude.
 Review: `tasks/REVIEW-weekday-food-optimisation-2026-09-25.md`. Every finding (R01 to R13 and the extra coverage checks) is folded into the section it affects; section 12 maps each one.
 Campaign: the four "Weekday Lunch/Dinner" Meta campaigns for The Anchor (current state and ids in
@@ -70,6 +70,18 @@ Not a fault: the booking system works. The availability API returned 20 open slo
 | D15 | The dinner challenger headline drops "tonight" and becomes "Dinner Tue to Fri, just walk in from 4pm" (40), so one rule covers the ads and the page: no "today" or "tonight" wording anywhere | D9 |
 
 D14 does not change the narrow emergency pause Peter pre-authorised on 10 September (runbook section 6); the review asks for that authority to stay intact (R12).
+
+### 3 and 4 October 2026, at build time
+
+Made after a read of Meta, Clarity and Google Analytics on 3 October (section 13 has the figures).
+
+| # | Decision | Changes |
+|---|---|---|
+| D16 | Build the website and management app stages now, and deploy both, management app first (3 October) | Launch gates for W and M1 cleared |
+| D17 | The "No need to book" line sits **above** the hero buttons, not under them. Under three stacked buttons it ended 23px above the cookie banner at 375 x 812 and fell behind it on shorter phones, and most ad visitors never scroll (3 October) | W3 |
+| D18 | The floating "Next event" card is hidden on `/book-table` for every visitor, not only for arrivals from the landing page. It covered the form's party size and date fields on a phone (3 October) | W4 acceptance; the-anchor.pub #180 |
+| D19 | "Never say today or tonight" for weekday lunch and dinner copy is recorded as a rule in the website's source of truth, `docs/SSOT.md` section 5 (3 October) | D9, D15 |
+| D20 | Go-ahead for the CheersAI stage: this record, the page-label count in the readouts, and the four "walk in" challenger ads created **paused**. Switching them on still needs its own yes, and still waits for the organic check (4 October) | Section 6 step 4 |
 
 ## 3. Out of scope
 
@@ -377,3 +389,47 @@ Directional, as with the rest of the test. The website change and Meta's unequal
 | R12 rollback and sequencing | D11, section 6, section 8 | Organic check is a real gate for activation only; no staff test; what rollback cannot restore; website revert assesses challengers; emergency pause unchanged |
 | R13 group challengers (optional) | C3 | One reusable list of the four ids, checked to exclude the rewrite |
 | Extra coverage checks | W2, W5, W6, W7, M1, C2 | Page-variant edge cases, cache freshness on Next 14, shared regressions, real Supabase insert error, account and identity assertions, dry-run and redaction tests, final evidence with deployment ids |
+
+---
+
+## 13. Build record (3 and 4 October 2026)
+
+### Why the build went ahead when it did
+
+Figures read on 3 October 2026, for 11 September to 2 October:
+
+- Meta: £309.68 spent of £500 (on plan), 2,002 link clicks at 15p, 1,458 landing page views, 38,260 people reached about 2.5 times each. 75% of spend ran in Reels and 39% went to over-65s, who saw the ads about 3.7 times each. The Reels overlay placement took £11 for 9 page loads.
+- Clarity (which records nearly every visitor): 1,759 visits to `/lunch-and-dinner`, 1.02 pages per visit, 13 seconds of active time, 21% average scroll. Two visits reached `/book-table`.
+- Google Analytics (which only sees visitors who accept cookies): 66 visits, 62 people. 14 of the 62 stayed long enough to get the Christmas pop-up; 5 tapped through it; 2 tapped "Book a table"; none booked.
+- So only about 1 in 25 ad visitors accepts cookies, and the consent-gated ad tags (F5) could never have shown an ad booking. Website bookings overall did not rise either: about 8 a week were made during the campaign against about 13 a week in the six weeks before.
+- None of F1 to F6 had been fixed: the page was checked live at 375 x 812 on 3 October and showed every fault in section 1.
+
+### What shipped
+
+| Part | Pull request | Merge commit | Production deployment | Live from (London) |
+|---|---|---|---|---|
+| M1 | the-anchor-management-tools #174 | `34fc99904e177d1cffa9665efe42326248a56f7a` | `dpl_EQsrCLTpciv2tFfesM2TVgzBEtNt` | 3 October, 22:01 |
+| W1 to W6, D17, D19 | the-anchor.pub #179 | `27ac3630453790125d58eb84fcddecdc0cf295b8` | `dpl_76Kg8S9pXMYeEXyoB5jQDrNy8nrd` | 3 October, 22:06 |
+| D18 | the-anchor.pub #180 | `f55462ac092e92ccaf3ebca2f73938c9eb6258d8` | `dpl_33eLskNX252GMCXMFurXBaMf9tFM` | 3 October, 22:17 |
+
+**Page-source reporting starts at 22:06 London on 3 October 2026** (D10). Readout query 5e uses that time. No database migration was made in any repository.
+
+Each deployment was matched to its commit, confirmed Ready, and confirmed as the one the production domain serves. The live site was then checked at 375 x 812 with trackers blocked, made-up `qa_` tags and the page address opened directly: each of the four `utm_campaign` values shows its own title, hero and first dishes; the walk-in line sits above the buttons; no pop-up after 15 seconds; the hero, footer and sticky "Book a table" each land on the form with the tags carried, the first field on screen and nothing covering it; no cookie or storage entry is written; no booking request was sent.
+
+### Where the build departs from the text above
+
+- **W3 placement (D17).** The walk-in line is above the hero buttons. At 360 x 640 the lowest 13px of "Book a table" then sits under the cookie banner on first paint; the rest of the button is visible.
+- **W4 and the "Next event" card (D18).** The card is shown to half of all sessions at random. It is hidden on `/book-table` for everyone.
+- **W7 booking body check.** Not attempted. It needs an automated submit through the Turnstile bot check, which nobody bypasses. As W7 allows, the proof that the submitted body carries `page_source` rests on the form and route tests.
+- **W7 in-app browser check.** Not done by automation. The owner was given the live address to open inside Facebook or Instagram.
+- **M1 extra guard.** A label containing a NUL character, or an emoji cut in half by truncation, would make Postgres refuse the whole analytics row. That label alone is dropped, so the booking's event is kept.
+- **M1 and marketing email reports.** `src/lib/email/marketing/attribution.ts` in the management app counts analytics rows by `utm_campaign` and `utm_content` with no event-type filter, so a table booking reached from a marketing email now counts as a booking for that email campaign. The migration comment says that was the intent.
+- **Data handling (D12), as found in the management app code.** The label is not included in the customer data export, which is keyed on a staff login. Erasure anonymises the customer row and leaves the analytics row and label. A staff hard delete cascades and removes them. Nothing expires the rows. Recorded in the M1 pull request.
+- **C2 lock.** Section 7 says to take the single-run lock with Upstash Redis through `@upstash/redis`. That client is no longer in this repository (only QStash is), there are no Redis environment variables, and rate limiting moved to the database. The lock is instead an exclusive lock file on the machine that runs the script, which gives the same guarantee because the script runs only from the owner's Mac. No Redis dependency and no migration are added.
+- **C1 recorded features.** Read from Meta on 4 October 2026 (Graph v24.0, read only): `creative_features_spec` returns 83 keys on every one of the 13 existing ads. On the 12 originals every key is `OPT_OUT` except `video_filtering`, which is `OPT_IN`; on Lunch A's paused rewrite all 83 are `OPT_OUT`. These are still-image ads, so a video setting has nothing to act on, and the originals are left as they are (D1). The challengers send all 83 as `OPT_OUT`.
+
+### Still open
+
+- **The organic check (section 6, step 3).** No table booking of any kind had been made by 10:40 on 4 October, so no labelled booking exists yet. Query 5e-1 returning its first row is the proof.
+- **C1 to C4.** In build from 4 October. `--apply` creates the four challengers paused; `--activate` waits for the organic check and the owner's yes at the time.
+- **Two follow-ups raised as separate tasks:** the management app's event bookings route rejects a booking when an ad tag is blank or too long; the website privacy notice prints today's date as its "Last updated" date.

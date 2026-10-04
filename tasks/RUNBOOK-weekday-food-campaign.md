@@ -68,6 +68,25 @@ Review: `tasks/REVIEW-weekday-food-campaign-2026-09-10.md`.
 Not changed, with reasons: F21 (Google applies the more restrictive of conflicting robots rules,
 so `noindex` holds); F26 (the build stays; results are read as directional).
 
+### Later owner decisions (25 September to 4 October 2026)
+
+Full text in `tasks/SPEC-weekday-food-optimisation.md` section 2; build record in its section 13.
+
+| # | Decision |
+|---|---|
+| D1 | Keep all 12 original ads running; no pausing for learning |
+| D2, D16 | Build the landing page fixes; built and live on 3 October |
+| D3, D7, D15 | Add one "walk in" challenger ad to each campaign, keeping the originals, with the "Book now" button and no "today" or "tonight" wording |
+| D4, D8, D12 | Record which page and ad a website table booking came from, from the page address with no cookie; management app only; treated as personal data, with a privacy notice line |
+| D5, D9, D19 | "No need to book" is true for both kitchen windows, Tuesday to Friday; the page and ads state the regular week and never say "today" or "tonight"; the rule is in the website's source of truth |
+| D10 | Page-source figures are judged from the website deployment onwards only (22:06 on 3 October); no before-and-after claim |
+| D11 | No staff test booking; the challengers wait for a real booking from the landing page to show the label |
+| D13 | The Meta ad account spending limit stays as it is |
+| D14 | Run the full test to 16 October and optimise; never recommend stopping |
+| D17 | The "No need to book" line sits above the hero buttons |
+| D18 | The "Next event" card is hidden on the booking page for everyone |
+| D20 | Create the four challengers paused; switching them on needs its own yes and the organic check |
+
 ### Alcohol check (CAP Code section 18), dinner Var 2
 The ad is about food; the pint is incidental and moderate ("a pint at your local"). Minimum age 18
 is a hard limit in the ad sets (Meta's Advantage+ audience cannot lower it), and the 5 mile adult
@@ -140,6 +159,10 @@ move locals, for any future spend.
 | 10 Sep | Daily check and readouts scheduled | Claude scheduled tasks on the owner's Mac |
 | 22 Sep 04:36 | Optimiser "booking rewrite" applied to Lunch A: new live ad `120246219010320609` ("Var 1 - booking rewrite", link `0ai0j0`, `utm_content=meta_ads_main`) with the internal campaign name as its headline. It took all of Lunch A's delivery that morning (1,160 impressions, 32 link clicks, £4.31) | CheersAI campaign dashboard Apply button |
 | 22 Sep 12:23 | That ad paused with the owner's yes; the three original Lunch A ads untouched | Meta API on the one ad; CheersAI `ads.status` and `meta_status` set to `PAUSED` |
+
+| 3 Oct 22:01 | Page-source labels accepted on website table bookings and stored in the `table_booking_created` analytics event (M1) | the-anchor-management-tools #174, merge `34fc9990`, deployment `dpl_EQsrCLTpciv2tFfesM2TVgzBEtNt` |
+| 3 Oct 22:06 | Landing page matched to the ad, Christmas pop-up off, "No need to book" above the buttons, "Book a table" straight to the form, page-source labels sent, privacy notice line, developer note removed (W1 to W6, D17, D19). **Page-source reporting starts here (readout query 5e)** | the-anchor.pub #179, merge `27ac3630`, deployment `dpl_76Kg8S9pXMYeEXyoB5jQDrNy8nrd` |
+| 3 Oct 22:17 | "Next event" card hidden on `/book-table` for everyone (D18) | the-anchor.pub #180, merge `f55462ac`, deployment `dpl_33eLskNX252GMCXMFurXBaMf9tFM` |
 
 Rollback: pause any campaign from the CheersAI app; revert the website PRs; restore the previous
 audience (`home`, `recent`, `frequently_in`) or automatic placements through the Meta API.
