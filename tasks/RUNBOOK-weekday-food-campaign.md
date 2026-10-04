@@ -45,6 +45,14 @@ paused the same day; section 8). It is not one of the three messages: report it 
 leave it out of the message comparison. Its link is the campaign-level code `0ai0j0`
 (`utm_content=meta_ads_main`).
 
+From 4 October each campaign also has a fifth ad slot in use: the "walk in" challenger, `Evergreen Test | Walk in | Var 4`,
+created **paused** (D20). Lunch A `120246417053410609` (ombkp0), Lunch B `120246417055840609` (0at7lw), Dinner A
+`120246417057360609` (upg47i), Dinner B `120246417059650609` (oty6qs). Lunch Var 4: "Lunch, no booking needed, Tue to
+Fri"; dinner Var 4: "Dinner Tue to Fri, just walk in from 4pm". Same image, button and audience as the originals, every
+automatic creative change opted out. They are switched on only with the owner's yes at the time and after a real
+booking from the landing page has carried the page label (readout query 5e-1). 20 codes now exist for 16 ads plus the
+paused rewrite, which uses a campaign-level code.
+
 ## 3. Owner decisions after the independent review (10 September 2026)
 
 Review: `tasks/REVIEW-weekday-food-campaign-2026-09-10.md`.
@@ -163,6 +171,10 @@ move locals, for any future spend.
 | 3 Oct 22:01 | Page-source labels accepted on website table bookings and stored in the `table_booking_created` analytics event (M1) | the-anchor-management-tools #174, merge `34fc9990`, deployment `dpl_EQsrCLTpciv2tFfesM2TVgzBEtNt` |
 | 3 Oct 22:06 | Landing page matched to the ad, Christmas pop-up off, "No need to book" above the buttons, "Book a table" straight to the form, page-source labels sent, privacy notice line, developer note removed (W1 to W6, D17, D19). **Page-source reporting starts here (readout query 5e)** | the-anchor.pub #179, merge `27ac3630`, deployment `dpl_76Kg8S9pXMYeEXyoB5jQDrNy8nrd` |
 | 3 Oct 22:17 | "Next event" card hidden on `/book-table` for everyone (D18) | the-anchor.pub #180, merge `f55462ac`, deployment `dpl_33eLskNX252GMCXMFurXBaMf9tFM` |
+| 4 Oct | Readout query 5e, the build record and the runbook updates; the three remaining readout tasks now report the page label and the organic check | cheersai2.0 #182; Claude scheduled tasks on the owner's Mac |
+| 4 Oct | Challenger tooling merged: creative opt-out, launch read-back and `npm run ops:add-weekday-challengers` (C1, C2) | cheersai2.0 #183, merge `7f056d17` |
+| 4 Oct 11:40 | Four "walk in" challenger ads created **paused** (run `2026-10-04T10-40-14-757Z-e17a4cd9`): 4 short links, 4 `ads` rows, 4 snapshot entries, 4 creatives, 4 ads. Read back from Meta: copy, button, own link and all 83 creative features opted out pass; review pending. The 12 originals and the paused rewrite unchanged | Management app short links API; CheersAI `ads` and `meta_campaigns.source_snapshot`; Meta API |
+| 4 Oct | Daily 08:30 check told that a paused Var 4 ad is expected, given the Var 4 claims, and set to tell the owner when the first labelled booking arrives | Claude scheduled task `anchor-weekday-food-daily-check` |
 
-Rollback: pause any campaign from the CheersAI app; revert the website PRs; restore the previous
+Rollback: pause any campaign from the CheersAI app; pause the challengers with `npm run ops:add-weekday-challengers -- --pause`; revert the website PRs; restore the previous
 audience (`home`, `recent`, `frequently_in`) or automatic placements through the Meta API.
