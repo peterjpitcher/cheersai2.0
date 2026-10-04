@@ -10,8 +10,9 @@ import { describe, expect, it } from 'vitest';
  * the allow-list below.
  *
  * Every allow-listed file is either behind a per-brand feature switch that is
- * off for new customers (paid ads, tournaments, management import) or is
- * server-only ingest. Adding to this list needs the same justification.
+ * off for new customers (paid ads, tournaments, management import), is
+ * server-only ingest, or is reachable only from an ops script run by hand.
+ * Adding to this list needs the same justification.
  */
 const PATTERN = /the-anchor|The Anchor|anchor\.pub|vip-club|Rose (&amp;|&) Crown|Sarah Mitchell|Google Business Profile/;
 
@@ -20,6 +21,8 @@ const ALLOWED: Record<string, string> = {
   'src/app/(app)/campaigns/[id]/actions.ts': 'paid ads (paidAds switch)',
   'src/features/campaigns/CampaignBriefForm.tsx': 'paid ads (paidAds switch)',
   'src/lib/campaigns/generate.ts': 'paid ads (paidAds switch)',
+  'src/lib/campaigns/challenger-ads.ts':
+    "ops script only (weekday challenger ads): pinned to The Anchor's account id and imported by nothing in the app, which tests/ops/add-weekday-challenger-ads.test.ts checks",
   'src/lib/campaigns/management-tracking.ts': 'paid ads (paidAds switch)',
   'src/lib/campaigns/optimisation.ts': 'paid ads (paidAds switch)',
   'src/lib/campaigns/rewrite-copy.ts': 'paid ads (paidAds switch)',

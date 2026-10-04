@@ -17,6 +17,7 @@
     "test:utc": "TZ=UTC CI=1 vitest run",
     "ci:verify": "npm run lint:ci && npm run typecheck && npm run test:ci && npm run test:utc && npm run build",
     "db:rebuild": "bash scripts/db-local-rebuild.sh",
+    "ops:add-weekday-challengers": "tsx scripts/ops/add-weekday-challenger-ads.ts",
     "ops:archive-planner-failures": "tsx scripts/ops/archive-planner-failures.ts",
     "ops:backfill-connections": "tsx scripts/ops/backfill-connections.ts",
     "ops:backfill-event-overlays": "tsx scripts/ops/backfill-event-overlays.ts",
