@@ -824,6 +824,130 @@ order by tb.booking_date, tb.booking_time;
 
 Result today, tested with three September references: all three matched (two Saturday 12 Sep 17:00 dinner bookings for 6 and 4, confirmed; one Sunday 13 Sep 14:00 booking for 3, cancelled). A separate check matched all 24 September table references (all `brand_site`, 102 covers in total; 7 of the 24 bookings are for Tue to Fri dates).
 
+### 5e. Website table bookings that started on the ad landing page (page-source label)
+
+Runs on the **management app** (`tfcasgxopxegwrabvwat`), not CheersAI. Added 4 October 2026.
+
+**What it counts.** Since 22:06 London time on 3 October 2026, the website sends six short labels with every table booking made through its booking form, read from the page address with no cookie involved, and the management app stores them in the `table_booking_created` row of `analytics_events` (`metadata`, flat keys and a nested `attribution` object). A booking that started from one of the three "Book a table" buttons on `/lunch-and-dinner` carries `booking_source = 'lunch_dinner_lp'`, plus the ad's `utm_campaign`, `utm_content` and `short_code` when the visitor arrived from an ad. Unlike 5a, this does not depend on cookie consent, which only about 1 in 25 ad visitors gives (Google Analytics saw 66 visits to the landing page against Meta's 1,458, 11 September to 2 October).
+
+**Rules for reporting it.**
+- It starts at the website deployment: **3 October 2026, 22:06 London** (the-anchor.pub PR #179, deployment `dpl_76Kg8S9pXMYeEXyoB5jQDrNy8nrd`; management app PR #174 went live first as `dpl_EQsrCLTpciv2tFfesM2TVgzBEtNt`). Earlier weeks are "not measured": never 0, and never a before-and-after figure (owner decision D10).
+- It counts bookings that start from the page's three booking buttons. A visitor who leaves through the menu or directions and books later by another route is not counted, and neither is anyone who walks in.
+- Confirmed means the booking's status today is `confirmed`, `completed`, `visited_waiting_for_review` or `review_clicked`. `pending_payment` and `pending_card_capture` are shown in their own column, because the deposit timeout can still cancel them. `cancelled` and `no_show` are left out. Figures are "as at" the readout time; if a later readout changes an earlier week, say so.
+- Rows whose `utm_source` starts with `qa` are test visits and are left out.
+- Never add 5e to CheersAI's or Meta's conversion totals (5a). They measure different things.
+- A rate over zero clicks is "n/a", and every rate is shown with its counts and its dates.
+
+**5e-1. Bookings by the week they were made, campaign and ad code.**
+
+```sql
+-- 5e-1. Landing-page bookings by week made (London), campaign and short code.
+with params as (
+  select timestamptz '2026-10-03 22:06 Europe/London' as label_live_from
+),
+ev as (
+  -- One row per booking: if a booking ever had two events, the earliest wins.
+  select distinct on (ae.table_booking_id)
+         ae.table_booking_id, ae.created_at,
+         ae.metadata->>'utm_source'   as utm_source,
+         ae.metadata->>'utm_campaign' as utm_campaign,
+         ae.metadata->>'short_code'   as short_code
+  from analytics_events ae
+  cross join params p
+  where ae.event_type = 'table_booking_created'
+    and ae.table_booking_id is not null
+    and ae.metadata->>'booking_source' = 'lunch_dinner_lp'
+    and ae.created_at >= p.label_live_from
+    and coalesce(ae.metadata->>'utm_source', '') not ilike 'qa%'
+  order by ae.table_booking_id, ae.created_at
+),
+b as (
+  select ev.*, tb.party_size,
+         case when tb.status::text in ('confirmed','completed','visited_waiting_for_review','review_clicked') then 'confirmed'
+              when tb.status::text in ('pending_payment','pending_card_capture') then 'awaiting_payment'
+              else 'left_out' end as state,
+         (tb.booking_purpose = 'food'
+          and extract(isodow from tb.booking_date) between 2 and 5
+          and ((tb.booking_time >= time '12:00' and tb.booking_time < time '15:00')
+            or (tb.booking_time >= time '16:00' and tb.booking_time < time '21:00'))) as tue_fri_food
+  from ev
+  join table_bookings tb on tb.id = ev.table_booking_id
+)
+select to_char(date_trunc('week', created_at at time zone 'Europe/London'), 'IYYY-"W"IW') as week_made,
+       coalesce(utm_campaign, '(no campaign tag)') as utm_campaign,
+       coalesce(short_code, '(no code)') as short_code,
+       count(*) filter (where state = 'confirmed') as bookings_confirmed,
+       count(*) filter (where state = 'awaiting_payment') as bookings_awaiting_payment,
+       count(*) filter (where state = 'left_out') as cancelled_or_no_show_left_out,
+       count(*) filter (where state = 'confirmed' and tue_fri_food) as tue_fri_food_bookings,
+       coalesce(sum(party_size) filter (where state = 'confirmed' and tue_fri_food), 0) as tue_fri_food_covers,
+       count(*) filter (where state = 'confirmed' and not tue_fri_food) as weekend_or_drinks_bookings,
+       min(created_at at time zone 'Europe/London')::timestamp(0) as first_booking_london
+from b
+group by 1, 2, 3
+order by 1, 2, 3;
+```
+
+A row with "(no campaign tag)" is a booking that started on the landing page without an ad's tags on the address (someone who typed or shared the address). The Tuesday to Friday food columns use the booking's current dining date and time, so a booking whose date is changed moves with it. For covers by the week of the meal rather than the week of booking, group by `date_trunc('week', tb.booking_date)` instead.
+
+Result on 4 October 2026, 10:40 London: 0 rows. No table booking of any kind has been made since the labels went live (the latest `table_booking_created` row is 3 October, 19:36), so this is "nothing yet", not a measured zero.
+
+**5e-2. Landing-page bookings per 100 human ad clicks, from the label start.**
+
+```sql
+-- 5e-2. Confirmed landing-page bookings against human short-link clicks, per campaign, both counted
+--       from the moment the labels went live. Add the four Var 4 codes here once the challengers exist.
+with params as (
+  select timestamptz '2026-10-03 22:06 Europe/London' as label_live_from
+),
+codes(code, campaign, utm_campaign) as (values
+  ('0ai0j0','Lunch A','weekday_lunch_a_cod_and_chips'),('jbozdk','Lunch A','weekday_lunch_a_cod_and_chips'),('56hzut','Lunch A','weekday_lunch_a_cod_and_chips'),('qx97ww','Lunch A','weekday_lunch_a_cod_and_chips'),
+  ('eff8sa','Lunch B','weekday_lunch_b_spicy_chicken_stack'),('aw6zqu','Lunch B','weekday_lunch_b_spicy_chicken_stack'),('xicfnn','Lunch B','weekday_lunch_b_spicy_chicken_stack'),('ah4kcu','Lunch B','weekday_lunch_b_spicy_chicken_stack'),
+  ('hrfowp','Dinner A','weekday_dinner_a_pizza'),('mrhx2v','Dinner A','weekday_dinner_a_pizza'),('jse8x1','Dinner A','weekday_dinner_a_pizza'),('if7tg6','Dinner A','weekday_dinner_a_pizza'),
+  ('9sie8u','Dinner B','weekday_dinner_b_beef_and_ale_pie'),('z75yyn','Dinner B','weekday_dinner_b_beef_and_ale_pie'),('f938i8','Dinner B','weekday_dinner_b_beef_and_ale_pie'),('i87o0t','Dinner B','weekday_dinner_b_beef_and_ale_pie')),
+campaigns as (select distinct campaign, utm_campaign from codes),
+clicks as (
+  select k.campaign, count(*) as human_clicks
+  from short_link_clicks c
+  join short_links sl on sl.id = c.short_link_id
+  join codes k on k.code = sl.short_code
+  cross join params p
+  where c.clicked_at >= p.label_live_from
+    and not public.short_link_is_known_bot(c.user_agent, c.device_type)
+  group by k.campaign
+),
+bookings as (
+  select m.campaign, count(distinct ae.table_booking_id) as bookings
+  from analytics_events ae
+  join table_bookings tb on tb.id = ae.table_booking_id
+  join campaigns m on m.utm_campaign = lower(ae.metadata->>'utm_campaign')
+  cross join params p
+  where ae.event_type = 'table_booking_created'
+    and ae.metadata->>'booking_source' = 'lunch_dinner_lp'
+    and ae.created_at >= p.label_live_from
+    and coalesce(ae.metadata->>'utm_source', '') not ilike 'qa%'
+    and tb.status::text in ('confirmed','completed','visited_waiting_for_review','review_clicked')
+  group by m.campaign
+)
+select m.campaign,
+       coalesce(b.bookings, 0) as landing_page_bookings,
+       coalesce(c.human_clicks, 0) as human_ad_clicks,
+       case when coalesce(c.human_clicks, 0) = 0 then 'n/a'
+            else round(100.0 * coalesce(b.bookings, 0) / c.human_clicks, 2)::text end as bookings_per_100_clicks,
+       (select to_char(label_live_from at time zone 'Europe/London', 'DD Mon YYYY HH24:MI') from params) as counted_from_london,
+       to_char(now() at time zone 'Europe/London', 'DD Mon YYYY HH24:MI') as counted_to_london
+from campaigns m
+left join clicks c on c.campaign = m.campaign
+left join bookings b on b.campaign = m.campaign
+order by m.campaign;
+```
+
+Result on 4 October 2026, 10:40 London: four rows, each 0 bookings over 0 clicks, rate "n/a". The ads do not deliver from Saturday to Monday, so the first clicks counted here will be on Tuesday 6 October.
+
+**The organic check (spec section 6, step 3).** The "walk in" challenger ads may only be switched on after a real booking from the landing page shows the label. 5e-1 returning its first row is that proof. Nobody makes a test booking to force it.
+
+**How 5e was checked before first use (4 October 2026, read only).** Over 14 September to 3 October the management app held 33 bookings with a `table_booking_created` row: none had more than one row, and none lacked a booking id. All 31 website bookings made through the table booking form had exactly one row (plus 2 staff-entered bookings). The 3 website table bookings with no row were all drinks tables created by an event booking, which use a different route and never pass through the landing page. Statuses seen on those 33: confirmed 13, completed 5, visited_waiting_for_review 6, review_clicked 1, cancelled 8. No booking was awaiting payment in the sample, so that column is untested on live data; the status names come from the `table_booking_status` enum (section 1). Weekend and drinks bookings are kept out of the food columns by the same day, purpose and time tests as query 1a.
+
 ### Caveats for booking conversions
 
 - **Party size and booking date:** `event_date` is empty for every table row, and `tickets` is filled on only 9 of 169 table rows since July (3 of 24 in September), so do not use them. Always take party size, date, time and status from step two. Likely cause (not confirmed): the website sends each table booking twice, once from the server with party size and once from the browser without it, and the CheersAI ingest upsert (`src/app/api/booking-conversions/route.ts` lines 142 to 185) overwrites every column on the second post. The local copy of the website repo is 39 commits behind, so this is unverified.
