@@ -234,7 +234,7 @@ export const MANUAL_CHECKS = {
   'public-hours': 'the Facebook Page hours and Google Business Profile against the management app (runbook check 7)',
   'booking-system': 'the booking system for an ad day and an excluded day (runbook check 9)',
   'organic-booking':
-    'a real booking made from /lunch-and-dinner shows booking_source lunch_dinner_lp (spec section 6, step 3)',
+    'a real website table booking made since 22:06 on 3 October 2026 carries a page label (spec section 6 step 3 as revised by D21; readout query 5e-3)',
 } as const;
 
 export type ManualCheck = keyof typeof MANUAL_CHECKS;
