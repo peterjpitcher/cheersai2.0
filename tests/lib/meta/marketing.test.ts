@@ -11,10 +11,15 @@ import {
   createMetaAdCreative,
   createMetaCampaign,
   createMetaAdSet,
+  fetchMetaAdAccountSpendStatus,
+  fetchMetaAdSetBudgetRemaining,
   fetchMetaAdSetSchedule,
   fetchMetaObjectInsights,
+  listMetaAdCreativesNamed,
+  listMetaAdSetAds,
   MetaApiError,
   normaliseMetaCallToActionType,
+  readMetaAdCreative,
   readMetaAdForLaunch,
   RECORDED_CREATIVE_FEATURES,
   searchMetaInterests,
@@ -1174,5 +1179,142 @@ describe('fetchMetaObjectInsights', () => {
       shares: 0,
       status: 'PAUSED',
     }));
+  });
+});
+
+describe('read-only Meta helpers for the challenger ads script', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    global.fetch = vi.fn();
+  });
+
+  function respondWith(...pages: unknown[]): void {
+    for (const page of pages) {
+      vi.mocked(global.fetch).mockResolvedValueOnce({ ok: true, json: async () => page } as Response);
+    }
+  }
+
+  function requests(): Array<{ url: URL; method: string | undefined }> {
+    return vi.mocked(global.fetch).mock.calls.map(([url, init]) => ({ url: new URL(String(url)), method: init?.method }));
+  }
+
+  it('lists every ad in an ad set, whatever its status, following Meta\'s pages', async () => {
+    respondWith(
+      {
+        data: [
+          { id: 'ad_1', name: 'Evergreen Test | Walk in | Var 4', configured_status: 'PAUSED', effective_status: 'PAUSED', creative: { id: 'creative_1' } },
+          { id: 'ad_2', name: 'Var 1', configured_status: 'ACTIVE', effective_status: 'ACTIVE' },
+        ],
+        paging: { cursors: { after: 'cursor_1' }, next: 'https://graph.facebook.com/next' },
+      },
+      { data: [{ id: 'ad_3', name: 'Old', configured_status: 'ARCHIVED', effective_status: 'ARCHIVED', creative: { id: 'creative_3' } }, { name: 'no id' }] },
+    );
+
+    const ads = await listMetaAdSetAds('adset_1', 'test-token');
+
+    expect(ads).toEqual([
+      { id: 'ad_1', name: 'Evergreen Test | Walk in | Var 4', configuredStatus: 'PAUSED', effectiveStatus: 'PAUSED', creativeId: 'creative_1' },
+      { id: 'ad_2', name: 'Var 1', configuredStatus: 'ACTIVE', effectiveStatus: 'ACTIVE', creativeId: null },
+      { id: 'ad_3', name: 'Old', configuredStatus: 'ARCHIVED', effectiveStatus: 'ARCHIVED', creativeId: 'creative_3' },
+    ]);
+
+    const [first, second] = requests();
+    expect(first!.method).toBe('GET');
+    expect(second!.method).toBe('GET');
+    expect(first!.url.pathname).toBe('/v24.0/adset_1/ads');
+    // Paused and archived ads are asked for by name: Meta leaves archived ads out otherwise.
+    const statuses = JSON.parse(first!.url.searchParams.get('effective_status') ?? '[]') as string[];
+    expect(statuses).toEqual(expect.arrayContaining(['ACTIVE', 'PAUSED', 'ARCHIVED', 'PENDING_REVIEW', 'DISAPPROVED', 'WITH_ISSUES']));
+    expect(first!.url.searchParams.get('after')).toBeNull();
+    expect(second!.url.searchParams.get('after')).toBe('cursor_1');
+  });
+
+  it('finds creatives by exact name only, across pages', async () => {
+    respondWith(
+      {
+        data: [
+          { id: 'c_1', name: 'Evergreen Test | Walk in | Var 4', object_story_spec: { link_data: { link: 'https://l.the-anchor.pub/aaa111' } } },
+          { id: 'c_2', name: 'Evergreen Test | Walk in | Var 44' },
+        ],
+        paging: { cursors: { after: 'cursor_1' }, next: 'https://graph.facebook.com/next' },
+      },
+      { data: [{ id: 'c_3', name: 'Evergreen Test | Walk in | Var 4', object_story_spec: { link_data: { link: 'https://l.the-anchor.pub/bbb222' } } }] },
+    );
+
+    const creatives = await listMetaAdCreativesNamed('act_123', 'test-token', 'Evergreen Test | Walk in | Var 4');
+
+    expect(creatives).toEqual([
+      { id: 'c_1', name: 'Evergreen Test | Walk in | Var 4', link: 'https://l.the-anchor.pub/aaa111' },
+      { id: 'c_3', name: 'Evergreen Test | Walk in | Var 4', link: 'https://l.the-anchor.pub/bbb222' },
+    ]);
+    expect(requests().map((request) => request.method)).toEqual(['GET', 'GET']);
+    expect(requests()[0]!.url.pathname).toBe('/v24.0/act_123/adcreatives');
+  });
+
+  it('fails rather than return a partial list when Meta never stops paging', async () => {
+    let page = 0;
+    vi.mocked(global.fetch).mockImplementation(async () => {
+      page += 1;
+      return {
+        ok: true,
+        json: async () => ({ data: [], paging: { cursors: { after: `cursor_${page}` }, next: 'https://graph.facebook.com/next' } }),
+      } as Response;
+    });
+
+    await expect(listMetaAdSetAds('adset_1', 'test-token')).rejects.toThrow(/the list is not complete/);
+    expect(vi.mocked(global.fetch)).toHaveBeenCalledTimes(50);
+  });
+
+  it('reads one creative by its id', async () => {
+    respondWith({
+      id: 'creative_1',
+      name: 'Evergreen Test | Walk in | Var 4',
+      object_story_spec: { page_id: 'page_123', link_data: { link: 'https://l.the-anchor.pub/abc123', message: 'Just turn up.' } },
+    });
+
+    const creative = await readMetaAdCreative('creative_1', 'test-token');
+
+    expect(creative).toMatchObject({ id: 'creative_1', pageId: 'page_123', link: 'https://l.the-anchor.pub/abc123', message: 'Just turn up.', creativeFeaturesSpec: null });
+    expect(requests()[0]).toMatchObject({ method: 'GET' });
+    expect(requests()[0]!.url.pathname).toBe('/v24.0/creative_1');
+  });
+
+  it('reads the account status and spending limit in minor units', async () => {
+    respondWith({ account_status: 1, spend_cap: '50000', amount_spent: '21344', id: 'act_123' });
+
+    await expect(fetchMetaAdAccountSpendStatus('act_123', 'test-token')).resolves.toEqual({
+      accountStatus: 1,
+      spendCapMinor: 50000,
+      amountSpentMinor: 21344,
+    });
+    expect(requests()[0]!.method).toBe('GET');
+    expect(requests()[0]!.url.searchParams.get('fields')).toBe('account_status,spend_cap,amount_spent');
+  });
+
+  it('returns nulls, never zero, for figures Meta leaves out', async () => {
+    respondWith({ id: 'act_123' }, { id: 'adset_1' });
+
+    await expect(fetchMetaAdAccountSpendStatus('act_123', 'test-token')).resolves.toEqual({
+      accountStatus: null,
+      spendCapMinor: null,
+      amountSpentMinor: null,
+    });
+    await expect(fetchMetaAdSetBudgetRemaining('adset_1', 'test-token')).resolves.toBeNull();
+  });
+
+  it('reads the budget left on an ad set', async () => {
+    respondWith({ budget_remaining: '7025', id: 'adset_1' });
+
+    await expect(fetchMetaAdSetBudgetRemaining('adset_1', 'test-token')).resolves.toBe(7025);
+    expect(requests()[0]!.method).toBe('GET');
+  });
+
+  it('throws MetaApiError when Meta rejects a list', async () => {
+    vi.mocked(global.fetch).mockResolvedValue({
+      ok: false,
+      json: async () => ({ error: { message: 'Invalid parameter', code: 100 } }),
+    } as Response);
+
+    await expect(listMetaAdSetAds('adset_1', 'test-token')).rejects.toBeInstanceOf(MetaApiError);
   });
 });
