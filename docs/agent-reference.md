@@ -139,6 +139,7 @@ All run with `tsx` against whatever Supabase the environment points at. Read the
 | `ops:repair-hidden-media-references` | `scripts/ops/repair-hidden-media-references.ts` | Repairs content that references hidden media |
 | `ops:archive-planner-failures` | `scripts/ops/archive-planner-failures.ts` | Archives failed planner jobs |
 | `ops:search-meta-interests` | `scripts/ops/search-meta-interests.ts` | Searches Meta interest targeting options |
+| `ops:add-weekday-challengers` | `scripts/ops/add-weekday-challenger-ads.ts` | Adds one "walk in" challenger ad to each of The Anchor's four Weekday food campaigns. Read only by default (`--dry-run`, `--status`); `--apply` creates the ads paused, `--activate` switches them on, `--pause` is the rollback. Each writing mode needs the owner's yes at the time (`tasks/SPEC-weekday-food-optimisation.md` section 7) |
 | `ops:invoke` | `scripts/ops/invoke-function.ts` | Invokes a Supabase edge function by name (`publish-queue` is the only one) |
 | `ops:seed-world-cup` | `scripts/ops/seed-world-cup-2026.ts` | Seeds the World Cup 2026 tournament fixtures |
 | (none) | `scripts/ops/cleanup-banner-storage.ts`, `diagnose-publishing.ts`, `remove-slot-language.ts` | Storage cleanup, stuck-job diagnosis, copy clean-up |

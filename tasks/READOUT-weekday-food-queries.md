@@ -455,12 +455,14 @@ Result today: 2026 W25 to W36: 48 sessions, £7,688.80, £640.73 a week, 3 zero-
 ### 3a. Health check of the 16 codes
 
 ```sql
--- 3a. Health check of the 16 campaign codes: exists, expiry, destination, parent, clicks so far
+-- 3a. Health check of the 20 campaign codes (16 originals and the 4 Var 4 challengers): exists, expiry, destination, parent, clicks so far
 with codes(code, campaign, level) as (values
   ('0ai0j0','Lunch A','campaign'),('jbozdk','Lunch A','ad'),('56hzut','Lunch A','ad'),('qx97ww','Lunch A','ad'),
   ('eff8sa','Lunch B','campaign'),('aw6zqu','Lunch B','ad'),('xicfnn','Lunch B','ad'),('ah4kcu','Lunch B','ad'),
   ('hrfowp','Dinner A','campaign'),('mrhx2v','Dinner A','ad'),('jse8x1','Dinner A','ad'),('if7tg6','Dinner A','ad'),
-  ('9sie8u','Dinner B','campaign'),('z75yyn','Dinner B','ad'),('f938i8','Dinner B','ad'),('i87o0t','Dinner B','ad'))
+  ('9sie8u','Dinner B','campaign'),('z75yyn','Dinner B','ad'),('f938i8','Dinner B','ad'),('i87o0t','Dinner B','ad'),
+  -- the four "walk in" challengers (Var 4), created paused on 4 October 2026
+  ('ombkp0','Lunch A','ad'),('0at7lw','Lunch B','ad'),('upg47i','Dinner A','ad'),('oty6qs','Dinner B','ad'))
 select c.campaign, c.level, c.code,
        sl.id is not null as exists_in_short_links,
        sl.expires_at,
@@ -500,7 +502,9 @@ codes(code, campaign, level) as (values
   ('0ai0j0','Lunch A','campaign'),('jbozdk','Lunch A','ad'),('56hzut','Lunch A','ad'),('qx97ww','Lunch A','ad'),
   ('eff8sa','Lunch B','campaign'),('aw6zqu','Lunch B','ad'),('xicfnn','Lunch B','ad'),('ah4kcu','Lunch B','ad'),
   ('hrfowp','Dinner A','campaign'),('mrhx2v','Dinner A','ad'),('jse8x1','Dinner A','ad'),('if7tg6','Dinner A','ad'),
-  ('9sie8u','Dinner B','campaign'),('z75yyn','Dinner B','ad'),('f938i8','Dinner B','ad'),('i87o0t','Dinner B','ad')),
+  ('9sie8u','Dinner B','campaign'),('z75yyn','Dinner B','ad'),('f938i8','Dinner B','ad'),('i87o0t','Dinner B','ad'),
+  -- the four "walk in" challengers (Var 4), created paused on 4 October 2026
+  ('ombkp0','Lunch A','ad'),('0at7lw','Lunch B','ad'),('upg47i','Dinner A','ad'),('oty6qs','Dinner B','ad')),
 weeks as (
   select gs::date as week_start from params, generate_series(first_week_start, last_week_start, interval '7 days') gs
 ),
@@ -708,7 +712,9 @@ with codes(code, campaign) as (values
   ('0ai0j0','Lunch A'),('jbozdk','Lunch A'),('56hzut','Lunch A'),('qx97ww','Lunch A'),
   ('eff8sa','Lunch B'),('aw6zqu','Lunch B'),('xicfnn','Lunch B'),('ah4kcu','Lunch B'),
   ('hrfowp','Dinner A'),('mrhx2v','Dinner A'),('jse8x1','Dinner A'),('if7tg6','Dinner A'),
-  ('9sie8u','Dinner B'),('z75yyn','Dinner B'),('f938i8','Dinner B'),('i87o0t','Dinner B')),
+  ('9sie8u','Dinner B'),('z75yyn','Dinner B'),('f938i8','Dinner B'),('i87o0t','Dinner B'),
+  -- the four "walk in" challengers (Var 4), created paused on 4 October 2026
+  ('ombkp0','Lunch A'),('0at7lw','Lunch B'),('upg47i','Dinner A'),('oty6qs','Dinner B')),
 utms(utm_campaign, campaign) as (values
   ('weekday_lunch_a_cod_and_chips','Lunch A'),('weekday_lunch_b_spicy_chicken_stack','Lunch B'),
   ('weekday_dinner_a_pizza','Dinner A'),('weekday_dinner_b_beef_and_ale_pie','Dinner B'))
@@ -823,6 +829,22 @@ order by tb.booking_date, tb.booking_time;
 ```
 
 Result today, tested with three September references: all three matched (two Saturday 12 Sep 17:00 dinner bookings for 6 and 4, confirmed; one Sunday 13 Sep 14:00 booking for 3, cancelled). A separate check matched all 24 September table references (all `brand_site`, 102 covers in total; 7 of the 24 bookings are for Tue to Fri dates).
+
+### The four "walk in" challenger ads (Var 4), from 4 October 2026
+
+Created **paused** on 4 October 2026 by `npm run ops:add-weekday-challengers -- --apply` (run `2026-10-04T10-40-14-757Z-e17a4cd9`). They deliver nothing until the owner switches them on.
+
+| Campaign | Meta ad id | Short code | CheersAI `ads.id` |
+|---|---|---|---|
+| Lunch A | `120246417053410609` | `ombkp0` | `efe7edc5-82c6-4dcd-9824-2a32d12eade7` |
+| Lunch B | `120246417055840609` | `0at7lw` | `98a9c1fe-a367-473a-943a-b6cbb5e23194` |
+| Dinner A | `120246417057360609` | `upg47i` | `22c31d53-15b2-4a37-b999-5c2093ee2213` |
+| Dinner B | `120246417059650609` | `oty6qs` | `b1b453b8-0fdb-4750-bbed-62ccfa801752` |
+
+- Query 4a now returns **17 rows**: the 12 originals, Lunch A's paused rewrite and these four. Match the challengers by Meta ad id; a count alone is not proof. Leave them out of every comparison while they are paused.
+- The four codes are in the lists of 3a, 3b and 5a. They are **not** in 5e-2 yet: add each one when its ad is switched on, and count its clicks from the activation time, never from 3 October.
+- **Clicks before activation are Meta, not customers.** Within three minutes of creation Meta fetched each new link: 49 fetches by its link checker (`facebookexternalhit`, classed as a bot and not counted) and 12 browser-like fetches from the United States with a facebook.com referrer, which the click log counts as human (`ombkp0` 8, `0at7lw` 2, `upg47i` 2, `oty6qs` 0). Any click on these four codes before the ads are switched on is Meta's review. The same happened to the original codes at set-up.
+- Once active, compare each challenger with the originals in its campaign **over the same period from its activation**, never challenger-to-date against originals since 11 September.
 
 ### 5e. Website table bookings that started on the ad landing page (page-source label)
 
