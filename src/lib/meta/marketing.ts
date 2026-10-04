@@ -95,6 +95,84 @@ export interface CreateAdCreativeParams {
   headline?: string;
   description?: string;
   callToActionType?: string;
+  // When true, the creative is sent with every recorded Meta automatic creative change set to
+  // OPT_OUT (RECORDED_CREATIVE_FEATURES), so Meta cannot rewrite the copy or edit the image.
+  // Absent or false sends exactly the request that was sent before this field existed.
+  optOutCreativeEnhancements?: boolean;
+}
+
+/**
+ * Every key Meta returned in `creative.degrees_of_freedom_spec.creative_features_spec` for the
+ * 13 existing weekday food ads (the 12 originals and Lunch A's paused rewrite), read with GET
+ * requests only on 4 October 2026 against Graph API v24.0. Both groups returned the same 83
+ * keys. On the 12 originals every key was OPT_OUT except `video_filtering` (OPT_IN); on the
+ * rewrite all 83 were OPT_OUT.
+ *
+ * The list is recorded rather than assumed: the `standard_enhancements` bundle is not among the
+ * keys Meta returns and is not relied on to cover them. Read the keys again before using this
+ * list on another Graph version (tasks/SPEC-weekday-food-optimisation.md, C1).
+ */
+export const RECORDED_CREATIVE_FEATURES = [
+  'adapt_to_placement', 'add_text_overlay', 'ads_with_benefits', 'advantage_plus_creative',
+  'app_highlights', 'audio', 'auto_promotion_tag', 'biz_ai', 'carousel_to_video',
+  'catalog_feed_tag', 'creative_stickers', 'customize_product_recommendation', 'cv_transformation',
+  'description_automation', 'dha_optimization', 'dynamic_cta_text', 'dynamic_partner_content',
+  'enable_ncs_testimonials', 'enhance_cta', 'fb_feed_tag', 'fb_reels_tag', 'fb_story_tag',
+  'feed_caption_optimization', 'generate_cta', 'hide_price', 'hyperlink_formatting', 'ig_feed_tag',
+  'ig_glados_feed', 'ig_reels_tag', 'ig_stream_tag', 'ig_video_native_subtitle', 'image_animation',
+  'image_auto_crop', 'image_background_gen', 'image_banner', 'image_brightness_and_contrast',
+  'image_end_card', 'image_enhancement', 'image_templates', 'image_text_translation',
+  'image_touchups', 'image_uncrop', 'inline_comment', 'local_store_extension',
+  'media_liquidity_animated_image', 'media_order', 'media_type_automation',
+  'multi_creative_post_carousel', 'multi_photo_to_video', 'music_generation',
+  'pac_genai_recomposition', 'pac_recomposition', 'pac_relaxation', 'product_browsing',
+  'product_extensions', 'product_metadata_automation', 'product_tags', 'profile_card',
+  'profile_extension', 'replace_media_text', 'reveal_details_over_time', 'show_destination_blurbs',
+  'show_summary', 'site_extensions', 'standard_enhancements_catalog',
+  'text_extraction_for_headline', 'text_extraction_for_tap_target', 'text_formatting_optimization',
+  'text_generation', 'text_optimizations', 'text_overlay_translation', 'text_translation',
+  'translate_voiceover', 'video_auto_crop', 'video_filtering', 'video_highlight',
+  'video_highlights', 'video_to_image', 'video_uncrop', 'video_uncrop_9x16_to_9x18',
+  'video_voiceover', 'wa_mm_image_filtering', 'wa_mm_text_truncation_length',
+] as const;
+
+/** What Meta holds for one ad and its creative, read back before the ad is switched on. */
+export interface MetaAdLaunchReadBack {
+  adId: string;
+  name: string | null;
+  adSetId: string | null;
+  configuredStatus: string | null;
+  effectiveStatus: string | null;
+  /** Meta's review feedback, or null when Meta returned none (an empty object counts as none). */
+  reviewFeedback: Record<string, unknown> | null;
+  creative: MetaCreativeLaunchReadBack;
+}
+
+export interface MetaCreativeLaunchReadBack {
+  id: string | null;
+  name: string | null;
+  pageId: string | null;
+  /** `object_story_spec.link_data.link`. */
+  link: string | null;
+  /** `object_story_spec.link_data.message` (the primary text). */
+  message: string | null;
+  /** `object_story_spec.link_data.name` (the headline). */
+  headline: string | null;
+  description: string | null;
+  callToActionType: string | null;
+  /** `object_story_spec.link_data.call_to_action.value.link`. */
+  callToActionLink: string | null;
+  /** `degrees_of_freedom_spec.creative_features_spec` exactly as Meta returned it, or null. */
+  creativeFeaturesSpec: Record<string, unknown> | null;
+}
+
+export type CreativeEnhancementsCheckResult = 'pass' | 'fail' | 'unverified';
+export type AdReviewCheckResult = 'pass' | 'fail' | 'pending';
+
+export interface MetaLaunchCheck<Result extends string> {
+  result: Result;
+  /** Plain-English reasons for anything other than a pass; empty on a pass. */
+  reasons: string[];
 }
 
 export interface CreateAdParams {
@@ -353,7 +431,7 @@ function normaliseMetaNumber(value: unknown): number | null {
   return null;
 }
 
-function normaliseMetaCallToActionType(value: string): string {
+export function normaliseMetaCallToActionType(value: string): string {
   // Ads Manager's editable UI/export flow still represents "Book Now" as BOOK_TRAVEL.
   // Sending BOOK_NOW is accepted by the API, but Ads Manager renders it as "Unknown (BOOK_NOW)".
   if (value === 'BOOK_NOW') return 'BOOK_TRAVEL';
@@ -554,6 +632,7 @@ export async function createMetaAdCreative(
     headline,
     description,
     callToActionType,
+    optOutCreativeEnhancements,
   } = params;
 
   // message lives inside link_data per Meta v24.0/v25.0 object_story_spec spec.
@@ -573,17 +652,397 @@ export async function createMetaAdCreative(
     };
   }
 
-  return metaPost<{ id: string }>(
-    `/${adAccountId}/adcreatives`,
-    accessToken,
-    {
-      name,
-      object_story_spec: {
-        page_id: pageId,
-        link_data: linkData,
-      },
+  const body: Record<string, unknown> = {
+    name,
+    object_story_spec: {
+      page_id: pageId,
+      link_data: linkData,
     },
-  );
+  };
+
+  // Appended last, and only on request, so a creative made without the flag keeps its exact
+  // field order and content. Every recorded feature is named: nothing is left to a bundle.
+  if (optOutCreativeEnhancements) {
+    body.degrees_of_freedom_spec = {
+      creative_features_spec: Object.fromEntries(
+        RECORDED_CREATIVE_FEATURES.map((feature) => [feature, { enroll_status: 'OPT_OUT' }]),
+      ),
+    };
+  }
+
+  return metaPost<{ id: string }>(`/${adAccountId}/adcreatives`, accessToken, body);
+}
+
+const AD_LAUNCH_READ_BACK_FIELDS =
+  'id,name,adset_id,configured_status,effective_status,ad_review_feedback,' +
+  'creative{id,name,object_story_spec,degrees_of_freedom_spec}';
+
+/**
+ * Read an ad and its creative back from Meta in one GET, for the checks that must pass before
+ * the ad is switched on. Anything Meta omits comes back as null, which never passes a check.
+ * Throws MetaApiError when Meta rejects the read (an expired token is code 190).
+ */
+export async function readMetaAdForLaunch(
+  adId: string,
+  accessToken: string,
+): Promise<MetaAdLaunchReadBack> {
+  const response = await metaGet<Record<string, unknown>>(`/${adId}`, accessToken, {
+    fields: AD_LAUNCH_READ_BACK_FIELDS,
+  });
+
+  return {
+    adId: asTrimmedString(response.id) ?? adId,
+    name: asTrimmedString(response.name),
+    adSetId: asTrimmedString(response.adset_id),
+    configuredStatus: asTrimmedString(response.configured_status),
+    effectiveStatus: asTrimmedString(response.effective_status),
+    reviewFeedback: readReviewFeedback(response.ad_review_feedback),
+    creative: shapeCreativeReadBack(asRecord(response.creative)),
+  };
+}
+
+/** Read one creative by its id (a GET), to recover a creative whose id is already stored. */
+export async function readMetaAdCreative(
+  creativeId: string,
+  accessToken: string,
+): Promise<MetaCreativeLaunchReadBack> {
+  const response = await metaGet<Record<string, unknown>>(`/${creativeId}`, accessToken, {
+    fields: 'id,name,object_story_spec,degrees_of_freedom_spec',
+  });
+  return shapeCreativeReadBack(response);
+}
+
+/** One ad as an ad set lists it. */
+export interface MetaAdSetAdSummary {
+  id: string;
+  name: string | null;
+  configuredStatus: string | null;
+  effectiveStatus: string | null;
+  creativeId: string | null;
+}
+
+// Meta leaves archived ads out of an ad set's list unless they are asked for by status, so
+// every status that can be listed is named. Deleted ads cannot be listed through an edge at
+// all (Meta: they can only be read by id), so DELETED is not in the filter.
+const LISTABLE_AD_STATUSES = [
+  'ACTIVE', 'PAUSED', 'PENDING_REVIEW', 'DISAPPROVED', 'PREAPPROVED', 'PENDING_BILLING_INFO',
+  'CAMPAIGN_PAUSED', 'ADSET_PAUSED', 'IN_PROCESS', 'WITH_ISSUES', 'ARCHIVED',
+];
+
+/** Every ad in an ad set, whatever its status (GET only), so an ad can be found by its name. */
+export async function listMetaAdSetAds(
+  adSetId: string,
+  accessToken: string,
+): Promise<MetaAdSetAdSummary[]> {
+  const rows = await metaGetAllPages(`/${adSetId}/ads`, accessToken, {
+    fields: 'id,name,configured_status,effective_status,creative{id}',
+    effective_status: JSON.stringify(LISTABLE_AD_STATUSES),
+  });
+
+  return rows
+    .map((row): MetaAdSetAdSummary | null => {
+      const id = asTrimmedString(row.id);
+      if (!id) return null;
+      return {
+        id,
+        name: asTrimmedString(row.name),
+        configuredStatus: asTrimmedString(row.configured_status),
+        effectiveStatus: asTrimmedString(row.effective_status),
+        creativeId: asTrimmedString(asRecord(row.creative)?.id),
+      };
+    })
+    .filter((row): row is MetaAdSetAdSummary => row !== null);
+}
+
+/** One creative as the ad account lists it. */
+export interface MetaAdCreativeSummary {
+  id: string;
+  name: string | null;
+  /** `object_story_spec.link_data.link`, or null for a creative built another way. */
+  link: string | null;
+}
+
+/**
+ * Every creative in the ad account carrying exactly this name (GET only). The account's
+ * creatives are paged through and matched here rather than filtered by Meta, so the match is
+ * exact and does not depend on a server-side filter.
+ */
+export async function listMetaAdCreativesNamed(
+  adAccountId: string,
+  accessToken: string,
+  name: string,
+): Promise<MetaAdCreativeSummary[]> {
+  const rows = await metaGetAllPages(`/${adAccountId}/adcreatives`, accessToken, {
+    fields: 'id,name,object_story_spec',
+  });
+
+  return rows
+    .map((row): MetaAdCreativeSummary | null => {
+      const id = asTrimmedString(row.id);
+      if (!id) return null;
+      const linkData = asRecord(asRecord(row.object_story_spec)?.link_data);
+      return { id, name: asTrimmedString(row.name), link: asTrimmedString(linkData?.link) };
+    })
+    .filter((row): row is MetaAdCreativeSummary => row !== null && row.name === name);
+}
+
+/** The ad account's status and spending limit, in minor units (pence), read with one GET. */
+export interface MetaAdAccountSpendStatus {
+  /** 1 means active. */
+  accountStatus: number | null;
+  /** The account spending limit; null when Meta returns none (0 means no limit is set). */
+  spendCapMinor: number | null;
+  amountSpentMinor: number | null;
+}
+
+export async function fetchMetaAdAccountSpendStatus(
+  adAccountId: string,
+  accessToken: string,
+): Promise<MetaAdAccountSpendStatus> {
+  const response = await metaGet<Record<string, unknown>>(`/${adAccountId}`, accessToken, {
+    fields: 'account_status,spend_cap,amount_spent',
+  });
+
+  return {
+    accountStatus: normaliseMetaNumber(response.account_status),
+    spendCapMinor: normaliseMetaNumber(response.spend_cap),
+    amountSpentMinor: normaliseMetaNumber(response.amount_spent),
+  };
+}
+
+/** What is left of an ad set's budget, in minor units (pence); null when Meta returns none. */
+export async function fetchMetaAdSetBudgetRemaining(
+  adSetId: string,
+  accessToken: string,
+): Promise<number | null> {
+  const response = await metaGet<Record<string, unknown>>(`/${adSetId}`, accessToken, {
+    fields: 'budget_remaining',
+  });
+  return normaliseMetaNumber(response.budget_remaining);
+}
+
+const META_LIST_PAGE_SIZE = 100;
+// 50 pages of 100 is far more than this account holds. Reaching it means the list cannot be
+// trusted to be complete, so the read fails rather than returning a partial answer.
+const META_LIST_MAX_PAGES = 50;
+
+async function metaGetAllPages(
+  path: string,
+  accessToken: string,
+  params: Record<string, string>,
+): Promise<Array<Record<string, unknown>>> {
+  const rows: Array<Record<string, unknown>> = [];
+  let after: string | null = null;
+
+  for (let page = 0; page < META_LIST_MAX_PAGES; page += 1) {
+    const response: Record<string, unknown> = await metaGet<Record<string, unknown>>(path, accessToken, {
+      ...params,
+      limit: String(META_LIST_PAGE_SIZE),
+      ...(after ? { after } : {}),
+    });
+
+    if (Array.isArray(response.data)) {
+      for (const row of response.data) {
+        const record = asRecord(row);
+        if (record) rows.push(record);
+      }
+    }
+
+    const paging = asRecord(response.paging);
+    const nextAfter = asTrimmedString(asRecord(paging?.cursors)?.after);
+    if (!paging?.next || !nextAfter || nextAfter === after) return rows;
+    after = nextAfter;
+  }
+
+  throw new MetaApiError(`Meta returned more than ${META_LIST_MAX_PAGES} pages for ${path}; the list is not complete.`, 0);
+}
+
+function shapeCreativeReadBack(creative: Record<string, unknown> | null): MetaCreativeLaunchReadBack {
+  const storySpec = asRecord(creative?.object_story_spec);
+  const linkData = asRecord(storySpec?.link_data);
+  const callToAction = asRecord(linkData?.call_to_action);
+  const callToActionValue = asRecord(callToAction?.value);
+
+  return {
+    id: asTrimmedString(creative?.id),
+    name: asTrimmedString(creative?.name),
+    pageId: asTrimmedString(storySpec?.page_id),
+    link: asTrimmedString(linkData?.link),
+    message: asTrimmedString(linkData?.message),
+    headline: asTrimmedString(linkData?.name),
+    description: asTrimmedString(linkData?.description),
+    callToActionType: asTrimmedString(callToAction?.type),
+    callToActionLink: asTrimmedString(callToActionValue?.link),
+    creativeFeaturesSpec: asRecord(asRecord(creative?.degrees_of_freedom_spec)?.creative_features_spec),
+  };
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+/** Any feedback at all is kept, whatever shape Meta sends it in; nothing or empty is null. */
+function readReviewFeedback(value: unknown): Record<string, unknown> | null {
+  if (value === undefined || value === null) return null;
+  const record = asRecord(value);
+  if (record) return Object.keys(record).length > 0 ? record : null;
+  if (Array.isArray(value)) return value.length > 0 ? { feedback: value } : null;
+  if (typeof value === 'string') return value.trim() ? { feedback: value.trim() } : null;
+  return { feedback: value };
+}
+
+function asTrimmedString(value: unknown): string | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+  return typeof value === 'string' && value.trim() ? value.trim() : null;
+}
+
+/**
+ * Whether Meta holds every recorded automatic creative change as opted out.
+ *
+ * - `fail`: any feature Meta returned is OPT_IN or carries a value that is not understood.
+ * - `unverified`: the spec is missing or empty, or a recorded feature is absent. This is not a
+ *   pass: an ad whose opt-out cannot be shown must not be switched on.
+ * - `pass`: every recorded feature is present and OPT_OUT.
+ *
+ * A feature Meta returns that is not on the recorded list is still checked, so a newly added
+ * feature that Meta has enrolled the creative in fails rather than slipping through.
+ */
+export function checkCreativeEnhancementsOptedOut(
+  creativeFeaturesSpec: unknown,
+): MetaLaunchCheck<CreativeEnhancementsCheckResult> {
+  const spec = asRecord(creativeFeaturesSpec);
+  const returned = spec ? Object.keys(spec) : [];
+
+  const enrolled: string[] = [];
+  const unknown: string[] = [];
+  for (const feature of returned) {
+    const status = readEnrollStatus(spec?.[feature]);
+    if (status === 'OPT_OUT') continue;
+    if (status === 'OPT_IN') enrolled.push(feature);
+    else unknown.push(feature);
+  }
+
+  if (enrolled.length > 0 || unknown.length > 0) {
+    const reasons: string[] = [];
+    if (enrolled.length > 0) reasons.push(`opted in: ${enrolled.join(', ')}`);
+    if (unknown.length > 0) reasons.push(`value not understood: ${unknown.join(', ')}`);
+    return { result: 'fail', reasons };
+  }
+
+  if (returned.length === 0) {
+    return { result: 'unverified', reasons: ['Meta returned no creative features'] };
+  }
+
+  const missing = RECORDED_CREATIVE_FEATURES.filter((feature) => !(feature in (spec ?? {})));
+  if (missing.length > 0) {
+    return { result: 'unverified', reasons: [`not returned by Meta: ${missing.join(', ')}`] };
+  }
+
+  return { result: 'pass', reasons: [] };
+}
+
+/** Meta returns `{ enroll_status: 'OPT_OUT' }`; a bare status string is read the same way. */
+function readEnrollStatus(value: unknown): string | null {
+  if (typeof value === 'string') return value.trim().toUpperCase() || null;
+  const status = asRecord(value)?.enroll_status;
+  return typeof status === 'string' ? status.trim().toUpperCase() || null : null;
+}
+
+/**
+ * Whether the creative's button and both of its links are what was meant to be sent. The app
+ * sends BOOK_NOW as BOOK_TRAVEL (normaliseMetaCallToActionType), so both sides of the button
+ * comparison are normalised the same way. The creative's own link and its button link must both
+ * equal the expected link: one pointing anywhere else fails.
+ */
+export function checkCreativeCallToAction(
+  creative: Pick<MetaCreativeLaunchReadBack, 'link' | 'callToActionType' | 'callToActionLink'>,
+  expected: { type: string; link: string },
+): MetaLaunchCheck<'pass' | 'fail'> {
+  const reasons: string[] = [];
+
+  const expectedType = normaliseMetaCallToActionType(expected.type.trim().toUpperCase());
+  const actualType = creative.callToActionType
+    ? normaliseMetaCallToActionType(creative.callToActionType.trim().toUpperCase())
+    : null;
+  if (!actualType) {
+    reasons.push('Meta returned no button type');
+  } else if (actualType !== expectedType) {
+    reasons.push(`the button is ${actualType}, expected ${expectedType}`);
+  }
+
+  if (!isSameLink(creative.link, expected.link)) {
+    reasons.push(`the creative link is ${creative.link ?? 'missing'}, expected ${expected.link}`);
+  }
+  if (!isSameLink(creative.callToActionLink, expected.link)) {
+    reasons.push(`the button link is ${creative.callToActionLink ?? 'missing'}, expected ${expected.link}`);
+  }
+
+  return { result: reasons.length === 0 ? 'pass' : 'fail', reasons };
+}
+
+/** Same address, ignoring letter case in the host and a trailing slash on the path. */
+function isSameLink(actual: string | null | undefined, expected: string): boolean {
+  const left = parseLink(actual);
+  const right = parseLink(expected);
+  return Boolean(left && right && left === right);
+}
+
+function parseLink(value: string | null | undefined): string | null {
+  if (!value) return null;
+  try {
+    const url = new URL(value.trim());
+    return `${url.protocol}//${url.host.toLowerCase()}${url.pathname.replace(/\/+$/, '')}${url.search}`;
+  } catch {
+    return null;
+  }
+}
+
+// Meta has not finished reviewing the ad. No feedback yet is not approval.
+const AD_REVIEW_IN_PROGRESS_STATUSES = new Set(['PENDING_REVIEW', 'IN_PROCESS', 'PREAPPROVED']);
+const AD_REVIEW_REJECTED_STATUSES = new Set(['DISAPPROVED', 'WITH_ISSUES']);
+
+/**
+ * Whether Meta has approved the ad in the state it was set to.
+ *
+ * - `fail`: Meta returned any review feedback or rejected the ad, the ad is not set to the
+ *   expected status, or its effective status is one that review will not resolve.
+ * - `pending`: Meta has not finished review, or returned no effective status.
+ * - `pass`: no feedback, and both the configured and the effective status are the expected one.
+ */
+export function checkAdReview(
+  ad: Pick<MetaAdLaunchReadBack, 'configuredStatus' | 'effectiveStatus' | 'reviewFeedback'>,
+  expectedStatus: 'ACTIVE' | 'PAUSED',
+): MetaLaunchCheck<AdReviewCheckResult> {
+  const configured = ad.configuredStatus?.toUpperCase() ?? null;
+  const effective = ad.effectiveStatus?.toUpperCase() ?? null;
+
+  if (ad.reviewFeedback && Object.keys(ad.reviewFeedback).length > 0) {
+    return { result: 'fail', reasons: [`Meta returned review feedback: ${JSON.stringify(ad.reviewFeedback)}`] };
+  }
+  if (effective && AD_REVIEW_REJECTED_STATUSES.has(effective)) {
+    return { result: 'fail', reasons: [`Meta reports the ad as ${effective}`] };
+  }
+  if (configured !== expectedStatus) {
+    return {
+      result: 'fail',
+      reasons: [`the ad is set to ${configured ?? 'an unknown status'}, expected ${expectedStatus}`],
+    };
+  }
+  if (!effective) {
+    return { result: 'pending', reasons: ['Meta returned no effective status'] };
+  }
+  if (effective === expectedStatus) {
+    return { result: 'pass', reasons: [] };
+  }
+  if (AD_REVIEW_IN_PROGRESS_STATUSES.has(effective)) {
+    return { result: 'pending', reasons: [`Meta has not finished review (${effective})`] };
+  }
+  return {
+    result: 'fail',
+    reasons: [`the ad's effective status is ${effective}, expected ${expectedStatus}`],
+  };
 }
 
 export async function createMetaAd(params: CreateAdParams): Promise<{ id: string }> {
