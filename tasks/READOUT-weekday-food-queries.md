@@ -832,7 +832,7 @@ Result today, tested with three September references: all three matched (two Sat
 
 ### The four "walk in" challenger ads (Var 4), from 4 October 2026
 
-Created **paused** on 4 October 2026 by `npm run ops:add-weekday-challengers -- --apply` (run `2026-10-04T10-40-14-757Z-e17a4cd9`). They deliver nothing until the owner switches them on.
+Created **paused** on 4 October 2026 by `npm run ops:add-weekday-challengers -- --apply` (run `2026-10-04T10-40-14-757Z-e17a4cd9`). **Switched on at 09:23 London on Monday 5 October 2026** by `--activate` (run `2026-10-05T08-23-25-008Z-c9c3014b`, owner decision D22). Meta's review passed by 09:25. The ad sets do not deliver on a Monday, so their first delivery is Tuesday 6 October.
 
 | Campaign | Meta ad id | Short code | CheersAI `ads.id` |
 |---|---|---|---|
@@ -841,10 +841,11 @@ Created **paused** on 4 October 2026 by `npm run ops:add-weekday-challengers -- 
 | Dinner A | `120246417057360609` | `upg47i` | `22c31d53-15b2-4a37-b999-5c2093ee2213` |
 | Dinner B | `120246417059650609` | `oty6qs` | `b1b453b8-0fdb-4750-bbed-62ccfa801752` |
 
-- Query 4a now returns **17 rows**: the 12 originals, Lunch A's paused rewrite and these four. Match the challengers by Meta ad id; a count alone is not proof. Leave them out of every comparison while they are paused.
-- The four codes are in the lists of 3a, 3b and 5a. They are **not** in 5e-2 yet: add each one when its ad is switched on, and count its clicks from the activation time, never from 3 October.
+- Query 4a now returns **17 rows**: the 12 originals, Lunch A's paused rewrite and these four. Match the challengers by Meta ad id; a count alone is not proof. From 5 October 16 are active and the rewrite is paused. The challengers have no figures before 6 October.
+- The four codes are in the lists of 3a, 3b and 5a. They are in 5e-2 from 5 October, counted from the start of Tuesday 6 October, their first delivery day, never from 3 October.
 - **Clicks before activation are Meta, not customers.** Within three minutes of creation Meta fetched each new link: 49 fetches by its link checker (`facebookexternalhit`, classed as a bot and not counted) and 12 browser-like fetches from the United States with a facebook.com referrer, which the click log counts as human (`ombkp0` 8, `0at7lw` 2, `upg47i` 2, `oty6qs` 0). Any click on these four codes before the ads are switched on is Meta's review. The same happened to the original codes at set-up.
-- Once active, compare each challenger with the originals in its campaign **over the same period from its activation**, never challenger-to-date against originals since 11 September.
+- **Meta checked the links again at switch-on:** 11 fetches by its link checker within 25 seconds of 09:23 on 5 October, all classed as bots. Between creation and switch-on `ombkp0` also drew 3 more browser-like fetches from the United States (11 in all). So every click on these four codes before Tuesday 6 October is Meta, not a customer.
+- Compare each challenger with the originals in its campaign **over the same days from Tuesday 6 October**, never challenger-to-date against originals since 11 September.
 
 ### 5e. Website table bookings that started on the ad landing page (page-source label)
 
@@ -918,23 +919,28 @@ Result on 4 October 2026, 10:40 London: 0 rows. No table booking of any kind has
 
 ```sql
 -- 5e-2. Confirmed landing-page bookings against human short-link clicks, per campaign, both counted
---       from the moment the labels went live. Add the four Var 4 codes here once the challengers exist.
+--       from the moment the labels went live. The four Var 4 codes count from the start of Tuesday
+--       6 October 2026, their first delivery day: every earlier click on them was Meta's own review.
 with params as (
   select timestamptz '2026-10-03 22:06 Europe/London' as label_live_from
 ),
 codes(code, campaign, utm_campaign) as (values
-  ('0ai0j0','Lunch A','weekday_lunch_a_cod_and_chips'),('jbozdk','Lunch A','weekday_lunch_a_cod_and_chips'),('56hzut','Lunch A','weekday_lunch_a_cod_and_chips'),('qx97ww','Lunch A','weekday_lunch_a_cod_and_chips'),
-  ('eff8sa','Lunch B','weekday_lunch_b_spicy_chicken_stack'),('aw6zqu','Lunch B','weekday_lunch_b_spicy_chicken_stack'),('xicfnn','Lunch B','weekday_lunch_b_spicy_chicken_stack'),('ah4kcu','Lunch B','weekday_lunch_b_spicy_chicken_stack'),
-  ('hrfowp','Dinner A','weekday_dinner_a_pizza'),('mrhx2v','Dinner A','weekday_dinner_a_pizza'),('jse8x1','Dinner A','weekday_dinner_a_pizza'),('if7tg6','Dinner A','weekday_dinner_a_pizza'),
-  ('9sie8u','Dinner B','weekday_dinner_b_beef_and_ale_pie'),('z75yyn','Dinner B','weekday_dinner_b_beef_and_ale_pie'),('f938i8','Dinner B','weekday_dinner_b_beef_and_ale_pie'),('i87o0t','Dinner B','weekday_dinner_b_beef_and_ale_pie')),
+  ('0ai0j0','Lunch A','weekday_lunch_a_cod_and_chips'),('jbozdk','Lunch A','weekday_lunch_a_cod_and_chips'),('56hzut','Lunch A','weekday_lunch_a_cod_and_chips'),('qx97ww','Lunch A','weekday_lunch_a_cod_and_chips'),('ombkp0','Lunch A','weekday_lunch_a_cod_and_chips'),
+  ('eff8sa','Lunch B','weekday_lunch_b_spicy_chicken_stack'),('aw6zqu','Lunch B','weekday_lunch_b_spicy_chicken_stack'),('xicfnn','Lunch B','weekday_lunch_b_spicy_chicken_stack'),('ah4kcu','Lunch B','weekday_lunch_b_spicy_chicken_stack'),('0at7lw','Lunch B','weekday_lunch_b_spicy_chicken_stack'),
+  ('hrfowp','Dinner A','weekday_dinner_a_pizza'),('mrhx2v','Dinner A','weekday_dinner_a_pizza'),('jse8x1','Dinner A','weekday_dinner_a_pizza'),('if7tg6','Dinner A','weekday_dinner_a_pizza'),('upg47i','Dinner A','weekday_dinner_a_pizza'),
+  ('9sie8u','Dinner B','weekday_dinner_b_beef_and_ale_pie'),('z75yyn','Dinner B','weekday_dinner_b_beef_and_ale_pie'),('f938i8','Dinner B','weekday_dinner_b_beef_and_ale_pie'),('i87o0t','Dinner B','weekday_dinner_b_beef_and_ale_pie'),('oty6qs','Dinner B','weekday_dinner_b_beef_and_ale_pie')),
+challengers(code, live_from) as (values
+  ('ombkp0', timestamptz '2026-10-06 00:00 Europe/London'),('0at7lw', timestamptz '2026-10-06 00:00 Europe/London'),
+  ('upg47i', timestamptz '2026-10-06 00:00 Europe/London'),('oty6qs', timestamptz '2026-10-06 00:00 Europe/London')),
 campaigns as (select distinct campaign, utm_campaign from codes),
 clicks as (
   select k.campaign, count(*) as human_clicks
   from short_link_clicks c
   join short_links sl on sl.id = c.short_link_id
   join codes k on k.code = sl.short_code
+  left join challengers ch on ch.code = k.code
   cross join params p
-  where c.clicked_at >= p.label_live_from
+  where c.clicked_at >= coalesce(ch.live_from, p.label_live_from)
     and not public.short_link_is_known_bot(c.user_agent, c.device_type)
   group by k.campaign
 ),
@@ -965,6 +971,8 @@ order by m.campaign;
 ```
 
 Result on 4 October 2026, 10:40 London: four rows, each 0 bookings over 0 clicks, rate "n/a". The ads do not deliver from Saturday to Monday, so the first clicks counted here will be on Tuesday 6 October.
+
+Result on 5 October 2026, 09:28 London, with the four Var 4 codes added: Lunch A 0 bookings over 4 clicks (0.00), the other three 0 over 0 ("n/a"). Those 4 clicks are not customers: two fetches each of `jbozdk` and `qx97ww` from the United States at 03:20 and 03:26 on Monday 5 October, a day the ads do not deliver. A browser-like fetch from outside the UK on a non-delivery day is Meta or another crawler that the bot test misses; say so if such clicks ever move a rate.
 
 **The organic check (spec section 6, step 3, revised by D21 on 4 October 2026).** The "walk in" challenger ads may only be switched on after a real website table booking shows a page label. It no longer has to start on the landing page: that page now tells visitors they need not book, so 5e-1 may stay empty to the end of the test. Query 5e-3 is the proof, and nobody makes a test booking to force it. **It cleared on 4 October 2026.** Switching the ads on still needs the owner's yes at the time.
 

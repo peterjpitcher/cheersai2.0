@@ -46,11 +46,12 @@ leave it out of the message comparison. Its link is the campaign-level code `0ai
 (`utm_content=meta_ads_main`).
 
 From 4 October each campaign also has a fifth ad slot in use: the "walk in" challenger, `Evergreen Test | Walk in | Var 4`,
-created **paused** (D20). Lunch A `120246417053410609` (ombkp0), Lunch B `120246417055840609` (0at7lw), Dinner A
+created paused on 4 October (D20) and **switched on at 09:23 on Monday 5 October 2026** (D22), so 16 ads are active. Lunch A `120246417053410609` (ombkp0), Lunch B `120246417055840609` (0at7lw), Dinner A
 `120246417057360609` (upg47i), Dinner B `120246417059650609` (oty6qs). Lunch Var 4: "Lunch, no booking needed, Tue to
 Fri"; dinner Var 4: "Dinner Tue to Fri, just walk in from 4pm". Same image, button and audience as the originals, every
-automatic creative change opted out. They are switched on only with the owner's yes at the time. The other condition, a real
-website table booking carrying a page label, was met on 4 October (D21, readout query 5e-3). 20 codes now exist for 16 ads plus the
+automatic creative change opted out. The owner gave his yes on 5 October after checking the Google and Facebook hours himself. The other condition, a real
+website table booking carrying a page label, was met on 4 October (D21, readout query 5e-3). First delivery is Tuesday 6 October;
+judge them against the originals over the same days from then. 20 codes now exist for 16 ads plus the
 paused rewrite, which uses a campaign-level code.
 
 ## 3. Owner decisions after the independent review (10 September 2026)
@@ -95,6 +96,7 @@ Full text in `tasks/SPEC-weekday-food-optimisation.md` section 2; build record i
 | D18 | The "Next event" card is hidden on the booking page for everyone |
 | D20 | Create the four challengers paused; switching them on needs its own yes and the organic check |
 | D21 | The organic check is any real website table booking carrying a page label, not only one from the landing page; met on 4 October |
+| D22 | Switch the four challengers on (5 October), after the owner confirmed the Google and Facebook hours are correct |
 
 ### Alcohol check (CAP Code section 18), dinner Var 2
 The ad is about food; the pint is incidental and moderate ("a pint at your local"). Minimum age 18
@@ -177,6 +179,7 @@ move locals, for any future spend.
 | 4 Oct 11:40 | Four "walk in" challenger ads created **paused** (run `2026-10-04T10-40-14-757Z-e17a4cd9`): 4 short links, 4 `ads` rows, 4 snapshot entries, 4 creatives, 4 ads. Read back from Meta: copy, button, own link and all 83 creative features opted out pass; review pending. The 12 originals and the paused rewrite unchanged | Management app short links API; CheersAI `ads` and `meta_campaigns.source_snapshot`; Meta API |
 | 4 Oct | Daily 08:30 check told that a paused Var 4 ad is expected, given the Var 4 claims, and set to tell the owner when the first labelled booking arrives | Claude scheduled task `anchor-weekday-food-daily-check` |
 | 4 Oct 17:30 | Switch-on proof widened to any real website table booking carrying a page label (D21), and met: two bookings, at 12:08 and 13:14, each stored `booking_source = direct`. Daily check and the three readout tasks updated to say so. The challengers stay paused and now wait only for the owner's yes | Spec D21; readout query 5e-3; Claude scheduled tasks on the owner's Mac |
+| 5 Oct 09:23 | Four "walk in" challenger ads **switched on** (run `2026-10-05T08-23-25-008Z-c9c3014b`) after all seven checks were made again that morning; the owner checked Google's hours himself. Meta approved all four by 09:25. 16 ads active, the rewrite still paused, the 12 originals unchanged. Daily check now expects 16 active ads; readouts for 12 and 19 October and query 5e-2 count the challengers from Tuesday 6 October | Meta API; CheersAI `ads`; Claude scheduled tasks on the owner's Mac |
 
 Rollback: pause any campaign from the CheersAI app; pause the challengers with `npm run ops:add-weekday-challengers -- --pause`; revert the website PRs; restore the previous
 audience (`home`, `recent`, `frequently_in`) or automatic placements through the Meta API.
