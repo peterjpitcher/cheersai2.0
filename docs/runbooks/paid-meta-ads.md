@@ -269,6 +269,8 @@ Use GET requests only and never print the token.
    Marketplace, right column, Messenger and Audience Network formats.
 7. **Public hours:** the Facebook Page's `hours` against the management app; Peter checks Google
    Business Profile. On 10 September 2026 the Page still said 4pm opening while the ads sold lunch.
+   Only Peter can check Google: the built-in browser refuses google.com and the website's Places keys
+   cannot read the listing (found 5 October 2026). Ask him early, because it holds up the launch.
 8. **Landing page on a phone** (375 x 812 and one shorter size, trackers blocked, a made-up `qa_`
    tag, the page address opened directly): the page matches the ad that links to it; stay on it
    for 15 seconds and confirm **no** pop-up or floating card appears (the 10 September check
