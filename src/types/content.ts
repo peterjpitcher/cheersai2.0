@@ -4,6 +4,8 @@
  * Always use fromDb<T>() when converting raw DB rows.
  */
 
+import type { SlotJob } from '@/lib/ai/slot-jobs';
+
 export type ContentType = 'instant_post' | 'story' | 'event' | 'promotion' | 'weekly_recurring';
 
 export type ContentStatus = 'draft' | 'review' | 'approved' | 'scheduled' | 'queued' | 'publishing' | 'published' | 'posted' | 'failed';
@@ -78,6 +80,8 @@ export interface SlotGeneratedCopy {
    * createScheduledBatch. Stories never carry an overlay.
    */
   bannerTextOverride?: string;
+  /** Event campaigns: the job this slot's copy was written for, shown above it (B3). */
+  job?: SlotJob;
 }
 
 /** Context snapshot used to detect stale generation when slots or media change */

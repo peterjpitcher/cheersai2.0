@@ -1,14 +1,16 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { DateTime } from "luxon";
+import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { generateContent } from "@/app/actions/ai-generate";
+import { generateContent, regenerateWithModifier } from "@/app/actions/ai-generate";
 import { ToastProvider } from "@/components/providers/toast-provider";
 import { GenerateStep } from "@/features/create/steps/generate-step";
 import type { ContentBrief } from "@/features/create/schemas/content-schemas";
+import type { SlotJob } from "@/lib/ai/slot-jobs";
 import type { MediaAssetSummary } from "@/lib/library/data";
-import type { SlotGeneratedCopy } from "@/types/content";
+import type { ScheduleSlot, SlotGeneratedCopy } from "@/types/content";
 
 vi.mock("@/app/actions/ai-generate", () => ({
   generateContent: vi.fn(),
@@ -763,5 +765,218 @@ describe("<GenerateStep />", () => {
     });
 
     expect(screen.queryByTestId("story-preview")).not.toBeInTheDocument();
+  });
+
+  // -------------------------------------------------------------------------
+  // Event campaigns: slots written in send order, each with its plan (B3)
+  // -------------------------------------------------------------------------
+
+  const CAMPAIGN_BRIEF = {
+    contentType: "event",
+    title: "Disco Night Music Bingo",
+    eventName: "Disco Night Music Bingo",
+    eventDate: "2026-11-13",
+    eventTime: "19:00",
+    prompt: "Two rounds of 70s disco.",
+    platforms: ["facebook", "instagram"],
+    placements: ["feed"],
+    facts: { host: "Jo" },
+  };
+
+  // Listed out of order: the wizard writes them in the order they go out.
+  const CAMPAIGN_SLOTS: ScheduleSlot[] = [
+    { key: "day", date: "2026-11-13", time: "07:00", source: "manual" },
+    { key: "launch", date: "2026-10-30", time: "07:00", source: "manual" },
+    { key: "last", date: "2026-11-11", time: "07:00", source: "manual" },
+    { key: "host", date: "2026-11-08", time: "07:00", source: "manual" },
+    { key: "week", date: "2026-11-06", time: "07:00", source: "manual" },
+  ];
+
+  /** Keeps the copies in state, as the wizard does, so the cards show what was written. */
+  function CampaignHarness({
+    brief,
+    slots,
+    initialCopies = [],
+  }: {
+    brief: Record<string, unknown>;
+    slots: ScheduleSlot[];
+    initialCopies?: SlotGeneratedCopy[];
+  }) {
+    const [copies, setCopies] = useState<SlotGeneratedCopy[]>(initialCopies);
+    return (
+      <ToastProvider>
+        <GenerateStep
+          contentId="draft-1"
+          contentBrief={brief as unknown as ContentBrief}
+          selectedSlots={slots}
+          generatedSlotCopies={copies}
+          onSlotCopiesChange={setCopies}
+          selectedMediaIds={[]}
+          publishMode="schedule"
+          isContextStale={false}
+          onGeneratedWithContext={vi.fn()}
+          onSaveDraft={vi.fn()}
+          onScheduleAll={vi.fn()}
+          onQueueAll={vi.fn()}
+          isSubmitting={false}
+          accountId="acc-1"
+          libraryItems={[]}
+          bannerDefaults={null}
+        />
+      </ToastProvider>
+    );
+  }
+
+  /** Numbers each write and records how many were in flight at once. */
+  function mockNumberedWrites(): { maxInFlight: () => number } {
+    let calls = 0;
+    let inFlight = 0;
+    let max = 0;
+    vi.mocked(generateContent).mockImplementation(async () => {
+      const n = ++calls;
+      inFlight += 1;
+      max = Math.max(max, inFlight);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      inFlight -= 1;
+      return {
+        data: {
+          copy: {
+            facebook: { body: `Facebook opening ${n}! Which round ${n}?` },
+            instagram: { body: `Instagram opening ${n}. Book now.` },
+          },
+          warnings: [],
+        },
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- mock only needs the shape the component reads
+      } as any;
+    });
+    return { maxInFlight: () => max };
+  }
+
+  it("writes an event campaign's slots one at a time, in send order, each with its plan", async () => {
+    const writes = mockNumberedWrites();
+    render(<CampaignHarness brief={CAMPAIGN_BRIEF} slots={CAMPAIGN_SLOTS} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /generate all \(5\)/i }));
+    await waitFor(() => expect(screen.getAllByText(/^Job:/)).toHaveLength(5));
+
+    expect(writes.maxInFlight()).toBe(1);
+    const contexts = vi.mocked(generateContent).mock.calls.map((call) => call[2]);
+    expect(contexts.map((context) => context?.scheduledAt)).toEqual(
+      ["2026-10-30", "2026-11-06", "2026-11-08", "2026-11-11", "2026-11-13"].map((date) => slotIso(date, "07:00")),
+    );
+    expect(contexts.map((context) => context?.campaign?.job)).toEqual([
+      "announce",
+      "how_it_works",
+      "meet_the_host",
+      "last_call",
+      "tonight",
+    ]);
+    expect(contexts[0]?.campaign).toEqual({
+      job: "announce",
+      position: 1,
+      total: 5,
+      earlierOpenings: [],
+      earlierQuestions: [],
+      allowQuestion: false,
+    });
+    // The third post is told how the first two opened and what they asked.
+    expect(contexts[2]?.campaign).toEqual({
+      job: "meet_the_host",
+      position: 3,
+      total: 5,
+      earlierOpenings: ["Facebook opening 1!", "Instagram opening 1.", "Facebook opening 2!", "Instagram opening 2."],
+      earlierQuestions: ["Which round 1?", "Which round 2?"],
+      allowQuestion: false,
+    });
+    expect(contexts.map((context) => context?.campaign?.allowQuestion)).toEqual([false, true, false, true, false]);
+
+    // Each card shows its job above its copy.
+    expect(screen.getAllByText(/^Job:/).map((line) => line.textContent)).toEqual([
+      "Job: Announce",
+      "Job: How it works",
+      "Job: Meet the host",
+      "Job: Last call",
+      "Job: Tonight",
+    ]);
+  });
+
+  function writtenSlot(key: string, date: string, body: string, job: SlotJob): SlotGeneratedCopy {
+    return {
+      slotKey: key,
+      scheduledAt: slotIso(date, "07:00"),
+      status: "ready",
+      copy: { facebook: { body }, instagram: { body } },
+      job,
+    };
+  }
+
+  it("rewrites one slot knowing how every other slot in the campaign opened", async () => {
+    const rewritten = {
+      data: {
+        copy: { facebook: { body: "A new second post." }, instagram: { body: "A new second post." } },
+        warnings: [],
+      },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- mock only needs the shape the component reads
+    } as any;
+    vi.mocked(generateContent).mockResolvedValue(rewritten);
+    vi.mocked(regenerateWithModifier).mockResolvedValue(rewritten);
+    render(
+      <CampaignHarness
+        brief={CAMPAIGN_BRIEF}
+        slots={CAMPAIGN_SLOTS}
+        initialCopies={[
+          writtenSlot("launch", "2026-10-30", "Disco is back on Friday 13th November! Which decade suits you?", "announce"),
+          writtenSlot("week", "2026-11-06", "Two rounds of 70s hits, prizes each round.", "how_it_works"),
+          writtenSlot("host", "2026-11-08", "Jo is on the mic for the night. Fancy a dance?", "meet_the_host"),
+          writtenSlot("last", "2026-11-11", "Tables are filling up for Friday.", "last_call"),
+          writtenSlot("day", "2026-11-13", "Doors open at half six tonight.", "tonight"),
+        ]}
+      />,
+    );
+    // Every other post, the later ones as well as the earlier.
+    const expectedPlan = {
+      job: "how_it_works",
+      position: 2,
+      total: 5,
+      earlierOpenings: [
+        "Disco is back on Friday 13th November!",
+        "Jo is on the mic for the night.",
+        "Tables are filling up for Friday.",
+        "Doors open at half six tonight.",
+      ],
+      earlierQuestions: ["Which decade suits you?", "Fancy a dance?"],
+      allowQuestion: true,
+    };
+
+    fireEvent.click(screen.getByRole("button", { name: /Fri 6 Nov, 07:00/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^Regenerate$/ }));
+    await waitFor(() => expect(generateContent).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(generateContent).mock.calls[0][2]?.campaign).toEqual(expectedPlan);
+
+    // A refine chip rewrites with the same plan.
+    await waitFor(() => expect(screen.getByRole("button", { name: "Make shorter" })).toBeEnabled());
+    fireEvent.click(screen.getByRole("button", { name: "Make shorter" }));
+    await waitFor(() => expect(regenerateWithModifier).toHaveBeenCalledTimes(1));
+    const [, , modifier, context] = vi.mocked(regenerateWithModifier).mock.calls[0];
+    expect(modifier).toBe("Make the copy shorter and more concise.");
+    expect(context?.campaign).toEqual(expectedPlan);
+    await waitFor(() => expect(screen.getByText(/^Job:/)).toHaveTextContent("Job: How it works"));
+  });
+
+  it("keeps writing other posts three at a time, without a plan or a job", async () => {
+    const writes = mockNumberedWrites();
+    render(
+      <CampaignHarness
+        brief={{ contentType: "promotion", title: "Two for one pizzas", platforms: ["facebook", "instagram"] }}
+        slots={CAMPAIGN_SLOTS.slice(0, 3)}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /generate all \(3\)/i }));
+    await waitFor(() => expect(screen.getByText("3 of 3 posts ready")).toBeInTheDocument());
+
+    expect(writes.maxInFlight()).toBe(3);
+    expect(vi.mocked(generateContent).mock.calls.map((call) => call[2]?.campaign)).toEqual([undefined, undefined, undefined]);
+    expect(screen.queryByText(/^Job:/)).not.toBeInTheDocument();
   });
 });
