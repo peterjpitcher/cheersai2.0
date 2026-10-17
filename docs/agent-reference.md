@@ -140,6 +140,7 @@ All run with `tsx` against whatever Supabase the environment points at. Read the
 | `ops:archive-planner-failures` | `scripts/ops/archive-planner-failures.ts` | Archives failed planner jobs |
 | `ops:search-meta-interests` | `scripts/ops/search-meta-interests.ts` | Searches Meta interest targeting options |
 | `ops:add-weekday-challengers` | `scripts/ops/add-weekday-challenger-ads.ts` | Adds one "walk in" challenger ad to each of The Anchor's four Weekday food campaigns. Read only by default (`--dry-run`, `--status`); `--apply` creates the ads paused, `--activate` switches them on, `--pause` is the rollback. Each writing mode needs the owner's yes at the time (`tasks/SPEC-weekday-food-optimisation.md` section 7) |
+| `ops:regenerate-rugby-posts` | `scripts/ops/regenerate-rugby-posts.ts` | Rebuilds a rugby tournament's unpublished posts after the rugby template changes (`--tournament <id>`). Read only by default; `--apply` deletes the unpublished posts and regenerates them through the normal path, never touching published ones. Run it after each template version bump (`tasks/SPEC-rugby-match-posts.md`) |
 | `ops:invoke` | `scripts/ops/invoke-function.ts` | Invokes a Supabase edge function by name (`publish-queue` is the only one) |
 | `ops:seed-world-cup` | `scripts/ops/seed-world-cup-2026.ts` | Seeds the World Cup 2026 tournament fixtures |
 | (none) | `scripts/ops/cleanup-banner-storage.ts`, `diagnose-publishing.ts`, `remove-slot-language.ts` | Storage cleanup, stuck-job diagnosis, copy clean-up |
