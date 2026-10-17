@@ -65,6 +65,16 @@ describe('planSlotJobs', () => {
     ]);
   });
 
+  it('gives a post after the event day a fresh angle, never a last call', () => {
+    // Saturday 14 November is the day after the event, which the timing rules write as a recap.
+    expect(planSlotJobs(['2026-11-06T08:00:00Z', '2026-11-13T08:00:00Z', '2026-11-14T10:00:00Z'], { eventDate: '2026-11-13', ...none })).toEqual([
+      'announce',
+      'tonight',
+      'fresh_angle',
+    ]);
+    expect(planSlotJobs(['2026-11-14T10:00:00Z'], { eventDate: '2026-11-13', ...none })).toEqual(['fresh_angle']);
+  });
+
   it('never gives meet the host without a host', () => {
     const jobs = planSlotJobs(
       ['2026-10-01T08:00:00Z', '2026-10-08T08:00:00Z', '2026-10-15T08:00:00Z', '2026-10-22T08:00:00Z'],
