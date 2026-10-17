@@ -10,6 +10,7 @@ import type {
   FixtureContentStatus,
   FixtureScreeningFields,
 } from '@/types/tournament';
+import { PUBLISHED_JOB_STATUSES, isPublishedContentStatus } from '@/lib/tournament/published-status';
 
 // --- snake_case DB row → camelCase TypeScript mappers ---
 
@@ -156,13 +157,6 @@ export async function getFixtureById(
 
 // --- Content lookup helpers ---
 
-const PUBLISHED_CONTENT_STATUSES = new Set(['published', 'posted', 'succeeded']);
-const PUBLISHED_JOB_STATUSES = ['published', 'succeeded'];
-
-function isPublishedContentStatus(status: string): boolean {
-  return PUBLISHED_CONTENT_STATUSES.has(status);
-}
-
 /** A fixture's posts, including any match-day round-up that lists it. */
 export async function getFixtureContentItems(
   supabase: SupabaseClient,
@@ -211,7 +205,7 @@ export async function getPublishedPlacements(
       .from('publish_jobs')
       .select('status')
       .eq('content_item_id', item.id)
-      .in('status', PUBLISHED_JOB_STATUSES)
+      .in('status', [...PUBLISHED_JOB_STATUSES])
       .limit(1);
 
     if (jobs?.length) {

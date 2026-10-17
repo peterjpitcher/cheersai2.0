@@ -29,8 +29,6 @@
 import dotenv from "dotenv";
 dotenv.config({ path: ".env.local" });
 
-const PUBLISHED = new Set(["published", "posted", "succeeded"]);
-
 function argValue(args: string[], name: string): string | null {
   const index = args.indexOf(name);
   return index >= 0 && args[index + 1] ? args[index + 1] : null;
@@ -52,6 +50,7 @@ async function main(): Promise<void> {
   const { bulkGenerateContent, deleteFixtureContentItems } = await import("@/lib/tournament/generate");
   const { NATIONS_TEMPLATE_VERSION } = await import("../../supabase/functions/_shared/nations-content-contract");
   const { coversFixture } = await import("../../supabase/functions/_shared/tournament-roundup");
+  const { isPublishedContentStatus } = await import("@/lib/tournament/published-status");
 
   const db = createServiceSupabaseClient();
   const { data: row, error: rowError } = await db.from("tournaments").select("account_id").eq("id", tournamentId).maybeSingle();
@@ -77,7 +76,7 @@ async function main(): Promise<void> {
   for (const fixture of targets) {
     // A match-day round-up counts towards every game it lists.
     const own = (items ?? []).filter((item) => coversFixture(item.prompt_context, fixture.id));
-    const unpublished = own.filter((item) => !PUBLISHED.has(String(item.status)));
+    const unpublished = own.filter((item) => !isPublishedContentStatus(item.status));
     const versions = [...new Set(unpublished.map((item) => String((item.prompt_context as Record<string, unknown>)?.screening_template_version ?? "none")))];
     console.log(`  ${fixture.kickOffAt}  ${fixture.teamA} v ${fixture.teamB}: ${unpublished.length} unpublished (${versions.join(", ") || "-"}), ${own.length - unpublished.length} published`);
   }
@@ -126,7 +125,7 @@ async function main(): Promise<void> {
   if (afterError) throw afterError;
   const byVersion = new Map<string, number>();
   for (const item of after ?? []) {
-    if (PUBLISHED.has(String(item.status))) continue;
+    if (isPublishedContentStatus(item.status)) continue;
     const version = String((item.prompt_context as Record<string, unknown>)?.screening_template_version ?? "none");
     byVersion.set(version, (byVersion.get(version) ?? 0) + 1);
   }
