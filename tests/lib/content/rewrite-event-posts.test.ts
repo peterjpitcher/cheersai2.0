@@ -208,7 +208,7 @@ describe('planEventPostRewrites', () => {
     return fakeDb({
       content_items: items,
       content_variants: variants,
-      publish_jobs: [...items.map((row) => ({ content_item_id: row.id, status: 'queued' })), ...jobs],
+      publish_jobs: [...items.map((row) => ({ content_item_id: row.id, account_id: ACCOUNT, status: 'queued' })), ...jobs],
       brand_profile: [],
       media_assets: [],
     });
@@ -290,7 +290,7 @@ describe('planEventPostRewrites', () => {
         item(5, { status: 'draft', scheduled_for: '2026-10-20T06:00:00+00:00' }),
         item(6, { scheduled_for: '2026-10-21T06:00:00+00:00' }),
       ],
-      [{ content_item_id: uuid(6), status: 'publishing' }],
+      [{ content_item_id: uuid(6), account_id: ACCOUNT, status: 'publishing' }, { content_item_id: uuid(1), account_id: 'other-brand', status: 'publishing' }],
     );
     const plan = await planEventPostRewrites(
       { db, write: writer(draft('Ten games and a £180 snowball.')), findEvent: async () => detail, now: () => NOW, model: 'gpt-test' },
@@ -390,7 +390,7 @@ describe('applyRewritePlan', () => {
     return {
       content_items: items,
       content_variants: variants,
-      publish_jobs: [...items.map((row) => ({ content_item_id: row.id, status: 'queued' })), ...jobs],
+      publish_jobs: [...items.map((row) => ({ content_item_id: row.id, account_id: ACCOUNT, status: 'queued' })), ...jobs],
     };
   }
 
@@ -401,7 +401,7 @@ describe('applyRewritePlan', () => {
       item(3, { scheduled_for: '2026-10-22T06:00:00+00:00' }),
       item(4, { status: 'posted' }),
       item(5),
-    ], [{ content_item_id: uuid(5), status: 'publishing' }]);
+    ], [{ content_item_id: uuid(5), account_id: ACCOUNT, status: 'publishing' }]);
     const { db } = fakeDb(tables);
     const outcome = await applyRewritePlan(db, parseRewritePlan(planFor([{ n: 1 }, { n: 2 }, { n: 3 }, { n: 4 }, { n: 5 }])), {
       mode: 'apply',
@@ -430,6 +430,30 @@ describe('applyRewritePlan', () => {
     });
     expect(outcome.skipped).toEqual([{ contentItemId: uuid(1), reason: 'due within 60 minutes' }]);
     expect(tables.content_variants[0].body).toBe('Old copy 1');
+  });
+
+  it('never overwrites an edit made between its read and its write', async () => {
+    const tables = tablesFor([item(1)]);
+    const { db } = fakeDb(tables);
+    // The read sees the planned text; by the time of the write the owner has edited it.
+    const racing = {
+      from: (table: string) => {
+        const builder = (db as unknown as { from: (name: string) => Record<string, unknown> }).from(table);
+        if (table !== 'content_variants') return builder;
+        const maybeSingle = builder.maybeSingle as () => Promise<{ data: Row | null }>;
+        builder.maybeSingle = async () => {
+          const result = await maybeSingle();
+          const seen = result.data ? { ...result.data } : null;
+          tables.content_variants[0].body = 'Edited by the owner just now';
+          return { ...result, data: seen };
+        };
+        return builder;
+      },
+    } as unknown as SupabaseClient;
+    const outcome = await applyRewritePlan(racing, parseRewritePlan(planFor([{ n: 1 }])), { mode: 'apply', now: () => NOW });
+    expect(outcome.written).toEqual([]);
+    expect(outcome.skipped).toEqual([{ contentItemId: uuid(1), reason: 'the text was changed while this ran' }]);
+    expect(tables.content_variants[0].body).toBe('Edited by the owner just now');
   });
 
   it('rolls back only text it wrote, and says when a post is already done', async () => {
@@ -492,5 +516,32 @@ describe('renderRewriteReport', () => {
     expect(report).toContain('**Facebook, after**\n\n> New line one');
     expect(report).toContain('Warnings: House style: one question at most.');
     expect(report).toContain('- Snowball Showdown Cash Bingo, Sat 17 Oct, 17:30, facebook: due within 60 minutes');
+  });
+
+  it('keeps two campaigns with the same name apart', () => {
+    const slot = (campaignId: string, scheduledFor: string, body: string) => ({
+      campaignId,
+      campaignName: 'Cash Bingo',
+      scheduledFor,
+      slotLabel: null,
+      warnings: [],
+      posts: [{ contentItemId: uuid(1), variantId: uuid(101), platform: 'facebook' as const, scheduledFor, oldBody: 'Old', newBody: body, oldPreviewData: null, newPreviewData: {} }],
+    });
+    const event = (campaignId: string, eventDate: string) => ({ campaignId, campaignName: 'Cash Bingo', eventName: 'Cash Bingo', eventDate, facts: null, tone: null, notes: [] });
+    const report = renderRewriteReport({
+      version: 1,
+      createdAt: NOW.toISOString(),
+      model: 'gpt-test',
+      accountId: ACCOUNT,
+      storiesLeftAlone: 0,
+      skipped: [],
+      events: [event('camp-oct', '2026-10-21'), event('camp-nov', '2026-11-18')],
+      slots: [slot('camp-oct', '2026-10-19T06:00:00+00:00', 'October night'), slot('camp-nov', '2026-11-16T07:00:00+00:00', 'November night')],
+    });
+    const [october, november] = report.split('## Cash Bingo').slice(1);
+    expect(october).toContain('October night');
+    expect(october).not.toContain('November night');
+    expect(november).toContain('November night');
+    expect(november).not.toContain('October night');
   });
 });

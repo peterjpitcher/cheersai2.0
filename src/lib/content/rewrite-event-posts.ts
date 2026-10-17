@@ -300,6 +300,7 @@ async function loadEventPosts(db: SupabaseClient, accountId: string, fromIso: st
     const { data: jobRows, error: jobError } = await db
       .from('publish_jobs')
       .select('content_item_id, status')
+      .eq('account_id', accountId)
       .in('content_item_id', rows.map((row) => row.id));
     if (jobError) throw new Error(`Could not load publish jobs: ${jobError.message}`);
     for (const job of (jobRows ?? []) as Array<{ content_item_id: string; status: string }>) {
@@ -634,6 +635,7 @@ export async function applyRewritePlan(
       const { data: jobs, error: jobError } = await db
         .from('publish_jobs')
         .select('status')
+        .eq('account_id', plan.accountId)
         .eq('content_item_id', post.contentItemId);
       if (jobError) throw new Error(jobError.message);
       const busy = ((jobs ?? []) as Array<{ status: string }>).filter((job) => !WAITING_JOB_STATUSES.has(job.status));
@@ -658,14 +660,20 @@ export async function applyRewritePlan(
         continue;
       }
 
+      // The expected text is part of the update itself, so an edit made between
+      // the read above and this write is never overwritten.
       const { data: updated, error: updateError } = await db
         .from('content_variants')
         .update({ body: targetBody, preview_data: targetPreview })
         .eq('id', post.variantId)
         .eq('content_item_id', post.contentItemId)
+        .eq('body', expectedBody)
         .select('id');
       if (updateError) throw new Error(updateError.message);
-      if (!updated?.length) throw new Error('the text record was not updated');
+      if (!updated?.length) {
+        skip('the text was changed while this ran');
+        continue;
+      }
 
       const { error: touchError } = await db
         .from('content_items')
@@ -717,10 +725,16 @@ export function renderRewriteReport(plan: RewritePlan): string {
     'Nothing has changed yet. Applying writes exactly the text below, and only to posts that have not been edited, moved or published since this list was made.',
   ];
 
+  // Keyed by campaign id: recurring events often share a name, and their posts
+  // must never be shown under another night's facts.
+  const campaignKey = (campaignId: string | null, campaignName: string): string => campaignId ?? `name:${campaignName}`;
   const byCampaign = new Map<string, PlannedSlot[]>();
-  for (const slot of plan.slots) byCampaign.set(slot.campaignName, [...(byCampaign.get(slot.campaignName) ?? []), slot]);
+  for (const slot of plan.slots) {
+    const key = campaignKey(slot.campaignId, slot.campaignName);
+    byCampaign.set(key, [...(byCampaign.get(key) ?? []), slot]);
+  }
   for (const event of plan.events) {
-    const slots = byCampaign.get(event.campaignName) ?? [];
+    const slots = byCampaign.get(campaignKey(event.campaignId, event.campaignName)) ?? [];
     lines.push('', `## ${event.campaignName}`, '', `${event.eventDate}. ${describeFacts(event.facts)} Tone: ${event.tone ?? DEFAULT_TONE}.`);
     if (event.ownerNote) lines.push('', `Owner note used: ${event.ownerNote}`);
     for (const note of event.notes) lines.push('', `**Check:** ${note}`);
