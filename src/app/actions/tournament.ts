@@ -28,7 +28,8 @@ import { areBothTeamsConfirmed } from '@/lib/tournament/placeholder';
 import { dispatchToQStash } from '@/lib/publishing/dispatch';
 import { enqueueAndDispatch, enqueuePublishJob } from '@/lib/publishing/queue';
 import { prepareRugbyFixture, saveRugbyFixture } from '@/lib/tournament/screening-mutation';
-import { checkTournamentContentById } from '@/lib/tournament/content-freshness';
+import { checkTournamentContentById, findContentCoveringFixture } from '@/lib/tournament/content-freshness';
+import { coveredFixtureIds, coversFixture, expectedFixtureRevision } from '../../../supabase/functions/_shared/tournament-roundup';
 import { projectTournamentFixtures } from '@/lib/tournament/screening-service';
 import type { TournamentFixture } from '@/types/tournament';
 import type { Tournament } from '@/types/tournament';
@@ -593,10 +594,9 @@ export async function publishNowFixture(
 
     if (fetchError) return { success: false, error: fetchError.message };
 
-    const fixtureItems = (allItems ?? []).filter((item: Record<string, unknown>) => {
-      const ctx = item.prompt_context as Record<string, unknown> | null;
-      return ctx?.tournament_fixture_id === fixtureId && ctx?.source === 'tournament';
-    });
+    // A match-day round-up that lists this fixture is its post too.
+    const fixtureItems = (allItems ?? []).filter((item: Record<string, unknown>) =>
+      coversFixture(item.prompt_context, fixtureId));
 
     // Only target content that has not already reached the published state.
     const unpublishedItems = fixtureItems.filter(
@@ -791,10 +791,8 @@ export async function toggleFixtureShowing(
         .eq('account_id', accountId)
         .is('deleted_at', null);
 
-      const publishedRemain = (remainingItems ?? []).some((item: Record<string, unknown>) => {
-        const ctx = item.prompt_context as Record<string, unknown> | null;
-        return ctx?.tournament_fixture_id === fixtureId && ctx?.source === 'tournament';
-      });
+      const publishedRemain = (remainingItems ?? []).some((item: Record<string, unknown>) =>
+        coversFixture(item.prompt_context, fixtureId));
 
       if (!publishedRemain) {
         await supabase
@@ -873,15 +871,9 @@ export async function getFixturePreview(
     const tournament = await getTournamentById(supabase, tournamentId, accountId);
     if (!tournament) return { success: false, error: 'Tournament not found' };
 
-    const { data: contentItems, error: fetchError } = await supabase
-      .from('content_items')
-      .select('id, platform, placement, status, scheduled_for, prompt_context')
-      .eq('account_id', accountId)
-      .is('deleted_at', null)
-      .contains('prompt_context', { tournament_fixture_id: fixtureId, source: 'tournament' });
-
-    if (fetchError) return { success: false, error: fetchError.message };
-    if (!contentItems?.length) return { success: true, items: [] };
+    // Includes the match-day round-up that lists this fixture.
+    const contentItems = await findContentCoveringFixture(supabase, accountId, fixtureId);
+    if (!contentItems.length) return { success: true, items: [] };
 
     const itemIds = contentItems.map((i) => i.id as string);
     const { data: variants } = await supabase
@@ -930,8 +922,26 @@ export async function getFixturePreview(
       }
     }
 
-    const currentFixture = tournament.sport === 'rugby_union' ? await getFixtureById(supabase, fixtureId, tournamentId) : null;
-    const currentScreening = currentFixture ? (await projectTournamentFixtures(supabase, tournament, [currentFixture]))[0] : null;
+    // Rugby posts are stale when any game they cover changed since generation.
+    const coveredIds = tournament.sport === 'rugby_union'
+      ? [...new Set(contentItems.flatMap((item) => coveredFixtureIds(item.prompt_context)))]
+      : [];
+    const coveredFixtures = (await Promise.all(coveredIds.map((id) => getFixtureById(supabase, id, tournamentId))))
+      .filter((fixture): fixture is TournamentFixture => Boolean(fixture));
+    const currentScreenings = coveredFixtures.length ? await projectTournamentFixtures(supabase, tournament, coveredFixtures) : [];
+    const fixtureById = new Map(coveredFixtures.map((fixture) => [fixture.id, fixture]));
+    const screeningById = new Map(currentScreenings.map((screened) => [screened.id, screened]));
+    const isStale = (context: Record<string, unknown> | null): boolean => {
+      if (tournament.sport !== 'rugby_union') return false;
+      if (context?.tournament_updated_at !== tournament.updatedAt) return true;
+      return coveredFixtureIds(context).some((id) => {
+        const fixture = fixtureById.get(id);
+        const screened = screeningById.get(id);
+        return !fixture
+          || fixture.contentRevision !== expectedFixtureRevision(context, id)
+          || (screened?.hours.state !== 'unknown' && context?.screening_hours_fingerprint !== screened?.hours.fingerprint);
+      });
+    };
     const items: PreviewItem[] = contentItems.map((item) => {
       const mediaIds = itemMediaMap.get(item.id as string) ?? [];
       const imageUrl = mediaIds.length ? (urlMap.get(mediaIds[0]) ?? '') : '';
@@ -939,7 +949,7 @@ export async function getFixturePreview(
       return {
         platform: item.platform as string,
         placement: item.placement as string,
-        status: currentFixture && ((item.prompt_context as Record<string, unknown> | null)?.screening_revision !== currentFixture.contentRevision || (item.prompt_context as Record<string, unknown> | null)?.tournament_updated_at !== tournament.updatedAt || (currentScreening?.hours.state !== 'unknown' && (item.prompt_context as Record<string, unknown> | null)?.screening_hours_fingerprint !== currentScreening?.hours.fingerprint)) ? `${item.status}: screening changed, review required` : item.status as string,
+        status: isStale(item.prompt_context) ? `${item.status}: screening changed, review required` : item.status as string,
         scheduledFor: (item.scheduled_for as string) ?? null,
         imageUrl,
         captionText: itemCaptionMap.get(item.id as string) ?? ((item.prompt_context as Record<string, unknown> | null)?.screening_caption as string | undefined) ?? null,

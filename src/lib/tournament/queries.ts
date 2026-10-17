@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { coveredFixtureIds } from '../../../supabase/functions/_shared/tournament-roundup';
 import type {
   Tournament,
   TournamentFixture,
@@ -162,21 +163,34 @@ function isPublishedContentStatus(status: string): boolean {
   return PUBLISHED_CONTENT_STATUSES.has(status);
 }
 
+/** A fixture's posts, including any match-day round-up that lists it. */
 export async function getFixtureContentItems(
   supabase: SupabaseClient,
   fixtureId: string,
   accountId: string,
 ): Promise<Array<{ id: string; platform: string; placement: string; status: string }>> {
-  const { data, error } = await supabase
-    .from('content_items')
-    .select('id, platform, placement, status')
-    .eq('account_id', accountId)
-    .is('deleted_at', null)
-    .contains('prompt_context', { tournament_fixture_id: fixtureId, source: 'tournament' });
+  const columns = 'id, platform, placement, status';
+  const [own, roundups] = await Promise.all([
+    supabase
+      .from('content_items')
+      .select(columns)
+      .eq('account_id', accountId)
+      .is('deleted_at', null)
+      .contains('prompt_context', { tournament_fixture_id: fixtureId, source: 'tournament' }),
+    supabase
+      .from('content_items')
+      .select(columns)
+      .eq('account_id', accountId)
+      .is('deleted_at', null)
+      .contains('prompt_context', { roundup_fixture_ids: [fixtureId], source: 'tournament' }),
+  ]);
 
-  if (error) throw error;
+  if (own.error) throw own.error;
+  if (roundups.error) throw roundups.error;
 
-  return data ?? [];
+  const byId = new Map<string, { id: string; platform: string; placement: string; status: string }>();
+  for (const item of [...(own.data ?? []), ...(roundups.data ?? [])]) byId.set(item.id, item);
+  return [...byId.values()];
 }
 
 export async function getPublishedPlacements(
@@ -229,14 +243,15 @@ export async function deriveFixtureContentStatuses(
 
   const fixtureContentMap = new Map<string, Array<{ status: string; scheduledFor: string | null }>>();
   for (const item of contentItems ?? []) {
-    const ctx = item.prompt_context as Record<string, unknown> | null;
-    const fId = ctx?.tournament_fixture_id as string | undefined;
-    if (!fId || !fixtureIds.includes(fId)) continue;
-    if (!fixtureContentMap.has(fId)) fixtureContentMap.set(fId, []);
-    fixtureContentMap.get(fId)!.push({
-      status: item.status as string,
-      scheduledFor: item.scheduled_for as string | null,
-    });
+    // A match-day round-up counts towards every game it lists.
+    for (const fId of coveredFixtureIds(item.prompt_context)) {
+      if (!fixtureIds.includes(fId)) continue;
+      if (!fixtureContentMap.has(fId)) fixtureContentMap.set(fId, []);
+      fixtureContentMap.get(fId)!.push({
+        status: item.status as string,
+        scheduledFor: item.scheduled_for as string | null,
+      });
+    }
   }
 
   const now = Date.now();

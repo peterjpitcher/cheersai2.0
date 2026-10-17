@@ -12,6 +12,8 @@ import { compositeOverlay } from '@/lib/tournament/overlay';
 import { displayTeamName } from '@/lib/tournament/team-display';
 import { interpolatePostTemplate } from '@/lib/tournament/template';
 import { buildRugbyMatchCopy, buildRugbyMenuLine } from '@/lib/tournament/rugby-copy';
+import { findContentCoveringFixture } from '@/lib/tournament/content-freshness';
+import { coveredFixtureIds } from '../../../supabase/functions/_shared/tournament-roundup';
 import { getPublishedPlacements } from '@/lib/tournament/queries';
 import { DEFAULT_TIMEZONE, MEDIA_BUCKET } from '@/lib/constants';
 import { redactId, tournamentDebug, tournamentDebugError } from '@/lib/tournament/debug';
@@ -883,13 +885,8 @@ export async function deleteFixtureContentItems(
   accountId: string,
   onlyUnpublished = false,
 ): Promise<number> {
-  const { data: fixtureItems, error: fetchError } = await supabase
-    .from('content_items')
-    .select('id, status')
-    .eq('account_id', accountId)
-    .contains('prompt_context', { tournament_fixture_id: fixtureId, source: 'tournament' });
-
-  if (fetchError) throw fetchError;
+  // Includes any match-day round-up that lists this fixture, and binned posts.
+  const fixtureItems = await findContentCoveringFixture(supabase, accountId, fixtureId, { includeDeleted: true });
 
   if (!fixtureItems.length) return 0;
 
@@ -968,25 +965,21 @@ export async function deleteFixtureContentItems(
       .remove(storagePaths);
   }
 
-  if (!onlyUnpublished) {
-    await supabase
-      .from('tournament_fixtures')
-      .update({ content_generated: false })
-      .eq('id', fixtureId);
-  } else {
-    const { data: remainingItems } = await supabase
-      .from('content_items')
-      .select('id')
-      .eq('account_id', accountId)
-      .is('deleted_at', null)
-      .contains('prompt_context', { tournament_fixture_id: fixtureId, source: 'tournament' })
-      .limit(1);
-
-    if (!remainingItems?.length) {
+  // A deleted round-up also leaves the other games it listed without a post, so
+  // every fixture it covered is re-checked, not only the one asked for.
+  const affectedFixtureIds = new Set<string>([fixtureId]);
+  for (const item of itemsToDelete) {
+    for (const id of coveredFixtureIds(item.prompt_context)) affectedFixtureIds.add(id);
+  }
+  for (const id of affectedFixtureIds) {
+    const keepsPosts = onlyUnpublished || id !== fixtureId
+      ? (await findContentCoveringFixture(supabase, accountId, id)).length > 0
+      : false;
+    if (!keepsPosts) {
       await supabase
         .from('tournament_fixtures')
         .update({ content_generated: false })
-        .eq('id', fixtureId);
+        .eq('id', id);
     }
   }
 

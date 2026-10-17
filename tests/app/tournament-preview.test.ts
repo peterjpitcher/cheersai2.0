@@ -99,6 +99,8 @@ describe('getFixturePreview', () => {
         ],
         error: null,
       },
+      // Second content lookup: match-day round-ups that list the fixture.
+      { data: [], error: null },
       {
         data: [
           {

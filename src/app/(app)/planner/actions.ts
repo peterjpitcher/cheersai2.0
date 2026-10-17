@@ -20,7 +20,10 @@ import { formatUkDateTime } from "@/lib/utils/date";
 import { requireEntitledContext } from "@/lib/billing/entitlement-server";
 import { createLogger } from "@/lib/logging";
 import { toLoggableError } from "@/lib/logging/to-error";
+import { findContentCoveringFixture } from "@/lib/tournament/content-freshness";
 import type { ContentStatus } from "@/types/content";
+
+import { coveredFixtureIds } from "../../../../supabase/functions/_shared/tournament-roundup";
 
 const logger = createLogger("planner");
 
@@ -160,18 +163,16 @@ type PlannerMediaAssetRow = {
 };
 
 function getTournamentContentContext(promptContext: unknown): {
-  fixtureId: string;
+  fixtureIds: string[];
   tournamentId: string | null;
 } | null {
-  if (!promptContext || typeof promptContext !== "object") return null;
+  // A match-day round-up covers every game it lists, not only its lead fixture.
+  const fixtureIds = coveredFixtureIds(promptContext);
+  if (!fixtureIds.length) return null;
 
   const context = promptContext as Record<string, unknown>;
-  if (context.source !== "tournament" || typeof context.tournament_fixture_id !== "string") {
-    return null;
-  }
-
   return {
-    fixtureId: context.tournament_fixture_id,
+    fixtureIds,
     tournamentId: typeof context.tournament_id === "string" ? context.tournament_id : null,
   };
 }
@@ -188,36 +189,25 @@ async function syncTournamentFixtureGeneratedState({
   const context = getTournamentContentContext(promptContext);
   if (!context) return null;
 
-  const { data: activeItems, error: activeItemsError } = await supabase
-    .from("content_items")
-    .select("id")
-    .eq("account_id", accountId)
-    .contains("prompt_context", {
-      tournament_fixture_id: context.fixtureId,
-      source: "tournament",
-    })
-    .is("deleted_at", null)
-    .limit(1);
+  for (const fixtureId of context.fixtureIds) {
+    const activeItems = await findContentCoveringFixture(supabase, accountId, fixtureId);
 
-  if (activeItemsError) {
-    throw activeItemsError;
-  }
+    let updateQuery = supabase
+      .from("tournament_fixtures")
+      .update({
+        content_generated: activeItems.length > 0,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", fixtureId);
 
-  let updateQuery = supabase
-    .from("tournament_fixtures")
-    .update({
-      content_generated: Boolean(activeItems?.length),
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", context.fixtureId);
+    if (context.tournamentId) {
+      updateQuery = updateQuery.eq("tournament_id", context.tournamentId);
+    }
 
-  if (context.tournamentId) {
-    updateQuery = updateQuery.eq("tournament_id", context.tournamentId);
-  }
-
-  const { error: updateError } = await updateQuery;
-  if (updateError) {
-    throw updateError;
+    const { error: updateError } = await updateQuery;
+    if (updateError) {
+      throw updateError;
+    }
   }
 
   return context.tournamentId;
