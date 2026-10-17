@@ -50,3 +50,34 @@ describe('buildRepeatedBannerLabel', () => {
     expect(result).toContain(' · ');
   });
 });
+
+// An event story's booking prompt shares the strip with the label
+// (tasks/SPEC-story-booking-prompt.md). The strip is centred, so the middle
+// item is what sits mid-height, clear of the story UI at top and bottom.
+describe('buildRepeatedBannerLabel with a story booking prompt', () => {
+  const middle = Math.floor(BANNER_LABEL_REPEAT_COUNT / 2);
+
+  it('alternates the prompt with the label, with a prompt in the middle', () => {
+    const parts = buildRepeatedBannerLabel('THIS FRIDAY', 'LINK IN BIO TO BOOK').split(' · ');
+
+    expect(parts).toHaveLength(BANNER_LABEL_REPEAT_COUNT);
+    expect(parts[middle]).toBe('LINK IN BIO TO BOOK');
+    expect(parts[middle - 1]).toBe('THIS FRIDAY');
+    expect(parts[middle + 1]).toBe('THIS FRIDAY');
+    for (let index = 1; index < parts.length; index += 1) {
+      expect(parts[index]).not.toBe(parts[index - 1]);
+    }
+  });
+
+  it('is symmetrical, so the clipped ends match', () => {
+    const parts = buildRepeatedBannerLabel('TONIGHT', 'BOOK AT THE-ANCHOR.PUB').split(' · ');
+    expect(parts).toEqual([...parts].reverse());
+  });
+
+  it('leaves the strip as before when there is no prompt', () => {
+    const plain = buildRepeatedBannerLabel('TODAY');
+    expect(buildRepeatedBannerLabel('TODAY', null)).toBe(plain);
+    expect(buildRepeatedBannerLabel('TODAY', undefined)).toBe(plain);
+    expect(buildRepeatedBannerLabel('TODAY', '   ')).toBe(plain);
+  });
+});

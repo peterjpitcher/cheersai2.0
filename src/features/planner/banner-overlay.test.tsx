@@ -168,3 +168,61 @@ describe('<BannerOverlay />', () => {
     expect(img?.getAttribute('loading')).toBe('lazy');
   });
 });
+
+// An event story's booking prompt rides in the strip, alternating with the
+// label, exactly as the publish worker draws it (tasks/SPEC-story-booking-prompt.md).
+describe('<BannerOverlay /> story booking prompt', () => {
+  it('carries the prompt in the strip, alternating with the label', () => {
+    const { container } = render(
+      <BannerOverlay
+        mediaUrl="/x.jpg"
+        config={baseConfig}
+        label="THIS FRIDAY"
+        storyPrompt="LINK IN BIO TO BOOK"
+      />,
+    );
+    const strip = container.querySelector('[data-banner-overlay]')!;
+    expect(strip).toHaveAttribute('data-story-prompt', 'LINK IN BIO TO BOOK');
+    const span = strip.querySelector('span')!;
+    expect(span.textContent).toContain('THIS FRIDAY · LINK IN BIO TO BOOK · THIS FRIDAY');
+    expect(span).toHaveAttribute('aria-label', 'THIS FRIDAY. LINK IN BIO TO BOOK');
+    // Still one strip: the prompt adds nothing else over the image.
+    expect(container.querySelectorAll('[data-banner-overlay]')).toHaveLength(1);
+  });
+
+  it('shows no prompt when the overlay is off', () => {
+    const { container } = render(
+      <BannerOverlay
+        mediaUrl="/x.jpg"
+        config={{ ...baseConfig, enabled: false }}
+        label="THIS FRIDAY"
+        storyPrompt="BOOK AT THE-ANCHOR.PUB"
+      />,
+    );
+    expect(container.querySelector('[data-banner-overlay]')).toBeNull();
+    expect(container.textContent).not.toContain('BOOK AT THE-ANCHOR.PUB');
+  });
+
+  it('shows no prompt when no label is due', () => {
+    const { container } = render(
+      <BannerOverlay
+        mediaUrl="/x.jpg"
+        config={baseConfig}
+        label={null}
+        storyPrompt="BOOK AT THE-ANCHOR.PUB"
+      />,
+    );
+    expect(container.querySelector('[data-banner-overlay]')).toBeNull();
+    expect(container.textContent).not.toContain('BOOK AT THE-ANCHOR.PUB');
+  });
+
+  it('keeps the plain strip without a prompt', () => {
+    const { container } = render(
+      <BannerOverlay mediaUrl="/x.jpg" config={baseConfig} label="TODAY" storyPrompt={null} />,
+    );
+    const strip = container.querySelector('[data-banner-overlay]')!;
+    expect(strip).not.toHaveAttribute('data-story-prompt');
+    const segments = (strip.querySelector('span')!.textContent ?? '').split(' · ');
+    expect(segments.every((segment) => segment === 'TODAY')).toBe(true);
+  });
+});

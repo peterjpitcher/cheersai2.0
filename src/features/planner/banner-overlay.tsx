@@ -18,6 +18,12 @@ type Props = {
   className?: string;
   /** Meaningful description of the image. Omit for decorative use. */
   alt?: string;
+  /**
+   * Booking prompt for an event story ("LINK IN BIO TO BOOK"), carried in the
+   * strip with the label, as the publish worker draws it. Shown only when the
+   * strip is.
+   */
+  storyPrompt?: string | null;
 };
 
 const positionClasses: Record<ResolvedConfig['position'], string> = {
@@ -37,7 +43,7 @@ const verticalTextStyle: Record<'left' | 'right', CSSProperties> = {
   right: { writingMode: 'vertical-rl' },
 };
 
-export function BannerOverlay({ mediaUrl, config, label, className, alt }: Props) {
+export function BannerOverlay({ mediaUrl, config, label, className, alt, storyPrompt }: Props) {
   const position = FIXED_BANNER_POSITION;
   const text =
     config.textOverride && config.textOverride.length > 0
@@ -54,8 +60,10 @@ export function BannerOverlay({ mediaUrl, config, label, className, alt }: Props
   // overflows on both ends regardless of strip width or label length. The
   // strip itself uses overflow-hidden + flex centring so the result clips
   // symmetrically. Mirrors the SVG output of renderBannerServer so preview
-  // and published image stay in sync.
-  const displayText = visible && text ? buildRepeatedBannerLabel(text) : null;
+  // and published image stay in sync, including an event story's booking
+  // prompt, which alternates with the label.
+  const prompt = storyPrompt?.trim() || null;
+  const displayText = visible && text ? buildRepeatedBannerLabel(text, prompt) : null;
 
   return (
     <div className={`relative ${className ?? ''}`}>
@@ -70,12 +78,13 @@ export function BannerOverlay({ mediaUrl, config, label, className, alt }: Props
         <div
           data-banner-overlay
           data-position={position}
+          data-story-prompt={prompt ?? undefined}
           className={`absolute ${positionClasses[position]} flex items-center justify-center overflow-hidden`}
           style={{ backgroundColor: FIXED_BANNER_BG, color: FIXED_BANNER_TEXT }}
         >
           <span
             className="whitespace-nowrap font-bold tracking-wide text-[clamp(0.42rem,1.05vw,0.82rem)]"
-            aria-label={text!}
+            aria-label={prompt ? `${text}. ${prompt}` : text!}
             style={textStyle}
           >
             {displayText}

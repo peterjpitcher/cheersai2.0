@@ -31,6 +31,8 @@ interface BannerSvgInputs {
     height: number;
     config: ResolvedConfig;
     label: string;
+    /** Booking prompt for an event story, carried in the strip with the label. */
+    storyPrompt?: string | null;
 }
 
 /**
@@ -39,7 +41,7 @@ interface BannerSvgInputs {
  * "<text>"; no "@font-face" block) without invoking the full renderer.
  */
 export function buildBannerSvg(inputs: BannerSvgInputs): string {
-    const { width, height, label } = inputs;
+    const { width, height, label, storyPrompt } = inputs;
     const position = FIXED_BANNER_POSITION;
     const shortSide = Math.min(width, height);
     const stripPct = 0.07;
@@ -50,7 +52,7 @@ export function buildBannerSvg(inputs: BannerSvgInputs): string {
     const stripWidth = horizontal ? width : stripPx;
     const stripHeight = horizontal ? stripPx : height;
 
-    const repeatedLabel = buildRepeatedBannerLabel(label);
+    const repeatedLabel = buildRepeatedBannerLabel(label, storyPrompt);
 
     // text-to-svg's getD() returns SVG path "d" attribute data, anchored
     // around the requested (x, y) per the anchor option. We anchor at the
@@ -80,10 +82,20 @@ export function buildBannerSvg(inputs: BannerSvgInputs): string {
   `.trim();
 }
 
+export interface RenderBannerOptions {
+    /**
+     * Booking prompt for an event story ("LINK IN BIO TO BOOK"). It shares the
+     * strip with the label, so it covers no more of the image. Omitted or null
+     * draws the strip as before.
+     */
+    storyPrompt?: string | null;
+}
+
 export async function renderBannerServer(
     source: Buffer,
     config: ResolvedConfig,
     label: string,
+    options: RenderBannerOptions = {},
 ): Promise<Buffer> {
     const img = sharp(source, { failOn: 'error' });
     const meta = await img.metadata();
@@ -96,6 +108,7 @@ export async function renderBannerServer(
         height: meta.height,
         config,
         label,
+        storyPrompt: options.storyPrompt,
     });
 
     const position = FIXED_BANNER_POSITION;

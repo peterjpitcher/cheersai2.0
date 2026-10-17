@@ -17,7 +17,7 @@ import {
   type ResolvedConfig,
 } from "@/lib/banner/config";
 import { extractCampaignTiming } from "@/lib/scheduling/campaign-timing";
-import { getProximityLabel } from "@/lib/scheduling/proximity-label";
+import { getProximityLabel, getStoryBookingPrompt } from "@/lib/scheduling/proximity-label";
 
 const DEFAULT_ACCOUNT_BANNER_DEFAULTS: AccountBannerDefaults = {
   banners_enabled: true,
@@ -63,6 +63,34 @@ async function loadAccountBannerDefaults({
     banner_bg: data.banner_bg ?? DEFAULT_ACCOUNT_BANNER_DEFAULTS.banner_bg,
     banner_text_colour: data.banner_text_colour ?? DEFAULT_ACCOUNT_BANNER_DEFAULTS.banner_text_colour,
   };
+}
+
+/**
+ * The brand's website (link_in_bio_profiles.website_url), which names the
+ * domain in a Facebook story's booking prompt. Only the preview depends on it,
+ * so a failed read is logged and shows the generic prompt rather than taking
+ * the post page down; the publish worker reads the website for itself.
+ */
+async function loadBrandWebsiteUrl({
+  supabase,
+  accountId,
+}: {
+  supabase: SupabaseClient;
+  accountId: string;
+}): Promise<string | null> {
+  const { data, error } = await supabase
+    .from("link_in_bio_profiles")
+    .select("website_url")
+    .eq("account_id", accountId)
+    .maybeSingle<{ website_url: string | null }>();
+
+  if (error) {
+    if (!isSchemaMissingError(error)) {
+      console.error("[planner] brand website lookup failed", error);
+    }
+    return null;
+  }
+  return data?.website_url ?? null;
 }
 
 /**
@@ -167,6 +195,8 @@ export interface PlannerContentDetail {
   providerResponse: Record<string, unknown> | null;
   bannerConfig: ResolvedConfig;
   bannerLabel: string | null;
+  /** Booking prompt the worker draws on this story with the strip, or null. */
+  storyPrompt: string | null;
   bannerOverrides: PostBannerOverrides;
   accountBannerDefaults: AccountBannerDefaults;
 }
@@ -786,10 +816,21 @@ export async function getPlannerContentDetail(contentId: string): Promise<Planne
     const detailVariants = normaliseVariants<ContentDetailVariantRow>(data.content_variants);
     const variant = detailVariants[0];
     const mediaIds = variant?.media_ids ?? [];
-    const [media, accountBannerDefaults] = await Promise.all([
+    const storyPromptInput = {
+      platform: data.platform,
+      placement: data.placement,
+      campaignType: data.campaigns?.campaign_type ?? null,
+      promptContext: data.prompt_context,
+    };
+    // Only a Facebook prompt names the website, so only then is it read.
+    const needsWebsite =
+      data.platform === "facebook" && getStoryBookingPrompt(storyPromptInput) !== null;
+    const [media, accountBannerDefaults, websiteUrl] = await Promise.all([
       loadMediaPreviews({ supabase, mediaIds, placement: data.placement }),
       loadAccountBannerDefaults({ supabase, accountId }),
+      needsWebsite ? loadBrandWebsiteUrl({ supabase, accountId }) : Promise.resolve(null),
     ]);
+    const storyPrompt = getStoryBookingPrompt({ ...storyPromptInput, websiteUrl });
 
     const jobEntries = Array.isArray(data.publish_jobs)
       ? (data.publish_jobs as ContentPublishJobRow[])
@@ -851,6 +892,7 @@ export async function getPlannerContentDetail(contentId: string): Promise<Planne
       providerResponse: (latestJob?.provider_response as Record<string, unknown> | null) ?? null,
       bannerConfig,
       bannerLabel,
+      storyPrompt,
       bannerOverrides: postOverrides,
       accountBannerDefaults,
     };

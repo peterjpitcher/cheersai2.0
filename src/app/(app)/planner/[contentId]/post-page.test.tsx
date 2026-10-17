@@ -50,6 +50,7 @@ function makeDetail(overrides: Partial<PlannerContentDetail> = {}): PlannerConte
     providerResponse: null,
     bannerConfig: { enabled: false, position: "right", bgColour: "#a57626", textColour: "#ffffff", textOverride: null },
     bannerLabel: null,
+    storyPrompt: null,
     bannerOverrides: {
       banner_enabled: null,
       banner_text_override: null,

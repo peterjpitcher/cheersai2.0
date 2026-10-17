@@ -37,7 +37,7 @@ import {
     type PostBannerOverrides,
     type ResolvedConfig,
 } from "./banner-config.ts";
-import { extractCampaignTiming, getProximityLabel } from "./banner-label.ts";
+import { extractCampaignTiming, getProximityLabel, getStoryBookingPrompt } from "./banner-label.ts";
 
 export interface PublishJobPayload {
     leadWindowMinutes?: number;
@@ -294,6 +294,44 @@ interface BannerRenderEndpointConfig {
 }
 
 /**
+ * The booking prompt for an event story (getStoryBookingPrompt), or null.
+ * Only a Facebook prompt names the brand's website, so only that case reads
+ * link_in_bio_profiles. A failed read must not cost the story its slot: it is
+ * logged and the generic Facebook text is used, which is still true because
+ * the Page carries the paired post with the booking link.
+ */
+async function resolveStoryBookingPrompt(
+    supabase: SupabaseClient,
+    content: ContentRow,
+): Promise<string | null> {
+    const input = {
+        platform: content.platform,
+        placement: content.placement,
+        campaignType: content.campaigns?.campaign_type ?? null,
+        promptContext: content.prompt_context,
+    };
+    const withoutWebsite = getStoryBookingPrompt({ ...input, websiteUrl: null });
+    if (withoutWebsite === null || content.platform !== "facebook") {
+        return withoutWebsite;
+    }
+
+    const { data, error } = await supabase
+        .from("link_in_bio_profiles")
+        .select("website_url")
+        .eq("account_id", content.account_id)
+        .maybeSingle<{ website_url: string | null }>();
+    if (error) {
+        console.error("[publish-queue] brand website lookup failed; story uses the generic booking prompt", {
+            contentId: content.id,
+            code: error.code ?? null,
+            message: error.message,
+        });
+        return withoutWebsite;
+    }
+    return getStoryBookingPrompt({ ...input, websiteUrl: data?.website_url ?? null });
+}
+
+/**
  * Resolve the banner config + label and (if enabled and a label is due) call
  * the Node-only Sharp render endpoint over HTTP, then upload the result.
  *
@@ -405,6 +443,10 @@ async function resolveAndRenderBanner(params: {
         );
     }
 
+    // Drawn only alongside the strip: an overlay switched off, or no label due,
+    // has already returned above.
+    const storyPrompt = await resolveStoryBookingPrompt(supabase, content);
+
     const { data: signedSourceList, error: signedSourceErr } = await supabase.storage
         .from(mediaBucket)
         .createSignedUrls([sourceStoragePath], 300);
@@ -425,6 +467,7 @@ async function resolveAndRenderBanner(params: {
                 sourceMediaUrl: signedSource,
                 config,
                 label: labelToShow,
+                storyPrompt,
             }),
         });
     } catch (err) {

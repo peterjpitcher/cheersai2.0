@@ -31,7 +31,9 @@ vi.mock("@/components/ui/sheet", () => ({
 }));
 
 vi.mock("@/features/planner/banner-overlay", () => ({
-  BannerOverlay: () => <div data-testid="banner-overlay" />,
+  BannerOverlay: ({ storyPrompt }: { storyPrompt?: string | null }) => (
+    <div data-testid="banner-overlay" data-story-prompt={storyPrompt ?? ""} />
+  ),
 }));
 
 vi.mock("@/features/planner/planner-media-swap-button", () => ({
@@ -88,6 +90,7 @@ function makeContent(overrides: Partial<PlannerContentDetail> = {}): PlannerCont
       textOverride: null,
     },
     bannerLabel: null,
+    storyPrompt: null,
     bannerOverrides: {
       banner_enabled: null,
       banner_text_override: null,
@@ -218,5 +221,27 @@ describe("<PostDrawer /> story caption gating", () => {
     const copyHeading = await screen.findByText("Copy");
     const copySection = copyHeading.parentElement!;
     expect(within(copySection).getByRole("button", { name: /edit/i })).toBeInTheDocument();
+  });
+});
+
+describe("<PostDrawer /> story booking prompt", () => {
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+    vi.clearAllMocks();
+  });
+
+  it("previews an event story's booking prompt with its strip", async () => {
+    renderDrawer(makeContent({ placement: "story", body: "", storyPrompt: "BOOK AT THE-ANCHOR.PUB" }));
+
+    const overlay = await screen.findByTestId("banner-overlay");
+    expect(overlay).toHaveAttribute("data-story-prompt", "BOOK AT THE-ANCHOR.PUB");
+  });
+
+  it("passes no prompt for a post without one", async () => {
+    renderDrawer(makeContent());
+
+    const overlay = await screen.findByTestId("banner-overlay");
+    expect(overlay).toHaveAttribute("data-story-prompt", "");
   });
 });

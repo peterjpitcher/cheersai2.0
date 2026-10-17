@@ -19,6 +19,15 @@
 
 export const MAX_BANNER_TEXT_LENGTH = 20;
 
+/**
+ * Longest booking prompt an event story may carry (getStoryBookingPrompt in
+ * src/lib/scheduling/proximity-label.ts): "BOOK AT " plus a domain of up to 32
+ * characters. Even 40 of the widest capitals (about 1,130px at the strip's
+ * text size) fit whole in the middle of a 1920px story strip, clear of the top
+ * and bottom 14% that Instagram and Facebook cover.
+ */
+export const MAX_STORY_PROMPT_LENGTH = 40;
+
 // Allowed: word chars, whitespace, common punctuation, and the pound sign.
 // Superset of the render endpoint's previous LABEL_PATTERN (adds `£`), so every
 // previously-valid label — including computed proximity labels — still passes.

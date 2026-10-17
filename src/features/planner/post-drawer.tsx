@@ -304,6 +304,7 @@ function DrawerContent({
                     mediaUrl={m.url}
                     config={content.bannerConfig}
                     label={bannerLabel}
+                    storyPrompt={content.storyPrompt}
                     className="h-full w-full"
                   />
                 </MediaFrame>
