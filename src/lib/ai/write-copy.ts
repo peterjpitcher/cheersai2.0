@@ -4,6 +4,7 @@ import type { ContentBrief } from '@/features/create/schemas/content-schemas';
 import { generatePlatformCopy } from '@/lib/ai/generate';
 import { findCopyIssues, postprocessCopy, type PostprocessResult } from '@/lib/ai/postprocess';
 import { INSTAGRAM_HASHTAG_LIMIT, buildSystemPrompt, buildUserPrompt } from '@/lib/ai/prompts';
+import type { CampaignSlotPlan } from '@/lib/ai/slot-jobs';
 import { getTemperature } from '@/lib/ai/temperature';
 import { BANNED_PHRASES, type BrandVoiceConfig } from '@/lib/ai/voice';
 import { buildGenerationTemporalContext, type GenerationTemporalContext } from '@/lib/create/temporal-context';
@@ -35,6 +36,8 @@ export interface WriteCopyInput {
   slotLabel?: string;
   media?: MediaMetadata[];
   modifier?: string;
+  /** This post's job and its campaign's earlier posts (B3). */
+  campaign?: CampaignSlotPlan;
 }
 
 export interface WriteCopyResult {
@@ -142,7 +145,7 @@ function deriveAspectClass(
  * that is returned as a warning for the owner rather than blocking the post.
  */
 export async function writeCopy(input: WriteCopyInput): Promise<WriteCopyResult> {
-  const { brief, brand, accountId, scheduledAt, slotLabel, media, modifier } = input;
+  const { brief, brand, accountId, scheduledAt, slotLabel, media, modifier, campaign } = input;
   const voiceConfig: BrandVoiceConfig = {
     tone: brief.tone,
     style: null,
@@ -167,6 +170,7 @@ export async function writeCopy(input: WriteCopyInput): Promise<WriteCopyResult>
     media: media?.length ? media : undefined,
     slotLabel,
     ...temporal,
+    campaign,
   });
   const temperature = getTemperature(brief.contentType);
   const postprocessConfig: Parameters<typeof postprocessCopy>[1] = {

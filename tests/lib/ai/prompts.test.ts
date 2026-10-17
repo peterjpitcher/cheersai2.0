@@ -487,3 +487,24 @@ describe("event fact sheet in the user prompt (tasks/SPEC-event-copy-engine.md B
     expect(prompt).not.toContain("Event facts from the venue");
   });
 });
+
+describe("campaign plan in the user prompt (tasks/SPEC-event-copy-engine.md B3)", () => {
+  it("adds the post's job and the earlier openings only when a campaign plan is given", () => {
+    const withPlan = buildUserPrompt(buildEventBrief(), undefined, {
+      campaign: {
+        job: "how_it_works",
+        position: 2,
+        total: 5,
+        earlierOpenings: ["Quiz Night is back on Wednesday 4th November."],
+        earlierQuestions: [],
+        allowQuestion: true,
+      },
+    });
+    expect(withPlan).toContain("Campaign plan: this is post 2 of 5 for this event.");
+    expect(withPlan).toContain("This post's job: Explain how the night works");
+    expect(withPlan).toContain('- "Quiz Night is back on Wednesday 4th November."');
+    expect(withPlan).toContain("You may ask one question");
+
+    expect(buildUserPrompt(buildEventBrief())).not.toContain("Campaign plan");
+  });
+});

@@ -52,6 +52,13 @@ Tone by event type (review 7) moved to B2, because it needs the event category, 
 - Write the slots in order rather than three at once. Each slot's prompt carries its job, the details to lead with, and the openings and questions earlier slots already used, which it must not repeat. Questions go in at most half the slots.
 - The wizard shows each slot's job above its copy.
 
+Core built 17 October 2026, ahead of the wizard part, because the first B8 rewrite plan repeated itself (7 of 7 Tinsel & Tipples Facebook posts opened "Hot mulled cider on..."; every Sparks & Sparklers post led with the host). `src/lib/ai/slot-jobs.ts` assigns the jobs and renders a "Campaign plan" block that `buildUserPrompt` adds when given one; the B8 rewrite tool writes each campaign's posts in order with it. Decisions:
+
+- Every post on the event day (London date) is "tonight"; the first earlier post announces; the last post before the day is the last call only when it is within three days; the posts between take how it works, meet the host (needs a host in the facts), dress-up and prizes, and eat first (each needs the brief to mention it), then fresh angles.
+- Questions are allowed in the second, fourth and sixth posts, so never in more than half.
+- Each post is told the first line of every earlier post in its campaign, on both platforms, and every question they asked.
+- Still to do: the wizard writes its slots in order with these plans and shows each slot's job.
+
 ### B4. Stronger model and best of three (review 3 and 4)
 
 - New ops script runs the current model and two or three candidates on 10 recent real briefs (stored in `content_items.ai_generation_params`), scores each draft with the B1 checks and a judging model, and prints a side-by-side for the owner. Candidates available to this account's key on 17 October 2026 include the GPT-5.4 and GPT-5.5 families and GPT-6 variants.
