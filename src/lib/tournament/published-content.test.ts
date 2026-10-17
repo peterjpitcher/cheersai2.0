@@ -1,7 +1,8 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { deleteFixtureContentItems, gamesLeftBehind } from './generate';
+import { clearStaleRoundups, deleteFixtureContentItems, gamesLeftBehind } from './generate';
+import { coveredFixtureIds } from '../../../supabase/functions/_shared/tournament-roundup';
 import { isPublishedContentStatus, isPublishedJobStatus } from './published-status';
 import { findContentCoveringFixture } from '@/lib/tournament/content-freshness';
 import type { TournamentFixture } from '@/types/tournament';
@@ -50,14 +51,19 @@ function fakeDb(rows: Record<string, Row[]>, failing: string[] = []) {
   return { db: { from, storage: { from: () => ({ remove: vi.fn() }) } } as unknown as SupabaseClient, deleted, updated };
 }
 
-function item(id: string, status: string, fixtureIds: string[] = ['f1']): { id: string; status: string; platform: string; placement: string; scheduled_for: string; prompt_context: Row } {
+function item(
+  id: string,
+  status: string,
+  fixtureIds: string[] = ['f1'],
+  eventStart = '2026-11-07T14:10:00Z',
+): { id: string; status: string; platform: string; placement: string; scheduled_for: string; prompt_context: Row } {
   return {
     id,
     status,
     platform: 'facebook',
     placement: 'feed',
-    scheduled_for: '2026-11-07T11:00:00Z',
-    prompt_context: { source: 'tournament', tournament_fixture_id: fixtureIds[0], roundup_fixture_ids: fixtureIds },
+    scheduled_for: '2026-11-04T11:40:00Z',
+    prompt_context: { source: 'tournament', tournament_fixture_id: fixtureIds[0], roundup_fixture_ids: fixtureIds, eventStart },
   };
 }
 
@@ -107,6 +113,7 @@ describe('gamesLeftBehind', () => {
     fixture('old-day-a', '2026-11-07T14:10:00Z'),
     fixture('old-day-b', '2026-11-07T16:40:00Z'),
     fixture('new-day', '2026-11-14T16:40:00Z'),
+    fixture('moved-too', '2026-11-21T14:10:00Z'),
   ];
 
   it('finds the day a moved game left, whose unpublished round-up still lists it', async () => {
@@ -118,8 +125,39 @@ describe('gamesLeftBehind', () => {
   it('leaves a published round-up and the game\'s own day alone', async () => {
     vi.mocked(findContentCoveringFixture).mockResolvedValue([
       item('old-roundup', 'posted', ['old-day-a', 'moved']),
-      item('new-roundup', 'scheduled', ['moved', 'new-day']),
+      item('new-roundup', 'scheduled', ['moved', 'new-day'], '2026-11-14T14:10:00Z'),
     ]);
     expect(await gamesLeftBehind({} as SupabaseClient, 'account-1', all[0], all)).toEqual([]);
+  });
+
+  it('takes the departed day from the round-up, not from another game that has also moved', async () => {
+    vi.mocked(findContentCoveringFixture).mockResolvedValue([item('old-roundup', 'scheduled', ['moved', 'moved-too', 'old-day-a'])]);
+    expect((await gamesLeftBehind({} as SupabaseClient, 'account-1', all[0], all)).map((lead) => lead.id)).toEqual(['old-day-a']);
+
+    // Every game it listed has left that day: nothing is left behind to rebuild.
+    vi.mocked(findContentCoveringFixture).mockResolvedValue([item('old-roundup', 'scheduled', ['moved', 'moved-too'])]);
+    expect(await gamesLeftBehind({} as SupabaseClient, 'account-1', all[0], all)).toEqual([]);
+  });
+});
+
+describe('clearStaleRoundups', () => {
+  const fixture = (id: string, kickOffAt: string): TournamentFixture => ({ id, kickOffAt } as TournamentFixture);
+
+  it('deletes a stale round-up once, before any day is rebuilt, and returns its day', async () => {
+    const all = [
+      fixture('moved', '2026-11-14T14:10:00Z'),
+      fixture('moved-too', '2026-11-21T14:10:00Z'),
+      fixture('old-day-a', '2026-11-07T14:10:00Z'),
+    ];
+    const stored = [item('old-roundup', 'scheduled', ['old-day-a', 'moved', 'moved-too'])];
+    const { db, deleted } = fakeDb({});
+    const isDeleted = (id: string): boolean => deleted.some((entry) => entry.table === 'content_items' && entry.ids.includes(id));
+    vi.mocked(findContentCoveringFixture).mockImplementation(async (_db, _account, fixtureId) =>
+      stored.filter((entry) => !isDeleted(entry.id) && coveredFixtureIds(entry.prompt_context).includes(fixtureId)));
+
+    const leads = await clearStaleRoundups(db, 'account-1', [all[0], all[1]], all);
+
+    expect(leads.map((lead) => lead.id)).toEqual(['old-day-a']);
+    expect(deleted.filter((entry) => entry.table === 'content_items')).toEqual([{ table: 'content_items', ids: ['old-roundup'] }]);
   });
 });

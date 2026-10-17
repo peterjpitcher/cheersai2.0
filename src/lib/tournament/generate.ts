@@ -995,18 +995,16 @@ async function bulkGenerateMatchDays(
   baseImageCache: Map<string, Buffer>,
 ): Promise<{ generated: number; skipped: number; errors: Array<{ fixtureId: string; error: string }> }> {
   const ordered = groupByMatchDay(eligible);
-  // A game moved to another day still sits in its old day's round-up, which
-  // rebuilding the new day removes, so the old day is rebuilt in this run too.
-  // Each day is rebuilt exactly once, so concurrent jobs never share a day.
+  // A game moved to another day still sits in its old day's round-up. That
+  // round-up is deleted here, once, before the days are rebuilt side by side,
+  // and its day is added to the run. Each day is rebuilt exactly once.
   const supabase = createServiceSupabaseClient();
   const days = new Set(ordered.map(([day]) => day));
-  for (const fixture of eligible) {
-    for (const lead of await gamesLeftBehind(supabase, tournament.accountId, fixture, fixtures)) {
-      const day = matchDayKey(lead.kickOffAt);
-      if (!days.has(day)) {
-        days.add(day);
-        ordered.push([day, [lead]]);
-      }
+  for (const lead of await clearStaleRoundups(supabase, tournament.accountId, eligible, fixtures)) {
+    const day = matchDayKey(lead.kickOffAt);
+    if (!days.has(day)) {
+      days.add(day);
+      ordered.push([day, [lead]]);
     }
   }
   const limit = pLimit(BULK_CONCURRENCY);
@@ -1065,11 +1063,43 @@ export async function gamesLeftBehind(
   const leads = new Map<string, TournamentFixture>();
   for (const item of await findContentCoveringFixture(supabase, accountId, fixture.id)) {
     if (isPublishedContentStatus(item.status)) continue;
-    for (const id of coveredFixtureIds(item.prompt_context)) {
-      const other = byId.get(id);
-      if (!other || id === fixture.id) continue;
-      const otherDay = matchDayKey(other.kickOffAt);
-      if (otherDay !== day && !leads.has(otherDay)) leads.set(otherDay, other);
+    // The day the round-up was written for, from its own lead kick-off. Where
+    // its other games sit now says nothing: they may have moved too.
+    const eventStart = item.prompt_context?.eventStart;
+    if (typeof eventStart !== 'string') continue;
+    const departedDay = matchDayKey(eventStart);
+    if (departedDay === day || leads.has(departedDay)) continue;
+    // A game still on that day leads its rebuild; with none left, there is nothing to rebuild.
+    const lead = coveredFixtureIds(item.prompt_context)
+      .map((id) => byId.get(id))
+      .find((other) => other && other.id !== fixture.id && matchDayKey(other.kickOffAt) === departedDay);
+    if (lead) leads.set(departedDay, lead);
+  }
+  return [...leads.values()];
+}
+
+/**
+ * Before Generate All rebuilds days side by side: delete, one at a time, each
+ * unpublished round-up that still lists an eligible game now on another day,
+ * and return a game from each day those round-ups were for, so those days are
+ * rebuilt too. Deleting them here means no two parallel rebuilds ever delete
+ * the same post, and with it an image another rebuild has just re-uploaded to
+ * the same path (image paths are fixed per lead game).
+ */
+export async function clearStaleRoundups(
+  supabase: SupabaseClient,
+  accountId: string,
+  eligible: TournamentFixture[],
+  fixtures: TournamentFixture[],
+): Promise<TournamentFixture[]> {
+  const leads = new Map<string, TournamentFixture>();
+  for (const fixture of eligible) {
+    const leftBehind = await gamesLeftBehind(supabase, accountId, fixture, fixtures);
+    if (!leftBehind.length) continue;
+    await deleteFixtureContentItems(supabase, fixture.id, accountId, true);
+    for (const lead of leftBehind) {
+      const day = matchDayKey(lead.kickOffAt);
+      if (!leads.has(day)) leads.set(day, lead);
     }
   }
   return [...leads.values()];
