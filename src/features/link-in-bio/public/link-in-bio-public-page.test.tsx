@@ -37,7 +37,7 @@ vi.mock('./link-in-bio-refresh-timer', () => ({
 }));
 
 import { LinkInBioPublicPage } from './link-in-bio-public-page';
-import type { PublicLinkInBioPageData } from '@/lib/link-in-bio/types';
+import type { PublicLinkInBioPageData, PublicWebsiteEvent } from '@/lib/link-in-bio/types';
 
 afterEach(() => {
   cleanup();
@@ -213,5 +213,88 @@ describe('<LinkInBioPublicPage /> banner rendering [G1]', () => {
     expect(frame).toHaveAttribute('data-media-placement', 'story');
     expect(frame).toHaveAttribute('data-media-size', 'fluid');
     expect(frame).toHaveClass('aspect-[9/16]');
+  });
+});
+
+// The page renders on the server, which runs in UTC on Vercel. Reading times
+// in the runtime's zone showed a 7pm event in British Summer Time as 6pm, so
+// every case runs with the runtime zone set to UTC, London and New York.
+describe('<LinkInBioPublicPage /> times on the London clock', () => {
+  const originalTimeZone = process.env.TZ;
+  const RUNTIME_ZONES = ['UTC', 'Europe/London', 'America/New_York'];
+
+  afterEach(() => {
+    process.env.TZ = originalTimeZone;
+  });
+
+  function websiteEvent(id: string, startsAt: string): PublicWebsiteEvent {
+    return {
+      id,
+      slug: id,
+      name: `Event ${id}`,
+      startsAt,
+      status: 'scheduled',
+      categoryLabel: null,
+      summary: null,
+      imageUrl: null,
+      ctaUrl: `https://l.the-anchor.pub/${id}`,
+      ctaLabel: 'Book now',
+    };
+  }
+
+  function timingsShown(data: PublicLinkInBioPageData): string[] {
+    const { container } = render(<LinkInBioPublicPage data={data} />);
+    // A card's timing line is a calendar icon and the text beside it: a <p> on
+    // campaign cards, a <span> on event cards. The other calendar icons sit in
+    // <div>s (the "Event" badge and the no-picture placeholder).
+    const timings = Array.from(
+      container.querySelectorAll('p > svg.lucide-calendar-days, span > svg.lucide-calendar-days'),
+    ).map((icon) => icon.parentElement?.textContent?.trim() ?? '');
+    cleanup();
+    return timings;
+  }
+
+  it.each(RUNTIME_ZONES)('shows "What\'s on" events at their London time (runtime zone %s)', (zone) => {
+    process.env.TZ = zone;
+    const data = buildData({ bannerConfig: null, bannerLabel: null });
+    data.campaigns = [];
+    data.websiteEvents = [
+      // What the data layer sends: London time with its offset.
+      websiteEvent('summer', '2026-10-07T19:00:00.000+01:00'),
+      // The same kind of instant written in UTC.
+      websiteEvent('summer-utc', '2026-10-16T18:00:00.000Z'),
+      // After the clocks go back on 25 October.
+      websiteEvent('winter', '2026-11-04T19:00:00.000+00:00'),
+      // 23:30 UTC on 7 October is half past midnight on the 8th in London.
+      websiteEvent('after-midnight', '2026-10-07T23:30:00.000Z'),
+      // Midnight London means no time was set, so only the date shows.
+      websiteEvent('date-only', '2026-10-09T00:00:00.000+01:00'),
+    ];
+
+    expect(timingsShown(data)).toEqual([
+      'Wed 7 Oct at 7pm',
+      'Fri 16 Oct at 7pm',
+      'Wed 4 Nov at 7pm',
+      'Thu 8 Oct at 12:30am',
+      'Fri 9 Oct',
+    ]);
+  });
+
+  it.each(RUNTIME_ZONES)('shows campaign dates at their London time (runtime zone %s)', (zone) => {
+    process.env.TZ = zone;
+    const event = buildData({
+      bannerConfig: null,
+      bannerLabel: null,
+      displayStartsAt: '2026-10-07T19:30:00.000+01:00',
+    });
+    expect(timingsShown(event)).toEqual(['Wed 7 Oct at 7:30pm']);
+
+    const weekly = buildData({
+      bannerConfig: null,
+      bannerLabel: null,
+      campaignType: 'weekly',
+      displayStartsAt: '2026-10-08T18:00:00.000Z',
+    });
+    expect(timingsShown(weekly)).toEqual(['Thursday at 7pm']);
   });
 });

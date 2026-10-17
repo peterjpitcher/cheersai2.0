@@ -1,8 +1,8 @@
-import { unstable_cache } from "next/cache";
 import { DateTime } from "luxon";
 
 import { DEFAULT_TIMEZONE, MEDIA_BUCKET } from "@/lib/constants";
 import { normaliseStoragePath, resolvePreviewCandidates, type PreviewCandidate } from "@/lib/library/data";
+import { createLogger } from "@/lib/logging";
 import {
   bannerConfigResolver,
   type AccountBannerDefaults,
@@ -150,18 +150,31 @@ interface CampaignAggregate {
 
 type ServiceSupabaseClient = NonNullable<ReturnType<typeof tryCreateServiceSupabaseClient>>;
 
+const logger = createLogger("link-in-bio");
+
 const WEBSITE_EVENT_LIMIT = 6;
+/** An event stays listed until it started this many hours ago. */
+const WEBSITE_EVENT_GRACE_HOURS = 4;
 /**
- * How long the management "what's on" list may be stale.
+ * How long one fetch of the management "what's on" list is reused.
  *
- * This list previously cost ~2.4s of blocking cross-app HTTP on every render of
- * a public link-in-bio page: one list call plus one detail call per event, all
- * with `cache: "no-store"`. Event listings change rarely, so a short window
- * turns that into a cache hit without anything a visitor would notice. The
- * signed media URLs and campaign windows that make this page `force-dynamic`
- * are fetched separately and are unaffected.
+ * The list used to sit in `unstable_cache` for five minutes. That cache is
+ * stale-while-revalidate: the first visitor after a quiet spell got the old
+ * copy while a refresh ran for whoever came next. The Anchor's page is seen
+ * about once every two days, so most of its visitors saw a list days old (past
+ * events at the top, new ones missing). Now every render fetches fresh, and a
+ * result is reused only for this long, so a burst of views (and the metadata
+ * and page renders of one request) share one fetch instead of each making up
+ * to eleven management calls. See tasks/SPEC-link-in-bio-freshness.md.
  */
-const WEBSITE_EVENTS_REVALIDATE_SECONDS = 300;
+const WEBSITE_EVENTS_REUSE_MS = 60_000;
+/**
+ * Timeout for each management call. The management app's logs for the 30 days
+ * to 17 October 2026 show at worst 641ms for the list and 1.7s for an event
+ * detail during a page refresh, so this leaves headroom without holding the
+ * page for the six seconds it used to allow.
+ */
+const WEBSITE_EVENTS_TIMEOUT_MS = 2_500;
 /**
  * Detail candidates fetched beyond what is rendered. Detail data can still drop
  * an event (no name anywhere, or a status that turns out to be cancelled), so a
@@ -491,11 +504,6 @@ function shapePublicWebsiteEvent(
   } satisfies PublicWebsiteEvent;
 }
 
-/** Cache tag for a brand's website events, so the list can be busted on demand. */
-export function websiteEventsCacheTag(accountId: string): string {
-  return `link-in-bio:website-events:${accountId}`;
-}
-
 /**
  * Narrow a management event list down to the entries worth fetching details for.
  *
@@ -509,7 +517,7 @@ export function selectWebsiteEventCandidates(
   timezone: string,
   now: DateTime,
 ): ManagementEventListItem[] {
-  const threshold = now.minus({ hours: 4 });
+  const threshold = now.minus({ hours: WEBSITE_EVENT_GRACE_HOURS });
   const seen = new Set<string>();
   const dated: { item: ManagementEventListItem; startsAt: DateTime }[] = [];
 
@@ -531,31 +539,41 @@ export function selectWebsiteEventCandidates(
 }
 
 /**
- * Cached entry point. `now` is deliberately computed inside rather than passed
- * in: a per-request timestamp in the cache key would mean the cache never hit.
+ * Cut a list of events, sorted by start, to the ones still worth showing at
+ * `now`, capped at what the page renders. Applied when the list is shown, not
+ * when it was fetched, so a remembered list can never show an event that has
+ * since passed.
  */
-function getPublicWebsiteEvents(
-  accountId: string,
+function upcomingWebsiteEvents(
+  events: PublicWebsiteEvent[],
   timezone: string,
-  websiteUrl: string | null,
-): Promise<PublicWebsiteEvent[]> {
-  return unstable_cache(
-    (tz: string, url: string | null) => loadPublicWebsiteEvents(accountId, tz, url),
-    ["link-in-bio", "website-events", accountId],
-    {
-      revalidate: WEBSITE_EVENTS_REVALIDATE_SECONDS,
-      tags: [websiteEventsCacheTag(accountId)],
-    },
-  )(timezone, websiteUrl);
+  now: DateTime,
+): PublicWebsiteEvent[] {
+  const threshold = now.minus({ hours: WEBSITE_EVENT_GRACE_HOURS });
+  return events
+    .filter((event) => {
+      const startsAt = DateTime.fromISO(event.startsAt).setZone(timezone);
+      return startsAt.isValid && startsAt >= threshold;
+    })
+    .slice(0, WEBSITE_EVENT_LIMIT);
 }
 
-async function loadPublicWebsiteEvents(
+/**
+ * Fetch a brand's upcoming events from the management app: every event the
+ * page could show, sorted by start and not yet cut to the display limit.
+ *
+ * Resolves to [] when the brand's import is off or not set up, and to null when
+ * the switch or the connection cannot be read, so the caller fails closed
+ * without using an older list. Rejects when the management app's list call
+ * fails or times out.
+ */
+async function fetchWebsiteEvents(
   accountId: string,
   timezone: string,
   websiteUrl: string | null,
-): Promise<PublicWebsiteEvent[]> {
+): Promise<PublicWebsiteEvent[] | null> {
   const supabase = tryCreateServiceSupabaseClient();
-  if (!supabase) return [];
+  if (!supabase) return null;
 
   const now = DateTime.now().setZone(timezone);
 
@@ -566,7 +584,16 @@ async function loadPublicWebsiteEvents(
     .select("management_import_enabled")
     .eq("id", accountId)
     .maybeSingle<{ management_import_enabled: boolean | null }>();
-  if (brandError || brand?.management_import_enabled !== true) {
+  if (brandError) {
+    if (!isSchemaMissingError(brandError)) {
+      logger.warn("could not read the management import switch; showing no events", {
+        accountId,
+        error: brandError.message,
+      });
+    }
+    return null;
+  }
+  if (brand?.management_import_enabled !== true) {
     return [];
   }
 
@@ -580,7 +607,7 @@ async function loadPublicWebsiteEvents(
     if (!isSchemaMissingError(error)) {
       console.error("[link-in-bio] failed to load management connection", error);
     }
-    return [];
+    return null;
   }
 
   const baseUrl = connection?.base_url?.trim();
@@ -589,48 +616,121 @@ async function loadPublicWebsiteEvents(
     return [];
   }
 
-  const config: ManagementApiConfig = { baseUrl, apiKey, timeoutMs: 6_000 };
+  const config: ManagementApiConfig = { baseUrl, apiKey, timeoutMs: WEBSITE_EVENTS_TIMEOUT_MS };
   const websiteBaseUrl = normaliseWebsiteBaseUrl(websiteUrl);
 
-  try {
-    const list = await listManagementEvents(config, {
-      limit: WEBSITE_EVENT_LIMIT * 3,
-      fromDate: now.toISODate() ?? undefined,
-      status: MANAGEMENT_EVENT_STATUSES,
-    });
+  const list = await listManagementEvents(config, {
+    limit: WEBSITE_EVENT_LIMIT * 3,
+    fromDate: now.toISODate() ?? undefined,
+    status: MANAGEMENT_EVENT_STATUSES,
+  });
 
-    // Only the events that can actually be rendered get a detail round trip.
-    // Previously this fetched details for every listed event and then discarded
-    // most of them, which is where the bulk of the page latency came from.
-    const candidates = selectWebsiteEventCandidates(list, timezone, now);
+  // Only the events that can actually be rendered get a detail round trip.
+  // Previously this fetched details for every listed event and then discarded
+  // most of them, which is where the bulk of the page latency came from.
+  const candidates = selectWebsiteEventCandidates(list, timezone, now);
 
-    const detailResults = await Promise.all(candidates.map(async (item) => {
-      let detail: ManagementEventDetail | null = null;
-      try {
-        detail = await getManagementEventDetail(config, item.id, { fallbackSlug: item.slug ?? undefined });
-      } catch (error) {
-        console.error("[link-in-bio] failed to load management event detail", { eventId: item.id, error });
-      }
-
-      return shapePublicWebsiteEvent(item, detail, timezone, websiteBaseUrl);
-    }));
-
-    const threshold = now.minus({ hours: 4 });
-    const deduped = new Map<string, PublicWebsiteEvent>();
-
-    for (const event of detailResults) {
-      if (!event) continue;
-      const startsAt = DateTime.fromISO(event.startsAt).setZone(timezone);
-      if (!startsAt.isValid || startsAt < threshold) continue;
-      deduped.set(event.id, event);
+  const detailResults = await Promise.all(candidates.map(async (item) => {
+    let detail: ManagementEventDetail | null = null;
+    try {
+      detail = await getManagementEventDetail(config, item.id, { fallbackSlug: item.slug ?? undefined });
+    } catch (error) {
+      console.error("[link-in-bio] failed to load management event detail", { eventId: item.id, error });
     }
 
-    return Array.from(deduped.values())
-      .sort((a, b) => DateTime.fromISO(a.startsAt).toMillis() - DateTime.fromISO(b.startsAt).toMillis())
-      .slice(0, WEBSITE_EVENT_LIMIT);
-  } catch (error) {
-    console.error("[link-in-bio] failed to load management website events", error);
-    return [];
+    return shapePublicWebsiteEvent(item, detail, timezone, websiteBaseUrl);
+  }));
+
+  const deduped = new Map<string, PublicWebsiteEvent>();
+  for (const event of detailResults) {
+    if (event) deduped.set(event.id, event);
+  }
+
+  return Array.from(deduped.values())
+    .sort((a, b) => DateTime.fromISO(a.startsAt).toMillis() - DateTime.fromISO(b.startsAt).toMillis());
+}
+
+interface RememberedWebsiteEvents {
+  events: PublicWebsiteEvent[];
+  fetchedAt: number;
+}
+
+/**
+ * Each brand's last good list, and any fetch in flight. Module scope, so they
+ * last as long as the server instance. The remembered list is reused for
+ * WEBSITE_EVENTS_REUSE_MS and after that is only a fallback for when the
+ * management app fails; a cold instance has none, and then shows no events.
+ */
+const rememberedWebsiteEvents = new Map<string, RememberedWebsiteEvents>();
+const pendingWebsiteEvents = new Map<string, Promise<PublicWebsiteEvent[] | null>>();
+
+/**
+ * One fetch per brand at a time; a successful result becomes the remembered
+ * list. A failure is logged here, once per fetch, rather than by each render
+ * that shared it (the metadata and the page are two).
+ */
+function fetchWebsiteEventsOnce(
+  accountId: string,
+  timezone: string,
+  websiteUrl: string | null,
+): Promise<PublicWebsiteEvent[] | null> {
+  const pending = pendingWebsiteEvents.get(accountId);
+  if (pending) return pending;
+
+  const request = fetchWebsiteEvents(accountId, timezone, websiteUrl)
+    .then((events) => {
+      if (events) {
+        rememberedWebsiteEvents.set(accountId, { events, fetchedAt: Date.now() });
+      }
+      return events;
+    })
+    .catch((error: unknown) => {
+      const fallback = rememberedWebsiteEvents.get(accountId);
+      logger.warn(
+        fallback
+          ? "management events fetch failed; showing the last good list"
+          : "management events fetch failed; showing no events",
+        {
+          accountId,
+          error: error instanceof Error ? error.message : String(error),
+          lastGoodAgeSeconds: fallback ? Math.round((Date.now() - fallback.fetchedAt) / 1000) : null,
+        },
+      );
+      throw error;
+    })
+    .finally(() => {
+      pendingWebsiteEvents.delete(accountId);
+    });
+  pendingWebsiteEvents.set(accountId, request);
+  return request;
+}
+
+/**
+ * The brand's "what's on" list for one render, fetched from the management app.
+ *
+ * A list fetched under WEBSITE_EVENTS_REUSE_MS ago is reused, and renders that
+ * arrive together share one fetch. The last good list is shown only when the
+ * fetch fails or times out, and whichever list is shown is cut against the
+ * current time. Never rejects: on any failure the page renders without events
+ * rather than failing. Exported for testing.
+ */
+export async function getPublicWebsiteEvents(
+  accountId: string,
+  timezone: string,
+  websiteUrl: string | null,
+): Promise<PublicWebsiteEvent[]> {
+  try {
+    const remembered = rememberedWebsiteEvents.get(accountId);
+    if (remembered && Date.now() - remembered.fetchedAt < WEBSITE_EVENTS_REUSE_MS) {
+      return upcomingWebsiteEvents(remembered.events, timezone, DateTime.now().setZone(timezone));
+    }
+
+    const events = await fetchWebsiteEventsOnce(accountId, timezone, websiteUrl);
+    return events ? upcomingWebsiteEvents(events, timezone, DateTime.now().setZone(timezone)) : [];
+  } catch {
+    // Already logged by fetchWebsiteEventsOnce.
+    const fallback = rememberedWebsiteEvents.get(accountId);
+    return fallback ? upcomingWebsiteEvents(fallback.events, timezone, DateTime.now().setZone(timezone)) : [];
   }
 }
 
@@ -787,6 +887,11 @@ export async function getPublicLinkInBioPageData(
 
     const timezone = accountRow?.timezone ?? DEFAULT_TIMEZONE;
     const now = DateTime.now().setZone(timezone);
+
+    // Started now so the management app's round trips overlap the campaign
+    // queries below. It never rejects, so nothing is left unhandled if one of
+    // those queries throws first.
+    const websiteEventsPromise = getPublicWebsiteEvents(accountId, timezone, profile.websiteUrl);
 
     // Loading every content item this account has ever published, with its
     // variants and campaign metadata, cost over a second and grew with history,
@@ -1072,9 +1177,11 @@ export async function getPublicLinkInBioPageData(
       } satisfies PublicLinkInBioTile;
     });
 
+    // The events fetch started before the campaign queries, so this phase is
+    // only the wait left after them.
     const [logoMedia, websiteEvents] = await track(timings, "logo+website-events", () => Promise.all([
       resolveLogoMedia(supabase, profile.logoUrl),
-      getPublicWebsiteEvents(accountId, timezone, profile.websiteUrl),
+      websiteEventsPromise,
     ]));
     const heroMedia = profile.heroMediaId ? assetMaps.previews.get(profile.heroMediaId) ?? null : null;
 

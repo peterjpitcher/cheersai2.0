@@ -4,7 +4,6 @@ import { DateTime } from "luxon";
 import {
   selectDisplayableCampaignIds,
   selectWebsiteEventCandidates,
-  websiteEventsCacheTag,
   type CampaignDisplayCandidate,
 } from "./public";
 import type { ManagementEventListItem } from "@/lib/management-app/client";
@@ -122,13 +121,6 @@ describe("selectWebsiteEventCandidates", () => {
       event(`e${i}`, { date: "2026-09-10", time: `${String(9 + (i % 12)).padStart(2, "0")}:00` }),
     );
     expect(selectWebsiteEventCandidates(list, TZ, NOW).length).toBeGreaterThan(6);
-  });
-});
-
-describe("websiteEventsCacheTag", () => {
-  it("is scoped per account so one brand cannot bust another's cache", () => {
-    expect(websiteEventsCacheTag("acc-1")).toBe("link-in-bio:website-events:acc-1");
-    expect(websiteEventsCacheTag("acc-1")).not.toBe(websiteEventsCacheTag("acc-2"));
   });
 });
 
