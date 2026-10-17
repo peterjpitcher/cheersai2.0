@@ -368,6 +368,7 @@ export function CreateWizard({ initialDraftId, accountId, onClose }: CreateWizar
           ? (['facebook', 'instagram'] as const)
           : (currentValues.platforms ?? ['facebook', 'instagram']),
         tone: currentValues.tone,
+        toneChosen: currentValues.toneChosen,
         lengthPreference: currentValues.lengthPreference,
         includeHashtags: currentValues.includeHashtags,
         includeEmojis: currentValues.includeEmojis,

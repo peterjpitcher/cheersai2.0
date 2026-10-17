@@ -16,6 +16,16 @@ export function importedBriefText(fields: { description?: string; prompt?: strin
 }
 
 /**
+ * Whether the owner chose the current tone. The form records it (toneChosen);
+ * a draft saved before it did falls back to the old rule, where any tone other
+ * than the default counts as chosen, so a resumed draft never loses a choice.
+ */
+export function ownerChoseTone({ toneChosen, tone }: { toneChosen?: boolean; tone?: string }): boolean {
+  if (typeof toneChosen === 'boolean') return toneChosen;
+  return (tone ?? 'friendly_warm') !== 'friendly_warm';
+}
+
+/**
  * The tone after an import, or null to leave it. A tone the owner picked
  * themselves always stays, even Friendly & Warm; otherwise the event's suggested
  * tone replaces any earlier import's suggestion, or the default comes back.

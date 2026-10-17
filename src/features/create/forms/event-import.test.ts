@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
-import { importedBriefText, toneAfterImport } from './event-import';
+import { eventBriefSchema } from '@/features/create/schemas/content-schemas';
+
+import { importedBriefText, ownerChoseTone, toneAfterImport } from './event-import';
 
 describe('importedBriefText', () => {
   it('keeps only the venue notes when a fact sheet came with the event', () => {
@@ -26,5 +28,32 @@ describe('toneAfterImport', () => {
   it('uses the event\'s suggestion, or puts the default back, when the owner has not picked one', () => {
     expect(toneAfterImport({ ownerChoseTone: false, suggestedTone: 'community_focused' })).toBe('community_focused');
     expect(toneAfterImport({ ownerChoseTone: false })).toBe('friendly_warm');
+  });
+});
+
+describe('ownerChoseTone', () => {
+  it('trusts the recorded choice, even for Friendly & Warm', () => {
+    expect(ownerChoseTone({ toneChosen: true, tone: 'friendly_warm' })).toBe(true);
+    expect(ownerChoseTone({ toneChosen: false, tone: 'playful' })).toBe(false);
+  });
+
+  it('treats any non-default tone in an older draft as chosen, so a resumed draft keeps it', () => {
+    expect(ownerChoseTone({ tone: 'professional' })).toBe(true);
+    expect(ownerChoseTone({ tone: 'friendly_warm' })).toBe(false);
+    expect(ownerChoseTone({})).toBe(false);
+  });
+
+  it('is kept by the brief schema, so drafts and type changes carry it', () => {
+    const parsed = eventBriefSchema.parse({
+      contentType: 'event',
+      title: 'Quiz Night',
+      platforms: ['facebook'],
+      eventName: 'Quiz Night',
+      eventDate: '2026-11-04',
+      eventTime: '19:00',
+      tone: 'friendly_warm',
+      toneChosen: true,
+    });
+    expect(parsed.toneChosen).toBe(true);
   });
 });

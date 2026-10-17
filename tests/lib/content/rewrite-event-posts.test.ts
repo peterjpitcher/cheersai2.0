@@ -149,6 +149,10 @@ describe('rebuildEventBrief', () => {
     expect(rebuildEventBrief({ ...storedBrief, tone: 'professional' }, detail).brief.tone).toBe('professional');
   });
 
+  it('keeps Friendly & Warm when the owner recorded choosing it', () => {
+    expect(rebuildEventBrief({ ...storedBrief, toneChosen: true }, detail).brief.tone).toBe('friendly_warm');
+  });
+
   it('flags a moved event and a changed description for the owner', () => {
     const { notes } = rebuildEventBrief(storedBrief, { ...detail, date: '2026-11-25', brief: 'Now with a £200 snowball.' });
     expect(notes.join(' ')).toMatch(/now has this on 2026-11-25 at 19:00/);

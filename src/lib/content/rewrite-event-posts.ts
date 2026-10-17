@@ -3,6 +3,7 @@ import { DateTime } from 'luxon';
 import { z } from 'zod';
 
 import { contentBriefSchema, type ContentBrief } from '@/features/create/schemas/content-schemas';
+import { ownerChoseTone } from '@/features/create/forms/event-import';
 import { resolveCopyModel } from '@/lib/ai/models';
 import { toPlatformCopy } from '@/lib/ai/platform-copy';
 import {
@@ -235,7 +236,8 @@ export function rebuildEventBrief(
     ? description
     : [description, fields.prompt].filter(Boolean).join('\n\n');
   const storedTone = text(stored.tone) ?? DEFAULT_TONE;
-  const tone = storedTone === DEFAULT_TONE && fields.suggestedTone ? fields.suggestedTone : storedTone;
+  const chosen = ownerChoseTone({ toneChosen: typeof stored.toneChosen === 'boolean' ? stored.toneChosen : undefined, tone: storedTone });
+  const tone = !chosen && fields.suggestedTone ? fields.suggestedTone : storedTone;
 
   const brief: Record<string, unknown> = { ...stored, prompt, tone };
   if (facts) brief.facts = facts;
