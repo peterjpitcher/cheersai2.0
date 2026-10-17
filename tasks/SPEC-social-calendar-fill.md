@@ -70,6 +70,13 @@ Owner approval: 17 October 2026, on `tasks/REVIEW-social-calendar-2026-10-17.md`
 
 ### 3. Calendar tool
 - `src/lib/content/calendar-fill.ts` (logic) and `scripts/ops/calendar-fill.ts` (wiring), with `npm run ops:calendar-fill`.
+- As built (17 October 2026):
+  - The logic is split three ways: `calendar-fill.ts` (the rules and the plan run), `calendar-fill-apply.ts` (apply, read-back and undo) and `calendar-fill-report.ts` (the owner's list).
+  - The venue subjects (lunch, roast, private hire) live in `scripts/ops/calendar-fill-subjects.json`, per brand: the facts, where they came from, the links and the photos. Lunch and roast are weekly campaigns; private hire is one-off posts with no campaign.
+  - Facebook links carry Facebook tracking and Instagram links Instagram tracking, using the events system's existing short links where they exist.
+  - A photo is used only when it is square or landscape, has a story version and is not hidden, so the feed never shows a cropped upright image.
+  - The shared scheduling step accepts `placements: ['feed', 'story']` on a weekly or one-off brief, and a weekly campaign's link-in-bio card carries its Instagram link. The wizard's posts are unchanged by either.
+  - Apply records what it did in `applied.json` beside the plan, and reads every post back. Undo puts added posts in the bin (as the planner does) and leaves any campaign it created, empty.
 - **Plan run:**
   1. Read the period's schedule.
   2. Work out each event's window.

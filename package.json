@@ -27,6 +27,7 @@
     "ops:invoke": "tsx scripts/ops/invoke-function.ts",
     "ops:link-auth-user": "tsx scripts/ops/link-auth-user.ts",
     "ops:regenerate-rugby-posts": "tsx scripts/ops/regenerate-rugby-posts.ts",
+    "ops:calendar-fill": "tsx scripts/ops/calendar-fill.ts",
     "ops:rewrite-event-posts": "tsx scripts/ops/rewrite-event-posts.ts",
     "ops:repair-hidden-media-references": "tsx scripts/ops/repair-hidden-media-references.ts",
     "ops:search-meta-interests": "tsx scripts/ops/search-meta-interests.ts",
