@@ -51,6 +51,7 @@ async function main(): Promise<void> {
   const { getTournamentById, getFixturesByTournament } = await import("@/lib/tournament/queries");
   const { bulkGenerateContent, deleteFixtureContentItems } = await import("@/lib/tournament/generate");
   const { NATIONS_TEMPLATE_VERSION } = await import("../../supabase/functions/_shared/nations-content-contract");
+  const { coversFixture } = await import("../../supabase/functions/_shared/tournament-roundup");
 
   const db = createServiceSupabaseClient();
   const { data: row, error: rowError } = await db.from("tournaments").select("account_id").eq("id", tournamentId).maybeSingle();
@@ -74,7 +75,8 @@ async function main(): Promise<void> {
 
   console.log(`${tournament.name}: ${fixtures.length} fixtures, ${fixtures.filter((fixture) => fixture.contentGenerated).length} with posts, ${missing.length} showing with confirmed teams but no posts${includeMissing ? " (included)" : ""}. Current template ${NATIONS_TEMPLATE_VERSION}.`);
   for (const fixture of targets) {
-    const own = (items ?? []).filter((item) => (item.prompt_context as Record<string, unknown>)?.tournament_fixture_id === fixture.id);
+    // A match-day round-up counts towards every game it lists.
+    const own = (items ?? []).filter((item) => coversFixture(item.prompt_context, fixture.id));
     const unpublished = own.filter((item) => !PUBLISHED.has(String(item.status)));
     const versions = [...new Set(unpublished.map((item) => String((item.prompt_context as Record<string, unknown>)?.screening_template_version ?? "none")))];
     console.log(`  ${fixture.kickOffAt}  ${fixture.teamA} v ${fixture.teamB}: ${unpublished.length} unpublished (${versions.join(", ") || "-"}), ${own.length - unpublished.length} published`);
