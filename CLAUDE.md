@@ -62,7 +62,7 @@ tasks/                  SPEC-*.md, PLAN-*.md, ADS-PLAYBOOK-the-anchor.md
 |---|---|---|
 | Meta Graph API (Facebook Pages, Instagram) | `src/lib/providers/`, `src/lib/meta/` | OAuth at `/api/oauth/[provider]`; `META_GRAPH_VERSION` pins the version; per-platform limits in `providers/rate-limits.ts` |
 | Meta Marketing API (paid campaigns) | `src/lib/meta/marketing.ts`, `src/lib/campaigns/` | Ads OAuth at `/api/oauth/facebook-ads`; daily `sync-meta-campaigns` and `optimise-meta-campaigns` crons |
-| OpenAI | `src/lib/ai/`, `src/app/actions/ai-generate.ts` | `OPENAI_MODEL` defaults to `gpt-4o-mini` |
+| OpenAI | `src/lib/ai/`, `src/app/actions/ai-generate.ts`, `src/lib/ai/write-copy.ts` | Copy model `gpt-5.5` (`DEFAULT_COPY_MODEL` in `src/lib/ai/models.ts`), overridden by `OPENAI_MODEL`, unset in production; image tagging keeps `gpt-4o-mini` |
 | Resend | `src/lib/email/`, `src/lib/notifications/` | failure and expiring-connection alerts |
 | Upstash QStash | `src/lib/qstash/client.ts` | delivery queue |
 | Axiom | `src/lib/logging/axiom.ts` | structured logs; silent when `AXIOM_TOKEN` is unset |
