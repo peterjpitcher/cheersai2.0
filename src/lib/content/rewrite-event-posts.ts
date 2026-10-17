@@ -224,8 +224,9 @@ export function rebuildEventBrief(
 
 /**
  * Pick the events-system record behind a campaign: the same name on the same
- * date, else the same name on the nearest date (a moved event, which the
- * report then flags), else nothing.
+ * date, else the only event with that name (a moved event, which the report
+ * then flags), else nothing. When several events share the name, none is
+ * borrowed, so one night of a series never lends its facts to another.
  */
 export function chooseManagementEvent(
   events: ManagementEventListItem[],
@@ -236,13 +237,7 @@ export function chooseManagementEvent(
   const named = events.filter((event) => event.name?.trim().toLowerCase() === wanted);
   const sameDay = named.find((event) => event.date === eventDate);
   if (sameDay) return sameDay;
-  const target = DateTime.fromISO(eventDate, { zone: DEFAULT_TIMEZONE });
-  const distance = (event: ManagementEventListItem): number => {
-    const date = event.date ? DateTime.fromISO(event.date, { zone: DEFAULT_TIMEZONE }) : null;
-    return date?.isValid && target.isValid ? Math.abs(date.diff(target, 'days').days) : Number.POSITIVE_INFINITY;
-  };
-  const nearest = [...named].sort((a, b) => distance(a) - distance(b))[0];
-  return nearest && Number.isFinite(distance(nearest)) ? nearest : null;
+  return named.length === 1 ? named[0] : null;
 }
 
 async function mapWithConcurrency<T, R>(items: T[], limit: number, task: (item: T, index: number) => Promise<R>): Promise<R[]> {

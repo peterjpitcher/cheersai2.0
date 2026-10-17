@@ -182,8 +182,13 @@ describe('chooseManagementEvent', () => {
     expect(chooseManagementEvent(list, 'snowball showdown cash bingo', '2026-11-18')?.id).toBe('b');
   });
 
-  it('falls back to the nearest date for a moved event', () => {
+  it('falls back to the only event with that name when it has moved', () => {
     expect(chooseManagementEvent(list.filter((event) => event.id !== 'b'), 'Snowball Showdown Cash Bingo', '2026-11-18')?.id).toBe('a');
+  });
+
+  it('borrows nothing when several events share the name but none is on the date', () => {
+    const series = [...list, { id: 'd', name: 'Snowball Showdown Cash Bingo', date: '2027-01-20' }].filter((event) => event.id !== 'b');
+    expect(chooseManagementEvent(series, 'Snowball Showdown Cash Bingo', '2026-11-18')).toBeNull();
   });
 
   it('finds nothing when no name matches', () => {
