@@ -3,7 +3,7 @@ import { timingSafeEqual } from "node:crypto";
 
 import { renderBannerServer } from "@/lib/banner/render-server";
 import type { ResolvedConfig, BannerPosition } from "@/lib/banner/config";
-import { BANNER_TEXT_PATTERN } from "@/lib/banner/text";
+import { BANNER_TEXT_PATTERN, MAX_STORY_PROMPT_LENGTH } from "@/lib/banner/text";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -68,6 +68,11 @@ interface RenderBannerRequestBody {
     sourceMediaUrl: string;
     config: ResolvedConfig;
     label: string;
+    /**
+     * Booking prompt for an event story ("LINK IN BIO TO BOOK"). Optional:
+     * absent or null means none, so a worker that predates it still renders.
+     */
+    storyPrompt?: string | null;
 }
 
 // G4 hardening: stricter input validation prevents callers (or buggy
@@ -121,6 +126,15 @@ function validateBody(value: unknown): string | null {
     }
     if (c.textOverride !== null && typeof c.textOverride !== "string") {
         return "config.textOverride";
+    }
+
+    if (v.storyPrompt !== undefined && v.storyPrompt !== null) {
+        if (typeof v.storyPrompt !== "string"
+            || v.storyPrompt.length === 0
+            || v.storyPrompt.length > MAX_STORY_PROMPT_LENGTH
+            || !BANNER_TEXT_PATTERN.test(v.storyPrompt)) {
+            return "storyPrompt";
+        }
     }
 
     return null;
@@ -221,7 +235,7 @@ export async function POST(request: Request): Promise<Response> {
 
     // validationFailure === null means body matches RenderBannerRequestBody
     // shape — the type predicate is preserved by validateBody's return.
-    const { sourceMediaUrl, config, label } = body as RenderBannerRequestBody;
+    const { sourceMediaUrl, config, label, storyPrompt } = body as RenderBannerRequestBody;
 
     const validated = validateSourceUrl(sourceMediaUrl);
     if (typeof validated === "string") {
@@ -269,7 +283,9 @@ export async function POST(request: Request): Promise<Response> {
 
     let rendered: Buffer;
     try {
-        rendered = await renderBannerServer(sourceBuffer, config, label);
+        rendered = await renderBannerServer(sourceBuffer, config, label, {
+            storyPrompt: storyPrompt ?? null,
+        });
     } catch (err) {
         const message = err instanceof Error ? err.message : "unknown render error";
         const reason = message.startsWith("BANNER_RENDER_FAILED")

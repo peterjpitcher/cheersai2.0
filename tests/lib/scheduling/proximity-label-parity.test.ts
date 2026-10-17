@@ -13,9 +13,16 @@
 // same thing. Drift between the duplicated copies is the bug it catches.
 import { describe, expect, it } from "vitest";
 import { DateTime } from "luxon";
-import { getProximityLabel as nodeImpl } from "@/lib/scheduling/proximity-label";
+import {
+  getProximityLabel as nodeImpl,
+  getStoryBookingPrompt as nodeStoryPrompt,
+  type StoryBookingPromptInput,
+} from "@/lib/scheduling/proximity-label";
+import { MAX_STORY_PROMPT_LENGTH as NODE_MAX_STORY_PROMPT_LENGTH } from "@/lib/banner/text";
 import {
   getProximityLabel as denoImpl,
+  getStoryBookingPrompt as denoStoryPrompt,
+  MAX_STORY_PROMPT_LENGTH as DENO_MAX_STORY_PROMPT_LENGTH,
   type CampaignTiming,
 } from "../../../supabase/functions/publish-queue/banner-label.ts";
 
@@ -83,6 +90,43 @@ describe("proximity-label parity (Node ↔ Deno worker copy)", () => {
       const nodeResult = nodeImpl({ referenceAt, campaignTiming: timing });
       const denoResult = denoImpl({ referenceAt, campaignTiming: timing });
       expect(denoResult).toBe(nodeResult);
+    });
+  }
+});
+
+// The story booking prompt is duplicated the same way: the planner previews
+// the Node copy and the worker publishes the Deno copy.
+const BOOKING_LINKS = {
+  brief: { ctaLinks: { facebook: "https://l.example.pub/fb1", instagram: "https://l.example.pub/ig1" } },
+};
+
+const STORY_PROMPT_FIXTURES: Array<{ name: string; input: StoryBookingPromptInput }> = [
+  { name: "facebook event story, website", input: { platform: "facebook", placement: "story", campaignType: "event", promptContext: BOOKING_LINKS, websiteUrl: "https://www.the-anchor.pub" } },
+  { name: "facebook, bare domain", input: { platform: "facebook", placement: "story", campaignType: "event", promptContext: BOOKING_LINKS, websiteUrl: "the-anchor.pub" } },
+  { name: "facebook, no website", input: { platform: "facebook", placement: "story", campaignType: "event", promptContext: BOOKING_LINKS, websiteUrl: null } },
+  { name: "facebook, IP website", input: { platform: "facebook", placement: "story", campaignType: "event", promptContext: BOOKING_LINKS, websiteUrl: "http://10.0.0.1" } },
+  { name: "facebook, mailto website", input: { platform: "facebook", placement: "story", campaignType: "event", promptContext: BOOKING_LINKS, websiteUrl: "mailto:a@b.com" } },
+  { name: "facebook, xn-- website", input: { platform: "facebook", placement: "story", campaignType: "event", promptContext: BOOKING_LINKS, websiteUrl: "https://xn--caf-dma.com" } },
+  { name: "facebook, 40-character prompt", input: { platform: "facebook", placement: "story", campaignType: "event", promptContext: BOOKING_LINKS, websiteUrl: `https://${"b".repeat(28)}.com` } },
+  { name: "facebook, 41-character prompt", input: { platform: "facebook", placement: "story", campaignType: "event", promptContext: BOOKING_LINKS, websiteUrl: `https://${"b".repeat(29)}.com` } },
+  { name: "instagram event story", input: { platform: "instagram", placement: "story", campaignType: "event", promptContext: BOOKING_LINKS, websiteUrl: "https://www.the-anchor.pub" } },
+  { name: "instagram, facebook link only", input: { platform: "instagram", placement: "story", campaignType: "event", promptContext: { brief: { ctaLinks: { facebook: "https://x.example/1" } } } } },
+  { name: "facebook, non-http link", input: { platform: "facebook", placement: "story", campaignType: "event", promptContext: { brief: { ctaLinks: { facebook: "javascript:alert(1)" } } } } },
+  { name: "feed post", input: { platform: "facebook", placement: "feed", campaignType: "event", promptContext: BOOKING_LINKS, websiteUrl: "https://www.the-anchor.pub" } },
+  { name: "promotion story", input: { platform: "instagram", placement: "story", campaignType: "promotion", promptContext: BOOKING_LINKS } },
+  { name: "no campaign", input: { platform: "instagram", placement: "story", campaignType: null, promptContext: BOOKING_LINKS } },
+  { name: "no prompt context", input: { platform: "facebook", placement: "story", campaignType: "event", promptContext: null } },
+  { name: "unknown platform", input: { platform: "gbp", placement: "story", campaignType: "event", promptContext: BOOKING_LINKS } },
+];
+
+describe("story booking prompt parity (Node ↔ Deno worker copy)", () => {
+  it("shares the length cap", () => {
+    expect(DENO_MAX_STORY_PROMPT_LENGTH).toBe(NODE_MAX_STORY_PROMPT_LENGTH);
+  });
+
+  for (const f of STORY_PROMPT_FIXTURES) {
+    it(`agrees on: ${f.name}`, () => {
+      expect(denoStoryPrompt(f.input)).toBe(nodeStoryPrompt(f.input));
     });
   }
 });

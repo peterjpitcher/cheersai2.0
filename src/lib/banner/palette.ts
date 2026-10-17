@@ -35,8 +35,17 @@ export const BANNER_LABEL_REPEAT_COUNT = 21;
 
 export const BANNER_LABEL_SEPARATOR = ' · ';
 
-export function buildRepeatedBannerLabel(label: string): string {
-  return Array.from({ length: BANNER_LABEL_REPEAT_COUNT })
-    .fill(label)
-    .join(BANNER_LABEL_SEPARATOR);
+/**
+ * The strip's text. An event story's booking prompt ("LINK IN BIO TO BOOK")
+ * alternates with the label, with a prompt in the middle: the strip is centred,
+ * so one whole prompt always sits mid-height, clear of the UI Instagram and
+ * Facebook draw over the top and bottom of a story. Carrying the prompt in the
+ * strip covers nothing more of the artwork (tasks/SPEC-story-booking-prompt.md).
+ */
+export function buildRepeatedBannerLabel(label: string, storyPrompt?: string | null): string {
+  const prompt = storyPrompt?.trim();
+  const middle = Math.floor(BANNER_LABEL_REPEAT_COUNT / 2);
+  return Array.from({ length: BANNER_LABEL_REPEAT_COUNT }, (_, index) =>
+    prompt && index % 2 === middle % 2 ? prompt : label,
+  ).join(BANNER_LABEL_SEPARATOR);
 }

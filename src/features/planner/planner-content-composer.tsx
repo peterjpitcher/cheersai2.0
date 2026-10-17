@@ -235,6 +235,7 @@ export function PlannerContentComposer({ detail, ownerTimezone, mediaLibrary }: 
                   mediaUrl={primaryMedia.url}
                   config={bannerConfig}
                   label={bannerLabel}
+                  storyPrompt={detail.storyPrompt}
                   className="h-full w-full"
                 />
               ) : (

@@ -119,3 +119,57 @@ describe('renderBannerServer visual sanity', () => {
     expect(distinct.size).toBeGreaterThan(8);
   });
 });
+
+// Story booking prompt (tasks/SPEC-story-booking-prompt.md): an event story's
+// prompt shares the strip with the label, so it covers no more of the image.
+describe('renderBannerServer story booking prompt', () => {
+    const storySource = () => readFileSync('tests/fixtures/banner/story-1080-1920.jpg');
+    const STRIP_WIDTH = 76; // 7% of the story's 1080px short side
+
+    it('carries the prompt in the same strip, as glyph paths', () => {
+        const inputs = { width: 1080, height: 1920, config: rightStripConfig, label: 'THIS FRIDAY' };
+        const plain = buildBannerSvg(inputs);
+        const withPrompt = buildBannerSvg({ ...inputs, storyPrompt: 'LINK IN BIO TO BOOK' });
+
+        expect(withPrompt).not.toBe(plain);
+        expect(withPrompt).toContain('<path');
+        expect(withPrompt).not.toContain('<text');
+        expect(withPrompt).not.toContain('@font-face');
+        // Same strip: same size, rotation and colour.
+        expect(withPrompt).toContain(`<svg width="${STRIP_WIDTH}" height="1920"`);
+        expect(withPrompt).toContain('rotate(90');
+        expect(withPrompt).toContain('#a57626');
+    });
+
+    it('changes only the strip: the artwork is pixel for pixel the strip-only render', async () => {
+        const plain = await renderBannerServer(storySource(), rightStripConfig, 'THIS FRIDAY');
+        const withPrompt = await renderBannerServer(storySource(), rightStripConfig, 'THIS FRIDAY', {
+            storyPrompt: 'BOOK AT THE-ANCHOR.PUB',
+        });
+        const meta = await sharp(withPrompt).metadata();
+        expect(meta.format).toBe('jpeg');
+        expect(meta.width).toBe(1080);
+        expect(meta.height).toBe(1920);
+
+        // Everything left of the strip, less one 16px JPEG block that straddles
+        // the strip's edge, is identical.
+        const artwork = { left: 0, top: 0, width: 1080 - STRIP_WIDTH - 16, height: 1920 };
+        const before = await sharp(plain).extract(artwork).raw().toBuffer();
+        const after = await sharp(withPrompt).extract(artwork).raw().toBuffer();
+        expect(after.equals(before)).toBe(true);
+
+        // The strip itself now carries different text.
+        const strip = { left: 1080 - STRIP_WIDTH, top: 0, width: STRIP_WIDTH, height: 1920 };
+        const stripBefore = await sharp(plain).extract(strip).raw().toBuffer();
+        const stripAfter = await sharp(withPrompt).extract(strip).raw().toBuffer();
+        expect(stripAfter.equals(stripBefore)).toBe(false);
+    });
+
+    it('draws the strip exactly as before without a prompt', async () => {
+        const plain = await renderBannerServer(storySource(), rightStripConfig, 'TONIGHT');
+        const nullPrompt = await renderBannerServer(storySource(), rightStripConfig, 'TONIGHT', { storyPrompt: null });
+        const blankPrompt = await renderBannerServer(storySource(), rightStripConfig, 'TONIGHT', { storyPrompt: '   ' });
+        expect(nullPrompt.equals(plain)).toBe(true);
+        expect(blankPrompt.equals(plain)).toBe(true);
+    });
+});

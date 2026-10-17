@@ -401,10 +401,12 @@ describe("POST /api/internal/render-banner", () => {
         const result = Buffer.from(await response.arrayBuffer());
         expect(result.equals(renderedBytes)).toBe(true);
 
+        // No storyPrompt in the body (a worker that predates it): none drawn.
         expect(renderBannerServerMock).toHaveBeenCalledWith(
             expect.any(Buffer),
             VALID_CONFIG,
             "TONIGHT",
+            { storyPrompt: null },
         );
         const sourceArg = renderBannerServerMock.mock.calls[0][0] as Buffer;
         expect(Buffer.from(sourceBytes).equals(sourceArg)).toBe(true);
@@ -426,6 +428,67 @@ describe("POST /api/internal/render-banner", () => {
             expect.any(Buffer),
             VALID_CONFIG,
             "£5 PINTS",
+            { storyPrompt: null },
         );
+    });
+
+    it.each(["LINK IN BIO TO BOOK", "BOOK AT THE-ANCHOR.PUB"])(
+        "passes the story booking prompt %s to the renderer",
+        async (storyPrompt) => {
+            globalThis.fetch = vi.fn().mockResolvedValue(buildAllowedSourceResponse(new Uint8Array([1, 2, 3, 4])));
+            renderBannerServerMock.mockResolvedValueOnce(Buffer.from([0xff, 0xd8, 0xff, 0xe0]));
+
+            const response = await POST(buildRequest({
+                headers: { authorization: "Bearer test-cron-secret" },
+                body: { sourceMediaUrl: ALLOWED_URL, config: VALID_CONFIG, label: "THIS FRIDAY", storyPrompt },
+            }));
+
+            expect(response.status).toBe(200);
+            expect(renderBannerServerMock).toHaveBeenCalledWith(
+                expect.any(Buffer),
+                VALID_CONFIG,
+                "THIS FRIDAY",
+                { storyPrompt },
+            );
+        },
+    );
+
+    it("treats a null storyPrompt as no prompt", async () => {
+        globalThis.fetch = vi.fn().mockResolvedValue(buildAllowedSourceResponse(new Uint8Array([1, 2, 3, 4])));
+        renderBannerServerMock.mockResolvedValueOnce(Buffer.from([0xff, 0xd8, 0xff, 0xe0]));
+
+        const response = await POST(buildRequest({
+            headers: { authorization: "Bearer test-cron-secret" },
+            body: { sourceMediaUrl: ALLOWED_URL, config: VALID_CONFIG, label: "TONIGHT", storyPrompt: null },
+        }));
+
+        expect(response.status).toBe(200);
+        expect(renderBannerServerMock).toHaveBeenCalledWith(
+            expect.any(Buffer),
+            VALID_CONFIG,
+            "TONIGHT",
+            { storyPrompt: null },
+        );
+    });
+
+    it.each([
+        ["an empty string", ""],
+        ["a number", 42],
+        ["over 40 characters", `BOOK AT ${"A".repeat(29)}.COM`],
+        ["markup", "<b>BOOK</b>"],
+        ["an emoji", "BOOK NOW 🍺"],
+    ])("returns 400 when storyPrompt is %s", async (_case, storyPrompt) => {
+        const fetchSpy = vi.spyOn(globalThis, "fetch");
+
+        const response = await POST(buildRequest({
+            headers: { authorization: "Bearer test-cron-secret" },
+            body: { sourceMediaUrl: ALLOWED_URL, config: VALID_CONFIG, label: "TONIGHT", storyPrompt },
+        }));
+
+        expect(response.status).toBe(400);
+        const json = await response.json();
+        expect(json).toEqual({ error: "BANNER_RENDER_FAILED: invalid storyPrompt" });
+        expect(fetchSpy).not.toHaveBeenCalled();
+        expect(renderBannerServerMock).not.toHaveBeenCalled();
     });
 });

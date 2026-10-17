@@ -325,3 +325,86 @@ export function getProximityLabel(input: ProximityLabelInput): ProximityLabel {
             return null;
     }
 }
+
+// --- Story booking prompt ---------------------------------------------------
+// Mirrors src/lib/scheduling/proximity-label.ts:getStoryBookingPrompt: keep in
+// sync. tests/lib/scheduling/proximity-label-parity.test.ts checks the two agree.
+//
+// Meta's publishing API cannot add link stickers to stories, so an event story
+// says where to book in its artwork instead (tasks/SPEC-story-booking-prompt.md).
+
+/** Approved by the owner on 17 October 2026. */
+export const STORY_PROMPT_INSTAGRAM = "LINK IN BIO TO BOOK";
+
+/**
+ * Facebook text for a brand with no usable website. Still true: the Page
+ * carries the paired feed post with the booking link.
+ */
+export const STORY_PROMPT_FACEBOOK_FALLBACK = "SEE OUR PAGE TO BOOK";
+
+/** Mirrors src/lib/banner/text.ts:MAX_STORY_PROMPT_LENGTH. */
+export const MAX_STORY_PROMPT_LENGTH = 40;
+
+export interface StoryBookingPromptInput {
+    platform: string | null | undefined;
+    placement: string | null | undefined;
+    campaignType: string | null | undefined;
+    promptContext: unknown;
+    /** The brand's website (link_in_bio_profiles.website_url). Only Facebook uses it. */
+    websiteUrl?: string | null;
+}
+
+/**
+ * The booking prompt drawn on an event story, or null when it gets none. A
+ * story qualifies when its own platform has a booking link in the brief: the
+ * same test that gives the paired feed post its booking line.
+ */
+export function getStoryBookingPrompt(input: StoryBookingPromptInput): string | null {
+    if (input.placement !== "story" || input.campaignType !== "event") return null;
+    const platform = input.platform;
+    if (platform !== "facebook" && platform !== "instagram") return null;
+    if (!readStoryBookingLink(input.promptContext, platform)) return null;
+    if (platform === "instagram") return STORY_PROMPT_INSTAGRAM;
+
+    const domain = websiteDomain(input.websiteUrl);
+    const prompt = domain ? `BOOK AT ${domain}` : null;
+    return prompt && prompt.length <= MAX_STORY_PROMPT_LENGTH ? prompt : STORY_PROMPT_FACEBOOK_FALLBACK;
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+    return value && typeof value === "object" && !Array.isArray(value)
+        ? (value as Record<string, unknown>)
+        : null;
+}
+
+function readStoryBookingLink(promptContext: unknown, platform: "facebook" | "instagram"): string | null {
+    const ctaLinks = asRecord(asRecord(asRecord(promptContext)?.brief)?.ctaLinks);
+    const raw = ctaLinks?.[platform];
+    if (typeof raw !== "string") return null;
+    const link = raw.trim();
+    return /^https?:\/\//i.test(link) ? link : null;
+}
+
+/**
+ * The website as a bare domain in capitals ("THE-ANCHOR.PUB"), or null when it
+ * is missing or not a plain domain: another scheme, credentials, an IP address
+ * or an international domain in its xn-- form.
+ */
+function websiteDomain(websiteUrl: string | null | undefined): string | null {
+    const raw = websiteUrl?.trim();
+    if (!raw) return null;
+    const hasScheme = /^[a-z][a-z0-9+.-]*:/i.test(raw);
+    if (hasScheme && !/^https?:\/\//i.test(raw)) return null;
+
+    let url: URL;
+    try {
+        url = new URL(hasScheme ? raw : `https://${raw}`);
+    } catch {
+        return null;
+    }
+    if (url.username || url.password) return null;
+
+    const host = url.hostname.toLowerCase().replace(/^www\./, "");
+    if (host.includes("xn--") || !/^(?:[a-z0-9-]+\.)+[a-z]{2,}$/.test(host)) return null;
+    return host.toUpperCase();
+}
