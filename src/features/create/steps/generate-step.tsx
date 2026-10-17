@@ -24,7 +24,9 @@ import { isStoryAssetSelectable } from '@/features/create/media-attachment-selec
 import { Skeleton } from '@/components/ui/skeleton';
 import { PlatformBadge } from '@/components/ui/platform-badge';
 import { generateContent, regenerateWithModifier } from '@/app/actions/ai-generate';
+import { campaignSlotPlan, planCampaignJobs } from '@/features/create/steps/campaign-plan';
 import { GENERATION_BATCH_SIZE, selectNextGenerationBatch } from '@/features/create/steps/generation-batch';
+import { SLOT_JOB_LABELS } from '@/lib/ai/slot-jobs';
 import { DEFAULT_TIMEZONE } from '@/lib/constants';
 import { useToast } from '@/components/providers/toast-provider';
 import type { ContentBrief } from '@/features/create/schemas/content-schemas';
@@ -344,6 +346,14 @@ export function GenerateStep({
       : [...selectedSlots].sort((a, b) => slotToIso(a).localeCompare(slotToIso(b))),
   [publishMode, selectedSlots]);
 
+  // Event campaigns: each slot's job, in send order (B3). Their slots are then
+  // written one at a time so each post knows how the others opened. Null for
+  // every other kind of post, which is still written three at a time.
+  const slotJobs = useMemo(
+    () => (isStorySchedule ? null : planCampaignJobs(contentBrief, effectiveSlots.map((slot) => slotToIso(slot)))),
+    [contentBrief, effectiveSlots, isStorySchedule],
+  );
+
   useEffect(() => {
     if (!isStorySchedule) return;
 
@@ -472,7 +482,7 @@ export function GenerateStep({
     if (scope === 'all') {
       for (const slot of effectiveSlots) {
         const prev = byKey.get(slot.key)!;
-        byKey.set(slot.key, { ...prev, copy: null, warnings: [], status: 'pending', error: undefined, approved: false });
+        byKey.set(slot.key, { ...prev, copy: null, warnings: [], status: 'pending', error: undefined, approved: false, job: undefined });
       }
       targets = effectiveSlots;
     } else {
@@ -506,12 +516,23 @@ export function GenerateStep({
           const slotIso = publishMode === 'now' && slot.key === 'now'
             ? null
             : slotToIso(slot);
+          // Built when this slot's turn comes, so it sees the copy of every
+          // slot written before it in this run.
+          const campaign = slotJobs
+            ? campaignSlotPlan(
+                contentBrief,
+                slotJobs,
+                effectiveSlots.findIndex((s) => s.key === slot.key),
+                effectiveSlots.map((s) => (s.key === slot.key ? undefined : byKey.get(s.key))),
+              )
+            : undefined;
           // Timing facts are derived server-side from the brief plus slotIso so
           // the browser clock never decides what "now" means.
           const result = await generateContent(contentId, contentBrief, {
             mediaIds: selectedMediaIds,
             scheduledAt: slotIso,
             slotLabel: slot.label,
+            campaign,
           });
 
           const prev = byKey.get(slot.key)!;
@@ -524,6 +545,7 @@ export function GenerateStep({
               copy: toPlatformCopy(result.data.copy),
               warnings: result.data.warnings,
               error: undefined,
+              job: campaign?.job,
             });
           }
         } catch {
@@ -540,7 +562,8 @@ export function GenerateStep({
       },
     );
 
-    await limitConcurrency(tasks, 3);
+    // An event campaign's slots are written one at a time, in send order (B3).
+    await limitConcurrency(tasks, slotJobs ? 1 : 3);
 
     // Surface batch generation failures (F8): allSettled swallows per-slot
     // errors, so summarise any failed slots via toast without throwing.
@@ -561,7 +584,7 @@ export function GenerateStep({
     });
 
     setIsGeneratingBatch(false);
-  }, [contentId, contentBrief, effectiveSlots, selectedMediaIds, publishMode, onSlotCopiesChange, onGeneratedWithContext, generatedSlotCopies, isStorySchedule, isGeneratingBatch, toast]);
+  }, [contentId, contentBrief, effectiveSlots, slotJobs, selectedMediaIds, publishMode, onSlotCopiesChange, onGeneratedWithContext, generatedSlotCopies, isStorySchedule, isGeneratingBatch, toast]);
 
   const handleGenerateAll = useCallback(() => runGeneration('all'), [runGeneration]);
   const handleGenerateNext = useCallback(() => runGeneration('next'), [runGeneration]);
@@ -574,7 +597,8 @@ export function GenerateStep({
     if (!contentId) return;
     if (isStorySchedule) return;
 
-    const slot = effectiveSlots.find(s => s.key === slotKey);
+    const index = effectiveSlots.findIndex(s => s.key === slotKey);
+    const slot = effectiveSlots[index];
     if (!slot) return;
 
     // Mark slot as generating
@@ -587,18 +611,21 @@ export function GenerateStep({
       const slotIso = publishMode === 'now' && slot.key === 'now'
         ? null
         : slotToIso(slot);
+      // A post rewritten on its own is told how every other post in its
+      // campaign opened, the later ones as well as the earlier (B3).
+      const campaign = slotJobs
+        ? campaignSlotPlan(
+            contentBrief,
+            slotJobs,
+            index,
+            effectiveSlots.map((s) => (s.key === slotKey ? undefined : generatedSlotCopies.find((sc) => sc.slotKey === s.key))),
+          )
+        : undefined;
       // See the batch path above: the server owns every temporal fact.
+      const context = { mediaIds: selectedMediaIds, scheduledAt: slotIso, slotLabel: slot.label, campaign };
       const result = modifier
-        ? await regenerateWithModifier(contentId, contentBrief, modifier, {
-            mediaIds: selectedMediaIds,
-            scheduledAt: slotIso,
-            slotLabel: slot.label,
-          })
-        : await generateContent(contentId, contentBrief, {
-            mediaIds: selectedMediaIds,
-            scheduledAt: slotIso,
-            slotLabel: slot.label,
-          });
+        ? await regenerateWithModifier(contentId, contentBrief, modifier, context)
+        : await generateContent(contentId, contentBrief, context);
 
       const finalCopies = generatedSlotCopies.map(sc => {
         if (sc.slotKey !== slotKey) return sc;
@@ -612,6 +639,7 @@ export function GenerateStep({
             copy: toPlatformCopy(result.data.copy),
             warnings: result.data.warnings,
             error: undefined,
+            job: campaign?.job,
           };
         }
         return sc;
@@ -630,7 +658,7 @@ export function GenerateStep({
       onSlotCopiesChange(failCopies);
       toast.error(errorMsg);
     }
-  }, [contentId, contentBrief, effectiveSlots, generatedSlotCopies, selectedMediaIds, publishMode, onSlotCopiesChange, toast, isStorySchedule]);
+  }, [contentId, contentBrief, effectiveSlots, slotJobs, generatedSlotCopies, selectedMediaIds, publishMode, onSlotCopiesChange, toast, isStorySchedule]);
 
   // -----------------------------------------------------------------------
   // Inline editing: update platform copy in a specific slot
@@ -855,6 +883,9 @@ export function GenerateStep({
           const isExpanded = expandedCards.has(slot.key);
           const status = slotCopy?.status ?? 'pending';
           const isApproved = slotCopy?.approved === true;
+          // The job an event post was written for (B3). A draft saved with a
+          // job this build no longer knows shows none.
+          const jobLabel = slotCopy?.job ? SLOT_JOB_LABELS[slotCopy.job] : undefined;
           // Overlays: events show a dynamic auto date-label (matching what the
           // publish worker prints) when no override is typed; other content types
           // stay opt-in (blank = no overlay). The auto-label is display-only: the
@@ -1097,6 +1128,12 @@ export function GenerateStep({
                   {/* Ready state: editable platform copy */}
                   {status === 'ready' && slotCopy?.copy && !isStorySchedule && (
                     <>
+                      {jobLabel && (
+                        <p className="text-xs text-muted-foreground">
+                          Job: <span className="font-medium text-foreground">{jobLabel}</span>
+                        </p>
+                      )}
+
                       {/* Warnings */}
                       {(slotCopy.warnings?.length ?? 0) > 0 && (
                         <div className="space-y-1.5">

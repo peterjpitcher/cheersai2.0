@@ -1,4 +1,5 @@
 import { DateTime } from 'luxon';
+import { z } from 'zod';
 
 import { DEFAULT_TIMEZONE } from '@/lib/constants';
 
@@ -14,15 +15,18 @@ import { DEFAULT_TIMEZONE } from '@/lib/constants';
  * the posts.
  */
 
-export type SlotJob =
-  | 'announce'
-  | 'how_it_works'
-  | 'meet_the_host'
-  | 'dress_up_and_prizes'
-  | 'eat_first'
-  | 'last_call'
-  | 'tonight'
-  | 'fresh_angle';
+export const SLOT_JOBS = [
+  'announce',
+  'how_it_works',
+  'meet_the_host',
+  'dress_up_and_prizes',
+  'eat_first',
+  'last_call',
+  'tonight',
+  'fresh_angle',
+] as const;
+
+export type SlotJob = (typeof SLOT_JOBS)[number];
 
 export interface SlotJobContext {
   /** The event's date in London, YYYY-MM-DD. */
@@ -40,12 +44,49 @@ export interface CampaignSlotPlan {
   /** 1-based place of this post in the campaign. */
   position: number;
   total: number;
-  /** First lines of the posts already written for this campaign. */
+  /**
+   * First lines of the campaign's other posts that are already written: the
+   * earlier ones when a campaign is written in order, all the rest when one
+   * post is rewritten on its own.
+   */
   earlierOpenings: string[];
-  /** Questions the posts already written for this campaign asked. */
+  /** Questions those posts asked. */
   earlierQuestions: string[];
   allowQuestion: boolean;
 }
+
+/**
+ * Limits on a campaign plan, shared by the create wizard that builds one and
+ * the server action that checks it.
+ */
+export const CAMPAIGN_PLAN_LIMITS = {
+  /** Posts in one campaign: the schedule step and createScheduledBatch allow 12. */
+  posts: 12,
+  /** One per platform for each of the other 11 posts. */
+  openings: 22,
+  questions: 22,
+  openingChars: 140,
+  questionChars: 200,
+} as const;
+
+/**
+ * A campaign plan as the create wizard sends it. The host is left out: the
+ * server takes it from the brief, so the prompt never names anyone else.
+ */
+export const campaignSlotPlanSchema = z
+  .object({
+    job: z.enum(SLOT_JOBS),
+    position: z.number().int().min(1).max(CAMPAIGN_PLAN_LIMITS.posts),
+    total: z.number().int().min(1).max(CAMPAIGN_PLAN_LIMITS.posts),
+    earlierOpenings: z
+      .array(z.string().trim().min(1).max(CAMPAIGN_PLAN_LIMITS.openingChars))
+      .max(CAMPAIGN_PLAN_LIMITS.openings),
+    earlierQuestions: z
+      .array(z.string().trim().min(1).max(CAMPAIGN_PLAN_LIMITS.questionChars))
+      .max(CAMPAIGN_PLAN_LIMITS.questions),
+    allowQuestion: z.boolean(),
+  })
+  .refine((plan) => plan.position <= plan.total, { message: 'The post is placed after the last post.', path: ['position'] });
 
 /** Days before the event within which the last pre-event post is a last call. */
 const LAST_CALL_DAYS = 3;
@@ -65,13 +106,18 @@ function londonDate(iso: string): string | null {
  * One job per post, in the order the posts go out. Posts on the event day are
  * "tonight"; the first earlier post announces; the last post before the day,
  * when it is within three days, is the last call; the posts between take the
- * content jobs the facts support, then fresh angles.
+ * content jobs the facts support, then fresh angles. A post after the event
+ * day is a fresh angle: the timing rules write it as a recap, so no job meant
+ * for before the event fits it.
  */
 export function planSlotJobs(scheduledAts: string[], context: SlotJobContext): SlotJob[] {
   const jobs = new Array<SlotJob>(scheduledAts.length);
   const before: number[] = [];
   scheduledAts.forEach((iso, index) => {
-    if (londonDate(iso) === context.eventDate) jobs[index] = 'tonight';
+    const date = londonDate(iso);
+    if (date === context.eventDate) jobs[index] = 'tonight';
+    // Both are YYYY-MM-DD London dates, so comparing the strings compares the days.
+    else if (date && date > context.eventDate) jobs[index] = 'fresh_angle';
     else before.push(index);
   });
   if (!before.length) return jobs;
@@ -124,7 +170,7 @@ export function describeSlotJob(job: SlotJob, host?: string | null): string {
   }
 }
 
-/** Short label for the owner's report and, later, the wizard. */
+/** Short label for the owner's report and the create wizard. */
 export const SLOT_JOB_LABELS: Record<SlotJob, string> = {
   announce: 'Announce',
   how_it_works: 'How it works',
@@ -142,14 +188,15 @@ export function renderCampaignPlan(plan: CampaignSlotPlan): string {
     `Campaign plan: this is post ${plan.position} of ${plan.total} for this event.`,
     `This post's job: ${describeSlotJob(plan.job, plan.host)}`,
   ];
+  // "Other", not "earlier": a post rewritten on its own is shown the later posts too.
   if (plan.earlierOpenings.length) {
     lines.push(
-      'Earlier posts in this campaign opened like this. Start differently, and do not lead with the same detail:',
+      'Other posts in this campaign opened like this. Start differently, and do not lead with the same detail:',
       ...plan.earlierOpenings.map((opening) => `- "${opening}"`),
     );
   }
   if (plan.earlierQuestions.length) {
-    lines.push(`Questions earlier posts asked (do not ask these again): ${plan.earlierQuestions.map((question) => `"${question}"`).join('; ')}`);
+    lines.push(`Questions other posts in this campaign asked (do not ask these again): ${plan.earlierQuestions.map((question) => `"${question}"`).join('; ')}`);
   }
   lines.push(plan.allowQuestion
     ? 'You may ask one question, only if it is about the event and new.'
@@ -157,12 +204,17 @@ export function renderCampaignPlan(plan: CampaignSlotPlan): string {
   return lines.join('\n');
 }
 
+/** Text cut at a word to at most `max` characters, ending "..." when cut. */
+export function shorten(text: string, max: number): string {
+  return text.length > max ? `${text.slice(0, max - 3).replace(/\s+\S*$/, '')}...` : text;
+}
+
 /** The first sentence of a post body, for the next posts' prompts. */
 export function openingOf(body: string): string {
   const line = body.trim().split('\n')[0] ?? '';
   // A sentence ends at its mark even when an emoji follows with no space ("Big night!🎉").
   const first = (line.match(/^.*?[.!?]+/u)?.[0] ?? line).trim();
-  return first.length > 140 ? `${first.slice(0, 137).replace(/\s+\S*$/, '')}...` : first;
+  return shorten(first, CAMPAIGN_PLAN_LIMITS.openingChars);
 }
 
 /**

@@ -55,9 +55,18 @@ Tone by event type (review 7) moved to B2, because it needs the event category, 
 Core built 17 October 2026, ahead of the wizard part, because the first B8 rewrite plan repeated itself (7 of 7 Tinsel & Tipples Facebook posts opened "Hot mulled cider on..."; every Sparks & Sparklers post led with the host). `src/lib/ai/slot-jobs.ts` assigns the jobs and renders a "Campaign plan" block that `buildUserPrompt` adds when given one; the B8 rewrite tool writes each campaign's posts in order with it. Decisions:
 
 - Every post on the event day (London date) is "tonight"; the first earlier post announces; the last post before the day is the last call only when it is within three days; the posts between take how it works, meet the host (needs a host in the facts), dress-up and prizes, and eat first (each needs the brief to mention it), then fresh angles.
+- A post after the event day is a fresh angle, never a last call: the timing rules already write it as a recap (added with the wizard part).
 - Questions are allowed in the second, fourth and sixth posts, so never in more than half.
 - Each post is told the first line of every earlier post in its campaign, on both platforms, and every question they asked.
-- Still to do: the wizard writes its slots in order with these plans and shows each slot's job.
+
+Wizard part built 17 October 2026 (`src/features/create/steps/campaign-plan.ts`, used by `generate-step.tsx`). Decisions:
+
+- An event campaign's slots are written one at a time, in send order (Generate, Generate next and Regenerate All). Each is sent its job, its place, the first lines and questions of the campaign's other posts that already have copy, and whether it may ask a question. Other content types are still written three at a time, with no plan.
+- Rewriting one post (Regenerate, a refine chip or Retry) tells it how every other post in the campaign opened, later ones included. The prompt therefore says "other posts in this campaign" rather than "earlier posts", for the ops tool too.
+- First lines and questions are read from the platforms the brief posts to, and from the owner's edited text where they edited it.
+- The server actions check the plan before writing: event briefs only, a known job, a place within at most 12 posts (the campaign cap), at most 22 first lines of up to 140 characters and 22 questions of up to 200. The host named in the prompt always comes from the brief. A plan that fails is refused with "We could not write this post. Refresh the page and try again." and a warning in the log, without calling the model.
+- Each card shows "Job: ..." above its copy. The job is stored with the slot's copy, so it shows what the copy was written for, and a saved draft keeps it.
+- Writing in order is slower: a seven-post campaign is seven model calls one after another rather than three at a time.
 
 ### B4. Stronger model and best of three (review 3 and 4)
 
@@ -101,7 +110,7 @@ B1 to B4 are code only: revert the PR. The model switch rolls back by resetting 
 
 - B1: prompt tests for the examples and rules; `postprocessCopy` tests for openers, filler caps, times, banned phrases and the Instagram hashtag cap; tone picked by category.
 - B2: mapper tests from a recorded management-app response, including FAQs, discount and payment modes; the prompt renders facts and strips markdown.
-- B3: slot job assignment for 3 to 7 slots with and without a performer or kitchen times; a later slot's prompt lists earlier openings and questions.
+- B3: slot job assignment for 3 to 7 slots with and without a performer or kitchen times; a later slot's prompt lists earlier openings and questions. Wizard: event slots written one at a time in send order, each with its plan and its job shown; a single-slot rewrite sees every other post; other content still written three at a time; the server refuses a plan it cannot use.
 - B4: evaluation script dry run with OpenAI mocked; temperature left out for reasoning models.
 - B8: plan, apply and rollback against an in-memory database with the writer mocked: eligibility (status, publish jobs, the hour's lead), the brief rebuilt from the management app, the untrue-wording guard, and apply skipping posts edited, moved or published since the plan.
 - No unit test calls OpenAI, Meta or the management app.

@@ -1,3 +1,27 @@
+# Copy engine B3 in the create wizard (2026-10-17)
+
+Spec: `tasks/SPEC-event-copy-engine.md` (B3); branch `feat/wizard-campaign-plan`, after #194.
+
+- [x] Server: generateContent and regenerateWithModifier accept a campaign plan, check it (event briefs only, a known
+      job, a place within 12 posts, bounded first lines and questions), take the host from the brief, pass it to writeCopy
+- [x] Wizard: event slots written one at a time in send order, each with its job, place, the other posts' first lines
+      and questions, and the question budget; a single-slot rewrite sees every other post; other content unchanged
+- [x] Each card shows its job above its copy; the job is stored with the slot's copy
+- [x] Job planner: a post after the event day is a fresh angle, never a last call
+- [x] Tests: send order and one write at a time, the plan per slot, job labels, single-slot rewrite and refine chip,
+      other content three at a time; the server check; the plan builder always passes it; mutation check (each
+      behaviour switched off makes its test fail)
+- [x] Browser run (owner's yes to restart Docker): dev server on Node 24 against the local Supabase, throwaway brand
+      and login, a five-post music bingo event. The five writes ran one after another; jobs Announce, How it works,
+      Dress-up and prizes, Last call, Tonight; each post was sent the openings and questions of the posts before it;
+      regenerating the 30 October post sent the other four posts' openings. gpt-4o-mini still repeated an opening,
+      asked a question where none was allowed and led a rewrite with the same detail as a later post: the plan is
+      right, the model follows it only part of the time. Test data, `.env.local` and the launch entry removed after
+- [x] `SKIP_ENV_VALIDATION=1 npm run ci:verify` on Node 24.21.0: lint (0 warnings), typecheck, 4,808 tests in London
+      and UTC; its build step needs CI's placeholder Supabase values in a worktree without `.env.local`, and passed
+      with them. The first commit also checked alone (typecheck, 600 related tests)
+- [x] Pushed `feat/wizard-campaign-plan` and opened a PR against main; no merge, no deploy
+
 # Service pages in the homepage style (2026-09-30)
 
 Spec: `tasks/SPEC-service-pages-homepage-style.md`; branch `feat/service-pages-homepage-style`.

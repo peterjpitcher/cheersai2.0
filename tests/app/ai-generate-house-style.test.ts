@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ContentBrief } from '@/features/create/schemas/content-schemas';
 import type { AiGenerationResponse } from '@/lib/ai/schemas';
+import type { CampaignSlotPlan } from '@/lib/ai/slot-jobs';
 
 const generatePlatformCopy = vi.fn();
 
@@ -87,5 +88,101 @@ describe('generateContent house-style check', () => {
     expect(generatePlatformCopy).toHaveBeenCalledTimes(2);
     expect(result.error).toBeUndefined();
     expect(result.data?.warnings.some((warning) => warning.startsWith('House style: Facebook: open with'))).toBe(true);
+  });
+});
+
+describe('campaign plan from the wizard (B3)', () => {
+  const hostedBrief = { ...brief, facts: { host: 'Jo' } } as unknown as ContentBrief;
+  const plan: CampaignSlotPlan = {
+    job: 'meet_the_host',
+    host: 'Someone Else',
+    position: 2,
+    total: 4,
+    earlierOpenings: ['Two rounds of 70s disco on Friday 13th November.'],
+    earlierQuestions: ['Which decade will you dress as?'],
+    allowQuestion: true,
+  };
+  const refused = 'We could not write this post. Refresh the page and try again.';
+
+  it('writes the plan into the prompt, naming the host from the brief', async () => {
+    generatePlatformCopy.mockResolvedValueOnce(draft('Jo hosts two rounds of 70s disco on Friday 13th November.'));
+    const { generateContent } = await import('@/app/actions/ai-generate');
+    const result = await generateContent('content-1', hostedBrief, { scheduledAt: '2026-11-06T08:00:00Z', campaign: plan });
+
+    expect(result.error).toBeUndefined();
+    const prompt = generatePlatformCopy.mock.calls[0][0].userPrompt as string;
+    expect(prompt).toContain('Campaign plan: this is post 2 of 4 for this event.');
+    expect(prompt).toContain('Lead with the host, Jo,');
+    expect(prompt).not.toContain('Someone Else');
+    expect(prompt).toContain('- "Two rounds of 70s disco on Friday 13th November."');
+    expect(prompt).toContain('"Which decade will you dress as?"');
+    expect(prompt).toContain('You may ask one question');
+  });
+
+  it('writes no campaign block without a plan', async () => {
+    generatePlatformCopy.mockResolvedValueOnce(draft('Two rounds of 70s disco and Jo on the mic, Friday 13th November.'));
+    const { generateContent } = await import('@/app/actions/ai-generate');
+    await generateContent('content-1', hostedBrief, { scheduledAt: '2026-11-06T08:00:00Z' });
+
+    expect(generatePlatformCopy.mock.calls[0][0].userPrompt).not.toContain('Campaign plan');
+  });
+
+  it('passes the plan when a post is rewritten with a modifier', async () => {
+    generatePlatformCopy.mockResolvedValueOnce(draft('Jo hosts two rounds of 70s disco on Friday 13th November.'));
+    const { regenerateWithModifier } = await import('@/app/actions/ai-generate');
+    const result = await regenerateWithModifier('content-1', hostedBrief, 'Make the copy shorter and more concise.', {
+      scheduledAt: '2026-11-06T08:00:00Z',
+      campaign: { ...plan, job: 'how_it_works', allowQuestion: false },
+    });
+
+    expect(result.error).toBeUndefined();
+    const prompt = generatePlatformCopy.mock.calls[0][0].userPrompt as string;
+    expect(prompt).toContain('Explain how the night works for someone who has never been');
+    expect(prompt).toContain('Do not ask a question in this post.');
+  });
+
+  it.each([
+    ['an unknown job', { ...plan, job: 'go_viral' }],
+    ['a place after the last post', { ...plan, position: 5 }],
+    ['more posts than a campaign holds', { ...plan, position: 1, total: 13 }],
+    ['too many openings', { ...plan, earlierOpenings: Array.from({ length: 23 }, (_, index) => `Opening ${index}.`) }],
+    ['an opening longer than any first line', { ...plan, earlierOpenings: ['x'.repeat(141)] }],
+    ['a missing field', { job: 'announce', position: 1, total: 1 }],
+    ['no plan at all', null],
+  ])('refuses %s without calling the model', async (_case, campaign) => {
+    const { generateContent } = await import('@/app/actions/ai-generate');
+    const result = await generateContent('content-1', hostedBrief, {
+      scheduledAt: '2026-11-06T08:00:00Z',
+      campaign: campaign as unknown as CampaignSlotPlan,
+    });
+
+    expect(result).toEqual({ error: refused });
+    expect(generatePlatformCopy).not.toHaveBeenCalled();
+  });
+
+  it('refuses a plan for a brief that is not an event', async () => {
+    const promotion = {
+      contentType: 'promotion',
+      title: 'Two for one pizzas',
+      prompt: 'Two for one pizzas on Tuesdays.',
+      platforms: ['facebook'],
+      offerSummary: 'Two for one pizzas',
+      endDate: '2026-12-31',
+    } as unknown as ContentBrief;
+    const { regenerateWithModifier } = await import('@/app/actions/ai-generate');
+    const result = await regenerateWithModifier('content-1', promotion, 'Make the copy shorter and more concise.', {
+      campaign: { ...plan, job: 'announce' },
+    });
+
+    expect(result).toEqual({ error: refused });
+    expect(generatePlatformCopy).not.toHaveBeenCalled();
+  });
+
+  it('refuses meet the host when the brief names no host', async () => {
+    const { generateContent } = await import('@/app/actions/ai-generate');
+    const result = await generateContent('content-1', brief, { scheduledAt: '2026-11-06T08:00:00Z', campaign: plan });
+
+    expect(result).toEqual({ error: refused });
+    expect(generatePlatformCopy).not.toHaveBeenCalled();
   });
 });

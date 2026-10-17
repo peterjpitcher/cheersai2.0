@@ -13,6 +13,7 @@ import type { ContentBrief } from '@/features/create/schemas/content-schemas';
 import { AI_OWNER_MESSAGES } from '@/lib/ai/generate';
 import type { PostprocessResult } from '@/lib/ai/postprocess';
 import { resolveCopyModel } from '@/lib/ai/models';
+import { campaignSlotPlanSchema, type CampaignSlotPlan } from '@/lib/ai/slot-jobs';
 import { loadBrandProfile, loadMediaMetadata, writeCopy } from '@/lib/ai/write-copy';
 import { requireEntitledContext } from '@/lib/billing/entitlement-server';
 import { ownerMessage } from '@/lib/errors/owner-message';
@@ -36,15 +37,42 @@ function generationFailureMessage(error: unknown, fallback: string): string {
 /**
  * Optional media + schedule context passed from the create wizard.
  *
- * Only mediaIds, scheduledAt and slotLabel are honoured. Every temporal fact is
- * derived on the server (writeCopy) from the brief plus scheduledAt, so one
- * clock and one implementation feed the prompt, the post-processor and the
- * stored generation params. The wizard no longer computes them in the browser.
+ * Only mediaIds, scheduledAt, slotLabel and campaign are honoured. Every
+ * temporal fact is derived on the server (writeCopy) from the brief plus
+ * scheduledAt, so one clock and one implementation feed the prompt, the
+ * post-processor and the stored generation params. The wizard no longer
+ * computes them in the browser.
  */
 interface GenerationContextInput {
   mediaIds?: string[];
   scheduledAt?: string | null;
   slotLabel?: string; // e.g. "Event day", "2 weeks out", "Launch", "Week 3"
+  /** Event campaigns: this post's job and how the campaign's other posts opened (B3). */
+  campaign?: CampaignSlotPlan;
+}
+
+/** Shown when the wizard sends a campaign plan the server cannot use. */
+const CAMPAIGN_PLAN_REFUSED = 'We could not write this post. Refresh the page and try again.';
+
+type CampaignPlanCheck = { ok: true; campaign?: CampaignSlotPlan } | { ok: false; reason: string };
+
+/**
+ * The wizard's campaign plan (tasks/SPEC-event-copy-engine.md B3), checked
+ * here because a server action accepts any payload: event briefs only, a known
+ * job, a place within the campaign, and bounded lists of openings and
+ * questions. The host named in the prompt always comes from the brief.
+ */
+function checkCampaignPlan(brief: ContentBrief, plan: unknown): CampaignPlanCheck {
+  if (plan === undefined) return { ok: true };
+  if (brief.contentType !== 'event') return { ok: false, reason: 'a campaign plan for a brief that is not an event' };
+  const parsed = campaignSlotPlanSchema.safeParse(plan);
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0];
+    return { ok: false, reason: `${issue?.path.join('.') || 'plan'}: ${issue?.message ?? 'not a campaign plan'}` };
+  }
+  const host = brief.facts?.host?.trim() || null;
+  if (parsed.data.job === 'meet_the_host' && !host) return { ok: false, reason: 'meet the host, but the brief names no host' };
+  return { ok: true, campaign: { ...parsed.data, host } };
 }
 
 /**
@@ -66,6 +94,12 @@ export async function generateContent(
   try {
     const { supabase, accountId } = await requireEntitledContext('create');
 
+    const plan = checkCampaignPlan(brief, context?.campaign);
+    if (!plan.ok) {
+      logger.warn('generateContent refused a campaign plan', { contentId, reason: plan.reason });
+      return { error: CAMPAIGN_PLAN_REFUSED };
+    }
+
     // Load the configured brand voice (key phrases, banned phrases, signatures,
     // tone sliders) from the brand_profile table, the same store the
     // Settings > Brand Voice form writes to.
@@ -81,6 +115,7 @@ export async function generateContent(
       scheduledAt: context?.scheduledAt,
       slotLabel: context?.slotLabel,
       media: mediaMetadata,
+      campaign: plan.campaign,
     });
 
     // Store generation params and draft copy on content_items
@@ -93,6 +128,7 @@ export async function generateContent(
             mediaIds: context?.mediaIds,
             scheduledAt: context?.scheduledAt,
             slotLabel: context?.slotLabel,
+            campaign: plan.campaign,
             ...temporal,
             mediaMetadata: mediaMetadata.length > 0 ? mediaMetadata : undefined,
           },
@@ -127,6 +163,12 @@ export async function regenerateWithModifier(
   try {
     const { supabase, accountId } = await requireEntitledContext('create');
 
+    const plan = checkCampaignPlan(brief, context?.campaign);
+    if (!plan.ok) {
+      logger.warn('regenerateWithModifier refused a campaign plan', { contentId, reason: plan.reason });
+      return { error: CAMPAIGN_PLAN_REFUSED };
+    }
+
     // Load the configured brand voice, as generateContent does.
     const brand = await loadBrandProfile(supabase, accountId);
 
@@ -141,6 +183,7 @@ export async function regenerateWithModifier(
       slotLabel: context?.slotLabel,
       media: mediaMetadata,
       modifier,
+      campaign: plan.campaign,
     });
 
     // Store generation params with modifier
@@ -154,6 +197,7 @@ export async function regenerateWithModifier(
             mediaIds: context?.mediaIds,
             scheduledAt: context?.scheduledAt,
             slotLabel: context?.slotLabel,
+            campaign: plan.campaign,
             ...temporal,
             mediaMetadata: mediaMetadata.length > 0 ? mediaMetadata : undefined,
           },
