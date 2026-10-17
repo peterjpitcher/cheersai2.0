@@ -76,9 +76,17 @@ Needs the performer's Instagram handle stored in the management app and returned
 
 After B1 to B3: a "Rewrite with the new engine" action on a campaign rewrites its unpublished posts in place, keeping schedule, images and links, for the owner to review. Then this autumn's six campaigns are rewritten.
 
+Decided 17 October 2026: this autumn's campaigns cannot wait for B3, because their posts start going out on 19 October. They are rewritten now, with B1, B2 and the chosen model, by an ops tool: `npm run ops:rewrite-event-posts` (`scripts/ops/rewrite-event-posts.ts`, logic in `src/lib/content/rewrite-event-posts.ts`).
+
+- A plan run changes no post. It refreshes each event's facts from the management app, writes every slot afresh through the same pipeline as the wizard (`src/lib/ai/write-copy.ts`), and saves a before-and-after report and a plan file under `temp/` (git-ignored). The AI calls are logged in `ai_usage_events`, as the wizard's are.
+- The owner approves the whole list once. `--apply --plan <file>` then writes exactly that text, and only to posts that still carry the planned old text, at the planned time, with status `scheduled`, every publish job `queued` and more than an hour to go. `--rollback --plan <file>` restores the old text on the same terms.
+- Only the text changes: `content_variants.body` and `preview_data` (the stored copy and the brief that wrote it). Schedule, images, links, overlays and stories are untouched. New text that would be untrue at its time (`evaluateTemporalDrift`) is left out of the plan.
+- Without B3, each slot is still written on its own, so the owner checks the list for repeated angles within a campaign.
+- The in-app action stays the long-term plan, after B3.
+
 ## 4. Rollback
 
-B1 to B4 are code only: revert the PR. The model switch rolls back by resetting `OPENAI_MODEL`. B5 rolls back by redeploying the previous worker.
+B1 to B4 are code only: revert the PR. The model switch rolls back by resetting `OPENAI_MODEL`. B5 rolls back by redeploying the previous worker. B8 rolls back with `npm run ops:rewrite-event-posts -- --rollback --plan <file>`, which restores the old text of every post not changed since.
 
 ## 5. Tests
 
@@ -86,4 +94,5 @@ B1 to B4 are code only: revert the PR. The model switch rolls back by resetting 
 - B2: mapper tests from a recorded management-app response, including FAQs, discount and payment modes; the prompt renders facts and strips markdown.
 - B3: slot job assignment for 3 to 7 slots with and without a performer or kitchen times; a later slot's prompt lists earlier openings and questions.
 - B4: evaluation script dry run with OpenAI mocked; temperature left out for reasoning models.
+- B8: plan, apply and rollback against an in-memory database with the writer mocked: eligibility (status, publish jobs, the hour's lead), the brief rebuilt from the management app, the untrue-wording guard, and apply skipping posts edited, moved or published since the plan.
 - No unit test calls OpenAI, Meta or the management app.
