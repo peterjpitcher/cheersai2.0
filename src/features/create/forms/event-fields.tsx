@@ -16,7 +16,7 @@ import {
   type ArtworkUiState,
 } from '@/features/create/artwork-status';
 import type { EventFactSheet } from '@/lib/management-app/event-facts';
-import { importedBriefText, toneAfterImport } from '@/features/create/forms/event-import';
+import { importedBriefText, ownerChoseTone, toneAfterImport } from '@/features/create/forms/event-import';
 
 interface EventFieldsProps {
   form: UseFormReturn<FieldValues>;
@@ -85,7 +85,7 @@ export function EventFields({
   canReplaceWithArtwork = false,
   onUseArtwork,
 }: EventFieldsProps): React.JSX.Element {
-  const { register, formState: { errors, touchedFields }, setValue, getValues } = form;
+  const { register, formState: { errors }, setValue, getValues } = form;
   const canImport = useAuth()?.features.managementImport === true;
   const [importOpen, setImportOpen] = useState(false);
   const [events, setEvents] = useState<EventOption[]>([]);
@@ -141,9 +141,14 @@ export function EventFields({
         setValue('facts', facts, { shouldValidate: true });
         setImportedFacts(facts ?? null);
         setValue('prompt', importedBriefText(fields, Boolean(facts)), { shouldValidate: true });
-        // A tone the owner picked (touched the control) stays; otherwise this event's suggestion.
-        const tone = toneAfterImport({ ownerChoseTone: Boolean(touchedFields.tone), suggestedTone: fields.suggestedTone });
-        if (tone) setValue('tone', tone, { shouldValidate: true });
+        // A tone the owner picked stays (recorded in toneChosen, which drafts and
+        // content-type changes keep); otherwise this event's suggestion applies.
+        const chosen = ownerChoseTone({ toneChosen: getValues('toneChosen'), tone: getValues('tone') });
+        const tone = toneAfterImport({ ownerChoseTone: chosen, suggestedTone: fields.suggestedTone });
+        if (tone) {
+          setValue('tone', tone, { shouldValidate: true });
+          setValue('toneChosen', false);
+        }
         setSelectedLabel(sourceLabel);
         setImportOpen(false);
 

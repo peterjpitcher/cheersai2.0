@@ -15,7 +15,7 @@ import { buildRugbyMatchCopy, buildRugbyMenuLine, buildRugbyRoundupCopy, joinRug
 import { findContentCoveringFixture } from '@/lib/tournament/content-freshness';
 import { coveredFixtureIds } from '../../../supabase/functions/_shared/tournament-roundup';
 import { getFixturesByTournament, getPublishedPlacements } from '@/lib/tournament/queries';
-import { PUBLISHED_JOB_STATUSES, isPublishedContentStatus } from '@/lib/tournament/published-status';
+import { IN_FLIGHT_STATUSES, PUBLISHED_JOB_STATUSES, isInFlightStatus, isPublishedContentStatus } from '@/lib/tournament/published-status';
 import { formatEventDateLong } from '@/lib/utils/date';
 import { DEFAULT_TIMEZONE, MEDIA_BUCKET } from '@/lib/constants';
 import { redactId, tournamentDebug, tournamentDebugError } from '@/lib/tournament/debug';
@@ -1000,7 +1000,7 @@ async function bulkGenerateMatchDays(
   // and its day is added to the run. Each day is rebuilt exactly once.
   const supabase = createServiceSupabaseClient();
   const days = new Set(ordered.map(([day]) => day));
-  for (const lead of await clearStaleRoundups(supabase, tournament.accountId, eligible, fixtures)) {
+  for (const lead of await clearStaleRoundups(supabase, tournament, fixtures)) {
     const day = matchDayKey(lead.kickOffAt);
     if (!days.has(day)) {
       days.add(day);
@@ -1079,30 +1079,48 @@ export async function gamesLeftBehind(
 }
 
 /**
- * Before Generate All rebuilds days side by side: delete, one at a time, each
- * unpublished round-up that still lists an eligible game now on another day,
- * and return a game from each day those round-ups were for, so those days are
- * rebuilt too. Deleting them here means no two parallel rebuilds ever delete
- * the same post, and with it an image another rebuild has just re-uploaded to
- * the same path (image paths are fixed per lead game).
+ * Before Generate All rebuilds days side by side: delete every unsent round-up
+ * of this tournament that lists a game no longer on the day it was written for
+ * (its eventStart), once and up front, and return a game from each such day
+ * that still has one, so that day is rebuilt too. A stale round-up is deleted
+ * even when none of its games is left on its day; otherwise the rebuilds of
+ * its games' new days would each find and delete it at the same time, and one
+ * could remove an image another had just re-uploaded to the same path (image
+ * paths are fixed per lead game).
  */
 export async function clearStaleRoundups(
   supabase: SupabaseClient,
-  accountId: string,
-  eligible: TournamentFixture[],
+  tournament: Tournament,
   fixtures: TournamentFixture[],
 ): Promise<TournamentFixture[]> {
+  const { data, error } = await supabase
+    .from('content_items')
+    .select('id, status, prompt_context')
+    .eq('account_id', tournament.accountId)
+    .is('deleted_at', null)
+    .contains('prompt_context', { source: 'tournament', tournament_id: tournament.id });
+  if (error) throw error;
+
+  const byId = new Map(fixtures.map((fixture) => [fixture.id, fixture]));
+  const stale: StoredContent[] = [];
   const leads = new Map<string, TournamentFixture>();
-  for (const fixture of eligible) {
-    const leftBehind = await gamesLeftBehind(supabase, accountId, fixture, fixtures);
-    if (!leftBehind.length) continue;
-    await deleteFixtureContentItems(supabase, fixture.id, accountId, true);
-    for (const lead of leftBehind) {
-      const day = matchDayKey(lead.kickOffAt);
-      if (!leads.has(day)) leads.set(day, lead);
-    }
+  for (const item of (data ?? []) as StoredContent[]) {
+    const eventStart = item.prompt_context?.eventStart;
+    if (typeof eventStart !== 'string') continue;
+    const day = matchDayKey(eventStart);
+    const covered = coveredFixtureIds(item.prompt_context)
+      .map((id) => byId.get(id))
+      .filter((fixture): fixture is TournamentFixture => Boolean(fixture));
+    if (!covered.some((fixture) => matchDayKey(fixture.kickOffAt) !== day)) continue;
+    stale.push(item);
+    const lead = covered.find((fixture) => matchDayKey(fixture.kickOffAt) === day);
+    if (lead && !leads.has(day)) leads.set(day, lead);
   }
-  return [...leads.values()];
+  const unsent = await unsentOnly(supabase, tournament.accountId, stale);
+  await removeContentItems(supabase, tournament.accountId, unsent);
+  // Only days whose round-up was actually deleted need rebuilding.
+  const deletedDays = new Set(unsent.map((item) => matchDayKey(item.prompt_context?.eventStart as string)));
+  return [...leads.entries()].filter(([day]) => deletedDays.has(day)).map(([, lead]) => lead);
 }
 
 /**
@@ -1160,48 +1178,45 @@ export async function regenerateMatchDay(
 // Content deletion / cleanup
 // ---------------------------------------------------------------------------
 
-export async function deleteFixtureContentItems(
+interface StoredContent {
+  id: string;
+  status: string;
+  prompt_context: Record<string, unknown> | null;
+}
+
+/**
+ * The posts that are safe to delete: neither the post nor any of its publish
+ * jobs is marked sent, or claimed by a worker that may be sending it right now.
+ * The live worker marks sent posts 'posted' (job 'succeeded') and a send in
+ * progress 'in_progress'; checking 'published' alone deleted both. Without the
+ * job list nothing can be shown to be safe, so a failed lookup throws.
+ */
+async function unsentOnly<T extends StoredContent>(supabase: SupabaseClient, accountId: string, items: T[]): Promise<T[]> {
+  if (!items.length) return items;
+  const { data: claimedJobs, error } = await supabase
+    .from('publish_jobs')
+    .select('content_item_id')
+    .in('content_item_id', items.map((item) => item.id))
+    .eq('account_id', accountId)
+    .in('status', [...PUBLISHED_JOB_STATUSES, ...IN_FLIGHT_STATUSES]);
+  if (error) throw error;
+  const claimed = new Set((claimedJobs ?? []).map((job: Record<string, unknown>) => job.content_item_id as string));
+  return items.filter((item) => !claimed.has(item.id) && !isPublishedContentStatus(item.status) && !isInFlightStatus(item.status));
+}
+
+/**
+ * Delete exactly these posts, their media rows and stored images, then clear
+ * the generated flag of every game they covered that no longer has a post.
+ * `resetFixtureId` is always cleared, covered or not.
+ */
+async function removeContentItems(
   supabase: SupabaseClient,
-  fixtureId: string,
   accountId: string,
-  onlyUnpublished = false,
+  items: StoredContent[],
+  { fixtureId, resetFixtureId }: { fixtureId?: string; resetFixtureId?: string } = {},
 ): Promise<number> {
-  // Includes any match-day round-up that lists this fixture, and binned posts.
-  const fixtureItems = await findContentCoveringFixture(supabase, accountId, fixtureId, { includeDeleted: true });
-
-  if (!fixtureItems.length) return 0;
-
-  let itemsToDelete = fixtureItems;
-
-  if (onlyUnpublished) {
-    // Preserve placements that have already gone out. The live worker marks
-    // them 'posted' (job 'succeeded'); checking 'published' alone deleted them.
-    const itemIds = fixtureItems.map((i: Record<string, unknown>) => i.id as string);
-    const { data: succeededJobs, error: jobsError } = await supabase
-      .from('publish_jobs')
-      .select('content_item_id')
-      .in('content_item_id', itemIds)
-      .eq('account_id', accountId)
-      .in('status', [...PUBLISHED_JOB_STATUSES]);
-    // Without the job list, nothing can be shown to be unpublished: delete nothing.
-    if (jobsError) throw jobsError;
-
-    const publishedIds = new Set(
-      (succeededJobs ?? []).map((j: Record<string, unknown>) => j.content_item_id as string),
-    );
-    for (const item of fixtureItems) {
-      if (isPublishedContentStatus((item as Record<string, unknown>).status)) {
-        publishedIds.add((item as Record<string, unknown>).id as string);
-      }
-    }
-    itemsToDelete = fixtureItems.filter(
-      (i: Record<string, unknown>) => !publishedIds.has(i.id as string),
-    );
-  }
-
-  if (!itemsToDelete.length) return 0;
-
-  const deleteIds = itemsToDelete.map((i: Record<string, unknown>) => i.id as string);
+  if (!items.length) return 0;
+  const deleteIds = items.map((item) => item.id);
 
   // Collect media asset IDs to clean up
   const { data: variants } = await supabase
@@ -1252,14 +1267,14 @@ export async function deleteFixtureContentItems(
 
   // A deleted round-up also leaves the other games it listed without a post, so
   // every fixture it covered is re-checked, not only the one asked for.
-  const affectedFixtureIds = new Set<string>([fixtureId]);
-  for (const item of itemsToDelete) {
+  const affectedFixtureIds = new Set<string>(fixtureId ? [fixtureId] : []);
+  for (const item of items) {
     for (const id of coveredFixtureIds(item.prompt_context)) affectedFixtureIds.add(id);
   }
   for (const id of affectedFixtureIds) {
-    const keepsPosts = onlyUnpublished || id !== fixtureId
-      ? (await findContentCoveringFixture(supabase, accountId, id)).length > 0
-      : false;
+    const keepsPosts = id === resetFixtureId
+      ? false
+      : (await findContentCoveringFixture(supabase, accountId, id)).length > 0;
     if (!keepsPosts) {
       await supabase
         .from('tournament_fixtures')
@@ -1269,4 +1284,22 @@ export async function deleteFixtureContentItems(
   }
 
   return deleteIds.length;
+}
+
+export async function deleteFixtureContentItems(
+  supabase: SupabaseClient,
+  fixtureId: string,
+  accountId: string,
+  onlyUnpublished = false,
+): Promise<number> {
+  // Includes any match-day round-up that lists this fixture, and binned posts.
+  const fixtureItems = await findContentCoveringFixture(supabase, accountId, fixtureId, { includeDeleted: true });
+  if (!fixtureItems.length) return 0;
+
+  const itemsToDelete = onlyUnpublished ? await unsentOnly(supabase, accountId, fixtureItems) : fixtureItems;
+  return removeContentItems(supabase, accountId, itemsToDelete, {
+    fixtureId,
+    // Deleting everything for a game always leaves it without posts.
+    resetFixtureId: onlyUnpublished ? undefined : fixtureId,
+  });
 }
