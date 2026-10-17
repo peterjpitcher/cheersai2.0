@@ -63,6 +63,7 @@ Core built 17 October 2026, ahead of the wizard part, because the first B8 rewri
 
 - New ops script runs the current model and two or three candidates on 10 recent real briefs (stored in `content_items.ai_generation_params`), scores each draft with the B1 checks and a judging model, and prints a side-by-side for the owner. Candidates available to this account's key on 17 October 2026 include the GPT-5.4 and GPT-5.5 families and GPT-6 variants.
 - The default model changes (`OPENAI_MODEL`) only after the owner has seen the side-by-side.
+- Decided 17 October 2026 (owner's yes, after the side-by-side and the 66-post rewrite list): `DEFAULT_COPY_MODEL` is gpt-5.5. About 6 US cents and 25 to 35 seconds a post; `OPENAI_MODEL` still overrides it, and image tagging keeps its own model. Rollback: set `DEFAULT_COPY_MODEL` back, or set `OPENAI_MODEL=gpt-4o-mini` in Vercel and redeploy.
 - Best of three: write three drafts, keep the one with the fewest check failures, then the judge's pick.
 - Reasoning models do not take a temperature; the generator leaves it out for them.
 - Image naming and tagging keeps its own model (`DEFAULT_MEDIA_TAGGING_MODEL`, gpt-4o-mini) whatever the copy model is; it used to read `OPENAI_MODEL` and would have broken on a reasoning model (review finding on #192, 17 October 2026).

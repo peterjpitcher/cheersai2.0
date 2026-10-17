@@ -23,10 +23,12 @@ const VALID_RESPONSE: AiGenerationResponse = {
   instagram: { body: 'A great evening.', hashtags: ['#food'], link_in_bio_line: null },
 };
 
+// A non-reasoning model, so these tests cover the temperature and 30s timeout path.
 const DEFAULT_OPTIONS = {
   systemPrompt: 'You are a test assistant.',
   userPrompt: 'Write a post about pub quiz night.',
   temperature: 0.7,
+  model: 'gpt-4o-mini',
 };
 
 describe('generatePlatformCopy', () => {
@@ -103,6 +105,20 @@ describe('generatePlatformCopy with reasoning models', () => {
 
   afterEach(() => {
     vi.useRealTimers();
+  });
+
+  it('writes with gpt-5.5 by default, with no temperature', async () => {
+    vi.stubEnv('OPENAI_MODEL', '');
+    mockParse.mockResolvedValue({ choices: [{ message: { parsed: VALID_RESPONSE } }] });
+    const { model: _model, ...withoutModel } = DEFAULT_OPTIONS;
+    void _model;
+
+    await generatePlatformCopy(withoutModel);
+
+    const callArgs = mockParse.mock.calls[0]![0];
+    expect(callArgs.model).toBe('gpt-5.5');
+    expect(callArgs).not.toHaveProperty('temperature');
+    vi.unstubAllEnvs();
   });
 
   it('leaves the temperature out, which reasoning models reject', async () => {

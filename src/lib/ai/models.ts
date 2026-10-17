@@ -1,11 +1,13 @@
 /**
  * Which OpenAI model writes post copy (tasks/SPEC-event-copy-engine.md B4).
  *
- * The default stays gpt-4o-mini until the owner approves a switch: on 17 October
- * 2026 a side-by-side on 10 real briefs had gpt-4o-mini's first drafts clean 3
- * times in 10, against 10 in 10 for gpt-5.4-mini and gpt-5.5.
+ * gpt-5.5 since 17 October 2026, on the owner's yes. A side-by-side on 10 real
+ * briefs had gpt-4o-mini's first drafts clean 3 times in 10, against 10 in 10
+ * for gpt-5.4-mini and gpt-5.5, and gpt-5.5 then wrote all 66 of the autumn's
+ * scheduled event posts with no house-style problem. About 6 US cents and 25 to
+ * 35 seconds a post. OPENAI_MODEL still overrides it.
  */
-export const DEFAULT_COPY_MODEL = 'gpt-4o-mini';
+export const DEFAULT_COPY_MODEL = 'gpt-5.5';
 
 /**
  * Image naming and tagging keeps its own model. It used to read OPENAI_MODEL
