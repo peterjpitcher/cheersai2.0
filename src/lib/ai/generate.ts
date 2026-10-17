@@ -9,6 +9,7 @@
 import { zodResponseFormat } from 'openai/helpers/zod';
 
 import { getOpenAIClient } from './client';
+import { copyTimeoutMs, isReasoningModel, resolveCopyModel } from './models';
 import { trackAiCall } from './usage';
 import { AiGenerationResponseSchema, type AiGenerationResponse } from './schemas';
 
@@ -20,6 +21,7 @@ import { AiGenerationResponseSchema, type AiGenerationResponse } from './schemas
 export const AI_OWNER_MESSAGES = {
   empty: 'The AI did not write any copy this time. Please try again.',
   timeout: 'Content generation timed out after 30 seconds. Please try again with a simpler brief.',
+  timeoutLong: 'Content generation timed out after 60 seconds. Please try again with a simpler brief.',
 } as const;
 
 export interface GenerateOptions {
@@ -43,15 +45,18 @@ export async function generatePlatformCopy(
 ): Promise<AiGenerationResponse> {
   const client = getOpenAIClient();
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 30_000); // AI-09: 30s timeout
+  const model = options.model ?? resolveCopyModel();
+  const reasoning = isReasoningModel(model);
+  // AI-09: 30s timeout, 60s for reasoning models, which take longer.
+  const timeout = setTimeout(() => controller.abort(), copyTimeoutMs(model));
 
   try {
-    const model = options.model ?? process.env.OPENAI_MODEL ?? 'gpt-4o-mini';
     const usage = options.usageAccountId ? { accountId: options.usageAccountId, feature: 'post_copy' as const } : undefined;
     const completion = await trackAiCall(usage, model, () => client.chat.completions.parse(
       {
         model,
-        temperature: options.temperature,
+        // Reasoning models reject a custom temperature.
+        ...(reasoning ? {} : { temperature: options.temperature }),
         messages: [
           { role: 'system', content: options.systemPrompt },
           { role: 'user', content: options.userPrompt },
@@ -71,7 +76,7 @@ export async function generatePlatformCopy(
     return parsed;
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') {
-      throw new Error(AI_OWNER_MESSAGES.timeout);
+      throw new Error(reasoning ? AI_OWNER_MESSAGES.timeoutLong : AI_OWNER_MESSAGES.timeout);
     }
     throw error;
   } finally {

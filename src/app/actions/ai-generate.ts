@@ -14,6 +14,7 @@ import { AI_OWNER_MESSAGES, generatePlatformCopy } from '@/lib/ai/generate';
 import type { PostprocessResult } from '@/lib/ai/postprocess';
 import { findCopyIssues, postprocessCopy } from '@/lib/ai/postprocess';
 import { INSTAGRAM_HASHTAG_LIMIT, buildSystemPrompt, buildUserPrompt } from '@/lib/ai/prompts';
+import { resolveCopyModel } from '@/lib/ai/models';
 import { getTemperature } from '@/lib/ai/temperature';
 import { BANNED_PHRASES, type BrandVoiceConfig } from '@/lib/ai/voice';
 import { requireAuthContext } from '@/lib/auth/server';
@@ -197,7 +198,7 @@ export async function generateContent(
             mediaMetadata: mediaMetadata.length > 0 ? mediaMetadata : undefined,
           },
           temperature,
-          model: process.env.OPENAI_MODEL ?? 'gpt-4o-mini',
+          model: resolveCopyModel(),
         },
         body_draft: processed.copy,
       })
@@ -285,7 +286,7 @@ export async function regenerateWithModifier(
             mediaMetadata: mediaMetadata.length > 0 ? mediaMetadata : undefined,
           },
           temperature,
-          model: process.env.OPENAI_MODEL ?? 'gpt-4o-mini',
+          model: resolveCopyModel(),
         },
         body_draft: processed.copy,
       })
