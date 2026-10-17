@@ -33,6 +33,7 @@ import { prepareRugbyFixture, saveRugbyFixture } from '@/lib/tournament/screenin
 import { checkTournamentContentById, findContentCoveringFixture } from '@/lib/tournament/content-freshness';
 import { coveredFixtureIds, coversFixture, expectedFixtureRevision } from '../../../supabase/functions/_shared/tournament-roundup';
 import { projectTournamentFixtures } from '@/lib/tournament/screening-service';
+import { isPublishedContentStatus, isPublishedJobStatus } from '@/lib/tournament/published-status';
 import type { TournamentFixture } from '@/types/tournament';
 import type { Tournament } from '@/types/tournament';
 import type { Platform } from '@/types/content';
@@ -41,17 +42,7 @@ import type { Platform } from '@/types/content';
 // Internal helpers
 // ---------------------------------------------------------------------------
 
-const PUBLISHED_CONTENT_STATUSES = new Set(['published', 'posted', 'succeeded']);
-const PUBLISHED_JOB_STATUSES = new Set(['published', 'posted', 'succeeded']);
 const LOCKED_JOB_STATUSES = new Set(['publishing', 'in_progress']);
-
-function isPublishedContentStatus(status: unknown): boolean {
-  return typeof status === 'string' && PUBLISHED_CONTENT_STATUSES.has(status);
-}
-
-function isPublishedJobStatus(status: unknown): boolean {
-  return typeof status === 'string' && PUBLISHED_JOB_STATUSES.has(status);
-}
 
 function isLockedJobStatus(status: unknown): boolean {
   return typeof status === 'string' && LOCKED_JOB_STATUSES.has(status);
@@ -291,8 +282,12 @@ export async function deleteFixture(
 
     // A rugby round-up covers the whole day: its published posts stay as history,
     // its unpublished ones go, and the day is rebuilt for the games that remain.
+    // A plain save clears contentGenerated but leaves the day's round-up in
+    // place, so whether posts cover this game is checked, not only the flag.
     const rugby = tournament.sport === 'rugby_union';
-    if (fixture.contentGenerated) {
+    const hasPosts = fixture.contentGenerated
+      || (await findContentCoveringFixture(supabase, accountId, fixtureId)).length > 0;
+    if (hasPosts) {
       await deleteFixtureContentItems(supabase, fixtureId, accountId, rugby /* onlyUnpublished */);
     }
 
@@ -306,7 +301,7 @@ export async function deleteFixture(
 
     revalidatePath(`/tournaments/${tournamentId}`);
 
-    if (rugby && fixture.contentGenerated) {
+    if (rugby && hasPosts) {
       const sameDay = (await getFixturesByTournament(supabase, tournamentId))
         .find(other => matchDayKey(other.kickOffAt) === matchDayKey(fixture.kickOffAt));
       try {
@@ -795,8 +790,11 @@ export async function toggleFixtureShowing(
       await saveRugbyFixture(supabase, tournament, fixture, { ...fixture, showing, screeningDecision: showing ? (fixture.screeningDecision === 'confirmed' ? 'confirmed' : 'unconfirmed') : 'not_showing', screeningConfirmedAt: showing ? new Date().toISOString() : fixture.screeningConfirmedAt }, {}, fixture.contentRevision);
       revalidatePath(`/tournaments/${tournamentId}`);
       // Hiding a game that was in a round-up rebuilds the day for the games
-      // still showing, rather than leaving the whole day's post on hold.
-      if (!showing && fixture.contentGenerated) {
+      // still showing, rather than leaving the whole day's post on hold. A plain
+      // save clears contentGenerated but keeps the round-up, so coverage decides.
+      const inRoundup = fixture.contentGenerated
+        || (await findContentCoveringFixture(supabase, accountId, fixtureId)).length > 0;
+      if (!showing && inRoundup) {
         const saved = await getFixtureById(supabase, fixtureId, tournamentId);
         try {
           if (saved) await regenerateMatchDay(tournament, saved);

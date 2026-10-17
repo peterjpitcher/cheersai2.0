@@ -15,6 +15,7 @@ import { buildRugbyMatchCopy, buildRugbyMenuLine, buildRugbyRoundupCopy, joinRug
 import { findContentCoveringFixture } from '@/lib/tournament/content-freshness';
 import { coveredFixtureIds } from '../../../supabase/functions/_shared/tournament-roundup';
 import { getFixturesByTournament, getPublishedPlacements } from '@/lib/tournament/queries';
+import { PUBLISHED_JOB_STATUSES, isPublishedContentStatus } from '@/lib/tournament/published-status';
 import { formatEventDateLong } from '@/lib/utils/date';
 import { DEFAULT_TIMEZONE, MEDIA_BUCKET } from '@/lib/constants';
 import { redactId, tournamentDebug, tournamentDebugError } from '@/lib/tournament/debug';
@@ -994,16 +995,37 @@ async function bulkGenerateMatchDays(
   baseImageCache: Map<string, Buffer>,
 ): Promise<{ generated: number; skipped: number; errors: Array<{ fixtureId: string; error: string }> }> {
   const ordered = groupByMatchDay(eligible);
+  // A game moved to another day still sits in its old day's round-up, which
+  // rebuilding the new day removes, so the old day is rebuilt in this run too.
+  // Each day is rebuilt exactly once, so concurrent jobs never share a day.
+  const supabase = createServiceSupabaseClient();
+  const days = new Set(ordered.map(([day]) => day));
+  for (const fixture of eligible) {
+    for (const lead of await gamesLeftBehind(supabase, tournament.accountId, fixture, fixtures)) {
+      const day = matchDayKey(lead.kickOffAt);
+      if (!days.has(day)) {
+        days.add(day);
+        ordered.push([day, [lead]]);
+      }
+    }
+  }
   const limit = pLimit(BULK_CONCURRENCY);
   const results = await Promise.allSettled(ordered.map(([, dayFixtures]) => limit(() =>
-    regenerateMatchDay(tournament, dayFixtures[0], { baseImageCache }))));
+    regenerateMatchDay(tournament, dayFixtures[0], { baseImageCache, rebuildDaysLeftBehind: false }))));
 
   let generated = 0;
   const errors: Array<{ fixtureId: string; error: string }> = [];
+  const eligibleIds = new Set(eligible.map((fixture) => fixture.id));
   results.forEach((result, index) => {
-    const dayFixtures = ordered[index][1];
+    const dayFixtures = ordered[index][1].filter((fixture) => eligibleIds.has(fixture.id));
     if (result.status === 'fulfilled') {
-      generated += dayFixtures.length;
+      // Count what the round-up covers; a game the screening rules exclude
+      // gets no post and is reported, not counted.
+      const covered = new Set(result.value);
+      for (const fixture of dayFixtures) {
+        if (covered.has(fixture.id)) generated += 1;
+        else errors.push({ fixtureId: fixture.id, error: NOT_PROMOTABLE_MESSAGE });
+      }
       return;
     }
     const message = result.reason instanceof Error ? result.reason.message : String(result.reason);
@@ -1025,26 +1047,64 @@ async function bulkGenerateMatchDays(
   return { generated, skipped: fixtures.length - eligible.length, errors };
 }
 
+const NOT_PROMOTABLE_MESSAGE = 'Confirm teams, broadcast and screening within existing hours before generating.';
+
+/**
+ * One game from each other match day whose unpublished round-up still lists
+ * this game, because the game has since moved day. Rebuilding this game's day
+ * deletes that round-up, so those days must be rebuilt as well.
+ */
+export async function gamesLeftBehind(
+  supabase: SupabaseClient,
+  accountId: string,
+  fixture: TournamentFixture,
+  fixtures: TournamentFixture[],
+): Promise<TournamentFixture[]> {
+  const day = matchDayKey(fixture.kickOffAt);
+  const byId = new Map(fixtures.map((other) => [other.id, other]));
+  const leads = new Map<string, TournamentFixture>();
+  for (const item of await findContentCoveringFixture(supabase, accountId, fixture.id)) {
+    if (isPublishedContentStatus(item.status)) continue;
+    for (const id of coveredFixtureIds(item.prompt_context)) {
+      const other = byId.get(id);
+      if (!other || id === fixture.id) continue;
+      const otherDay = matchDayKey(other.kickOffAt);
+      if (otherDay !== day && !leads.has(otherDay)) leads.set(otherDay, other);
+    }
+  }
+  return [...leads.values()];
+}
+
 /**
  * Rebuild a rugby match day's round-up from scratch: delete the day's
  * unpublished posts, then generate one round-up for every promotable game that
  * day. Placements already published are not posted again. With requireFixture,
  * the given game must itself be promotable, checked before anything is deleted.
- * Returns how many games the new round-up covers (0 when none are promotable).
+ * When the game has moved from another day, that day's round-up (which still
+ * lists it) is deleted here, so that day is rebuilt too unless the caller
+ * rebuilds it itself (rebuildDaysLeftBehind: false, as Generate All does).
+ * Returns the ids of the games the new round-up covers (none when no game is
+ * promotable).
  */
 export async function regenerateMatchDay(
   tournament: Tournament,
   fixture: TournamentFixture,
-  { requireFixture = false, baseImageCache }: { requireFixture?: boolean; baseImageCache?: Map<string, Buffer> } = {},
-): Promise<number> {
+  { requireFixture = false, baseImageCache, rebuildDaysLeftBehind = true }: {
+    requireFixture?: boolean;
+    baseImageCache?: Map<string, Buffer>;
+    rebuildDaysLeftBehind?: boolean;
+  } = {},
+): Promise<string[]> {
   const supabase = createServiceSupabaseClient();
   const games = await resolveMatchDay(supabase, tournament, fixture);
   if (requireFixture && !games.some(game => game.fixture.id === fixture.id)) {
-    throw new Error('Confirm teams, broadcast and screening within existing hours before generating.');
+    throw new Error(NOT_PROMOTABLE_MESSAGE);
   }
 
   const day = matchDayKey(fixture.kickOffAt);
-  const dayIds = (await getFixturesByTournament(supabase, tournament.id))
+  const fixtures = await getFixturesByTournament(supabase, tournament.id);
+  const leftBehind = rebuildDaysLeftBehind ? await gamesLeftBehind(supabase, tournament.accountId, fixture, fixtures) : [];
+  const dayIds = fixtures
     .filter(other => matchDayKey(other.kickOffAt) === day)
     .map(other => other.id);
   for (const id of new Set([...dayIds, fixture.id])) {
@@ -1057,9 +1117,13 @@ export async function regenerateMatchDay(
     .in('id', [...new Set([...dayIds, fixture.id])]);
   if (resetError) throw resetError;
 
-  if (!games.length) return 0;
-  await generateFixtureContent(tournament, games[0].fixture, 0, { skipPublished: true, baseImageCache });
-  return games.length;
+  if (games.length) {
+    await generateFixtureContent(tournament, games[0].fixture, 0, { skipPublished: true, baseImageCache });
+  }
+  for (const lead of leftBehind) {
+    await regenerateMatchDay(tournament, lead, { baseImageCache, rebuildDaysLeftBehind: false });
+  }
+  return games.map(game => game.fixture.id);
 }
 
 // ---------------------------------------------------------------------------
@@ -1080,19 +1144,23 @@ export async function deleteFixtureContentItems(
   let itemsToDelete = fixtureItems;
 
   if (onlyUnpublished) {
-    // Preserve placements that have already reached the published state.
+    // Preserve placements that have already gone out. The live worker marks
+    // them 'posted' (job 'succeeded'); checking 'published' alone deleted them.
     const itemIds = fixtureItems.map((i: Record<string, unknown>) => i.id as string);
-    const { data: succeededJobs } = await supabase
+    const { data: succeededJobs, error: jobsError } = await supabase
       .from('publish_jobs')
       .select('content_item_id')
       .in('content_item_id', itemIds)
-      .eq('status', 'published');
+      .eq('account_id', accountId)
+      .in('status', [...PUBLISHED_JOB_STATUSES]);
+    // Without the job list, nothing can be shown to be unpublished: delete nothing.
+    if (jobsError) throw jobsError;
 
     const publishedIds = new Set(
       (succeededJobs ?? []).map((j: Record<string, unknown>) => j.content_item_id as string),
     );
     for (const item of fixtureItems) {
-      if ((item as Record<string, unknown>).status === 'published') {
+      if (isPublishedContentStatus((item as Record<string, unknown>).status)) {
         publishedIds.add((item as Record<string, unknown>).id as string);
       }
     }

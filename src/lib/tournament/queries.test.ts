@@ -53,7 +53,7 @@ describe('getPublishedPlacements', () => {
     expect(placements).toEqual(new Set(['facebook:feed', 'instagram:story']));
     expect(from).toHaveBeenCalledWith('publish_jobs');
     expect(calls).toContainEqual({ method: 'is', column: 'deleted_at', value: null });
-    expect(calls).toContainEqual({ method: 'in', column: 'status', value: ['published', 'succeeded'] });
+    expect(calls).toContainEqual({ method: 'in', column: 'status', value: ['published', 'posted', 'succeeded'] });
   });
 });
 
