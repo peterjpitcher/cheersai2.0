@@ -14,10 +14,17 @@
 // exactly as the generator does today.
 //
 // SAFETY: read only by default. --apply deletes each fixture's unpublished posts
-// and regenerates them. Needs the owner's yes at the time.
+// and regenerates them. Needs the owner's yes at the time. A game that fails is
+// retried on its own twice; anything still failing is listed and left without
+// posts, so a re-run picks it up: --include-missing also generates every showing
+// game with confirmed teams that has no posts (what "Generate all" does).
 //
-//   npm run ops:regenerate-rugby-posts -- --tournament <id>            # read only
+// Run it on Node 24, as production does: Node 26's fetch failed mid-upload with
+// an HTTP/2 stream error on 17 October 2026.
+//
+//   npm run ops:regenerate-rugby-posts -- --tournament <id>                      # read only
 //   npm run ops:regenerate-rugby-posts -- --tournament <id> --apply
+//   npm run ops:regenerate-rugby-posts -- --tournament <id> --apply --include-missing
 //
 import dotenv from "dotenv";
 dotenv.config({ path: ".env.local" });
@@ -32,6 +39,7 @@ function argValue(args: string[], name: string): string | null {
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
   const apply = args.includes("--apply");
+  const includeMissing = args.includes("--include-missing");
   const tournamentId = argValue(args, "--tournament");
   if (!tournamentId) {
     console.error("Usage: npm run ops:regenerate-rugby-posts -- --tournament <id> [--apply]");
@@ -53,7 +61,8 @@ async function main(): Promise<void> {
   if (tournament.sport !== "rugby_union") throw new Error("Only rugby tournaments use the screening template.");
 
   const fixtures = await getFixturesByTournament(db, tournamentId);
-  const targets = fixtures.filter((fixture) => fixture.contentGenerated);
+  const missing = fixtures.filter((fixture) => !fixture.contentGenerated && fixture.showing && fixture.teamsConfirmed);
+  const targets = fixtures.filter((fixture) => fixture.contentGenerated || (includeMissing && missing.includes(fixture)));
 
   const { data: items, error: itemsError } = await db
     .from("content_items")
@@ -63,7 +72,7 @@ async function main(): Promise<void> {
     .contains("prompt_context", { source: "tournament", tournament_id: tournamentId });
   if (itemsError) throw itemsError;
 
-  console.log(`${tournament.name}: ${fixtures.length} fixtures, ${targets.length} with posts. Current template ${NATIONS_TEMPLATE_VERSION}.`);
+  console.log(`${tournament.name}: ${fixtures.length} fixtures, ${fixtures.filter((fixture) => fixture.contentGenerated).length} with posts, ${missing.length} showing with confirmed teams but no posts${includeMissing ? " (included)" : ""}. Current template ${NATIONS_TEMPLATE_VERSION}.`);
   for (const fixture of targets) {
     const own = (items ?? []).filter((item) => (item.prompt_context as Record<string, unknown>)?.tournament_fixture_id === fixture.id);
     const unpublished = own.filter((item) => !PUBLISHED.has(String(item.status)));
@@ -82,11 +91,29 @@ async function main(): Promise<void> {
     if (error) throw error;
   }
 
-  const refreshed = await getFixturesByTournament(db, tournamentId);
-  const targetIds = new Set(targets.map((fixture) => fixture.id));
-  const result = await bulkGenerateContent(tournament, refreshed.filter((fixture) => targetIds.has(fixture.id)));
-  console.log(`\nGenerated ${result.generated}, skipped ${result.skipped}, failed ${result.errors.length}.`);
-  for (const failure of result.errors) console.log(`  FAILED ${failure.fixtureId}: ${failure.error}`);
+  // Each failed game rolls back its own partial posts, so it can simply be retried.
+  let pending = new Set(targets.map((fixture) => fixture.id));
+  let errors: Array<{ fixtureId: string; error: string }> = [];
+  let generated = 0;
+  for (let attempt = 1; attempt <= 3 && pending.size; attempt += 1) {
+    const refreshed = await getFixturesByTournament(db, tournamentId);
+    const batch = refreshed.filter((fixture) => pending.has(fixture.id) && !fixture.contentGenerated);
+    if (!batch.length) break;
+    const result = attempt === 1
+      ? await bulkGenerateContent(tournament, batch)
+      : await batch.reduce(async (previous, fixture) => {
+        const totals = await previous;
+        const single = await bulkGenerateContent(tournament, [fixture]);
+        return { generated: totals.generated + single.generated, skipped: 0, errors: [...totals.errors, ...single.errors] };
+      }, Promise.resolve({ generated: 0, skipped: 0, errors: [] as Array<{ fixtureId: string; error: string }> }));
+    generated += result.generated;
+    errors = result.errors;
+    pending = new Set(errors.map((failure) => failure.fixtureId));
+    console.log(`Attempt ${attempt}: generated ${result.generated}, failed ${errors.length}.`);
+  }
+  console.log(`\nGenerated ${generated}, failed ${errors.length}.`);
+  for (const failure of errors) console.log(`  FAILED ${failure.fixtureId}: ${failure.error.split("\n")[0]}`);
+  const result = { errors };
 
   const { data: after, error: afterError } = await db
     .from("content_items")
