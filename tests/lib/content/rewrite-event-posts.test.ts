@@ -153,6 +153,13 @@ describe('rebuildEventBrief', () => {
     expect(rebuildEventBrief({ ...storedBrief, toneChosen: true }, detail).brief.tone).toBe('friendly_warm');
   });
 
+  it('drops an earlier suggested tone back to the default when the event no longer suggests one', () => {
+    const uncategorised = { ...detail, category: undefined, categoryName: undefined, categorySlug: undefined };
+    expect(rebuildEventBrief({ ...storedBrief, tone: 'playful', toneChosen: false }, uncategorised).brief.tone).toBe('friendly_warm');
+    // An older brief with no record keeps a non-default tone, as the wizard does.
+    expect(rebuildEventBrief({ ...storedBrief, tone: 'playful' }, uncategorised).brief.tone).toBe('playful');
+  });
+
   it('flags a moved event and a changed description for the owner', () => {
     const { notes } = rebuildEventBrief(storedBrief, { ...detail, date: '2026-11-25', brief: 'Now with a £200 snowball.' });
     expect(notes.join(' ')).toMatch(/now has this on 2026-11-25 at 19:00/);
