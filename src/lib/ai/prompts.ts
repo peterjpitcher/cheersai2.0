@@ -648,8 +648,13 @@ export function buildUserPrompt(
 
   sections.push(`Title: ${brief.title}`);
 
+  const facts = brief.contentType === 'event' ? brief.facts : undefined;
   if (brief.prompt) {
-    sections.push(`Description: ${brief.prompt}`);
+    // Imported notes are often written as web copy with their own headline
+    // ("Get ready for a huge themed Friday night"), which the model copied.
+    sections.push(facts
+      ? `Venue notes (facts to draw on; never reuse their headline or wording): ${brief.prompt}`
+      : `Description: ${brief.prompt}`);
   }
 
   sections.push(`Platforms: ${brief.platforms.join(', ')}`);
@@ -691,6 +696,8 @@ export function buildUserPrompt(
     sections.push(`Event time: ${brief.eventTime}`);
     if (brief.venue) sections.push(`Venue: ${brief.venue}`);
     if (brief.eventEndDate) sections.push(`Event end date: ${brief.eventEndDate}`);
+    const factBlock = renderEventFacts(facts);
+    if (factBlock) sections.push(factBlock);
   }
 
   if (brief.contentType === 'promotion') {
@@ -762,6 +769,33 @@ export function buildUserPrompt(
   }
 
   return sections.join('\n');
+}
+
+type EventFacts = NonNullable<Extract<ContentBrief, { contentType: 'event' }>['facts']>;
+
+/**
+ * The management app's facts about the event as the only facts to use
+ * (tasks/SPEC-event-copy-engine.md B2). Price, age rules, doors and booking were
+ * the facts missing from scheduled posts in the 17 October 2026 review.
+ */
+function renderEventFacts(facts: EventFacts | undefined): string | null {
+  if (!facts) return null;
+  const lines = [
+    facts.category ? `- Kind of event: ${facts.category}` : null,
+    facts.times ? `- Times: ${facts.times}` : null,
+    facts.price ? `- Price: ${facts.price}` : null,
+    facts.booking ? `- Booking: ${facts.booking}` : null,
+    facts.host ? `- Host: ${facts.host}` : null,
+    facts.highlights?.length ? `- Highlights: ${facts.highlights.join('; ')}` : null,
+    facts.pastEvent ? `- From previous nights: ${facts.pastEvent}` : null,
+  ].filter((line): line is string => Boolean(line));
+  const faqs = (facts.faqs ?? []).map((faq) => `- ${faq.question} ${faq.answer}`);
+  if (!lines.length && !faqs.length) return null;
+  return [
+    'Event facts from the venue\'s own events system. Use only these facts. Where they matter, state the price, any age rule, the doors time and how booking and payment work:',
+    ...lines,
+    ...(faqs.length ? ['Questions people ask, with the venue\'s answers:', ...faqs] : []),
+  ].join('\n');
 }
 
 type TimingBlockContext = Parameters<typeof buildUserPrompt>[2];

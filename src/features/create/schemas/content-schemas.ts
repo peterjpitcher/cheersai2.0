@@ -56,6 +56,17 @@ const campaignPlacementsSchema = z
   .min(1, 'Select at least one placement')
   .default(['feed']);
 
+const eventFactSheetSchema = z.object({
+  category: z.string().max(120).optional(),
+  times: z.string().max(200).optional(),
+  price: z.string().max(240).optional(),
+  booking: z.string().max(200).optional(),
+  host: z.string().max(200).optional(),
+  highlights: z.array(z.string().max(300)).max(12).optional(),
+  pastEvent: z.string().max(800).optional(),
+  faqs: z.array(z.object({ question: z.string().max(300), answer: z.string().max(400) })).max(8).optional(),
+});
+
 // ---------------------------------------------------------------------------
 // Base schema: fields shared by all content types
 // ---------------------------------------------------------------------------
@@ -132,6 +143,11 @@ export const eventBriefSchema = baseContentSchema.extend({
     .optional(),
   venue: z.string().max(200).optional(),
   placements: eventPlacementsSchema,
+  /**
+   * Facts the management app holds about the event, rendered into the copy
+   * prompt as the only facts to use (tasks/SPEC-event-copy-engine.md B2).
+   */
+  facts: eventFactSheetSchema.optional(),
 });
 
 export const promotionBriefSchema = baseContentSchema

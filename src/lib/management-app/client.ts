@@ -92,6 +92,16 @@ export interface ManagementEventDetail {
   } | null;
   performer_name?: string | null;
   performer_type?: string | null;
+  end_time?: string | null;
+  last_entry_time?: string | null;
+  ticket_price?: number | null;
+  online_discount_type?: string | null;
+  online_discount_value?: number | null;
+  online_discount_ends_at?: string | null;
+  previous_event_summary?: string | null;
+  attendance_note?: string | null;
+  /** Questions and answers from the event's FAQ, for the copy fact sheet. */
+  faqs?: Array<{ question: string; answer: string }> | null;
   image?: string[] | null;
   heroImageUrl?: string | null;
   thumbnailImageUrl?: string | null;
@@ -622,12 +632,37 @@ function shapeEventDetail(value: unknown): ManagementEventDetail {
     category: readCategory(row),
     performer_name: asOptionalString(row.performer_name),
     performer_type: asOptionalString(row.performer_type),
+    end_time: asOptionalString(row.end_time),
+    last_entry_time: asOptionalString(row.last_entry_time),
+    ticket_price: asOptionalNumber(row.ticket_price),
+    online_discount_type: asOptionalString(row.online_discount_type),
+    online_discount_value: asOptionalNumber(row.online_discount_value),
+    online_discount_ends_at: asOptionalString(row.online_discount_ends_at),
+    previous_event_summary: asOptionalString(row.previous_event_summary),
+    attendance_note: asOptionalString(row.attendance_note),
+    faqs: readFaqs(row.faq),
     image: asOptionalStringArray(row.image),
     heroImageUrl: asOptionalString(row.heroImageUrl),
     thumbnailImageUrl: asOptionalString(row.thumbnailImageUrl),
     posterImageUrl: asOptionalString(row.posterImageUrl),
     imageUrl: asOptionalString(row.imageUrl),
   } satisfies ManagementEventDetail;
+}
+
+/** The event's FAQ, which the API sends in schema.org shape (Question with acceptedAnswer). */
+function readFaqs(value: unknown): Array<{ question: string; answer: string }> | null {
+  if (!Array.isArray(value)) return null;
+  const faqs = value
+    .map((entry) => {
+      const row = entry && typeof entry === "object" ? entry as Record<string, unknown> : {};
+      const answer = row.acceptedAnswer && typeof row.acceptedAnswer === "object"
+        ? asOptionalString((row.acceptedAnswer as Record<string, unknown>).text)
+        : null;
+      const question = asOptionalString(row.name);
+      return question && answer ? { question, answer } : null;
+    })
+    .filter((faq): faq is { question: string; answer: string } => faq !== null);
+  return faqs.length ? faqs : null;
 }
 
 function readCtaLinks(value: unknown): ManagementEventCtaLinks | null {

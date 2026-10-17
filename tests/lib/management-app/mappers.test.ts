@@ -61,6 +61,8 @@ describe("management app mappers", () => {
       seatsRemaining: 24,
     });
     expect(mapped.fields.prompt).toContain("Imported from management app event");
+    // The copy fact sheet and a starting tone travel with the prefill.
+    expect(mapped.fields.facts).toMatchObject({ price: "£3 per person, paid in cash on arrival", booking: "Book a table" });
     expect(mapped.fields.prompt).toContain("Booking details: booking mode table, payment mode cash_only, price £3 per person.");
     expect(mapped.fields.prompt).toContain("Capacity signal: capacity 60, 24 seats remaining.");
     expect(mapped.fields.prompt).toContain("Highlights: Live saxophone, Late bar.");
@@ -108,5 +110,23 @@ describe("management app mappers", () => {
 
     expect(mapped.fields.endDate).toBe("2026-03-05");
     expect(mapped.sourceLabel).toBe("Fizz Friday (ends 2026-03-05)");
+  });
+});
+
+
+describe("management app mappers: copy facts", () => {
+  it("cleans the imported brief and suggests a tone from the category", () => {
+    const mapped = mapManagementEventToEventCampaignPrefill({
+      id: "evt-9",
+      name: "Sleigh My Name",
+      date: "2026-12-11",
+      time: "19:00",
+      brief: "## Music Bingo Night\r\n\r\n**Get ready** for a themed night",
+      categoryName: "Music Bingo",
+      doors_time: "18:30:00",
+    });
+    expect(mapped.fields.description).toBe("Music Bingo Night\n\nGet ready for a themed night");
+    expect(mapped.fields.suggestedTone).toBe("playful");
+    expect(mapped.fields.facts).toMatchObject({ category: "Music Bingo", times: "starts 7pm; doors 6:30pm" });
   });
 });

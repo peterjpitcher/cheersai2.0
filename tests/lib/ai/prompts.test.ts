@@ -457,3 +457,33 @@ function buildEventBrief(): ContentBrief {
     placements: ["feed"],
   } as unknown as ContentBrief;
 }
+
+describe("event fact sheet in the user prompt (tasks/SPEC-event-copy-engine.md B2)", () => {
+  it("renders the venue's facts as the only facts to use, and labels imported notes", () => {
+    const brief = {
+      ...buildEventBrief(),
+      prompt: "Get ready for a huge themed Friday night.",
+      facts: {
+        category: "Music Bingo",
+        times: "7pm to 10pm; doors 6:30pm",
+        price: "£5 per person, paid in cash on arrival",
+        booking: "Shared tables: book a place for each person",
+        host: "Nikki Manfadge",
+        faqs: [{ question: "Is there an age limit?", answer: "All ages welcome." }],
+      },
+    } as unknown as ContentBrief;
+    const prompt = buildUserPrompt(brief);
+    expect(prompt).toContain("Venue notes (facts to draw on; never reuse their headline or wording): Get ready");
+    expect(prompt).toContain("Use only these facts.");
+    expect(prompt).toContain("- Times: 7pm to 10pm; doors 6:30pm");
+    expect(prompt).toContain("- Price: £5 per person, paid in cash on arrival");
+    expect(prompt).toContain("- Host: Nikki Manfadge");
+    expect(prompt).toContain("- Is there an age limit? All ages welcome.");
+  });
+
+  it("keeps the plain description label when there are no facts", () => {
+    const prompt = buildUserPrompt({ ...buildEventBrief(), prompt: "Teams of six." } as ContentBrief);
+    expect(prompt).toContain("Description: Teams of six.");
+    expect(prompt).not.toContain("Event facts from the venue");
+  });
+});
