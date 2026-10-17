@@ -2,9 +2,19 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { DateTime } from 'luxon';
 import { z } from 'zod';
 
-import { contentBriefSchema } from '@/features/create/schemas/content-schemas';
+import { contentBriefSchema, type ContentBrief } from '@/features/create/schemas/content-schemas';
 import { resolveCopyModel } from '@/lib/ai/models';
 import { toPlatformCopy } from '@/lib/ai/platform-copy';
+import {
+  SLOT_JOB_LABELS,
+  openingOf,
+  planSlotJobs,
+  questionAllowed,
+  questionsIn,
+  slotJobSignals,
+  type CampaignSlotPlan,
+  type SlotJob,
+} from '@/lib/ai/slot-jobs';
 import { loadBrandProfile, loadMediaMetadata, writeCopy } from '@/lib/ai/write-copy';
 import { DEFAULT_TIMEZONE } from '@/lib/constants';
 import type { ManagementEventDetail, ManagementEventListItem } from '@/lib/management-app/client';
@@ -13,7 +23,7 @@ import { mapManagementEventToEventCampaignPrefill } from '@/lib/management-app/m
 import { buildPreviewData, composePublishBody } from '@/lib/publishing/compose-body';
 import { readPlatformCtaLinks } from '@/lib/publishing/copy-rules';
 import { evaluateTemporalDrift } from '@/lib/publishing/temporal-drift';
-import type { Platform } from '@/types/content';
+import type { Platform, PlatformCopy } from '@/types/content';
 
 /**
  * Rewriting the copy of event posts that are already scheduled, with the
@@ -59,6 +69,8 @@ export interface PlannedSlot {
   campaignName: string;
   scheduledFor: string;
   slotLabel: string | null;
+  /** The post's job in its campaign (B3). */
+  job?: SlotJob;
   posts: PlannedPost[];
   warnings: string[];
 }
@@ -141,6 +153,12 @@ interface EventContext {
   summary: EventSummary;
   brief: Record<string, unknown>;
   cancelled: boolean;
+}
+
+interface SlotOutcome {
+  slot: PlannedSlot | null;
+  skipped: SkippedPost[];
+  copy?: PlatformCopy;
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -371,35 +389,37 @@ export async function planEventPostRewrites(deps: PlanDeps, options: PlanOptions
     const key = slotKeyOf(post);
     slotGroups.set(key, [...(slotGroups.get(key) ?? []), post]);
   }
+  // Each campaign's slots, in the order they go out.
+  const campaigns = new Map<string, EligiblePost[][]>();
+  for (const posts of slotGroups.values()) {
+    const key = posts[0].row.campaign_id ?? '';
+    campaigns.set(key, [...(campaigns.get(key) ?? []), posts]);
+  }
+  for (const campaignSlots of campaigns.values()) {
+    campaignSlots.sort((a, b) => Date.parse(a[0].row.scheduled_for) - Date.parse(b[0].row.scheduled_for));
+  }
 
   const brand = await loadBrandProfile(deps.db, options.accountId);
-  const groups = [...slotGroups.values()];
   let done = 0;
-  const outcomes = await mapWithConcurrency(groups, options.concurrency ?? 3, async (posts) => {
+  const leaveAlone = (posts: EligiblePost[], reason: string): SkippedPost[] =>
+    posts.map((post) => ({ contentItemId: post.row.id, campaignName: post.campaignName, platform: post.platform, scheduledFor: post.row.scheduled_for, reason }));
+
+  /** Write one slot (its Facebook and Instagram posts) and check the result. */
+  const writeSlot = async (posts: EligiblePost[], event: EventContext, brief: Extract<ContentBrief, { contentType: 'event' }>, campaign: CampaignSlotPlan): Promise<SlotOutcome> => {
     const lead = posts[0];
-    const event = events.get(lead.row.campaign_id ?? '');
     const scheduledFor = lead.row.scheduled_for;
     const label = `${lead.campaignName}, ${londonLabel(scheduledFor)}`;
-    const leaveAlone = (reason: string): SkippedPost[] =>
-      posts.map((post) => ({ contentItemId: post.row.id, campaignName: post.campaignName, platform: post.platform, scheduledFor, reason }));
-
-    if (!event) return { skipped: leaveAlone('no event details') };
-    if (event.cancelled) return { skipped: leaveAlone('event cancelled in the events system') };
-    const parsed = contentBriefSchema.safeParse(event.brief);
-    if (!parsed.success || parsed.data.contentType !== 'event') {
-      return { skipped: leaveAlone(`the rebuilt brief is not valid (${parsed.success ? 'not an event' : parsed.error.issues[0]?.message ?? 'unknown'})`) };
-    }
-
     const slotLabel = text(lead.row.prompt_context?.slotLabel);
     const slotKey = text(lead.row.prompt_context?.slotKey) ?? undefined;
     const media = await loadMediaMetadata(deps.db, options.accountId, lead.variant.media_ids);
     const input = {
-      brief: parsed.data,
+      brief,
       brand,
       accountId: options.accountId,
       scheduledAt: scheduledFor,
       slotLabel: slotLabel ?? undefined,
       media,
+      campaign,
     };
 
     let result: Awaited<ReturnType<typeof writeCopy>> | null = null;
@@ -413,8 +433,8 @@ export async function planEventPostRewrites(deps: PlanDeps, options: PlanOptions
       }
     }
     done += 1;
-    log(`Wrote ${done}/${groups.length}: ${label}`);
-    if (!result) return { skipped: leaveAlone(`the AI could not write it (${failure})`) };
+    log(`Wrote ${done}/${slotGroups.size}: ${label} (${SLOT_JOB_LABELS[campaign.job]})`);
+    if (!result) return { slot: null, skipped: leaveAlone(posts, `the AI could not write it (${failure})`) };
 
     const copy = toPlatformCopy(result.processed.copy);
     const ctaLinks = readPlatformCtaLinks(event.brief);
@@ -430,11 +450,11 @@ export async function planEventPostRewrites(deps: PlanDeps, options: PlanOptions
         publishAt: DateTime.fromISO(scheduledFor, { setZone: true }),
       });
       if (!newBody.trim()) {
-        slotSkipped.push({ contentItemId: post.row.id, campaignName: post.campaignName, platform: post.platform, scheduledFor, reason: 'the new text came back empty' });
+        slotSkipped.push(...leaveAlone([post], 'the new text came back empty'));
         continue;
       }
       if (drift.stale) {
-        slotSkipped.push({ contentItemId: post.row.id, campaignName: post.campaignName, platform: post.platform, scheduledFor, reason: `the new text says ${drift.untrue.join(', ')}, which is untrue at its time` });
+        slotSkipped.push(...leaveAlone([post], `the new text says ${drift.untrue.join(', ')}, which is untrue at its time`));
         continue;
       }
       planned.push({
@@ -454,14 +474,55 @@ export async function planEventPostRewrites(deps: PlanDeps, options: PlanOptions
       });
     }
     const slot: PlannedSlot | null = planned.length
-      ? { campaignId: lead.row.campaign_id, campaignName: lead.campaignName, scheduledFor, slotLabel, posts: planned, warnings: result.processed.warnings }
+      ? { campaignId: lead.row.campaign_id, campaignName: lead.campaignName, scheduledFor, slotLabel, job: campaign.job, posts: planned, warnings: result.processed.warnings }
       : null;
-    return { slot, skipped: slotSkipped };
+    return { slot, skipped: slotSkipped, copy };
+  };
+
+  // Campaigns are written side by side; within a campaign the posts are
+  // written in order, each told its job and how the earlier posts opened (B3).
+  const outcomes = await mapWithConcurrency([...campaigns.entries()], options.concurrency ?? 3, async ([key, campaignSlots]) => {
+    const event = events.get(key);
+    const all = (reason: string): SlotOutcome[] => campaignSlots.map((posts) => ({ slot: null, skipped: leaveAlone(posts, reason) }));
+    if (!event) return all('no event details');
+    if (event.cancelled) return all('event cancelled in the events system');
+    const parsed = contentBriefSchema.safeParse(event.brief);
+    if (!parsed.success || parsed.data.contentType !== 'event') {
+      return all(`the rebuilt brief is not valid (${parsed.success ? 'not an event' : parsed.error.issues[0]?.message ?? 'unknown'})`);
+    }
+    const brief = parsed.data;
+    const host = brief.facts?.host ?? null;
+    const jobPlan = planSlotJobs(
+      campaignSlots.map((posts) => posts[0].row.scheduled_for),
+      { eventDate: brief.eventDate, host, ...slotJobSignals(`${brief.prompt} ${JSON.stringify(brief.facts ?? {})}`) },
+    );
+
+    const results: SlotOutcome[] = [];
+    const earlierOpenings: string[] = [];
+    const earlierQuestions: string[] = [];
+    for (const [index, posts] of campaignSlots.entries()) {
+      const outcome = await writeSlot(posts, event, brief, {
+        job: jobPlan[index],
+        host,
+        position: index + 1,
+        total: campaignSlots.length,
+        earlierOpenings: [...earlierOpenings],
+        earlierQuestions: [...earlierQuestions],
+        allowQuestion: questionAllowed(index + 1),
+      });
+      results.push(outcome);
+      for (const body of outcome.copy ? [outcome.copy.facebook.body, outcome.copy.instagram.body] : []) {
+        const opening = openingOf(body);
+        if (opening) earlierOpenings.push(opening);
+        earlierQuestions.push(...questionsIn(body));
+      }
+    }
+    return results;
   });
 
   const slots: PlannedSlot[] = [];
-  for (const outcome of outcomes) {
-    if ('slot' in outcome && outcome.slot) slots.push(outcome.slot);
+  for (const outcome of outcomes.flat()) {
+    if (outcome.slot) slots.push(outcome.slot);
     skipped.push(...outcome.skipped);
   }
   slots.sort((a, b) => Date.parse(a.scheduledFor) - Date.parse(b.scheduledFor) || a.campaignName.localeCompare(b.campaignName));
@@ -656,6 +717,7 @@ export function renderRewriteReport(plan: RewritePlan): string {
     for (const note of event.notes) lines.push('', `**Check:** ${note}`);
     for (const slot of slots) {
       lines.push('', `### ${londonLabel(slot.scheduledFor)}${slot.slotLabel ? ` (${slot.slotLabel})` : ''}`);
+      if (slot.job) lines.push('', `Job: ${SLOT_JOB_LABELS[slot.job]}.`);
       for (const post of slot.posts) {
         lines.push('', `**${PLATFORM_NAME[post.platform]}, before**`, '', quote(post.oldBody), '', `**${PLATFORM_NAME[post.platform]}, after**`, '', quote(post.newBody));
       }

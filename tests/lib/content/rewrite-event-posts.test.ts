@@ -246,6 +246,31 @@ describe('planEventPostRewrites', () => {
     expect(plan.events[0]).toMatchObject({ eventName: 'Snowball Showdown Cash Bingo', tone: 'community_focused' });
   });
 
+  it('writes a campaign in order, giving each post a job and the earlier openings', async () => {
+    const { db } = setup([
+      item(7, { scheduled_for: '2026-11-17T08:00:00+00:00' }),
+      item(8, { platform: 'instagram', scheduled_for: '2026-11-17T08:00:00+00:00' }),
+    ]);
+    const write = vi.fn()
+      .mockResolvedValueOnce({ processed: { copy: draft('Ten games and a £180 snowball on Wednesday 18th November.', 'A £180 snowball is up for grabs.'), warnings: [] }, temporal: {}, temperature: 0.7 })
+      .mockResolvedValueOnce({ processed: { copy: draft('Last call for cash bingo on Wednesday 18th November.', 'Last call for cash bingo.'), warnings: [] }, temporal: {}, temperature: 0.7 }) as unknown as typeof writeCopy;
+    const plan = await planEventPostRewrites(
+      { db, write, findEvent: async () => detail, now: () => NOW, model: 'gpt-test' },
+      { accountId: ACCOUNT },
+    );
+
+    const calls = vi.mocked(write).mock.calls.map((call) => call[0].campaign);
+    expect(calls[0]).toMatchObject({ job: 'announce', position: 1, total: 2, earlierOpenings: [], allowQuestion: false, host: 'Peter Pitcher' });
+    expect(calls[1]).toMatchObject({
+      job: 'last_call',
+      position: 2,
+      total: 2,
+      earlierOpenings: ['Ten games and a £180 snowball on Wednesday 18th November.', 'A £180 snowball is up for grabs.'],
+      allowQuestion: true,
+    });
+    expect(plan.slots.map((slot) => slot.job)).toEqual(['announce', 'last_call']);
+  });
+
   it('leaves alone posts due within the hour, not scheduled, or already publishing', async () => {
     const { db } = setup(
       [
@@ -429,6 +454,7 @@ describe('renderRewriteReport', () => {
           campaignName: 'Snowball Showdown Cash Bingo',
           scheduledFor: '2026-10-19T06:00:00+00:00',
           slotLabel: null,
+          job: 'announce',
           warnings: ['House style: one question at most.'],
           posts: [{
             contentItemId: uuid(1),
@@ -449,6 +475,7 @@ describe('renderRewriteReport', () => {
     expect(report).toContain('Facts used: price: £10 per person.');
     expect(report).toContain('**Check:** Check this.');
     expect(report).toContain('### Mon 19 Oct, 07:00');
+    expect(report).toContain('Job: Announce.');
     expect(report).toContain('> Old line one\n>\n> Old line two');
     expect(report).toContain('**Facebook, after**\n\n> New line one');
     expect(report).toContain('Warnings: House style: one question at most.');

@@ -88,7 +88,7 @@ Decided 17 October 2026: this autumn's campaigns cannot wait for B3, because the
 - A plan run changes no post. It refreshes each event's facts from the management app, writes every slot afresh through the same pipeline as the wizard (`src/lib/ai/write-copy.ts`), and saves a before-and-after report and a plan file under `temp/` (git-ignored). The AI calls are logged in `ai_usage_events`, as the wizard's are.
 - The owner approves the whole list once. `--apply --plan <file>` then writes exactly that text, and only to posts that still carry the planned old text, at the planned time, with status `scheduled`, every publish job `queued` and more than an hour to go. `--rollback --plan <file>` restores the old text on the same terms.
 - Only the text changes: `content_variants.body` and `preview_data` (the stored copy and the brief that wrote it). Schedule, images, links, overlays and stories are untouched. New text that would be untrue at its time (`evaluateTemporalDrift`) is left out of the plan.
-- Without B3, each slot is still written on its own, so the owner checks the list for repeated angles within a campaign.
+- Each campaign's posts are written in order with the B3 core (see B3), so later posts know how the earlier ones opened.
 - The in-app action stays the long-term plan, after B3.
 
 ## 4. Rollback
