@@ -1,0 +1,55 @@
+{
+  "91fda684-2801-4abb-980e-f42cec017cef": {
+    "lunch": {
+      "title": "Weekday lunch",
+      "contentType": "weekly_recurring",
+      "daysOfWeek": [2, 3, 4, 5],
+      "time": "12:00",
+      "ctaLabel": "Book a table",
+      "ctaLinks": {
+        "facebook": "https://l.the-anchor.pub/uo2acz",
+        "instagram": "https://l.the-anchor.pub/i1i1db"
+      },
+      "tone": "friendly_warm",
+      "notes": "Weekday lunch at The Anchor in Stanwell Moor. We open from 12pm Tuesday to Friday. Lunch is served from 12pm to 3pm (last orders for food 2.30pm) and dinner from 4pm to 9pm (last orders for food 8.30pm). Lunch is the full main menu, not a smaller lunch menu, so it suits a proper pub lunch such as fish and chips, something lighter, or a catch-up with friends over food and a drink. Weekday lunches started on 1 September because customers asked for them, so write about them as a regular part of the week, not as news. Free parking on site. Say \"last orders for food\", never \"last sitting\". Do not mention Mondays, and do not mention lunchtime deals, meal deals or prices.",
+      "source": "the owner's Now Open Lunchtimes brief (August 2026) and the-anchor.pub, checked 17 October 2026",
+      "photos": [
+        "5a6cd1a9-b5bf-4ee1-bd89-8029c06c7191",
+        "3ec300f8-c9e4-41b3-95a6-a12ae4ff60a1",
+        "5eb067d9-2429-43ed-a269-aacce3246c03"
+      ]
+    },
+    "roast": {
+      "title": "Sunday roast",
+      "contentType": "weekly_recurring",
+      "daysOfWeek": [0],
+      "time": "13:00",
+      "ctaLabel": "Book your Sunday roast",
+      "ctaLinks": {
+        "facebook": "https://l.the-anchor.pub/ayl0qs",
+        "instagram": "https://l.the-anchor.pub/3ttx19"
+      },
+      "tone": "friendly_warm",
+      "notes": "Sunday roast at The Anchor in Stanwell Moor, every Sunday from 1pm to 6pm. Every roast is carved when you order it. The meat roasts come with a Yorkshire pudding, triple-cooked herb and garlic roast potatoes, oven-roasted carrots and parsnips, buttered cabbage and our signature gravy. Choose roast turkey with a sage and onion stuffing ball, 28-day topside of beef or roast pork. The vegan beetroot and butternut squash Wellington comes with the roast potatoes, carrots and parsnips and a vegan gravy. There are kids' roasts too. Walk-ins are welcome and there is no pre-order. Booking is recommended for groups and busy times, and the last table booking is 5.30pm. Free parking, and dogs are welcome. Do not mention prices or deposits.",
+      "source": "the-anchor.pub/sunday-roast, checked 17 October 2026",
+      "photos": [
+        "2359ee3d-d4e1-4d32-a92a-9fa70b88132b"
+      ]
+    },
+    "private_hire": {
+      "title": "Private hire",
+      "contentType": "instant_post",
+      "ctaLabel": "Enquire about your date",
+      "ctaLinks": {
+        "facebook": "https://www.the-anchor.pub/private-hire?utm_source=facebook&utm_medium=social&utm_campaign=private_hire_landing_page&utm_content=facebook_main",
+        "instagram": "https://l.the-anchor.pub/v2absw"
+      },
+      "tone": "friendly_warm",
+      "notes": "Private hire at The Anchor in Stanwell Moor, near Staines and 7 minutes from Heathrow Terminal 5. We host room bookings from just 10 guests, and events of up to 150; larger events and hiring the whole pub are by enquiry. Our dining room seats 26, or up to 50 standing, with French doors onto the beer garden and a TV for presentations. Catering to suit your budget, from sandwich and finger buffets to an indoor BBQ, or sit-down meals from our menu. You plan the day directly with our team, and you are welcome to bring your own decorations. 20 free parking spaces right outside. Popular occasions: birthdays and milestone parties, anniversaries, engagement parties, christenings and naming days, baby showers, wakes and memorials, retirement parties, and work meetings, lunches and team socials. Enquire through the link or call 01753 682707. Do not mention Christmas, prices or deposits.",
+      "source": "the-anchor.pub/private-hire, checked 17 October 2026",
+      "photos": [
+        "896aef90-b74a-46d3-8fb7-e38e9b1551ce"
+      ]
+    }
+  }
+}

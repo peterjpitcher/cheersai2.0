@@ -106,6 +106,23 @@ describe('campaign plan prompt', () => {
     expect(block).toContain('Do not ask a question in this post.');
   });
 
+  it('never tells the writer to mention dressing up the brief does not offer', () => {
+    // The job is given when a brief mentions prizes or dressing up, so its
+    // instruction must not assume both (a prizes-only cash bingo was written
+    // up as "festive dress-up").
+    const block = renderCampaignPlan({
+      job: 'dress_up_and_prizes',
+      position: 4,
+      total: 6,
+      earlierOpenings: [],
+      earlierQuestions: [],
+      allowQuestion: true,
+    });
+    expect(block).toContain('whichever the brief mentions');
+    expect(block).toContain('Never mention dressing up, costumes or outfits unless the brief does.');
+    expect(block).not.toContain('Lead with dressing up and the prizes');
+  });
+
   it('reads the opening and questions of a post', () => {
     const body = 'Sparks fly on Wednesday 4th November! Teams of up to six.\n\nWhich round will you win? Bring a pen.';
     expect(openingOf(body)).toBe('Sparks fly on Wednesday 4th November!');
