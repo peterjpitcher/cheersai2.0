@@ -153,8 +153,12 @@ export function FixtureRow({
 
   async function handleToggleShowing() {
     setLoading(true);
+    setError(null);
     try {
-      await toggleFixtureShowing(tournament.id, fixture.id, !fixture.showing);
+      const result = await toggleFixtureShowing(tournament.id, fixture.id, !fixture.showing);
+      if (!result.success) {
+        setError(result.error ?? 'Update failed');
+      }
     } finally {
       setLoading(false);
     }

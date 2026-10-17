@@ -308,3 +308,23 @@ describe('compositeOverlay', () => {
     expect(metadata.height).toBe(1920);
   });
 });
+
+
+describe('round-up artwork', () => {
+  it('lists the day\'s games under the date instead of one matchup', async () => {
+    const svg = await renderOverlaySvg({
+      tournamentName: 'Nations Championship 2026',
+      teamA: 'Italy',
+      teamB: 'South Africa',
+      dateDisplay: 'Saturday 7 November',
+      timeDisplay: '11:40 AM',
+      roundLabel: 'League round',
+      houseRulesText: null,
+      matches: [
+        { timeDisplay: '11:40 AM', teamA: 'Italy', teamB: 'South Africa' },
+        { timeDisplay: '2:10 PM', teamA: 'Scotland', teamB: 'New Zealand' },
+      ],
+    }, { width: 1080, height: 1080 });
+    expect(svg).toContain('matches="11:40 AM ITALY v SOUTH AFRICA | 2:10 PM SCOTLAND v NEW ZEALAND"');
+  });
+});

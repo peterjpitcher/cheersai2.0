@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { ScreeningDayHours } from '@/lib/management-app/screening-hours';
 import type { TournamentFixture } from '@/types/tournament';
 
-import { buildRugbyMatchCopy, buildRugbyMenuLine, buildRugbyOpeningLine, describeMinutes } from './rugby-copy';
+import { buildRugbyMatchCopy, buildRugbyMenuLine, buildRugbyOpeningLine, buildRugbyRoundupCopy, describeMinutes, isRugbyListLine, joinRugbyParagraphs } from './rugby-copy';
 import { resolveScreening, toScreeningFacts } from './screening';
 
 function screen(kickOffAt: string, kitchen: Array<[string, string]>, policy?: 'stay_open_if_viewers') {
@@ -87,5 +87,44 @@ describe('buildRugbyMenuLine', () => {
     expect(buildRugbyMenuLine('2026-11-07T15:10:00Z', 'https://www.the-anchor.pub/food-menu'))
       .toBe('See our menu: https://www.the-anchor.pub/food-menu');
     expect(buildRugbyMenuLine('2026-11-07T15:10:00Z', null)).toBeNull();
+  });
+});
+
+describe('buildRugbyRoundupCopy', () => {
+  function day(policy?: 'stay_open_if_viewers') {
+    return [
+      { kickOffAt: '2026-11-07T11:40:00Z', id: 'a', teamA: 'Italy', teamB: 'South Africa' },
+      { kickOffAt: '2026-11-07T14:10:00Z', id: 'b', teamA: 'Scotland', teamB: 'New Zealand' },
+      { kickOffAt: '2026-11-07T20:10:00Z', id: 'c', teamA: 'France', teamB: 'Fiji' },
+    ].map((game) => {
+      const { screened } = screen(game.kickOffAt, [['12:00', '19:00']], policy);
+      return { fixture: { ...game }, screened: { ...screened, id: game.id, teamA: game.teamA, teamB: game.teamB } };
+    });
+  }
+
+  it('lists every game in kick-off order with notes for the games they apply to', () => {
+    const copy = buildRugbyRoundupCopy(day('stay_open_if_viewers'));
+    expect(copy.lines[0]).toMatch(/[Tt]hree games/);
+    expect(copy.lines[0]).toContain('Saturday 7th November');
+    expect(copy.lines.slice(1, 4)).toEqual(['11:40am Italy v South Africa', '2:10pm Scotland v New Zealand', '8:10pm France v Fiji']);
+    expect(copy.lines).toContain("We open at 12pm, 20 minutes after the 11:40am kick-off, so you'll catch the rest of that game.");
+    // The stay-open policy sits on the late game, not the day's first game.
+    expect(copy.lines).toContain("We usually close at 10pm. If you're still here watching the 8:10pm game, we'll stay open until the final whistle. Please arrive before 10pm.");
+    expect(copy.lines).toContain('Kitchen times: 12pm to 7pm, so you can eat while you watch.');
+    expect(copy.requiredLines).toHaveLength(3);
+    expect(copy.imageNote).toBe("Doors 12pm. Usually close 10pm, open to the final whistle if you're still watching. Kitchen 12pm to 7pm.");
+  });
+
+  it('is honest about the late finish for a brand without the stay-open policy', () => {
+    const copy = buildRugbyRoundupCopy(day());
+    expect(copy.lines).toContain('We close at 10pm, before the final whistle of the 8:10pm game, so you may miss the end.');
+    expect(copy.lines.join(' ')).not.toContain('stay open');
+  });
+
+  it('keeps the fixture list tight and every other paragraph spaced', () => {
+    const text = joinRugbyParagraphs(['Three games on our screens.', '2:10pm England v Japan', '4:40pm Wales v Fiji', 'Kitchen times: 12pm to 7pm.']);
+    expect(text).toBe('Three games on our screens.\n\n2:10pm England v Japan\n4:40pm Wales v Fiji\n\nKitchen times: 12pm to 7pm.');
+    expect(isRugbyListLine('11:40am Italy v South Africa (Main screen, with commentary)')).toBe(true);
+    expect(isRugbyListLine('Kitchen times: 12pm to 7pm.')).toBe(false);
   });
 });

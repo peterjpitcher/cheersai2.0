@@ -23,6 +23,11 @@ export interface OverlayData {
   bookingLabel?: string;
   bookingUrl?: string;
   footerNote?: string;
+  /**
+   * A match-day round-up: every game that day in kick-off order. With two or
+   * more games the artwork lists them under the date instead of one matchup.
+   */
+  matches?: Array<{ timeDisplay: string; teamA: string; teamB: string }>;
 }
 
 interface OverlayDimensions {
@@ -244,6 +249,77 @@ export async function renderOverlaySvg(
     },
   };
 
+  // 1b: Round-up zone, the day's games as a list under the date
+  const matches = data.matches && data.matches.length > 1 ? data.matches : null;
+  const rowSize = matches ? sw(matches.length <= 3 ? 0.058 : matches.length === 4 ? 0.05 : 0.043) : 0;
+  const listZone = matches
+    ? {
+      type: 'div',
+      props: {
+        style: {
+          position: 'absolute',
+          top: sh(0.18),
+          bottom: sh(0.31),
+          left: sw(0.06),
+          right: sw(0.06),
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: Math.round(rowSize * 0.32),
+        },
+        children: [
+          {
+            type: 'div',
+            props: {
+              style: {
+                display: 'flex',
+                alignItems: 'center',
+                gap: sw(0.012),
+                marginBottom: sw(0.02),
+                color: 'rgba(255,255,255,0.9)',
+                fontFamily: 'Inter',
+                fontSize: sw(0.026),
+                fontWeight: 600,
+                letterSpacing: '0.24em',
+                textTransform: 'uppercase',
+              },
+              children: [
+                { type: 'div', props: { style: { width: sw(0.05), height: 1, background: GOLD } } },
+                data.dateDisplay,
+                { type: 'div', props: { style: { width: sw(0.05), height: 1, background: GOLD } } },
+              ],
+            },
+          },
+          // Two columns: kick-off times right-aligned against the teams, so the
+          // times line up down the list.
+          ...matches.map((match) => ({
+            type: 'div',
+            props: {
+              style: { display: 'flex', alignItems: 'center', width: sw(0.86), gap: sw(0.026) },
+              children: [
+                {
+                  type: 'div',
+                  props: {
+                    style: { display: 'flex', justifyContent: 'flex-end', width: sw(0.2), color: GOLD, fontFamily: 'Oswald', fontWeight: 600, fontSize: Math.round(rowSize * 0.78), letterSpacing: '0.02em' },
+                    children: match.timeDisplay,
+                  },
+                },
+                {
+                  type: 'div',
+                  props: {
+                    style: { display: 'flex', flex: 1, color: '#FFFFFF', fontFamily: 'Oswald', fontWeight: 700, fontSize: rowSize, lineHeight: 1, textTransform: 'uppercase' },
+                    children: `${match.teamA} v ${match.teamB}`,
+                  },
+                },
+              ],
+            },
+          })),
+        ],
+      },
+    }
+    : null;
+
   // 2: Booking CTA , anchored above the pitch
   const cta = {
     type: 'div',
@@ -324,7 +400,7 @@ export async function renderOverlaySvg(
         width: `${width}px`,
         height: `${height}px`,
       },
-      children: [tournamentTitle, matchupZone, cta, note],
+      children: [tournamentTitle, listZone ?? matchupZone, cta, note],
     },
   };
 
@@ -357,6 +433,9 @@ export async function renderOverlaySvg(
     ` dateDisplay="${escapeSvgAttribute(data.dateDisplay)}"` +
     ` timeDisplay="${escapeSvgAttribute(data.timeDisplay)}"` +
     ` roundLabel="${escapeSvgAttribute(data.roundLabel)}"` +
+    (matches
+      ? ` matches="${escapeSvgAttribute(matches.map((match) => `${match.timeDisplay} ${match.teamA.toUpperCase()} v ${match.teamB.toUpperCase()}`).join(' | '))}"`
+      : '') +
     `/></metadata>`;
   // Use function replacement to avoid $& / $1 expansion in metadata strings
   const svgWithMeta = rawSvg.replace(/(<svg[^>]*>)/, (match) => `${match}${metadata}`);

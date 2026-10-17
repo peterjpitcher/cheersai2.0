@@ -2,6 +2,7 @@ import { NATIONS_TEMPLATE_VERSION } from '../../../supabase/functions/_shared/na
 import { describe, expect, it } from 'vitest';
 import type { ScreeningDayHours } from '@/lib/management-app/screening-hours';
 import type { TournamentFixture } from '@/types/tournament';
+import { lintContent } from '@/lib/ai/content-rules';
 import { buildTournamentContentPayload } from './generate';
 import { resolveScreening, toScreeningFacts } from './screening';
 import type { ScreenedFixture } from './screening-service';
@@ -116,7 +117,7 @@ it.each([
   expect(copy).toContain("We usually close at 10pm. If you're still here watching, we'll stay open until the final whistle. Please arrive before 10pm.");
   expect(copy).toContain('Kitchen times: 12pm to 3pm and 4pm to 9pm, so you can eat while you watch.');
   expect(copy).not.toContain('end of the match may be missed');
-  expect(result.promptContext.screening_template_version).toBe('nations-screening-v4');
+  expect(result.promptContext.screening_template_version).toBe(NATIONS_TEMPLATE_VERSION);
 });
 
 it('is honest that another brand closes before the final whistle', () => {
@@ -128,4 +129,49 @@ it('is honest that another brand closes before the final whistle', () => {
   expect(result.body).toContain('We close at 10pm, before the final whistle, so you may miss the end.');
   expect(result.body).toContain('Kitchen times: 12pm to 7pm, so you can eat before kick-off.');
   expect(result.body).not.toContain('stay open');
+});
+
+describe('match-day round-up posts', () => {
+  const games = [
+    { id: 'f', teamA: 'Italy', teamB: 'South Africa', kickOffAt: '2026-11-07T11:40:00Z' },
+    { id: 'g', teamA: 'Scotland', teamB: 'New Zealand', kickOffAt: '2026-11-07T14:10:00Z' },
+    { id: 'h', teamA: 'Wales', teamB: 'Japan', kickOffAt: '2026-11-07T16:40:00Z' },
+    { id: 'i', teamA: 'France', teamB: 'Fiji', kickOffAt: '2026-11-07T20:10:00Z' },
+  ];
+  const roundup = games.map((game, index) => ({
+    ...screenedFor({ kickOffAt: game.kickOffAt, policy: 'stay_open_if_viewers', screenLabel: null, commentary: 'unconfirmed' }),
+    id: game.id, teamA: game.teamA, teamB: game.teamB, contentRevision: 2 + index,
+  }));
+
+  it('records every game it covers and the revision each was written from', () => {
+    const result = buildTournamentContentPayload({ tournament, fixture, screened: roundup[0], roundup, platform: 'facebook', placement: 'feed', scheduledFor: new Date('2026-11-04T11:40:00Z') });
+    expect(result.promptContext.tournament_fixture_id).toBe('f');
+    expect(result.promptContext.roundup_fixture_ids).toEqual(['f', 'g', 'h', 'i']);
+    expect(result.promptContext.roundup_revisions).toEqual({ f: 2, g: 3, h: 4, i: 5 });
+    expect(result.promptContext.title).toBe('Rugby on Saturday 7th November');
+    expect(result.promptContext.ctaUrl).toContain('#fixture-f');
+  });
+
+  it('writes the games as a tight list with one booking line', () => {
+    const result = buildTournamentContentPayload({ tournament, fixture, screened: roundup[0], roundup, platform: 'facebook', placement: 'feed', scheduledFor: new Date('2026-11-04T11:40:00Z') });
+    expect(result.body).toContain('11:40am Italy v South Africa\n2:10pm Scotland v New Zealand\n4:40pm Wales v Japan\n8:10pm France v Fiji');
+    expect(result.body).toContain("If you're still here watching the 8:10pm game, we'll stay open until the final whistle.");
+    expect(result.body.match(/Book a table/g)).toHaveLength(1);
+    expect(result.body).not.toMatch(/\b\d{2}:\d{2}\b/);
+  });
+
+  it('keeps a long Instagram round-up whole and passes the publishing checks', () => {
+    const scheduledFor = new Date('2026-11-04T11:40:00Z');
+    const result = buildTournamentContentPayload({ tournament, fixture, screened: roundup[0], roundup, platform: 'instagram', placement: 'feed', scheduledFor });
+    expect(result.body.split(/\s+/).length).toBeGreaterThan(80);
+    expect(result.body).toContain('Kitchen times: 12pm to 7pm, so you can eat while you watch.');
+    expect(result.body.split('\n\n').at(-1)).toBe('Book a table via the link in our bio.');
+    expect(lintContent({ body: result.body, platform: 'instagram', placement: 'feed', context: result.promptContext, scheduledFor }).pass).toBe(true);
+  });
+
+  it('treats a single game as a normal match post', () => {
+    const result = buildTournamentContentPayload({ tournament, fixture, screened: roundup[0], roundup: [roundup[0]], platform: 'facebook', placement: 'feed', scheduledFor: new Date('2026-11-04T11:40:00Z') });
+    expect(result.promptContext.roundup_fixture_ids).toBeUndefined();
+    expect(result.body).toMatch(/Italy v South Africa/);
+  });
 });

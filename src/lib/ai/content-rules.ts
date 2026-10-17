@@ -163,7 +163,7 @@ export function resolveContract({
     includeEmojis,
     maxHashtags,
     maxEmojis,
-    maxWords: platform === "instagram" ? 80 : undefined,
+    maxWords: platform === "instagram" ? resolveCaptionWordLimit(context) : undefined,
     maxChars: undefined,
     allowLinkInBio: platform === "instagram" && hasLink,
     hasLink,
@@ -955,6 +955,17 @@ function getContextString(context: Record<string, unknown> | null | undefined, k
   if (typeof candidate !== "string") return null;
   const trimmed = candidate.trim();
   return trimmed.length ? trimmed : null;
+}
+
+/**
+ * Instagram captions keep the 80-word house limit. A deterministic list post,
+ * such as a rugby match-day round-up (tasks/SPEC-rugby-match-posts.md), may set
+ * caption_word_limit to allow more, up to 300 words, so its fixture list and
+ * opening-time notes are never cut.
+ */
+function resolveCaptionWordLimit(context: Record<string, unknown> | null | undefined): number {
+  const value = context?.caption_word_limit;
+  return typeof value === "number" && Number.isInteger(value) && value > 80 && value <= 300 ? value : 80;
 }
 
 function getContextStringArray(context: Record<string, unknown> | null | undefined, key: string) {

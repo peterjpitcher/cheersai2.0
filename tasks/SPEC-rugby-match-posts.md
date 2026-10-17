@@ -52,6 +52,15 @@ Safety kept: generation still fails closed if the opening-time or kitchen senten
 
 Assumption, recorded for review: stories follow the same rule as the feed (one per match day), since six near-identical stories in a day has the same problem.
 
+Decisions made while building part 2 (17 October 2026):
+
+- Shipped in two PRs: 2a teaches every reader (worker gate, app freshness, invalidation, deletion, status badges, publish now, preview, planner sync) the round-up shape before 2b writes it, so the worker understands round-ups before any exist.
+- The stay-open wording is read from the games that run past closing, not from the day's first game (resolveScreening only sets the policy on late games).
+- A round-up's Instagram caption may run to 200 words (`caption_word_limit` in the post context; the hard cap is 300, the default stays 80), so its list and notes are never cut by channel shortening.
+- The round-up artwork lists the games in two columns (kick-off time, then teams) under the date, and the booking label reads "Book your table at" rather than "for this game".
+- Generate on any game rebuilds that whole day. Hiding a game that was in a round-up rebuilds the day for the games still showing; deleting a rugby game keeps the day's published posts as history, removes its unpublished ones and rebuilds the day. Errors from hiding now show on screen (they were silently ignored before).
+- Bulk "Generate all" rebuilds each match day that has a game without posts, so a newly confirmed game joins its day's round-up.
+
 ## 4. Rollout
 
 Each part ships on its own:
