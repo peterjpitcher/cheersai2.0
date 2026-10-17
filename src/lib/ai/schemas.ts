@@ -19,7 +19,7 @@ export const AiGenerationResponseSchema = z.object({
   }),
   instagram: z.object({
     body: z.string().describe('Instagram caption body. No URLs, domains, booking links, hashtags, or link-in-bio line'),
-    hashtags: z.array(z.string()).nullable().describe('Relevant hashtags with # prefix, max 10'),
+    hashtags: z.array(z.string()).nullable().describe('Relevant hashtags with # prefix, max 5'),
     link_in_bio_line: z.string().nullable().describe('Link-in-bio call-to-action line. Use link-in-bio wording only; never include a URL or domain'),
   }),
 });

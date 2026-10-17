@@ -12,8 +12,8 @@ import { unstable_rethrow } from 'next/navigation';
 import type { ContentBrief } from '@/features/create/schemas/content-schemas';
 import { AI_OWNER_MESSAGES, generatePlatformCopy } from '@/lib/ai/generate';
 import type { PostprocessResult } from '@/lib/ai/postprocess';
-import { postprocessCopy } from '@/lib/ai/postprocess';
-import { buildSystemPrompt, buildUserPrompt } from '@/lib/ai/prompts';
+import { findCopyIssues, postprocessCopy } from '@/lib/ai/postprocess';
+import { INSTAGRAM_HASHTAG_LIMIT, buildSystemPrompt, buildUserPrompt } from '@/lib/ai/prompts';
 import { getTemperature } from '@/lib/ai/temperature';
 import { BANNED_PHRASES, type BrandVoiceConfig } from '@/lib/ai/voice';
 import { requireAuthContext } from '@/lib/auth/server';
@@ -72,9 +72,52 @@ function resolveTemporalContext(
 }
 
 // Default post-processing limits per platform
-const MAX_HASHTAGS: Record<string, number> = { facebook: 5, instagram: 10 };
+const MAX_HASHTAGS: Record<string, number> = { facebook: 5, instagram: INSTAGRAM_HASHTAG_LIMIT };
 const MAX_EMOJIS: Record<string, number> = { facebook: 3, instagram: 3 };
 const MAX_WORDS: Record<string, number> = { facebook: 300, instagram: 150 };
+
+/**
+ * Write, tidy and check the copy. When the first draft breaks the house style
+ * (a stock opening, repeated filler, more than one question or an empty one),
+ * the model rewrites once with the problems listed; anything still wrong after
+ * that is returned as a warning for the owner rather than blocking the post
+ * (tasks/SPEC-event-copy-engine.md B1).
+ */
+async function writeCheckedCopy({
+  systemPrompt,
+  userPrompt,
+  temperature,
+  accountId,
+  postprocessConfig,
+}: {
+  systemPrompt: string;
+  userPrompt: string;
+  temperature: number;
+  accountId: string;
+  postprocessConfig: Parameters<typeof postprocessCopy>[1];
+}): Promise<PostprocessResult> {
+  const first = postprocessCopy(
+    await generatePlatformCopy({ systemPrompt, userPrompt, temperature, usageAccountId: accountId }),
+    postprocessConfig,
+  );
+  const issues = findCopyIssues(first.copy);
+  if (!issues.length) return first;
+
+  const rewritten = postprocessCopy(
+    await generatePlatformCopy({
+      systemPrompt,
+      userPrompt: `${userPrompt}\n\nYour first draft broke these house-style rules. Write it again, fixing every one:\n${issues.map((issue) => `- ${issue}`).join('\n')}`,
+      temperature,
+      usageAccountId: accountId,
+    }),
+    postprocessConfig,
+  );
+  const remaining = findCopyIssues(rewritten.copy);
+  return {
+    ...rewritten,
+    warnings: [...rewritten.warnings, ...remaining.map((issue) => `House style: ${issue}`)],
+  };
+}
 
 /**
  * Generate platform-specific copy from a content brief.
@@ -110,7 +153,9 @@ export async function generateContent(
     // Load media metadata for context-aware generation
     const mediaMetadata = await loadMediaMetadata(supabase, accountId, context?.mediaIds);
 
-    const systemPrompt = buildSystemPrompt(brief.contentType, brief.tone, voiceConfig, brand);
+    const systemPrompt = buildSystemPrompt(brief.contentType, brief.tone, voiceConfig, brand, {
+      keyPhraseSeed: keyPhraseSeed(context),
+    });
     const temporal = resolveTemporalContext(brief, context);
     const userPrompt = buildUserPrompt(brief, undefined, {
       scheduledAt: context?.scheduledAt,
@@ -120,23 +165,22 @@ export async function generateContent(
     });
     const temperature = getTemperature(brief.contentType);
 
-    const rawCopy = await generatePlatformCopy({
+    const processed = await writeCheckedCopy({
       systemPrompt,
       userPrompt,
       temperature,
-      usageAccountId: accountId,
-    });
-
-    const processed = postprocessCopy(rawCopy, {
-      maxHashtags: MAX_HASHTAGS,
-      maxEmojis: MAX_EMOJIS,
-      maxWords: MAX_WORDS,
-      bannedPhrases: [...BANNED_PHRASES, ...brand.bannedPhrases.map((p) => p.trim()).filter(Boolean)],
-      platformSignatures: voiceConfig.platformSignatures,
-      defaultCta: voiceConfig.defaultCta,
-      ctaLinks: brief.ctaLinks ?? null,
-      eventStartIso: temporal.eventStart ?? null,
-      allowedRelativeWording: temporal.allowedRelativeWording,
+      accountId,
+      postprocessConfig: {
+        maxHashtags: MAX_HASHTAGS,
+        maxEmojis: MAX_EMOJIS,
+        maxWords: MAX_WORDS,
+        bannedPhrases: [...BANNED_PHRASES, ...brand.bannedPhrases.map((p) => p.trim()).filter(Boolean)],
+        platformSignatures: voiceConfig.platformSignatures,
+        defaultCta: voiceConfig.defaultCta,
+        ctaLinks: brief.ctaLinks ?? null,
+        eventStartIso: temporal.eventStart ?? null,
+        allowedRelativeWording: temporal.allowedRelativeWording,
+      },
     });
 
     // Store generation params and draft copy on content_items
@@ -196,7 +240,9 @@ export async function regenerateWithModifier(
     // Load media metadata for context-aware generation
     const mediaMetadata = await loadMediaMetadata(supabase, accountId, context?.mediaIds);
 
-    const systemPrompt = buildSystemPrompt(brief.contentType, brief.tone, voiceConfig, brand);
+    const systemPrompt = buildSystemPrompt(brief.contentType, brief.tone, voiceConfig, brand, {
+      keyPhraseSeed: keyPhraseSeed(context),
+    });
     const temporal = resolveTemporalContext(brief, context);
     const userPrompt = buildUserPrompt(brief, modifier, {
       scheduledAt: context?.scheduledAt,
@@ -206,23 +252,22 @@ export async function regenerateWithModifier(
     });
     const temperature = getTemperature(brief.contentType);
 
-    const rawCopy = await generatePlatformCopy({
+    const processed = await writeCheckedCopy({
       systemPrompt,
       userPrompt,
       temperature,
-      usageAccountId: accountId,
-    });
-
-    const processed = postprocessCopy(rawCopy, {
-      maxHashtags: MAX_HASHTAGS,
-      maxEmojis: MAX_EMOJIS,
-      maxWords: MAX_WORDS,
-      bannedPhrases: [...BANNED_PHRASES, ...brand.bannedPhrases.map((p) => p.trim()).filter(Boolean)],
-      platformSignatures: voiceConfig.platformSignatures,
-      defaultCta: voiceConfig.defaultCta,
-      ctaLinks: brief.ctaLinks ?? null,
-      eventStartIso: temporal.eventStart ?? null,
-      allowedRelativeWording: temporal.allowedRelativeWording,
+      accountId,
+      postprocessConfig: {
+        maxHashtags: MAX_HASHTAGS,
+        maxEmojis: MAX_EMOJIS,
+        maxWords: MAX_WORDS,
+        bannedPhrases: [...BANNED_PHRASES, ...brand.bannedPhrases.map((p) => p.trim()).filter(Boolean)],
+        platformSignatures: voiceConfig.platformSignatures,
+        defaultCta: voiceConfig.defaultCta,
+        ctaLinks: brief.ctaLinks ?? null,
+        eventStartIso: temporal.eventStart ?? null,
+        allowedRelativeWording: temporal.allowedRelativeWording,
+      },
     });
 
     // Store generation params with modifier
@@ -258,6 +303,11 @@ export async function regenerateWithModifier(
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+/** Rotates the saved key phrases between a campaign's posts, stable per slot. */
+function keyPhraseSeed(context?: GenerationContextInput): string {
+  return `${context?.slotLabel ?? ''}|${context?.scheduledAt ?? ''}`;
+}
 
 /** Load the brand voice profile, falling back to safe defaults if unset or missing. */
 async function loadBrandProfile(

@@ -6,9 +6,10 @@ const HASHTAG_TOKEN = /#[\p{L}\p{N}_]+/gu;
 const LINK_IN_BIO_SENTENCE =
   /\b(?:see|check|use|tap|visit|head to|go to)?\s*(?:the\s+|our\s+)?link[-\s]in[-\s](?:our\s+|the\s+)?bio[^.!?\n]*(?:[.!?]|$)/gi;
 
+// Instagram has allowed at most five hashtags per post since 18 December 2025.
 const PLATFORM_HASHTAG_LIMIT: Record<Platform, number> = {
   facebook: 5,
-  instagram: 10,
+  instagram: 5,
 };
 
 export function readPlatformCtaLinks(brief: Record<string, unknown>): PlatformCtaLinks {

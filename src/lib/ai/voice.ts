@@ -100,6 +100,12 @@ export const BANNED_PHRASES: string[] = [
   "unforgettable journey",
   "exclusive night",
   "hidden gem",
+  // Found in the scheduled posts reviewed on 17 October 2026
+  // (tasks/REVIEW-content-quality-2026-10-17.md)
+  "like no other",
+  "won't want to miss",
+  "extravaganza",
+  "don your",
 ];
 
 export const BANNED_PHRASE_REPLACEMENTS: Array<{ pattern: RegExp; replacement: string }> = [
@@ -126,6 +132,12 @@ export const BANNED_PHRASE_REPLACEMENTS: Array<{ pattern: RegExp; replacement: s
   { pattern: /\bcosy atmosphere\b/gi, replacement: "cosy setting" },
   { pattern: /\bfood and drink experience\b/gi, replacement: "food and drink" },
   { pattern: /\b(?:the\s+)?atmosphere\b/gi, replacement: "vibe" },
+  // "a Music Bingo night like no other" reads fine without the tail.
+  { pattern: /[^\S\n]+like no other\b/gi, replacement: "" },
+  { pattern: /\bextravaganza\b/gi, replacement: "night" },
+  // Two cases so a sentence that opens with it keeps its capital.
+  { pattern: /\bDon your\b/g, replacement: "Wear your" },
+  { pattern: /\bdon your\b/g, replacement: "wear your" },
 ];
 
 export const PREFERRED_PHRASES: string[] = [

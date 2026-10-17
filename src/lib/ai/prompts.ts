@@ -236,6 +236,25 @@ function isNonEmptyString(value: string | null | undefined | false): value is st
   return Boolean(value);
 }
 
+/** Instagram has allowed at most five hashtags per post since 18 December 2025. */
+export const INSTAGRAM_HASHTAG_LIMIT = 5;
+
+/**
+ * One or two of the brand's saved key phrases, rotated by post so the same
+ * ones do not appear in every caption. The seed (slot and schedule) keeps the
+ * choice stable when a post is regenerated.
+ */
+export function pickKeyPhrases(phrases: string[], seed = ''): string[] {
+  const cleaned = phrases.map((phrase) => phrase.trim()).filter(Boolean);
+  if (cleaned.length <= 2) return cleaned;
+  let hash = 0;
+  for (let index = 0; index < seed.length; index += 1) {
+    hash = (hash * 31 + seed.charCodeAt(index)) | 0;
+  }
+  const start = Math.abs(hash) % cleaned.length;
+  return [cleaned[start], cleaned[(start + 1) % cleaned.length]];
+}
+
 function formatListLine(label: string, items: string[], joiner = ", ") {
   const cleaned = items.map((item) => item.trim()).filter(Boolean);
   if (!cleaned.length) return null;
@@ -366,16 +385,70 @@ POV guidance: speak as the business, "we", "our" and "us". Do not refer to the b
 `.trim();
 }
 
+// Each example pairs a short brief with the post written from it, so the model
+// learns to lead with the brief's own specific detail and to state its facts
+// plainly. Replaced on 17 October 2026: the previous examples ("Join us for a
+// proper Sunday roast", "Looking for the perfect spot", "just the ticket") taught
+// the stock openings found in 62 of 66 scheduled posts
+// (tasks/REVIEW-content-quality-2026-10-17.md).
 function getFewShotExamples() {
   return `
-Example 1 (Facebook, Sunday roast event):
-Join us for a proper Sunday roast this weekend. We're serving up slow-roasted beef with all the trimmings, including our massive Yorkies. It's the perfect way to gather the family before the week starts again. Book your table now to avoid missing out.
+The examples show the style only. Never copy their facts, names, songs, dishes, prices or wording: use the brief you are given.
 
-Example 2 (Instagram, sport):
-The Six Nations is back on our screens. We'll be showing every match live. Grab a pint and settle in for the action. Who are you backing this year?
+Example 1 (Facebook, music bingo, first post)
+Brief: Disco Night Music Bingo, Friday 14th March, 7pm to 10pm, doors 6:30pm, host Jo, two rounds of 70s disco, prizes, extra points for dressing up, £5 cash on the night, food from 4pm.
+Post:
+Two rounds of 70s disco, a room full of singalongs and Jo on the mic. Disco Night Music Bingo is on Friday 14th March.
 
-Example 3 (Facebook, casual midweek):
-Looking for the perfect spot for a midweek catch-up? Our burger and pint night is just the ticket. Great food, cold drinks, and even better company. See you at the bar!
+We play a clip, you find it on your card. Fill a line and you win a prize. Dress for the theme for extra points.
+
+£5 each, cash on the night. Doors 6:30pm, first song at 7pm, and food is on from 4pm if you want to eat first.
+
+Which disco song gets you dancing every time?
+
+Example 2 (Instagram, quiz night, two days before)
+Brief: Quiz Night, Wednesday 19th March, 7:30pm, teams of up to six, £2 each, £50 bar tab for the winning team.
+Post:
+A £50 bar tab for the winning team.
+Quiz Night is this Wednesday at 7:30pm.
+Teams of up to six, £2 each.
+
+Example 3 (Facebook, cash bingo, the day itself)
+Brief: Cash Bingo, tonight at 7pm, books £10 cash, ten games, cash prizes, players must be 18 or over.
+Post:
+Ten games and cash prizes tonight. Cash Bingo starts at 7pm.
+
+Books are £10 each, cash on the night, and players must be 18 or over.
+
+Example 4 (Facebook, tasting night, announcement)
+Brief: Christmas Tasting Night, Friday 20th November, 7pm, six blind tastings, mulled cider on arrival, full Christmas supper included, £40 booked ahead or £45 on the door, over 18s only, 25 seats.
+Post:
+Six blind tastings, a mulled cider as you walk in and a full Christmas supper. Our Christmas Tasting Night is on Friday 20th November at 7pm.
+
+Tickets are £40 when you book ahead or £45 on the door. Over 18s only, and there are 25 seats.
+
+Example 5 (Instagram, Halloween party, a week before)
+Brief: Halloween Party, Saturday 31st October, 8pm to midnight, DJ Sam, free entry, prize for the best costume.
+Post:
+A prize for the best costume, and DJ Sam until midnight.
+Our Halloween Party is next Saturday, 31st October, from 8pm.
+Free entry.
+
+Example 6 (Facebook, sport)
+Brief: England v France, Saturday 15th March, kick-off 4:45pm, on the big screen, kitchen open until 9pm.
+Post:
+England v France on the big screen this Saturday. Kick-off 4:45pm.
+
+The kitchen is open until 9pm, so you can eat at half-time or after the final whistle.
+
+Who's your player to watch?
+
+Example 7 (Facebook, food)
+Brief: Sunday roast, served 12pm to 5pm, beef, pork or nut roast, a Yorkshire pudding with every roast, booking recommended.
+Post:
+Beef, pork or a nut roast, each with a Yorkshire pudding. Sunday roast is served from 12pm to 5pm.
+
+Booking is recommended, so reserve a table if you can.
 
 Grammar rules, strictly follow these:
 - "we" is a SUBJECT pronoun: "We're serving...", "We'll be showing..."
@@ -403,8 +476,11 @@ const CONTENT_TYPE_CONTEXT: Record<ContentType, string> = {
 
 const PLATFORM_RULES = [
   'Facebook: target 80-140 words for announcements and 50-90 words for reminders. Conversational tone. Put hashtags only in facebook.hashtags and CTA wording only in facebook.cta_text.',
-  'Facebook: where natural, close the body with a short question or opinion prompt that invites comments (e.g. "Who\'s on your team?", "What\'s your go-to order?"), posts that get replies reach more people.',
-  'Instagram: target 45-90 words. First line must hook within 125 characters. Use short line breaks. Put hashtags only in instagram.hashtags and booking wording only in instagram.link_in_bio_line.',
+  'Instagram: target 45-90 words. First line must hook within 125 characters. Use short line breaks. Put hashtags only in instagram.hashtags and booking wording only in instagram.link_in_bio_line. Name the kind of event and the place in the caption itself, because people search Instagram by those words.',
+  // Replaced on 17 October 2026: "close with a question" put one on every
+  // Facebook post, 17 of 33 of them "Who's coming?". Meta demotes posts that
+  // ask people to tag, share, like or comment.
+  'Questions: ask at most one, and only when it is about the event itself and gives people something real to answer (a song, a team, a dish). Most posts need none. Never ask "Who\'s coming?", "Who\'s ready?" or "Who are you bringing?", and never ask people to tag, share, like or comment.',
   'Do not clone the same caption twice. Facebook can be fuller and conversational, while Instagram should be hook-led and scannable.',
 ].join('\n');
 
@@ -420,8 +496,11 @@ const WRITING_RULES: WritingRule[] = [
     pub: "Lead with why it'll be a good time, the fun, the people, the reason to come.",
     business: 'Lead with why it matters to the reader, the benefit, the result, the reason to get in touch.',
   },
-  'Open with the most interesting specific detail as the hook, never a generic greeting or a formulaic opener like "Get ready" or "Don\'t miss".',
-  'Include the key details clearly: what it is, the date, the time, the price if relevant, and how to book or join.',
+  'Open with the most interesting specific detail from the brief (the theme, the host, the prize, the dish), never a generic greeting or a stock opening such as "Get ready", "Join us", "Don\'t miss", "Tonight\'s the night", "Calling all" or "Ready for...?".',
+  'Say "join us" at most once in a post, and never in the first line.',
+  'Cut filler words such as fun, lively, exciting, amazing, fantastic and perfect: use the specific detail instead.',
+  'Include the key details clearly: what it is, the date, the time, the price if relevant, and how to book or join. When the brief gives a price, an age rule, a doors time or how booking and payment work, state them plainly.',
+  'Write times as 7pm or 7:30pm, never 7:00pm or 19:00.',
   'Never put URLs, bare domains, markdown links, source citations, or old booking links in any body copy. The system owns final CTA URLs.',
   'For Instagram, booking/joining instructions must only point people to the link in bio. Never put a URL, bare domain, booking link, or booking website in Instagram copy.',
   'Do not invent operational details. Only mention bookings, limited spaces, walk-ins, arrival rules, food service times, prices, hosts, age rules, or capacity if they are explicitly supplied in the brief.',
@@ -455,6 +534,7 @@ export function buildSystemPrompt(
   tone: string,
   brandVoice?: BrandVoiceConfig,
   brand?: BrandProfile,
+  options: { keyPhraseSeed?: string } = {},
 ): string {
   const businessType = customBusinessType(brand);
   const businessDescription = businessType ? brand?.businessDescription?.trim() : undefined;
@@ -502,9 +582,13 @@ export function buildSystemPrompt(
   // or whole sentences get rewritten/removed after generation.
   const brandLines = [
     brand ? describeToneTargets(brand) : null,
-    brand ? formatListLine('Use natural phrases like', brand.keyPhrases) : null,
+    // One or two saved phrases per post, rotated, so the same ones stop
+    // recurring ("Bring your mates" was in 10 of 66 scheduled posts).
+    brand ? formatListLine('Weave in one of these phrases only if it fits naturally', pickKeyPhrases(brand.keyPhrases, options.keyPhraseSeed)) : null,
     brand ? formatListLine('Do not mention', brand.bannedTopics) : null,
     formatListLine('Never use these phrases', mergedBannedPhrases(brand?.bannedPhrases ?? [])),
+    brand ? formatListLine("The brand's own hashtags, to use first whenever hashtags are wanted", brand.defaultHashtags, ' ') : null,
+    brand ? formatListLine('Emojis that suit the brand, whenever emojis are wanted', brand.defaultEmojis, ' ') : null,
   ].filter(isNonEmptyString);
   if (brandLines.length) {
     lines.push('', 'Brand specifics:', ...brandLines);
@@ -581,13 +665,17 @@ export function buildUserPrompt(
   }
 
   if (brief.includeHashtags) {
-    sections.push('Include relevant hashtags per platform.');
+    sections.push(
+      `Hashtags: at most ${INSTAGRAM_HASHTAG_LIMIT} on Instagram and 3 on Facebook. Start with the brand's own hashtags that fit, then one or two that name the kind of event (for example #MusicBingo or #QuizNight). Never use a person's name as a hashtag, and no generic tags such as #FunNightOut.`,
+    );
   } else {
     sections.push('Do not include hashtags.');
   }
 
   if (!brief.includeEmojis) {
     sections.push('Avoid emojis entirely.');
+  } else {
+    sections.push("Use one or two emojis where they add something, preferably the brand's own, and never more than three.");
   }
 
   const ctaInstruction = buildCtaInstruction(brief.contentType, brief.ctaLinks);

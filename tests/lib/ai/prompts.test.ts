@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { buildInstantPostPrompt, buildSystemPrompt, buildUserPrompt } from "@/lib/ai/prompts";
+import { INSTAGRAM_HASHTAG_LIMIT, buildInstantPostPrompt, buildSystemPrompt, buildUserPrompt, pickKeyPhrases } from "@/lib/ai/prompts";
 import { buildGenerationTemporalContext } from "@/lib/create/temporal-context";
 import type { ContentBrief } from "@/features/create/schemas/content-schemas";
 import { BANNED_PHRASES } from "@/lib/ai/voice";
@@ -397,3 +397,63 @@ describe("buildSystemPrompt business type", () => {
     expect(prompt).not.toContain("About the business:");
   });
 });
+
+describe("house style in the v2 prompts (tasks/SPEC-event-copy-engine.md B1)", () => {
+  it("teaches from briefs, not stock openings, and keeps the examples out of the post", () => {
+    const prompt = buildSystemPrompt("event", "friendly_warm", undefined, buildBrand());
+    expect(prompt).toContain("The examples show the style only. Never copy their facts");
+    expect(prompt).toContain("Brief: Disco Night Music Bingo");
+    expect(prompt).not.toMatch(/Join us for a proper Sunday roast|perfect spot|just the ticket|Who are you backing/);
+    expect(prompt).toContain('never a generic greeting or a stock opening such as "Get ready", "Join us"');
+    expect(prompt).toContain('Say "join us" at most once');
+    expect(prompt).toContain("Write times as 7pm or 7:30pm, never 7:00pm or 19:00.");
+  });
+
+  it("asks for at most one real question and never comment bait", () => {
+    const prompt = buildSystemPrompt("event", "friendly_warm", undefined, buildBrand());
+    expect(prompt).toContain("Questions: ask at most one");
+    expect(prompt).toContain("never ask people to tag, share, like or comment");
+    expect(prompt).not.toContain("close the body with a short question");
+  });
+
+  it("sends the brand's own hashtags and emojis, with Instagram's five-hashtag limit", () => {
+    const system = buildSystemPrompt("event", "friendly_warm", undefined, buildBrand());
+    expect(system).toContain("The brand's own hashtags, to use first whenever hashtags are wanted: #cheers #publife.");
+    expect(system).toContain("Emojis that suit the brand, whenever emojis are wanted: 🍺 😊.");
+    const brief = { ...buildEventBrief(), includeHashtags: true, includeEmojis: true };
+    const user = buildUserPrompt(brief);
+    expect(user).toContain(`at most ${INSTAGRAM_HASHTAG_LIMIT} on Instagram`);
+    expect(user).toContain("Never use a person's name as a hashtag");
+    expect(user).toContain("Use one or two emojis where they add something");
+  });
+
+  it("offers one or two key phrases per post, rotated by slot", () => {
+    const phrases = ["Proper pub food", "Bring your mates", "Free on-site parking", "Your local in Stanwell Moor"];
+    expect(pickKeyPhrases(phrases, "Event day|2026-11-13T07:00")).toHaveLength(2);
+    const picks = new Set(["a", "b", "c", "d", "e", "f"].map((seed) => pickKeyPhrases(phrases, seed).join("|")));
+    expect(picks.size).toBeGreaterThan(1);
+    expect(pickKeyPhrases(phrases, "same")).toEqual(pickKeyPhrases(phrases, "same"));
+    expect(pickKeyPhrases(["Only one"], "x")).toEqual(["Only one"]);
+    const prompt = buildSystemPrompt("event", "friendly_warm", undefined, buildBrand({ keyPhrases: phrases }), { keyPhraseSeed: "a" });
+    expect(prompt.match(/Weave in one of these phrases only if it fits naturally: (.*)\./)?.[1].split(", ")).toHaveLength(2);
+  });
+});
+
+function buildEventBrief(): ContentBrief {
+  return {
+    contentType: "event",
+    title: "Quiz Night",
+    prompt: "Teams of up to six.",
+    platforms: ["facebook", "instagram"],
+    tone: "friendly_warm",
+    lengthPreference: "standard",
+    includeHashtags: false,
+    includeEmojis: false,
+    ctaStyle: "default",
+    proofPoints: [],
+    eventName: "Quiz Night",
+    eventDate: "2026-11-04",
+    eventTime: "19:30",
+    placements: ["feed"],
+  } as unknown as ContentBrief;
+}
