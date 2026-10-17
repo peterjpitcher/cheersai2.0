@@ -72,7 +72,8 @@ const BUILD_UP_GAP_DAYS = 2;
 const WEEKLY_SHIFTS = [-1, 1, -2, 2];
 const MAX_WEEKLY_BEATS = 4;
 const SLOT_STEP_MINUTES = 30;
-const OCCUPYING_STATUSES = new Set(['scheduled', 'queued', 'publishing', 'posted']);
+/** Waiting, going out or gone out. "posted" is the live worker's word, "published" the v2 handler's. */
+const OCCUPYING_STATUSES = new Set(['scheduled', 'queued', 'publishing', 'posted', 'published']);
 const CANCELLED_EVENT = /cancel|postpon/i;
 
 export type FeedPlatform = 'facebook' | 'instagram';

@@ -205,6 +205,21 @@ describe('decideCalendar: empty days', () => {
     expect(decision.buildUps.map((entry) => entry.event.name)).toEqual(['Sleigh']);
   });
 
+  it('counts a published post as filling its day, and its photo as used', () => {
+    const decision = decide({
+      from: '2026-11-24',
+      to: '2026-11-26',
+      posts: [
+        ...slot('2026-11-24 11:00', { status: 'published', mediaIds: ['lunch-1'] }),
+        ...trivia('2026-11-25 11:00'),
+      ],
+      events: quizEvents,
+      subjects: { lunch: photos.lunch },
+    });
+
+    expect(decision.venue.map((entry) => [entry.slot.date, entry.photo.id])).toEqual([['2026-11-26', 'lunch-2']]);
+  });
+
   it('lists a day it cannot fill', () => {
     const decision = decide({ from: '2026-11-29', to: '2026-11-29', events: quizEvents });
 

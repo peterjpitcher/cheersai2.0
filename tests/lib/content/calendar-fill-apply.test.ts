@@ -15,12 +15,13 @@ function read(row: Row, column: string): unknown {
 }
 
 /** In-memory tables for the query shapes apply and rollback use; updates and deletes change the rows. */
-function fakeDb(tables: Record<string, Row[]>): SupabaseClient {
+function fakeDb(tables: Record<string, Row[]>, { failUpdateOn }: { failUpdateOn?: string } = {}): SupabaseClient {
   const from = (table: string) => {
     const filters: Array<(row: Row) => boolean> = [];
     let action: { kind: 'update'; values: Row } | { kind: 'delete' } | null = null;
     const matching = (): Row[] => (tables[table] ?? []).filter((row) => filters.every((filter) => filter(row)));
-    const run = (): { data: Row[]; error: null } => {
+    const run = (): { data: Row[] | null; error: { message: string } | null } => {
+      if (action?.kind === 'update' && table === failUpdateOn) return { data: null, error: { message: 'connection reset' } };
       const hit = matching();
       if (action?.kind === 'update') for (const row of hit) Object.assign(row, action.values);
       if (action?.kind === 'delete') tables[table] = (tables[table] ?? []).filter((row) => !hit.includes(row));
@@ -143,6 +144,33 @@ describe('applyCalendarPlan: moves', () => {
   });
 });
 
+describe('applyCalendarPlan: a move that half happens', () => {
+  it('puts the posts back when their publish jobs cannot be moved', async () => {
+    const tables = { content_items: scheduledItems(move.fromIso), publish_jobs: jobsFor(move.fromIso) };
+    const outcome = await applyCalendarPlan({ db: fakeDb(tables, { failUpdateOn: 'publish_jobs' }), now: () => NOW }, basePlan({ moves: [move] }));
+
+    expect(outcome.failed).toEqual([{ what: expect.stringContaining('Sparks Quiz'), error: expect.stringContaining('the posts were put back') }]);
+    expect(outcome.record.moved).toEqual([]);
+    expect(tables.content_items.every((row) => row.scheduled_for === move.fromIso)).toBe(true);
+  });
+
+  it('finishes a slot whose posts moved but whose jobs did not', async () => {
+    const tables = { content_items: scheduledItems(move.toIso), publish_jobs: jobsFor(move.fromIso) };
+    const outcome = await applyCalendarPlan({ db: fakeDb(tables), now: () => NOW }, basePlan({ moves: [move] }));
+
+    expect(outcome.record.moved).toEqual([{ contentItemIds: ids, fromIso: move.fromIso, toIso: move.toIso }]);
+    expect(tables.publish_jobs.every((row) => row.next_attempt_at === move.toIso)).toBe(true);
+  });
+
+  it('calls a slot done only when its posts and jobs are both at the new time', async () => {
+    const tables = { content_items: scheduledItems(move.toIso), publish_jobs: jobsFor(move.toIso) };
+    const outcome = await applyCalendarPlan({ db: fakeDb(tables), now: () => NOW }, basePlan({ moves: [move] }));
+
+    expect(outcome.skipped).toEqual([{ what: expect.stringContaining('Sparks Quiz'), reason: 'already done' }]);
+    expect(outcome.record.moved).toEqual([]);
+  });
+});
+
 describe('applyCalendarPlan: optional 7am moves', () => {
   const early = { ...move, reason: 'early_build_up' as const, fromIso: atLondon('2026-10-28', '07:00') };
 
@@ -256,6 +284,25 @@ describe('verifyAppliedPlan', () => {
 });
 
 describe('rollbackCalendarPlan', () => {
+  it('bins a post it added whose publishing failed, since it never went out', async () => {
+    const tables: Record<string, Row[]> = {
+      content_items: [{ id: 'n3', account_id: ACCOUNT, status: 'failed', deleted_at: null, platform: 'facebook', placement: 'feed', scheduled_for: atLondon('2026-10-22', '11:00') }],
+      publish_jobs: [{ content_item_id: 'n3', account_id: ACCOUNT, status: 'failed' }],
+    };
+    const plan = basePlan();
+    const outcome = await rollbackCalendarPlan({ db: fakeDb(tables), now: () => NOW }, plan, {
+      planId: plan.planId,
+      accountId: ACCOUNT,
+      moved: [],
+      created: [{ batchKey: 'lunch', slotKeys: [], contentItemIds: ['n3'], campaignId: null, createdCampaign: false }],
+      importedArtwork: [],
+    });
+
+    expect(outcome.skipped).toEqual([]);
+    expect(tables.content_items[0].deleted_at).toBe(NOW.toISOString());
+    expect(tables.publish_jobs).toEqual([]);
+  });
+
   it('bins the posts it added that have not gone out, and moves moved posts back', async () => {
     const tables: Record<string, Row[]> = {
       content_items: [

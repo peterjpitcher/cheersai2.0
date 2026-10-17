@@ -25,6 +25,8 @@ import { scheduleContentBatch } from '@/lib/content/schedule-batch';
  */
 
 const WAITING_JOB_STATUS = 'queued';
+/** Posts undo may bin: waiting to go out, or failed and never sent. */
+const BINNABLE_STATUSES = ['scheduled', 'failed'];
 const SENDING_JOB_STATUSES = new Set(['in_progress', 'succeeded', 'publishing', 'published']);
 
 const copyEntrySchema = z.object({ body: z.string() }).passthrough();
@@ -207,7 +209,30 @@ export async function applyCalendarPlan(deps: ApplyDeps, plan: CalendarPlan, pre
       if (error) throw new Error(error.message);
       const rows = (data ?? []) as ItemRow[];
       if (rows.length === ids.length && rows.every((row) => row.scheduled_for && Date.parse(row.scheduled_for) === Date.parse(move.toIso))) {
-        skipped.push({ what, reason: 'already done' });
+        // The posts are at the new time; their waiting jobs must be too. A run
+        // stopped between the two writes leaves the jobs behind, so finish it.
+        const { data: jobRows, error: jobReadError } = await db
+          .from('publish_jobs')
+          .select('content_item_id, status, next_attempt_at')
+          .eq('account_id', plan.accountId)
+          .in('content_item_id', ids);
+        if (jobReadError) throw new Error(jobReadError.message);
+        const behind = ((jobRows ?? []) as Array<{ status: string; next_attempt_at: string | null }>).filter(
+          (job) => job.status === WAITING_JOB_STATUS && (!job.next_attempt_at || Date.parse(job.next_attempt_at) !== Date.parse(move.toIso)),
+        );
+        if (!behind.length) {
+          skipped.push({ what, reason: 'already done' });
+          continue;
+        }
+        const { error: repairError } = await db
+          .from('publish_jobs')
+          .update({ next_attempt_at: move.toIso, scheduled_at: move.toIso, updated_at: new Date(nowMs).toISOString() })
+          .eq('account_id', plan.accountId)
+          .in('content_item_id', ids)
+          .eq('status', WAITING_JOB_STATUS);
+        if (repairError) throw new Error(repairError.message);
+        record.moved.push({ contentItemIds: ids, fromIso: move.fromIso, toIso: move.toIso });
+        log(`Finished moving ${what}: its jobs now match`);
         continue;
       }
       const problem =
@@ -264,7 +289,16 @@ export async function applyCalendarPlan(deps: ApplyDeps, plan: CalendarPlan, pre
         .eq('account_id', plan.accountId)
         .in('content_item_id', ids)
         .eq('status', WAITING_JOB_STATUS);
-      if (jobError) throw new Error(jobError.message);
+      if (jobError) {
+        // Put the posts back, so a post and its publish job never disagree about the time.
+        await db
+          .from('content_items')
+          .update({ scheduled_for: move.fromIso, scheduled_at: move.fromIso })
+          .eq('account_id', plan.accountId)
+          .in('id', ids)
+          .eq('scheduled_for', move.toIso);
+        throw new Error(`its publish jobs could not be moved, so the posts were put back (${jobError.message})`);
+      }
       record.moved.push({ contentItemIds: ids, fromIso: move.fromIso, toIso: move.toIso });
       log(`Moved ${what}`);
     } catch (error) {
@@ -426,7 +460,7 @@ export async function rollbackCalendarPlan(deps: Pick<ApplyDeps, 'db' | 'now' | 
           skipped.push({ what, reason: 'already in the bin' });
           continue;
         }
-        if (row.status !== 'scheduled' || (jobs.get(row.id) ?? []).some((status) => SENDING_JOB_STATUSES.has(status))) {
+        if (!BINNABLE_STATUSES.includes(row.status) || (jobs.get(row.id) ?? []).some((status) => SENDING_JOB_STATUSES.has(status))) {
           skipped.push({ what, reason: `it is ${row.status} and cannot be taken back` });
           continue;
         }
@@ -435,7 +469,7 @@ export async function rollbackCalendarPlan(deps: Pick<ApplyDeps, 'db' | 'now' | 
           .update({ deleted_at: nowIso, updated_at: nowIso })
           .eq('account_id', plan.accountId)
           .eq('id', row.id)
-          .eq('status', 'scheduled')
+          .in('status', BINNABLE_STATUSES)
           .select('id');
         if (binError) throw new Error(binError.message);
         if (!(binned ?? []).length) {
@@ -478,7 +512,15 @@ export async function rollbackCalendarPlan(deps: Pick<ApplyDeps, 'db' | 'now' | 
         .eq('account_id', plan.accountId)
         .in('content_item_id', back)
         .eq('status', WAITING_JOB_STATUS);
-      if (jobError) throw new Error(jobError.message);
+      if (jobError) {
+        await db
+          .from('content_items')
+          .update({ scheduled_for: moved.toIso, scheduled_at: moved.toIso })
+          .eq('account_id', plan.accountId)
+          .in('id', back)
+          .eq('scheduled_for', moved.fromIso);
+        throw new Error(`their publish jobs could not be moved back, so the posts were left at ${londonTime(moved.toIso)} (${jobError.message})`);
+      }
       log(`Moved back ${what} to ${londonTime(moved.fromIso)}`);
     } catch (error) {
       failed.push({ what, error: error instanceof Error ? error.message : String(error) });
