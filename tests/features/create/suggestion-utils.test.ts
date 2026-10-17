@@ -25,9 +25,9 @@ describe("buildEventSuggestions", () => {
     const result = buildEventSuggestions({ startDate: "2026-05-23", startTime: "19:00", timezone: TZ });
 
     expect(result.map((slot) => [slot.label, slot.date, slot.time])).toEqual([
-      ["Weekly hype · 1 week out", "2026-05-16", "12:00"],
-      ["2 days to go", "2026-05-21", "12:00"],
-      ["1 day to go", "2026-05-22", "12:00"],
+      ["Weekly hype · 1 week out", "2026-05-16", "11:00"],
+      ["2 days to go", "2026-05-21", "11:00"],
+      ["1 day to go", "2026-05-22", "11:00"],
       ["Event day", "2026-05-23", "07:00"],
     ]);
   });
@@ -176,15 +176,15 @@ describe("buildPromotionSuggestions", () => {
       name: "ends today",
       now: "2026-10-12T08:00:00.000Z", // Mon 12 Oct, 09:00 BST
       endDate: "2026-10-12",
-      expected: [["Launch", "2026-10-12", "12:00"]],
+      expected: [["Launch", "2026-10-12", "11:00"]],
     },
     {
       name: "ends tomorrow",
       now: "2026-10-12T08:00:00.000Z",
       endDate: "2026-10-13",
       expected: [
-        ["Launch", "2026-10-12", "12:00"],
-        ["Last chance", "2026-10-13", "12:00"],
+        ["Launch", "2026-10-12", "11:00"],
+        ["Last chance", "2026-10-13", "11:00"],
       ],
     },
     {
@@ -192,9 +192,9 @@ describe("buildPromotionSuggestions", () => {
       now: "2026-10-12T08:00:00.000Z",
       endDate: "2026-10-15",
       expected: [
-        ["Launch", "2026-10-12", "12:00"],
-        ["Mid-run reminder", "2026-10-13", "12:00"],
-        ["Last chance", "2026-10-15", "12:00"],
+        ["Launch", "2026-10-12", "11:00"],
+        ["Mid-run reminder", "2026-10-13", "11:00"],
+        ["Last chance", "2026-10-15", "11:00"],
       ],
     },
     {
@@ -202,9 +202,9 @@ describe("buildPromotionSuggestions", () => {
       now: "2026-10-12T08:00:00.000Z",
       endDate: "2026-10-22",
       expected: [
-        ["Launch", "2026-10-12", "12:00"],
-        ["Mid-run reminder", "2026-10-17", "12:00"],
-        ["Last chance", "2026-10-22", "12:00"],
+        ["Launch", "2026-10-12", "11:00"],
+        ["Mid-run reminder", "2026-10-17", "11:00"],
+        ["Last chance", "2026-10-22", "11:00"],
       ],
     },
     {
@@ -212,9 +212,9 @@ describe("buildPromotionSuggestions", () => {
       now: "2026-10-12T08:00:00.000Z",
       endDate: "2026-11-11",
       expected: [
-        ["Launch", "2026-10-12", "12:00"],
-        ["Mid-run reminder", "2026-10-27", "12:00"],
-        ["Last chance", "2026-11-11", "12:00"],
+        ["Launch", "2026-10-12", "11:00"],
+        ["Mid-run reminder", "2026-10-27", "11:00"],
+        ["Last chance", "2026-11-11", "11:00"],
       ],
     },
     {
@@ -223,8 +223,8 @@ describe("buildPromotionSuggestions", () => {
       now: "2026-10-24T08:00:00.000Z",
       endDate: "2026-10-25",
       expected: [
-        ["Launch", "2026-10-24", "12:00"],
-        ["Last chance", "2026-10-25", "12:00"],
+        ["Launch", "2026-10-24", "11:00"],
+        ["Last chance", "2026-10-25", "11:00"],
       ],
     },
     {
@@ -233,8 +233,8 @@ describe("buildPromotionSuggestions", () => {
       now: "2026-10-25T09:00:00.000Z",
       endDate: "2026-10-26",
       expected: [
-        ["Launch", "2026-10-25", "12:00"],
-        ["Last chance", "2026-10-26", "12:00"],
+        ["Launch", "2026-10-25", "11:00"],
+        ["Last chance", "2026-10-26", "11:00"],
       ],
     },
     {
@@ -243,9 +243,9 @@ describe("buildPromotionSuggestions", () => {
       now: "2026-10-23T08:00:00.000Z",
       endDate: "2026-10-26",
       expected: [
-        ["Launch", "2026-10-23", "12:00"],
-        ["Mid-run reminder", "2026-10-24", "12:00"],
-        ["Last chance", "2026-10-26", "12:00"],
+        ["Launch", "2026-10-23", "11:00"],
+        ["Mid-run reminder", "2026-10-24", "11:00"],
+        ["Last chance", "2026-10-26", "11:00"],
       ],
     },
   ])("offers one suggestion per day when the offer $name", ({ now, endDate, expected }) => {
@@ -263,7 +263,7 @@ describe("buildPromotionSuggestions", () => {
     expect(deconflictSuggestions(built, UNRELATED_POST, TZ)).toEqual(built);
   });
 
-  it("puts each suggestion at 12:00 London on its day, in BST and in GMT", () => {
+  it("puts each suggestion at 11:00 London on its day, in BST and in GMT", () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-10-24T08:00:00.000Z")); // Sat 24 Oct, 09:00 BST
 
@@ -272,8 +272,8 @@ describe("buildPromotionSuggestions", () => {
     expect(
       built.map((slot) => DateTime.fromISO(`${slot.date}T${slot.time}`, { zone: TZ }).toUTC().toISO()),
     ).toEqual([
-      "2026-10-24T11:00:00.000Z", // 12:00 BST
-      "2026-10-25T12:00:00.000Z", // 12:00 GMT
+      "2026-10-24T10:00:00.000Z", // 11:00 BST
+      "2026-10-25T11:00:00.000Z", // 11:00 GMT
     ]);
   });
 });
@@ -297,9 +297,9 @@ describe("buildPromotionSuggestions with the offer's start and end dates", () =>
       startDate: "2026-10-05",
       endDate: "2026-10-15",
       expected: [
-        ["Launch", "2026-10-05", "12:00"],
-        ["Mid-run reminder", "2026-10-10", "12:00"],
-        ["Last chance", "2026-10-15", "12:00"],
+        ["Launch", "2026-10-05", "11:00"],
+        ["Mid-run reminder", "2026-10-10", "11:00"],
+        ["Last chance", "2026-10-15", "11:00"],
       ],
     },
     {
@@ -308,9 +308,9 @@ describe("buildPromotionSuggestions with the offer's start and end dates", () =>
       startDate: "2026-09-29",
       endDate: "2026-10-09",
       expected: [
-        ["Launch", "2026-09-29", "12:00"],
-        ["Mid-run reminder", "2026-10-04", "12:00"],
-        ["Last chance", "2026-10-09", "12:00"],
+        ["Launch", "2026-09-29", "11:00"],
+        ["Mid-run reminder", "2026-10-04", "11:00"],
+        ["Last chance", "2026-10-09", "11:00"],
       ],
     },
     {
@@ -319,9 +319,9 @@ describe("buildPromotionSuggestions with the offer's start and end dates", () =>
       startDate: undefined,
       endDate: "2026-10-09",
       expected: [
-        ["Launch", "2026-09-29", "12:00"],
-        ["Mid-run reminder", "2026-10-04", "12:00"],
-        ["Last chance", "2026-10-09", "12:00"],
+        ["Launch", "2026-09-29", "11:00"],
+        ["Mid-run reminder", "2026-10-04", "11:00"],
+        ["Last chance", "2026-10-09", "11:00"],
       ],
     },
     {
@@ -331,9 +331,9 @@ describe("buildPromotionSuggestions with the offer's start and end dates", () =>
       startDate: "",
       endDate: "2026-10-09",
       expected: [
-        ["Launch", "2026-09-29", "12:00"],
-        ["Mid-run reminder", "2026-10-04", "12:00"],
-        ["Last chance", "2026-10-09", "12:00"],
+        ["Launch", "2026-09-29", "11:00"],
+        ["Mid-run reminder", "2026-10-04", "11:00"],
+        ["Last chance", "2026-10-09", "11:00"],
       ],
     },
     {
@@ -342,9 +342,9 @@ describe("buildPromotionSuggestions with the offer's start and end dates", () =>
       startDate: "2026-09-22",
       endDate: "2026-10-09",
       expected: [
-        ["Launch", "2026-09-29", "12:00"],
-        ["Mid-run reminder", "2026-10-04", "12:00"],
-        ["Last chance", "2026-10-09", "12:00"],
+        ["Launch", "2026-09-29", "11:00"],
+        ["Mid-run reminder", "2026-10-04", "11:00"],
+        ["Last chance", "2026-10-09", "11:00"],
       ],
     },
     {
@@ -355,9 +355,9 @@ describe("buildPromotionSuggestions with the offer's start and end dates", () =>
       startDate: "2026-10-20",
       endDate: "2026-10-09",
       expected: [
-        ["Launch", "2026-09-29", "12:00"],
-        ["Mid-run reminder", "2026-10-04", "12:00"],
-        ["Last chance", "2026-10-09", "12:00"],
+        ["Launch", "2026-09-29", "11:00"],
+        ["Mid-run reminder", "2026-10-04", "11:00"],
+        ["Last chance", "2026-10-09", "11:00"],
       ],
     },
     {
@@ -365,7 +365,7 @@ describe("buildPromotionSuggestions with the offer's start and end dates", () =>
       now: TUESDAY_MORNING,
       startDate: "2026-10-06",
       endDate: "2026-10-06",
-      expected: [["Launch", "2026-10-06", "12:00"]],
+      expected: [["Launch", "2026-10-06", "11:00"]],
     },
     {
       name: "starts tomorrow and ends the day after: launch and last chance",
@@ -373,8 +373,8 @@ describe("buildPromotionSuggestions with the offer's start and end dates", () =>
       startDate: "2026-09-30",
       endDate: "2026-10-01",
       expected: [
-        ["Launch", "2026-09-30", "12:00"],
-        ["Last chance", "2026-10-01", "12:00"],
+        ["Launch", "2026-09-30", "11:00"],
+        ["Last chance", "2026-10-01", "11:00"],
       ],
     },
     {
@@ -389,11 +389,11 @@ describe("buildPromotionSuggestions with the offer's start and end dates", () =>
       now: TUESDAY_MORNING,
       startDate: undefined,
       endDate: "2026-09-29",
-      expected: [["Launch", "2026-09-29", "12:00"]],
+      expected: [["Launch", "2026-09-29", "11:00"]],
     },
     {
-      // 12:30 BST: today's 12:00 is inside the 15-minute rule, so nothing is left.
-      name: "ends today and it is past noon: no suggestions",
+      // 12:30 BST: today's 11:00 has already passed, so nothing is left.
+      name: "ends today and it is past 11:00: no suggestions",
       now: "2026-09-29T11:30:00.000Z",
       startDate: undefined,
       endDate: "2026-09-29",
@@ -406,9 +406,9 @@ describe("buildPromotionSuggestions with the offer's start and end dates", () =>
       startDate: "2026-10-24",
       endDate: "2026-10-28",
       expected: [
-        ["Launch", "2026-10-24", "12:00"],
-        ["Mid-run reminder", "2026-10-26", "12:00"],
-        ["Last chance", "2026-10-28", "12:00"],
+        ["Launch", "2026-10-24", "11:00"],
+        ["Mid-run reminder", "2026-10-26", "11:00"],
+        ["Last chance", "2026-10-28", "11:00"],
       ],
     },
     {
@@ -418,9 +418,9 @@ describe("buildPromotionSuggestions with the offer's start and end dates", () =>
       startDate: "2026-10-25",
       endDate: "2026-10-27",
       expected: [
-        ["Launch", "2026-10-25", "12:00"],
-        ["Mid-run reminder", "2026-10-26", "12:00"],
-        ["Last chance", "2026-10-27", "12:00"],
+        ["Launch", "2026-10-25", "11:00"],
+        ["Mid-run reminder", "2026-10-26", "11:00"],
+        ["Last chance", "2026-10-27", "11:00"],
       ],
     },
     {
@@ -443,7 +443,7 @@ describe("buildPromotionSuggestions with the offer's start and end dates", () =>
     expect(new Set(keys).size).toBe(keys.length);
   });
 
-  it("puts the launch at 12:00 London on a start date either side of the clock change", () => {
+  it("puts the launch at 11:00 London on a start date either side of the clock change", () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-10-19T08:00:00.000Z")); // Mon 19 Oct, 09:00 BST
 
@@ -452,7 +452,7 @@ describe("buildPromotionSuggestions with the offer's start and end dates", () =>
       return DateTime.fromISO(`${launch.date}T${launch.time}`, { zone: TZ }).toUTC().toISO();
     };
 
-    expect(launchAt("2026-10-24")).toBe("2026-10-24T11:00:00.000Z"); // 12:00 BST
-    expect(launchAt("2026-10-25")).toBe("2026-10-25T12:00:00.000Z"); // 12:00 GMT
+    expect(launchAt("2026-10-24")).toBe("2026-10-24T10:00:00.000Z"); // 11:00 BST
+    expect(launchAt("2026-10-25")).toBe("2026-10-25T11:00:00.000Z"); // 11:00 GMT
   });
 });

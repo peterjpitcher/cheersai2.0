@@ -1,5 +1,10 @@
 export const DEFAULT_TIMEZONE = "Europe/London";
-export const DEFAULT_POST_TIME = "12:00";
+/**
+ * Build-up, offer and food posts go out at 11:00 (moved from 12:00 on the owner's
+ * approval of tasks/REVIEW-social-calendar-2026-10-17.md, decision 5): 11am posts
+ * earned about three times the clicks of noon and 7am ones in the 90 days before.
+ */
+export const DEFAULT_POST_TIME = "11:00";
 export const STORY_POST_TIME = "07:00";
 /**
  * Posts landing on the day of the event go out first thing, not late afternoon.

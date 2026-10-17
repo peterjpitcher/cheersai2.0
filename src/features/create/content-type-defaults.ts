@@ -1,6 +1,6 @@
 import { DateTime } from 'luxon';
 
-import { DEFAULT_TIMEZONE } from '@/lib/constants';
+import { DEFAULT_POST_TIME, DEFAULT_TIMEZONE } from '@/lib/constants';
 import type { ContentBriefInput } from '@/features/create/schemas/content-schemas';
 import type { ContentType } from '@/types/content';
 
@@ -35,7 +35,7 @@ export function getContentTypeDefaults(
     promotion: { offerSummary: '', endDate: '', placements: ['feed'] },
     weekly_recurring: {
       daysOfWeek: [1],
-      time: '12:00',
+      time: DEFAULT_POST_TIME,
       endDate: now.setZone(DEFAULT_TIMEZONE).plus({ weeks: 4 }).toFormat('yyyy-MM-dd'),
       placement: 'feed',
     },

@@ -35,7 +35,7 @@ describe("getContentTypeDefaults", () => {
     // from the London date is 22 November.
     expect(getContentTypeDefaults("weekly_recurring", { defaultEventVenue: "x", now })).toEqual({
       daysOfWeek: [1],
-      time: "12:00",
+      time: "11:00",
       endDate: "2026-11-22",
       placement: "feed",
     });

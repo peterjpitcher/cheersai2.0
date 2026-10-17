@@ -6,7 +6,7 @@ import { DateTime } from 'luxon';
 
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
-import { DEFAULT_TIMEZONE, WEEKLY_MAX_OCCURRENCES } from '@/lib/constants';
+import { DEFAULT_POST_TIME, DEFAULT_TIMEZONE, WEEKLY_MAX_OCCURRENCES } from '@/lib/constants';
 import { buildWeeklyMultiDaySuggestions } from '@/features/create/schedule/suggestion-utils';
 
 const DAYS = [
@@ -42,7 +42,7 @@ export function WeeklyRecurringFields({ form }: WeeklyRecurringFieldsProps): Rea
   // (a bare `?? []` allocates a new array each render, which breaks the
   // occurrenceCount useMemo below under React Compiler's memoization rules).
   const selectedDays = useMemo(() => watchedDays ?? [], [watchedDays]);
-  const time = (watch('time') as string) ?? '12:00';
+  const time = (watch('time') as string) ?? DEFAULT_POST_TIME;
   const endDate = (watch('endDate') as string) ?? '';
   const placement = (watch('placement') as 'feed' | 'story') ?? 'feed';
   const ctaLink = (watch('ctaLinks') as { facebook?: string } | undefined)?.facebook ?? '';

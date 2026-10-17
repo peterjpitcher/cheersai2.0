@@ -83,13 +83,13 @@ function buildCountdownSlots({
   for (const def of countdownDefs) {
     const day = scheduleBase.minus(def.shift);
     // The event-day post goes out first thing (EVENT_DAY_POST_TIME) so people
-    // still have time to see it and book; the days before stay at midday. It
+    // still have time to see it and book; the days before go at DEFAULT_POST_TIME. It
     // is set here, where every event suggestion is built, so it holds whether
     // or not the planner already has posts (the wizard only deconflicts when
     // it does). 07:00 exists exactly once in London on both clock-change days,
     // whose shifts happen between 01:00 and 02:00, so set() needs no GMT/BST
     // handling: on Sunday 25 October 2026 it gives 07:00 GMT, the days before
-    // stay 12:00 BST.
+    // stay 11:00 BST.
     const occurs = def.id === "event-day" ? applyEventDayTime(day) : day;
     if (occurs < minimumSlot) continue;
     slots.push({ id: def.id, label: def.label, occurs });

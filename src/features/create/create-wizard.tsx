@@ -27,7 +27,7 @@ import type {
   ScheduleSlot,
   SlotGeneratedCopy,
 } from '@/types/content';
-import { DEFAULT_TIMEZONE, WEEKLY_MAX_OCCURRENCES } from '@/lib/constants';
+import { DEFAULT_POST_TIME, DEFAULT_TIMEZONE, WEEKLY_MAX_OCCURRENCES } from '@/lib/constants';
 
 import { BriefStep } from '@/features/create/steps/brief-step';
 import {
@@ -399,7 +399,7 @@ export function CreateWizard({ initialDraftId, accountId, onClose }: CreateWizar
         const count = buildWeeklyMultiDaySuggestions({
           startDate: DateTime.now().setZone(DEFAULT_TIMEZONE).toFormat('yyyy-MM-dd'),
           daysOfWeek: (v.daysOfWeek as number[]) ?? [],
-          time: (v.time as string) ?? '12:00',
+          time: (v.time as string) ?? DEFAULT_POST_TIME,
           endDate: (v.endDate as string) ?? '',
           timezone: DEFAULT_TIMEZONE,
         }).length;
