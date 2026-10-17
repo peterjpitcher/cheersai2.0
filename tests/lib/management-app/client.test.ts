@@ -361,3 +361,43 @@ describe("management app client", () => {
     });
   });
 });
+
+describe("management event detail facts for copy", () => {
+  beforeEach(() => {
+    fetchMock.mockReset();
+    vi.stubGlobal("fetch", fetchMock);
+  });
+
+  it("reads timings, pricing, past-event notes and the schema.org FAQ", async () => {
+    fetchMock.mockResolvedValue(jsonResponse(200, {
+      success: true,
+      data: {
+        id: "evt-1",
+        name: "Tinsel & Tipples",
+        end_time: "22:00:00",
+        last_entry_time: "19:15:00",
+        ticket_price: 45,
+        online_discount_type: "fixed",
+        online_discount_value: 5,
+        online_discount_ends_at: null,
+        previous_event_summary: "Sold out last year.",
+        attendance_note: null,
+        faq: [
+          { "@type": "Question", name: "Is there an age limit?", acceptedAnswer: { "@type": "Answer", text: "Yes. Over 18s only." } },
+          { "@type": "Question", name: "", acceptedAnswer: { text: "Dropped: no question." } },
+          { "@type": "Question", name: "No answer" },
+        ],
+      },
+    }));
+
+    const detail = await getManagementEventDetail(TEST_CONFIG, "evt-1");
+
+    expect(detail.end_time).toBe("22:00:00");
+    expect(detail.last_entry_time).toBe("19:15:00");
+    expect(detail.ticket_price).toBe(45);
+    expect(detail.online_discount_type).toBe("fixed");
+    expect(detail.online_discount_value).toBe(5);
+    expect(detail.previous_event_summary).toBe("Sold out last year.");
+    expect(detail.faqs).toEqual([{ question: "Is there an age limit?", answer: "Yes. Over 18s only." }]);
+  });
+});

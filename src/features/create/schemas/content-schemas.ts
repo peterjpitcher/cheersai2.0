@@ -13,6 +13,7 @@ import { DateTime } from 'luxon';
 import { z } from 'zod';
 
 import { DEFAULT_TIMEZONE } from '@/lib/constants';
+import { EVENT_FACT_LIMITS } from '@/lib/management-app/event-facts';
 
 /** What the owner sees when an offer's dates cannot work. */
 export const OFFER_DATE_MESSAGES = {
@@ -55,6 +56,21 @@ const campaignPlacementsSchema = z
   .array(placementSchema)
   .min(1, 'Select at least one placement')
   .default(['feed']);
+
+// The limits live with the fact-sheet builder, which shortens imported text to fit.
+const eventFactSheetSchema = z.object({
+  category: z.string().max(EVENT_FACT_LIMITS.category).optional(),
+  times: z.string().max(EVENT_FACT_LIMITS.times).optional(),
+  price: z.string().max(EVENT_FACT_LIMITS.price).optional(),
+  booking: z.string().max(EVENT_FACT_LIMITS.booking).optional(),
+  host: z.string().max(EVENT_FACT_LIMITS.host).optional(),
+  highlights: z.array(z.string().max(EVENT_FACT_LIMITS.highlight)).max(EVENT_FACT_LIMITS.highlightCount).optional(),
+  pastEvent: z.string().max(EVENT_FACT_LIMITS.pastEvent).optional(),
+  faqs: z
+    .array(z.object({ question: z.string().max(EVENT_FACT_LIMITS.question), answer: z.string().max(EVENT_FACT_LIMITS.answer) }))
+    .max(EVENT_FACT_LIMITS.faqCount)
+    .optional(),
+});
 
 // ---------------------------------------------------------------------------
 // Base schema: fields shared by all content types
@@ -132,6 +148,11 @@ export const eventBriefSchema = baseContentSchema.extend({
     .optional(),
   venue: z.string().max(200).optional(),
   placements: eventPlacementsSchema,
+  /**
+   * Facts the management app holds about the event, rendered into the copy
+   * prompt as the only facts to use (tasks/SPEC-event-copy-engine.md B2).
+   */
+  facts: eventFactSheetSchema.optional(),
 });
 
 export const promotionBriefSchema = baseContentSchema

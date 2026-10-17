@@ -15,6 +15,7 @@ import {
   isArtworkProblem,
   type ArtworkUiState,
 } from '@/features/create/artwork-status';
+import type { EventFactSheet } from '@/lib/management-app/event-facts';
 
 interface EventFieldsProps {
   form: UseFormReturn<FieldValues>;
@@ -27,6 +28,38 @@ interface EventFieldsProps {
   artworkState?: ArtworkUiState | null;
   canReplaceWithArtwork?: boolean;
   onUseArtwork?: () => void;
+}
+
+/** The facts the AI will use, shown so the owner can spot anything wrong in the events system. */
+function EventFactsSummary({ facts }: { facts: EventFactSheet }): React.JSX.Element {
+  const rows: Array<[string, string]> = [
+    ['Kind of event', facts.category ?? ''],
+    ['Times', facts.times ?? ''],
+    ['Price', facts.price ?? ''],
+    ['Booking', facts.booking ?? ''],
+    ['Host', facts.host ?? ''],
+    ['Highlights', (facts.highlights ?? []).join('; ')],
+  ].filter((row): row is [string, string] => Boolean(row[1]));
+  const faqCount = facts.faqs?.length ?? 0;
+  return (
+    <div className="rounded-md border bg-muted/40 p-3 text-xs">
+      <p className="font-medium text-foreground">Facts the AI will use (from your events system)</p>
+      <dl className="mt-1 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-muted-foreground">
+        {rows.map(([label, value]) => (
+          <div key={label} className="contents">
+            <dt className="font-medium">{label}</dt>
+            <dd>{value}</dd>
+          </div>
+        ))}
+      </dl>
+      {faqCount > 0 && (
+        <p className="mt-1 text-muted-foreground">
+          Plus {faqCount} question{faqCount === 1 ? '' : 's'} and answer{faqCount === 1 ? '' : 's'} from the event page.
+        </p>
+      )}
+      <p className="mt-1 text-muted-foreground">Something wrong? Correct it in the events system, then import again.</p>
+    </div>
+  );
 }
 
 interface EventOption {
@@ -45,13 +78,16 @@ export function EventFields({
   canReplaceWithArtwork = false,
   onUseArtwork,
 }: EventFieldsProps): React.JSX.Element {
-  const { register, formState: { errors }, setValue } = form;
+  const { register, formState: { errors }, setValue, getValues } = form;
   const canImport = useAuth()?.features.managementImport === true;
   const [importOpen, setImportOpen] = useState(false);
   const [events, setEvents] = useState<EventOption[]>([]);
   const [search, setSearch] = useState('');
   const [importError, setImportError] = useState<string | null>(null);
   const [selectedLabel, setSelectedLabel] = useState<string | null>(null);
+  const [importedFacts, setImportedFacts] = useState<EventFactSheet | null>(
+    () => (getValues('facts') as EventFactSheet | undefined) ?? null,
+  );
   const [isPending, startTransition] = useTransition();
 
   function handleOpenImport(): void {
@@ -94,9 +130,18 @@ export function EventFields({
         if (fields.ctaLinks && Object.keys(fields.ctaLinks).length > 0) {
           setValue('ctaLinks', fields.ctaLinks, { shouldValidate: true });
         }
-        const briefParts = [fields.description, fields.prompt].filter(Boolean);
+        // With a fact sheet the summary line would only repeat it, so the brief
+        // keeps just the venue's own notes (tasks/SPEC-event-copy-engine.md B2).
+        const facts = fields.facts && Object.keys(fields.facts).length ? fields.facts : undefined;
+        setValue('facts', facts, { shouldValidate: true });
+        setImportedFacts(facts ?? null);
+        const briefParts = (facts ? [fields.description] : [fields.description, fields.prompt]).filter(Boolean);
         if (briefParts.length > 0) {
           setValue('prompt', briefParts.join('\n\n'), { shouldValidate: true });
+        }
+        // A starting tone for this kind of event, unless the owner already picked one.
+        if (fields.suggestedTone && (getValues('tone') ?? 'friendly_warm') === 'friendly_warm') {
+          setValue('tone', fields.suggestedTone, { shouldValidate: true });
         }
         setSelectedLabel(sourceLabel);
         setImportOpen(false);
@@ -193,6 +238,7 @@ export function EventFields({
             Imported: {selectedLabel}
           </p>
         )}
+        {importedFacts && !importOpen && <EventFactsSummary facts={importedFacts} />}
 
         {/*
           Artwork arrives seconds after the fields, often once this panel has

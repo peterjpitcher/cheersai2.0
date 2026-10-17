@@ -2,6 +2,7 @@ import { DateTime } from "luxon";
 
 import type { EventCampaignFormValues, PromotionCampaignFormValues } from "@/lib/create/schema";
 import type { ManagementEventDetail, ManagementMenuSpecialItem } from "@/lib/management-app/client";
+import { buildEventFactSheet, stripImportedFormatting, toneForCategory, type CopyTone, type EventFactSheet } from "@/lib/management-app/event-facts";
 import { DEFAULT_TIMEZONE } from "@/lib/constants";
 import type { PlatformCtaLinks } from "@/types/content";
 
@@ -25,6 +26,10 @@ interface EventPrefillResult {
     seatsRemaining?: number;
     isFree?: boolean;
     ctaLinks?: PlatformCtaLinks;
+    /** What the management app knows about the event, for the copy prompt. */
+    facts?: EventFactSheet;
+    /** A starting tone for this kind of event, when the category suggests one. */
+    suggestedTone?: CopyTone;
   };
   sourceLabel: string;
 }
@@ -44,7 +49,9 @@ export function mapManagementEventToEventCampaignPrefill(
   const name = detail.name?.trim() || "Imported event";
   const startDate = resolveEventStartDate(detail) ?? DateTime.now().toISODate() ?? "";
   const startTime = resolveEventStartTime(detail) ?? "19:00";
-  const description = detail.brief?.trim() || undefined;
+  // Imported text arrives with Markdown and Windows line endings, which social
+  // copy would show literally (and the model echoes the Markdown headline).
+  const description = stripImportedFormatting(detail.brief ?? "") || undefined;
   const facebookCtaUrl =
     detail.ctaLinks?.facebook?.trim() ||
     detail.cta_links?.facebook?.trim() ||
@@ -124,6 +131,8 @@ export function mapManagementEventToEventCampaignPrefill(
         ...(facebookCtaUrl ? { facebook: facebookCtaUrl } : {}),
         ...(linkInBioUrl ? { instagram: linkInBioUrl } : {}),
       },
+      facts: buildEventFactSheet({ ...detail, categoryName: eventCategoryName ?? null }),
+      suggestedTone: toneForCategory(eventCategoryName ?? eventCategorySlug) ?? undefined,
       prompt: promptParts.join(" "),
     },
     sourceLabel: `${name} (${startDate}${startTime ? ` ${startTime}` : ""})`,
