@@ -643,6 +643,16 @@ describe('house-style check (findCopyIssues)', () => {
   it('allows one real question about the event', () => {
     expect(findCopyIssues(copy('Two rounds of 70s disco tonight. Which song gets you dancing every time?'))).toEqual([]);
   });
+
+  it('counts questions that an emoji follows straight away', () => {
+    expect(findCopyIssues(copy('Two rounds of 70s disco tonight. Which song?🎶 Which outfit?🕺')).join(' ')).toMatch(/at most one question/);
+  });
+
+  it('checks only the platforms the brief asked for', () => {
+    const issues = findCopyIssues(copy('Two rounds of 70s disco tonight.', 'Get ready for a fun, lively night!'), ['facebook']);
+    expect(issues).toEqual([]);
+    expect(findCopyIssues(copy('Two rounds of 70s disco tonight.', 'Get ready for a fun, lively night!')).join(' ')).toMatch(/^Instagram/);
+  });
 });
 
 describe('postprocessCopy house-style tidying', () => {
@@ -656,5 +666,14 @@ describe('postprocessCopy house-style tidying', () => {
       facebook: { body: 'A Music Bingo night like no other. Don your best sequins for a themed extravaganza.', cta_text: null, hashtags: [] },
     }), makeConfig({ bannedPhrases: [] }));
     expect(result.copy.facebook.body).toBe('A Music Bingo night. Wear your best sequins for a themed night.');
+  });
+});
+
+describe('official names', () => {
+  it('keeps a supplied event name the cliché clean-up would otherwise change', () => {
+    const result = postprocessCopy(makeRawCopy({
+      facebook: { body: 'The Christmas Extravaganza is on Friday. A festive extravaganza for all.', cta_text: null, hashtags: [] },
+    }), makeConfig({ bannedPhrases: [], protectedTerms: ['Christmas Extravaganza'] }));
+    expect(result.copy.facebook.body).toBe('The Christmas Extravaganza is on Friday. A festive night for all.');
   });
 });

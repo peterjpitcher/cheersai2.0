@@ -35,7 +35,7 @@ import type {
   ScheduleSlot,
   SlotGeneratedCopy,
 } from '@/types/content';
-import type { PostprocessResult } from '@/lib/ai/postprocess';
+import { toPlatformCopy } from '@/lib/ai/platform-copy';
 import { BannerOverlay } from '@/features/planner/banner-overlay';
 import { bannerConfigResolver, FIXED_BANNER_POSITION, FIXED_BANNER_BG, FIXED_BANNER_TEXT } from '@/lib/banner/config';
 import type { AccountBannerDefaults, ResolvedConfig } from '@/lib/banner/config';
@@ -82,26 +82,6 @@ function limitConcurrency<T>(tasks: (() => Promise<T>)[], concurrency: number): 
 /** Convert a ScheduleSlot to an ISO timestamp in Europe/London */
 function slotToIso(slot: ScheduleSlot): string {
   return DateTime.fromISO(`${slot.date}T${slot.time}`, { zone: DEFAULT_TIMEZONE }).toISO()!;
-}
-
-/**
- * Convert snake_case AI response to camelCase PlatformCopy.
- * The AI action returns AiGenerationResponse (snake_case) but the wizard
- * state uses PlatformCopy (camelCase).
- */
-function toPlatformCopy(raw: PostprocessResult['copy']): PlatformCopy {
-  return {
-    facebook: {
-      body: raw.facebook.body,
-      ctaText: raw.facebook.cta_text ?? undefined,
-      hashtags: raw.facebook.hashtags ?? undefined,
-    },
-    instagram: {
-      body: raw.instagram.body,
-      hashtags: raw.instagram.hashtags ?? undefined,
-      linkInBioLine: raw.instagram.link_in_bio_line ?? undefined,
-    },
-  };
 }
 
 function createEmptyStoryCopy(): PlatformCopy {

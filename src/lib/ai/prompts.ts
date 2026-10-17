@@ -1,6 +1,7 @@
 import { DateTime } from "luxon";
 
 import { buildTemporalInstructions } from "@/lib/ai/temporal-instructions";
+import { renderCampaignPlan, type CampaignSlotPlan } from "@/lib/ai/slot-jobs";
 import { BANNED_PHRASES, PREFERRED_PHRASES, TONE_PROFILE, type BrandVoiceConfig, buildVoiceInstructions } from "@/lib/ai/voice";
 import { DEFAULT_TIMEZONE } from "@/lib/constants";
 import { calendarDayGap, splitRelativeWording } from "@/lib/create/temporal-context";
@@ -642,6 +643,8 @@ export function buildUserPrompt(
       aspectClass?: 'square' | 'story' | 'landscape';
     }>;
     slotLabel?: string; // e.g. "Event day", "2 weeks out", "Launch", "Week 3"
+    /** This post's job and the earlier posts of its campaign (B3). */
+    campaign?: CampaignSlotPlan;
   },
 ): string {
   const sections: string[] = [];
@@ -748,6 +751,10 @@ export function buildUserPrompt(
     if (temporal) {
       sections.push(temporal);
     }
+  }
+
+  if (context?.campaign) {
+    sections.push(renderCampaignPlan(context.campaign));
   }
 
   // Media metadata from the create wizard (selected before generation)

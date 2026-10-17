@@ -10,17 +10,10 @@
 import { unstable_rethrow } from 'next/navigation';
 
 import type { ContentBrief } from '@/features/create/schemas/content-schemas';
-import { AI_OWNER_MESSAGES, generatePlatformCopy } from '@/lib/ai/generate';
+import { AI_OWNER_MESSAGES } from '@/lib/ai/generate';
 import type { PostprocessResult } from '@/lib/ai/postprocess';
-import { findCopyIssues, postprocessCopy } from '@/lib/ai/postprocess';
-import { INSTAGRAM_HASHTAG_LIMIT, buildSystemPrompt, buildUserPrompt } from '@/lib/ai/prompts';
 import { resolveCopyModel } from '@/lib/ai/models';
-import { getTemperature } from '@/lib/ai/temperature';
-import { BANNED_PHRASES, type BrandVoiceConfig } from '@/lib/ai/voice';
-import { requireAuthContext } from '@/lib/auth/server';
-import { buildGenerationTemporalContext } from '@/lib/create/temporal-context';
-import type { GenerationTemporalContext } from '@/lib/create/temporal-context';
-import type { BrandProfile } from '@/lib/settings/data';
+import { loadBrandProfile, loadMediaMetadata, writeCopy } from '@/lib/ai/write-copy';
 import { requireEntitledContext } from '@/lib/billing/entitlement-server';
 import { ownerMessage } from '@/lib/errors/owner-message';
 import { createLogger } from '@/lib/logging';
@@ -44,80 +37,14 @@ function generationFailureMessage(error: unknown, fallback: string): string {
  * Optional media + schedule context passed from the create wizard.
  *
  * Only mediaIds, scheduledAt and slotLabel are honoured. Every temporal fact is
- * derived here on the server from the brief plus scheduledAt, so one clock and
- * one implementation feed the prompt, the post-processor and the stored
- * generation params. The wizard no longer computes them in the browser.
+ * derived on the server (writeCopy) from the brief plus scheduledAt, so one
+ * clock and one implementation feed the prompt, the post-processor and the
+ * stored generation params. The wizard no longer computes them in the browser.
  */
 interface GenerationContextInput {
   mediaIds?: string[];
   scheduledAt?: string | null;
   slotLabel?: string; // e.g. "Event day", "2 weeks out", "Launch", "Week 3"
-}
-
-/**
- * Derive every temporal fact server-side.
- *
- * An absent scheduledAt means "publish now" and resolves against the server
- * clock. An unparseable scheduledAt yields no temporal claims at all rather
- * than being mistaken for "now".
- */
-function resolveTemporalContext(
-  brief: ContentBrief,
-  context?: GenerationContextInput,
-): GenerationTemporalContext {
-  return buildGenerationTemporalContext({
-    contentType: brief.contentType,
-    brief: brief as unknown as Record<string, unknown>,
-    scheduledAt: context?.scheduledAt,
-  });
-}
-
-// Default post-processing limits per platform
-const MAX_HASHTAGS: Record<string, number> = { facebook: 5, instagram: INSTAGRAM_HASHTAG_LIMIT };
-const MAX_EMOJIS: Record<string, number> = { facebook: 3, instagram: 3 };
-const MAX_WORDS: Record<string, number> = { facebook: 300, instagram: 150 };
-
-/**
- * Write, tidy and check the copy. When the first draft breaks the house style
- * (a stock opening, repeated filler, more than one question or an empty one),
- * the model rewrites once with the problems listed; anything still wrong after
- * that is returned as a warning for the owner rather than blocking the post
- * (tasks/SPEC-event-copy-engine.md B1).
- */
-async function writeCheckedCopy({
-  systemPrompt,
-  userPrompt,
-  temperature,
-  accountId,
-  postprocessConfig,
-}: {
-  systemPrompt: string;
-  userPrompt: string;
-  temperature: number;
-  accountId: string;
-  postprocessConfig: Parameters<typeof postprocessCopy>[1];
-}): Promise<PostprocessResult> {
-  const first = postprocessCopy(
-    await generatePlatformCopy({ systemPrompt, userPrompt, temperature, usageAccountId: accountId }),
-    postprocessConfig,
-  );
-  const issues = findCopyIssues(first.copy);
-  if (!issues.length) return first;
-
-  const rewritten = postprocessCopy(
-    await generatePlatformCopy({
-      systemPrompt,
-      userPrompt: `${userPrompt}\n\nYour first draft broke these house-style rules. Write it again, fixing every one:\n${issues.map((issue) => `- ${issue}`).join('\n')}`,
-      temperature,
-      usageAccountId: accountId,
-    }),
-    postprocessConfig,
-  );
-  const remaining = findCopyIssues(rewritten.copy);
-  return {
-    ...rewritten,
-    warnings: [...rewritten.warnings, ...remaining.map((issue) => `House style: ${issue}`)],
-  };
 }
 
 /**
@@ -140,48 +67,20 @@ export async function generateContent(
     const { supabase, accountId } = await requireEntitledContext('create');
 
     // Load the configured brand voice (key phrases, banned phrases, signatures,
-    // tone sliders) from the brand_profile table — the same store the
-    // Settings → Brand Voice form writes to.
+    // tone sliders) from the brand_profile table, the same store the
+    // Settings > Brand Voice form writes to.
     const brand = await loadBrandProfile(supabase, accountId);
-
-    const voiceConfig: BrandVoiceConfig = {
-      tone: brief.tone,
-      style: null,
-      defaultCta: null,
-      platformSignatures: brandSignatures(brand),
-    };
 
     // Load media metadata for context-aware generation
     const mediaMetadata = await loadMediaMetadata(supabase, accountId, context?.mediaIds);
 
-    const systemPrompt = buildSystemPrompt(brief.contentType, brief.tone, voiceConfig, brand, {
-      keyPhraseSeed: keyPhraseSeed(context),
-    });
-    const temporal = resolveTemporalContext(brief, context);
-    const userPrompt = buildUserPrompt(brief, undefined, {
-      scheduledAt: context?.scheduledAt,
-      media: mediaMetadata.length > 0 ? mediaMetadata : undefined,
-      slotLabel: context?.slotLabel,
-      ...temporal,
-    });
-    const temperature = getTemperature(brief.contentType);
-
-    const processed = await writeCheckedCopy({
-      systemPrompt,
-      userPrompt,
-      temperature,
+    const { processed, temporal, temperature } = await writeCopy({
+      brief,
+      brand,
       accountId,
-      postprocessConfig: {
-        maxHashtags: MAX_HASHTAGS,
-        maxEmojis: MAX_EMOJIS,
-        maxWords: MAX_WORDS,
-        bannedPhrases: [...BANNED_PHRASES, ...brand.bannedPhrases.map((p) => p.trim()).filter(Boolean)],
-        platformSignatures: voiceConfig.platformSignatures,
-        defaultCta: voiceConfig.defaultCta,
-        ctaLinks: brief.ctaLinks ?? null,
-        eventStartIso: temporal.eventStart ?? null,
-        allowedRelativeWording: temporal.allowedRelativeWording,
-      },
+      scheduledAt: context?.scheduledAt,
+      slotLabel: context?.slotLabel,
+      media: mediaMetadata,
     });
 
     // Store generation params and draft copy on content_items
@@ -228,47 +127,20 @@ export async function regenerateWithModifier(
   try {
     const { supabase, accountId } = await requireEntitledContext('create');
 
-    // Load the configured brand voice — see generateContent for details.
+    // Load the configured brand voice, as generateContent does.
     const brand = await loadBrandProfile(supabase, accountId);
-
-    const voiceConfig: BrandVoiceConfig = {
-      tone: brief.tone,
-      style: null,
-      defaultCta: null,
-      platformSignatures: brandSignatures(brand),
-    };
 
     // Load media metadata for context-aware generation
     const mediaMetadata = await loadMediaMetadata(supabase, accountId, context?.mediaIds);
 
-    const systemPrompt = buildSystemPrompt(brief.contentType, brief.tone, voiceConfig, brand, {
-      keyPhraseSeed: keyPhraseSeed(context),
-    });
-    const temporal = resolveTemporalContext(brief, context);
-    const userPrompt = buildUserPrompt(brief, modifier, {
-      scheduledAt: context?.scheduledAt,
-      media: mediaMetadata.length > 0 ? mediaMetadata : undefined,
-      slotLabel: context?.slotLabel,
-      ...temporal,
-    });
-    const temperature = getTemperature(brief.contentType);
-
-    const processed = await writeCheckedCopy({
-      systemPrompt,
-      userPrompt,
-      temperature,
+    const { processed, temporal, temperature } = await writeCopy({
+      brief,
+      brand,
       accountId,
-      postprocessConfig: {
-        maxHashtags: MAX_HASHTAGS,
-        maxEmojis: MAX_EMOJIS,
-        maxWords: MAX_WORDS,
-        bannedPhrases: [...BANNED_PHRASES, ...brand.bannedPhrases.map((p) => p.trim()).filter(Boolean)],
-        platformSignatures: voiceConfig.platformSignatures,
-        defaultCta: voiceConfig.defaultCta,
-        ctaLinks: brief.ctaLinks ?? null,
-        eventStartIso: temporal.eventStart ?? null,
-        allowedRelativeWording: temporal.allowedRelativeWording,
-      },
+      scheduledAt: context?.scheduledAt,
+      slotLabel: context?.slotLabel,
+      media: mediaMetadata,
+      modifier,
     });
 
     // Store generation params with modifier
@@ -299,128 +171,4 @@ export async function regenerateWithModifier(
     logger.error('regenerateWithModifier failed', toLoggableError(error), { contentId });
     return { error: generationFailureMessage(error, 'We could not rewrite the copy just now. Please try again.') };
   }
-}
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-/** Rotates the saved key phrases between a campaign's posts, stable per slot. */
-function keyPhraseSeed(context?: GenerationContextInput): string {
-  return `${context?.slotLabel ?? ''}|${context?.scheduledAt ?? ''}`;
-}
-
-/** Load the brand voice profile, falling back to safe defaults if unset or missing. */
-async function loadBrandProfile(
-  supabase: Awaited<ReturnType<typeof requireAuthContext>>['supabase'],
-  accountId: string,
-): Promise<BrandProfile> {
-  const defaults: BrandProfile = {
-    toneFormal: 0.5,
-    tonePlayful: 0.5,
-    keyPhrases: [],
-    bannedTopics: [],
-    bannedPhrases: [],
-    defaultHashtags: [],
-    defaultEmojis: [],
-    instagramSignature: undefined,
-    facebookSignature: undefined,
-  };
-
-  try {
-    const { data, error } = await supabase
-      .from('brand_profile')
-      .select(
-        'tone_formal, tone_playful, key_phrases, banned_topics, banned_phrases, default_hashtags, default_emojis, instagram_signature, facebook_signature, business_type, business_description',
-      )
-      .eq('account_id', accountId)
-      .maybeSingle<{
-        tone_formal: number | null;
-        tone_playful: number | null;
-        key_phrases: string[] | null;
-        banned_topics: string[] | null;
-        banned_phrases: string[] | null;
-        default_hashtags: string[] | null;
-        default_emojis: string[] | null;
-        instagram_signature: string | null;
-        facebook_signature: string | null;
-        business_type: string | null;
-        business_description: string | null;
-      }>();
-
-    if (error || !data) return defaults;
-
-    return {
-      toneFormal: data.tone_formal ?? defaults.toneFormal,
-      tonePlayful: data.tone_playful ?? defaults.tonePlayful,
-      keyPhrases: data.key_phrases ?? [],
-      bannedTopics: data.banned_topics ?? [],
-      bannedPhrases: data.banned_phrases ?? [],
-      defaultHashtags: data.default_hashtags ?? [],
-      defaultEmojis: data.default_emojis ?? [],
-      instagramSignature: data.instagram_signature ?? undefined,
-      facebookSignature: data.facebook_signature ?? undefined,
-      businessType: data.business_type ?? undefined,
-      businessDescription: data.business_description ?? undefined,
-    };
-  } catch {
-    return defaults;
-  }
-}
-
-/** Build the per-platform signature map from the brand profile (Facebook/Instagram only). */
-function brandSignatures(brand: BrandProfile): Record<string, string> {
-  const signatures: Record<string, string> = {};
-  if (brand.facebookSignature?.trim()) signatures.facebook = brand.facebookSignature.trim();
-  if (brand.instagramSignature?.trim()) signatures.instagram = brand.instagramSignature.trim();
-  return signatures;
-}
-
-/** Load media asset metadata from DB, preserving the caller's selected order. */
-async function loadMediaMetadata(
-  supabase: Awaited<ReturnType<typeof requireAuthContext>>['supabase'],
-  accountId: string,
-  mediaIds?: string[],
-): Promise<Array<{
-  id: string;
-  fileName: string;
-  mediaType: 'image' | 'video';
-  tags: string[];
-  aspectClass?: 'square' | 'story' | 'landscape';
-}>> {
-  if (!mediaIds?.length) return [];
-
-  const { data: mediaAssets } = await supabase
-    .from('media_assets')
-    .select('id, file_name, media_type, tags, width, height')
-    .in('id', mediaIds)
-    .eq('account_id', accountId);
-
-  if (!mediaAssets) return [];
-
-  // Preserve the caller's selected order (important for carousel position)
-  const assetMap = new Map(mediaAssets.map(a => [a.id, a]));
-  return mediaIds
-    .map(id => assetMap.get(id))
-    .filter(Boolean)
-    .map(a => ({
-      id: a!.id,
-      fileName: a!.file_name ?? 'unnamed',
-      mediaType: (a!.media_type ?? 'image') as 'image' | 'video',
-      tags: Array.isArray(a!.tags) ? a!.tags : [],
-      aspectClass: deriveAspectClass(a!.width, a!.height),
-    }));
-}
-
-/** Classify an image's aspect ratio for prompt context. */
-function deriveAspectClass(
-  width: number | null,
-  height: number | null,
-): 'square' | 'story' | 'landscape' | undefined {
-  if (!width || !height) return undefined;
-  const ratio = width / height;
-  if (ratio >= 0.95 && ratio <= 1.05) return 'square';
-  if (ratio < 0.75) return 'story';
-  if (ratio > 1.3) return 'landscape';
-  return undefined;
 }

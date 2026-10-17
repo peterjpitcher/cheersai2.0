@@ -1,6 +1,7 @@
 import { DateTime } from "luxon";
 
 import { scrubBannedPhrases } from "@/lib/ai/voice";
+import { questionsIn } from "@/lib/ai/slot-jobs";
 import { DEFAULT_TIMEZONE } from "@/lib/constants";
 import { formatEventDateLong } from "@/lib/utils/date";
 import { collapseWhitespacePreservingBreaks, stripMarkdown } from "@/lib/utils/markdown";
@@ -358,6 +359,11 @@ export interface PostprocessConfig {
   eventStartIso?: string | null;
   /** Relative wording that is true for this post, e.g. ["this Saturday"]. */
   allowedRelativeWording?: string[];
+  /**
+   * Names the owner supplied (the event or post title), kept exactly as given:
+   * the cliché clean-up must not turn "Christmas Extravaganza" into "Christmas night".
+   */
+  protectedTerms?: readonly string[];
 }
 
 /**
@@ -540,9 +546,16 @@ const EMPTY_QUESTION =
  * when it rewrites. Empty when the copy passes. Applies to both platforms'
  * bodies; the composer adds booking lines and hashtags separately.
  */
-export function findCopyIssues(copy: AiGenerationResponse): string[] {
+export function findCopyIssues(
+  copy: AiGenerationResponse,
+  platforms: readonly string[] = ["facebook", "instagram"],
+): string[] {
   const issues = new Set<string>();
-  for (const [platform, body] of [["Facebook", copy.facebook.body], ["Instagram", copy.instagram.body]] as const) {
+  const bodies = [["facebook", "Facebook", copy.facebook.body], ["instagram", "Instagram", copy.instagram.body]] as const;
+  // Only the platforms the brief asked for: the model always returns both, and
+  // a problem in copy nobody will see must not cost a rewrite or a warning.
+  for (const [key, platform, body] of bodies) {
+    if (!platforms.includes(key)) continue;
     const text = normaliseApostrophes(body ?? "").trim();
     if (!text) continue;
     const firstLine = text.split("\n").find((line) => line.trim()) ?? "";
@@ -553,13 +566,32 @@ export function findCopyIssues(copy: AiGenerationResponse): string[] {
     if (joinUs > 1) issues.add(`${platform}: say "join us" at most once.`);
     const fillers = text.match(FILLER_WORD) ?? [];
     if (fillers.length > 1) issues.add(`${platform}: cut filler words (${[...new Set(fillers.map((word) => word.toLowerCase()))].join(", ")}); use the specific detail instead.`);
-    const questions = text.split(/(?<=[.!?])\s+/).filter((sentence) => sentence.trim().endsWith("?"));
+    const questions = questionsIn(text);
     if (questions.length > 1) issues.add(`${platform}: ask at most one question.`);
     if (questions.some((question) => EMPTY_QUESTION.test(question)) || EMPTY_QUESTION.test(text)) {
       issues.add(`${platform}: drop questions like "Who's coming?" and any request to tag, share or comment; ask only about the event itself, or ask nothing.`);
     }
   }
   return [...issues];
+}
+
+/**
+ * Swap each protected name for a placeholder no phrase rule can match, and
+ * give back a function that puts the names back afterwards.
+ */
+function shieldTerms(text: string, terms: readonly string[] | undefined): { text: string; restore: (value: string) => string } {
+  const names = [...new Set((terms ?? []).map((term) => term.trim()).filter((term) => term.length > 2))]
+    .sort((a, b) => b.length - a.length);
+  if (!names.length) return { text, restore: (value) => value };
+  let shielded = text;
+  names.forEach((name, index) => {
+    const pattern = new RegExp(name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi");
+    shielded = shielded.replace(pattern, `\uE000${index}\uE001`);
+  });
+  return {
+    text: shielded,
+    restore: (value) => value.replace(/\uE000(\d+)\uE001/g, (_match, index: string) => names[Number(index)] ?? ""),
+  };
 }
 
 /**
@@ -586,8 +618,10 @@ function processPlatformBody(
   // intact), then drop the whole containing sentence for any banned phrase
   // left over, deleting just the phrase produces broken grammar ("Bring your
   // friends and family for. Book now!").
-  output = scrubBannedPhrases(output).value;
+  const shielded = shieldTerms(output, config.protectedTerms);
+  output = scrubBannedPhrases(shielded.text).value;
   output = removeBannedPhraseSentences(output, config.bannedPhrases);
+  output = shielded.restore(output);
 
   // Collapse stray spaces from removals while preserving paragraph breaks
   output = collapseWhitespacePreservingBreaks(output);
