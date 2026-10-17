@@ -344,15 +344,20 @@ export async function scheduleContentBatch(
     // A tool adding posts to a campaign that already exists: it must be this account's.
     const { data: existingCampaign, error: existingCampaignError } = await supabase
       .from('campaigns')
-      .select('id')
+      .select('id, campaign_type')
       .eq('id', existingCampaignId)
       .eq('account_id', accountId)
-      .maybeSingle();
+      .maybeSingle<{ id: string; campaign_type: string | null }>();
     if (existingCampaignError) {
       logger.error('scheduleContentBatch campaign lookup failed', toLoggableError(existingCampaignError), { accountId });
       return { error: SCHEDULE_MESSAGES.scheduleFailed };
     }
     if (!existingCampaign) return { error: 'That campaign no longer exists.' };
+    // The planner reads a post's timing and date labels from its campaign's
+    // type, so event posts may only join an event campaign, and so on.
+    if (existingCampaign.campaign_type !== mapCampaignType(contentType)) {
+      return { error: 'These posts are a different kind from that campaign, so they were not added to it.' };
+    }
     campaignId = existingCampaignId;
   } else if (needsCampaign) {
     const campaignName =

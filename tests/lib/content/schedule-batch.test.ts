@@ -91,8 +91,9 @@ const slot = {
 const library = {
   media_assets: [{ id: 'art-1', account_id: 'acc-1', media_type: 'image', derived_variants: { story: 'derived/art-1/story.jpg' } }],
   campaigns: [
-    { id: 'camp-own', account_id: 'acc-1' },
-    { id: 'camp-other', account_id: 'acc-2' },
+    { id: 'camp-own', account_id: 'acc-1', campaign_type: 'event' },
+    { id: 'camp-weekly', account_id: 'acc-1', campaign_type: 'weekly' },
+    { id: 'camp-other', account_id: 'acc-2', campaign_type: 'event' },
   ],
 };
 
@@ -135,6 +136,22 @@ describe('scheduleContentBatch with an existing campaign', () => {
     });
 
     expect(result).toEqual({ error: 'That campaign no longer exists.' });
+    expect(writes.filter((write) => write.op !== 'select')).toEqual([]);
+  });
+
+  it('refuses a campaign of another kind before writing anything', async () => {
+    const { db, writes } = fakeDb(library);
+    const result = await scheduleContentBatch(db, 'acc-1', {
+      contentType: 'event',
+      brief: eventBrief,
+      selectedMediaIds: [],
+      slotCopies: [slot],
+      platforms: ['facebook'],
+      mode: 'schedule',
+      existingCampaignId: 'camp-weekly',
+    });
+
+    expect(result).toEqual({ error: 'These posts are a different kind from that campaign, so they were not added to it.' });
     expect(writes.filter((write) => write.op !== 'select')).toEqual([]);
   });
 
