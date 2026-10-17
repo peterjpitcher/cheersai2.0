@@ -93,3 +93,22 @@ describe('applyChannelRules and lintContent: em dash house style', () => {
     expect(result.issues.map((entry) => entry.code)).not.toContain('em_dash');
   });
 });
+
+describe('applyChannelRules: paragraphs and the booking link', () => {
+  // Regression: whitespace normalising merged every paragraph into one run-on
+  // line, and the final full stop was added straight after the booking link.
+  it('keeps each paragraph on its own line and adds no full stop after the booking link', () => {
+    const result = applyChannelRules({
+      body: 'Kick-off 8:10pm.\n\nWe usually close at 10pm.\n\nKitchen times: 12pm to 9pm.',
+      platform: 'facebook',
+      placement: 'feed',
+      context: { ctaUrl: 'https://www.the-anchor.pub/live-sport/nations-championship#fixture-1', ctaLabel: 'Book a table' },
+    });
+    expect(result.body.split('\n')).toEqual([
+      'Kick-off 8:10pm.',
+      'We usually close at 10pm.',
+      'Kitchen times: 12pm to 9pm.',
+      'Book a table: https://www.the-anchor.pub/live-sport/nations-championship#fixture-1',
+    ]);
+  });
+});

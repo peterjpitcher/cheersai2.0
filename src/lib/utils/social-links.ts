@@ -35,10 +35,16 @@ export function containsDirectLink(value: string): boolean {
 }
 
 export function stripDirectLinks(value: string): string {
+  // Collapse spaces left by a removed link, but never line breaks: collapsing
+  // all whitespace merged every paragraph of a multi-line post into one line
+  // ("...may be missed Book a table...").
   return value
     .replace(DIRECT_LINK_WITH_LEADING_PREPOSITION, "")
     .replace(/[ \t]+([,.;:!?])/g, "$1")
-    .replace(/\s{2,}/g, " ")
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n[ \t]+/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
     .trim();
 }
 

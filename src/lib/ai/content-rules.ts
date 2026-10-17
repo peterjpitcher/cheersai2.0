@@ -549,12 +549,15 @@ export function removeTrailingEllipses(value: string): string {
 }
 
 function normalizePunctuation(value: string) {
+  // Spaces collapse; line breaks survive. Collapsing all whitespace merged every
+  // paragraph into one run-on line before the booking line was appended.
   return value
     .replace(/!{2,}/g, "!")
     .replace(/\?{2,}/g, "?")
     .replace(/\.{2,}/g, ".")
     .replace(/,\./g, ".")
-    .replace(/\s{2,}/g, " ")
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
     .trim();
 }
 
@@ -680,7 +683,9 @@ function ensureFinalPunctuation(value: string) {
   const lines = value.split("\n").map((line) => line.trim()).filter(Boolean);
   if (!lines.length) return value;
   const last = lines.length - 1;
-  if (lines[last].startsWith("#")) {
+  // A closing hashtag line or link is left alone: a full stop after a link
+  // ("...#fixture-123.") becomes part of the address on some platforms.
+  if (lines[last].startsWith("#") || /https?:\/\/\S+$/i.test(lines[last])) {
     return lines.join("\n");
   }
   if (!/[.!?]$/.test(lines[last])) {
