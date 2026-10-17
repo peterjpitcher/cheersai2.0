@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { AiGenerationResponse } from './schemas';
 import {
   containsEmDash,
+  findCopyIssues,
   postprocessCopy,
   removeBannedPhraseSentences,
   replaceEmDashes,
@@ -603,5 +604,57 @@ describe('postprocessCopy em dash handling', () => {
     const result = postprocessCopy(makeRawCopy(), config);
     expect(result.copy.facebook.body).not.toContain(dash);
     expect(result.copy.facebook.body).toContain('-- The Anchor Team');
+  });
+});
+
+describe('house-style check (findCopyIssues)', () => {
+  const copy = (facebook: string, instagram = 'Two rounds of 70s disco with Jo on the mic.') => makeRawCopy({
+    facebook: { body: facebook, cta_text: null, hashtags: [] },
+    instagram: { body: instagram, hashtags: [], link_in_bio_line: null },
+  });
+
+  it('passes copy that leads with a specific detail', () => {
+    expect(findCopyIssues(copy('Christmas number ones and cheesy crackers. Nikki hosts Sleigh My Name on Friday 11th December.'))).toEqual([]);
+  });
+
+  it.each([
+    'Get ready for a huge themed night!',
+    "Tonight's the night for Sequins & Showstoppers!",
+    'Join us for our Quiz Night on Wednesday.',
+    "Don’t miss our Cash Bingo this Friday.",
+    'Ready for a fun night out?',
+  ])('flags a stock opening: %s', (opening) => {
+    expect(findCopyIssues(copy(`${opening} Kick-off 7pm.`)).join(' ')).toMatch(/stock opening/);
+  });
+
+  it('flags repeated filler, a second "join us", two questions and empty questions', () => {
+    const issues = findCopyIssues(copy('Two rounds tonight. Join us for a fun, lively night. Join us early. Fancy it? Who’s coming?'));
+    expect(issues.join(' ')).toMatch(/at most once/);
+    expect(issues.join(' ')).toMatch(/filler words \(fun, lively\)/);
+    expect(issues.join(' ')).toMatch(/at most one question/);
+    expect(issues.join(' ')).toMatch(/Who's coming/);
+  });
+
+  it('flags asking people to tag or share, but not ordinary sharing', () => {
+    expect(findCopyIssues(copy('Two rounds tonight. Tag a mate who loves a singalong.')).join(' ')).toMatch(/tag, share or comment/);
+    expect(findCopyIssues(copy('Sharing platters for the table, served from 5pm.'))).toEqual([]);
+  });
+
+  it('allows one real question about the event', () => {
+    expect(findCopyIssues(copy('Two rounds of 70s disco tonight. Which song gets you dancing every time?'))).toEqual([]);
+  });
+});
+
+describe('postprocessCopy house-style tidying', () => {
+  it('writes times in house style on the live path', () => {
+    const result = postprocessCopy(makeRawCopy({ facebook: { body: 'Doors at 6:30 PM, bingo from 7:00pm.', cta_text: null, hashtags: [] } }), makeConfig());
+    expect(result.copy.facebook.body).toBe('Doors at 6:30pm, bingo from 7pm.');
+  });
+
+  it('replaces the clichés found in the October review', () => {
+    const result = postprocessCopy(makeRawCopy({
+      facebook: { body: 'A Music Bingo night like no other. Don your best sequins for a themed extravaganza.', cta_text: null, hashtags: [] },
+    }), makeConfig({ bannedPhrases: [] }));
+    expect(result.copy.facebook.body).toBe('A Music Bingo night. Wear your best sequins for a themed night.');
   });
 });

@@ -522,6 +522,46 @@ export function postprocessCopy(
   };
 }
 
+// ---------------------------------------------------------------------------
+// House-style check (tasks/SPEC-event-copy-engine.md B1)
+// ---------------------------------------------------------------------------
+
+/** Openings that tell the reader nothing about the event. */
+const FORMULAIC_OPENER =
+  /^\W*(?:get ready|join us|don'?t miss|tonight'?s the night|tonight is the night|calling all|are you ready|ready for|it'?s time|mark your calendars?|save the date|guess what)\b/i;
+/** Words that fill space instead of saying something specific. */
+const FILLER_WORD = /\b(?:fun|fun-filled|lively|exciting|amazing|fantastic|perfect|incredible)\b/gi;
+/** Questions that ask for nothing real, or ask people to tag, share or comment. */
+const EMPTY_QUESTION =
+  /\bwho(?:'s| is| are you)? (?:coming|joining|ready|excited|in|bringing)\b|\btag (?:a|your) (?:mates?|friends?|pals?|partner)\b|\bshare this(?: post)?\b|\bcomment below\b/i;
+
+/**
+ * House-style problems in finished copy, as instructions the model can act on
+ * when it rewrites. Empty when the copy passes. Applies to both platforms'
+ * bodies; the composer adds booking lines and hashtags separately.
+ */
+export function findCopyIssues(copy: AiGenerationResponse): string[] {
+  const issues = new Set<string>();
+  for (const [platform, body] of [["Facebook", copy.facebook.body], ["Instagram", copy.instagram.body]] as const) {
+    const text = normaliseApostrophes(body ?? "").trim();
+    if (!text) continue;
+    const firstLine = text.split("\n").find((line) => line.trim()) ?? "";
+    if (FORMULAIC_OPENER.test(firstLine)) {
+      issues.add(`${platform}: open with the most interesting specific detail, not a stock opening such as "${firstLine.split(/[.!?]/)[0].trim().slice(0, 40)}".`);
+    }
+    const joinUs = text.match(/\bjoin us\b/gi)?.length ?? 0;
+    if (joinUs > 1) issues.add(`${platform}: say "join us" at most once.`);
+    const fillers = text.match(FILLER_WORD) ?? [];
+    if (fillers.length > 1) issues.add(`${platform}: cut filler words (${[...new Set(fillers.map((word) => word.toLowerCase()))].join(", ")}); use the specific detail instead.`);
+    const questions = text.split(/(?<=[.!?])\s+/).filter((sentence) => sentence.trim().endsWith("?"));
+    if (questions.length > 1) issues.add(`${platform}: ask at most one question.`);
+    if (questions.some((question) => EMPTY_QUESTION.test(question)) || EMPTY_QUESTION.test(text)) {
+      issues.add(`${platform}: drop questions like "Who's coming?" and any request to tag, share or comment; ask only about the event itself, or ask nothing.`);
+    }
+  }
+  return [...issues];
+}
+
 /**
  * Process a single platform body: strip banned phrases, clamp emojis,
  * enforce word limit, and append signature.
@@ -538,6 +578,9 @@ function processPlatformBody(
   // House style bans the em dash. Swap it for the mark a person would have used
   // before the sentence-level steps below run, so they see real boundaries.
   output = replaceEmDashes(output);
+
+  // House style for times: "7pm", "7:30pm", never "7:00pm" or "7:00 PM".
+  output = normaliseTimes(output);
 
   // Replace known clichés with natural alternatives first (keeps the sentence
   // intact), then drop the whole containing sentence for any banned phrase
