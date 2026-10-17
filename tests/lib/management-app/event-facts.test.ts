@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 
+import { eventBriefSchema } from "@/features/create/schemas/content-schemas";
 import {
   buildEventFactSheet,
+  EVENT_FACT_LIMITS,
   friendlyClock,
   stripImportedFormatting,
   toneForCategory,
@@ -54,6 +56,36 @@ describe("buildEventFactSheet", () => {
     expect(sheet.faqs).toHaveLength(8);
     expect(sheet.faqs?.[0].answer.length).toBeLessThanOrEqual(323);
     expect(sheet.faqs?.[0].answer.endsWith("...")).toBe(true);
+  });
+  it("shortens a long or busy record to the brief's limits, so the brief still validates", () => {
+    const words = (count: number): string => Array.from({ length: count }, (_, index) => `word${index}`).join(" ");
+    const sheet = buildEventFactSheet({
+      categoryName: words(40),
+      performer_name: words(60),
+      highlights: Array.from({ length: 20 }, () => words(80)),
+      previous_event_summary: words(150),
+      attendance_note: words(50),
+      faqs: [{ question: words(80), answer: "Yes." }],
+    });
+
+    expect(sheet.highlights).toHaveLength(EVENT_FACT_LIMITS.highlightCount);
+    expect(sheet.highlights?.[0].length).toBeLessThanOrEqual(EVENT_FACT_LIMITS.highlight);
+    expect(sheet.highlights?.[0]).toMatch(/word\d+\.\.\.$/);
+    expect(sheet.pastEvent?.length).toBeLessThanOrEqual(EVENT_FACT_LIMITS.pastEvent);
+    expect(sheet.category?.length).toBeLessThanOrEqual(EVENT_FACT_LIMITS.category);
+    expect(sheet.host?.length).toBeLessThanOrEqual(EVENT_FACT_LIMITS.host);
+    expect(sheet.faqs?.[0].question.length).toBeLessThanOrEqual(EVENT_FACT_LIMITS.question);
+
+    const brief = eventBriefSchema.safeParse({
+      contentType: "event",
+      title: "Busy night",
+      platforms: ["facebook"],
+      eventName: "Busy night",
+      eventDate: "2026-11-18",
+      eventTime: "19:00",
+      facts: sheet,
+    });
+    expect(brief.success).toBe(true);
   });
 });
 

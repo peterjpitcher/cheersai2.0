@@ -44,8 +44,33 @@ export interface EventFactsSource {
   faqs?: Array<{ question: string; answer: string }> | null;
 }
 
-const MAX_FAQS = 8;
+/**
+ * The brief's limit for each fact (eventFactSheetSchema in content-schemas.ts
+ * reads these), so a long or busy event record is shortened here rather than
+ * failing the brief, which the owner cannot edit.
+ */
+export const EVENT_FACT_LIMITS = {
+  category: 120,
+  times: 200,
+  price: 240,
+  booking: 200,
+  host: 200,
+  highlightCount: 12,
+  highlight: 300,
+  pastEvent: 800,
+  faqCount: 8,
+  question: 300,
+  answer: 400,
+} as const;
+
+// Answers are kept well under their limit so the prompt stays short.
 const MAX_ANSWER_CHARS = 320;
+
+/** Keep text within a limit, ending on a whole word. */
+function clip(text: string | undefined, max: number): string | undefined {
+  if (!text || text.length <= max) return text;
+  return `${text.slice(0, max - 3).replace(/\s+\S*$/, "")}...`;
+}
 
 /** "19:00" or "19:00:00" to "7pm"; null when not a time. */
 export function friendlyClock(value: string | null | undefined): string | null {
@@ -124,20 +149,23 @@ export function buildEventFactSheet(source: EventFactsSource): EventFactSheet {
   const faqs = (source.faqs ?? [])
     .map((faq) => ({ question: clean(faq.question), answer: clean(faq.answer) }))
     .filter((faq): faq is { question: string; answer: string } => Boolean(faq.question && faq.answer))
-    .slice(0, MAX_FAQS)
+    .slice(0, EVENT_FACT_LIMITS.faqCount)
     .map((faq) => ({
-      question: faq.question,
+      question: clip(faq.question, EVENT_FACT_LIMITS.question) as string,
       answer: faq.answer.length > MAX_ANSWER_CHARS ? `${faq.answer.slice(0, MAX_ANSWER_CHARS).replace(/\s+\S*$/, "")}...` : faq.answer,
     }));
   const pastEvent = [clean(source.previous_event_summary), clean(source.attendance_note)].filter(Boolean).join(" ");
   const sheet: EventFactSheet = {
-    category: clean(source.categoryName),
-    times: describeTimes(source),
-    price: describePrice(source),
-    booking: describeBooking(source),
-    host: clean(source.performer_name),
-    highlights: (source.highlights ?? []).map((item) => clean(item)).filter((item): item is string => Boolean(item)),
-    pastEvent: pastEvent || undefined,
+    category: clip(clean(source.categoryName), EVENT_FACT_LIMITS.category),
+    times: clip(describeTimes(source), EVENT_FACT_LIMITS.times),
+    price: clip(describePrice(source), EVENT_FACT_LIMITS.price),
+    booking: clip(describeBooking(source), EVENT_FACT_LIMITS.booking),
+    host: clip(clean(source.performer_name), EVENT_FACT_LIMITS.host),
+    highlights: (source.highlights ?? [])
+      .map((item) => clip(clean(item), EVENT_FACT_LIMITS.highlight))
+      .filter((item): item is string => Boolean(item))
+      .slice(0, EVENT_FACT_LIMITS.highlightCount),
+    pastEvent: clip(pastEvent || undefined, EVENT_FACT_LIMITS.pastEvent),
     faqs,
   };
   return Object.fromEntries(

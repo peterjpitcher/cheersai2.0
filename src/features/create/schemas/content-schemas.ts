@@ -13,6 +13,7 @@ import { DateTime } from 'luxon';
 import { z } from 'zod';
 
 import { DEFAULT_TIMEZONE } from '@/lib/constants';
+import { EVENT_FACT_LIMITS } from '@/lib/management-app/event-facts';
 
 /** What the owner sees when an offer's dates cannot work. */
 export const OFFER_DATE_MESSAGES = {
@@ -56,15 +57,19 @@ const campaignPlacementsSchema = z
   .min(1, 'Select at least one placement')
   .default(['feed']);
 
+// The limits live with the fact-sheet builder, which shortens imported text to fit.
 const eventFactSheetSchema = z.object({
-  category: z.string().max(120).optional(),
-  times: z.string().max(200).optional(),
-  price: z.string().max(240).optional(),
-  booking: z.string().max(200).optional(),
-  host: z.string().max(200).optional(),
-  highlights: z.array(z.string().max(300)).max(12).optional(),
-  pastEvent: z.string().max(800).optional(),
-  faqs: z.array(z.object({ question: z.string().max(300), answer: z.string().max(400) })).max(8).optional(),
+  category: z.string().max(EVENT_FACT_LIMITS.category).optional(),
+  times: z.string().max(EVENT_FACT_LIMITS.times).optional(),
+  price: z.string().max(EVENT_FACT_LIMITS.price).optional(),
+  booking: z.string().max(EVENT_FACT_LIMITS.booking).optional(),
+  host: z.string().max(EVENT_FACT_LIMITS.host).optional(),
+  highlights: z.array(z.string().max(EVENT_FACT_LIMITS.highlight)).max(EVENT_FACT_LIMITS.highlightCount).optional(),
+  pastEvent: z.string().max(EVENT_FACT_LIMITS.pastEvent).optional(),
+  faqs: z
+    .array(z.object({ question: z.string().max(EVENT_FACT_LIMITS.question), answer: z.string().max(EVENT_FACT_LIMITS.answer) }))
+    .max(EVENT_FACT_LIMITS.faqCount)
+    .optional(),
 });
 
 // ---------------------------------------------------------------------------
