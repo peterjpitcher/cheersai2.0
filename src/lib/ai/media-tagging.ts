@@ -13,6 +13,7 @@ import { zodResponseFormat } from 'openai/helpers/zod';
 import { z } from 'zod';
 
 import { getOpenAIClient } from './client';
+import { DEFAULT_MEDIA_TAGGING_MODEL, copyTimeoutMs, isReasoningModel } from './models';
 import { trackAiCall } from './usage';
 
 /** Max number of AI-suggested tags applied to an asset. */
@@ -89,15 +90,18 @@ export async function generateMediaNameAndTags(
 ): Promise<MediaNameAndTags> {
   const client = getOpenAIClient();
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 30_000);
+  const model = input.model ?? DEFAULT_MEDIA_TAGGING_MODEL;
+  const reasoning = isReasoningModel(model);
+  const timeoutMs = copyTimeoutMs(model);
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
-    const model = input.model ?? process.env.OPENAI_MODEL ?? 'gpt-4o-mini';
     const usage = input.usageAccountId ? { accountId: input.usageAccountId, feature: 'media_tagging' as const } : undefined;
     const completion = await trackAiCall(usage, model, () => client.chat.completions.parse(
       {
         model,
-        temperature: 0.3,
+        // Reasoning models reject a custom temperature.
+        ...(reasoning ? {} : { temperature: 0.3 }),
         messages: [
           { role: 'system', content: buildMediaTaggingSystemPrompt(input.businessType) },
           {
@@ -121,7 +125,7 @@ export async function generateMediaNameAndTags(
     return { name: parsed.name, tags: parsed.tags };
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') {
-      throw new Error('Media tagging timed out after 30 seconds.');
+      throw new Error(`Media tagging timed out after ${timeoutMs / 1000} seconds.`);
     }
     throw error;
   } finally {

@@ -62,6 +62,24 @@ describe('generateMediaNameAndTags', () => {
     expect(mockParse.mock.calls[0]![0].model).toBe('gpt-4o');
   });
 
+  it('keeps its own model when the copy model is switched', async () => {
+    process.env.OPENAI_MODEL = 'gpt-5.5';
+    mockParse.mockResolvedValue({ choices: [{ message: { parsed: { name: 'Bar', tags: ['bar'] } } }] });
+
+    await generateMediaNameAndTags({ imageUrl: 'https://example.com/a.jpg' });
+
+    expect(mockParse.mock.calls[0]![0].model).toBe('gpt-4o-mini');
+    expect(mockParse.mock.calls[0]![0].temperature).toBe(0.3);
+  });
+
+  it('leaves out the temperature for a reasoning model', async () => {
+    mockParse.mockResolvedValue({ choices: [{ message: { parsed: { name: 'Bar', tags: ['bar'] } } }] });
+
+    await generateMediaNameAndTags({ imageUrl: 'https://example.com/a.jpg', model: 'gpt-5.4-mini' });
+
+    expect(mockParse.mock.calls[0]![0]).not.toHaveProperty('temperature');
+  });
+
   it('throws when the API returns no parsed content', async () => {
     mockParse.mockResolvedValue({ choices: [{ message: { parsed: null } }] });
 

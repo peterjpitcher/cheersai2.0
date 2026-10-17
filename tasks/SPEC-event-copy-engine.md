@@ -58,6 +58,7 @@ Tone by event type (review 7) moved to B2, because it needs the event category, 
 - The default model changes (`OPENAI_MODEL`) only after the owner has seen the side-by-side.
 - Best of three: write three drafts, keep the one with the fewest check failures, then the judge's pick.
 - Reasoning models do not take a temperature; the generator leaves it out for them.
+- Image naming and tagging keeps its own model (`DEFAULT_MEDIA_TAGGING_MODEL`, gpt-4o-mini) whatever the copy model is; it used to read `OPENAI_MODEL` and would have broken on a reasoning model (review finding on #192, 17 October 2026).
 - Cost: about 15 copy generations a month at about 3,000 prompt tokens each (`ai_usage_events`, September and October 2026). Prices are checked on OpenAI's pricing page before the switch.
 
 ### B5. Location tag (review 12)

@@ -7,6 +7,13 @@
  */
 export const DEFAULT_COPY_MODEL = 'gpt-4o-mini';
 
+/**
+ * Image naming and tagging keeps its own model. It used to read OPENAI_MODEL
+ * too, so switching the copy model to a reasoning model would have broken it
+ * (they reject its temperature) and multiplied its cost for no gain.
+ */
+export const DEFAULT_MEDIA_TAGGING_MODEL = 'gpt-4o-mini';
+
 /** The copy model in use: OPENAI_MODEL when set, otherwise the default. */
 export function resolveCopyModel(): string {
   return process.env.OPENAI_MODEL?.trim() || DEFAULT_COPY_MODEL;
