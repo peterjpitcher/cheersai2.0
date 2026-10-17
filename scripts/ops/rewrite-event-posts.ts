@@ -15,8 +15,10 @@
  *
  * Run it on Node 24 from the repo root with .env.local. OPENAI_MODEL picks the
  * model for a plan run, as it does for the app.
+ * --note adds the owner's guidance to every brief in the run, as owner notes
+ * typed in the wizard would be (use it with --campaign).
  *
- *   npm run ops:rewrite-event-posts -- --account <id> [--campaign <id> ...]
+ *   npm run ops:rewrite-event-posts -- --account <id> [--campaign <id> ...] [--note <text>]
  *   npm run ops:rewrite-event-posts -- --apply --plan <file>
  *   npm run ops:rewrite-event-posts -- --rollback --plan <file>
  */
@@ -33,17 +35,18 @@ export interface RewriteArgs {
   campaignIds: string[];
   planFile: string | null;
   outDir: string | null;
+  note: string | null;
 }
 
 export const USAGE = [
   'Usage:',
-  '  npm run ops:rewrite-event-posts -- --account <id> [--campaign <id> ...] [--out <dir>]',
+  '  npm run ops:rewrite-event-posts -- --account <id> [--campaign <id> ...] [--note <text>] [--out <dir>]',
   '  npm run ops:rewrite-event-posts -- --apply --plan <file>',
   '  npm run ops:rewrite-event-posts -- --rollback --plan <file>',
 ].join('\n');
 
 export function parseArgs(argv: string[]): RewriteArgs {
-  const args: RewriteArgs = { mode: 'plan', accountId: null, campaignIds: [], planFile: null, outDir: null };
+  const args: RewriteArgs = { mode: 'plan', accountId: null, campaignIds: [], planFile: null, outDir: null, note: null };
   const modes = new Set<RewriteArgs['mode']>();
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
@@ -59,12 +62,14 @@ export function parseArgs(argv: string[]): RewriteArgs {
     else if (arg === '--campaign') args.campaignIds.push(value());
     else if (arg === '--plan') args.planFile = value();
     else if (arg === '--out') args.outDir = value();
+    else if (arg === '--note') args.note = value();
     else throw new Error(`Unknown option ${arg}.\n${USAGE}`);
   }
   if (modes.size > 1) throw new Error(`Choose --apply or --rollback, not both.\n${USAGE}`);
   args.mode = [...modes][0] ?? 'plan';
   if (args.mode === 'plan' && !args.accountId) throw new Error(`A plan run needs --account.\n${USAGE}`);
   if (args.mode !== 'plan' && !args.planFile) throw new Error(`--${args.mode} needs --plan <file>.\n${USAGE}`);
+  if (args.mode !== 'plan' && args.note) throw new Error(`--note only applies to a plan run.\n${USAGE}`);
   return args;
 }
 
@@ -111,7 +116,7 @@ async function main(): Promise<void> {
         return chosen ? getManagementEventDetail(config, chosen.id, { fallbackSlug: chosen.slug ?? undefined }) : null;
       },
     },
-    { accountId, campaignIds: args.campaignIds },
+    { accountId, campaignIds: args.campaignIds, ownerNote: args.note ?? undefined },
   );
 
   const stamp = DateTime.now().setZone('Europe/London').toFormat('yyyyLLdd-HHmmss');

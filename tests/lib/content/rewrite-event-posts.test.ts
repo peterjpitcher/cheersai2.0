@@ -271,6 +271,18 @@ describe('planEventPostRewrites', () => {
     expect(plan.slots.map((slot) => slot.job)).toEqual(['announce', 'last_call']);
   });
 
+  it('adds the owner note to the brief and records it for the report', async () => {
+    const { db } = setup();
+    const write = writer(draft('Ten games and a growing final jackpot.'));
+    const plan = await planEventPostRewrites(
+      { db, write, findEvent: async () => detail, now: () => NOW, model: 'gpt-test' },
+      { accountId: ACCOUNT, ownerNote: 'Mention the final jackpot; never state an amount.' },
+    );
+    expect(vi.mocked(write).mock.calls[0][0].brief.prompt).toMatch(/\n\nOwner notes: Mention the final jackpot; never state an amount\.$/);
+    expect(plan.events[0].ownerNote).toBe('Mention the final jackpot; never state an amount.');
+    expect(renderRewriteReport(plan)).toContain('Owner note used: Mention the final jackpot; never state an amount.');
+  });
+
   it('leaves alone posts due within the hour, not scheduled, or already publishing', async () => {
     const { db } = setup(
       [

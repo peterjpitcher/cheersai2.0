@@ -10,7 +10,13 @@ describe('rewrite-event-posts arguments', () => {
       campaignIds: ['c-1', 'c-2'],
       planFile: null,
       outDir: null,
+      note: null,
     });
+  });
+
+  it('takes an owner note for a plan run only', () => {
+    expect(parseArgs(['--account', 'acc-1', '--note', 'Mention the jackpot.'])).toMatchObject({ mode: 'plan', note: 'Mention the jackpot.' });
+    expect(() => parseArgs(['--apply', '--plan', 'p.json', '--note', 'x'])).toThrow(/only applies to a plan run/);
   });
 
   it('applies or rolls back a plan file', () => {

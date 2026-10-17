@@ -90,6 +90,7 @@ export interface EventSummary {
   eventDate: string;
   facts: EventFactSheet | null;
   tone: string | null;
+  ownerNote?: string;
   notes: string[];
 }
 
@@ -119,6 +120,8 @@ export interface PlanDeps {
 export interface PlanOptions {
   accountId: string;
   campaignIds?: string[];
+  /** Guidance from the owner for this run, added to each brief as owner notes, as typed in the wizard. */
+  ownerNote?: string;
   concurrency?: number;
 }
 
@@ -369,6 +372,10 @@ export async function planEventPostRewrites(deps: PlanDeps, options: PlanOptions
       lookupNote = `The events system could not be reached (${error instanceof Error ? error.message : String(error)}).`;
     }
     const rebuilt = rebuildEventBrief(post.brief, detail);
+    const ownerNote = options.ownerNote?.trim() || undefined;
+    if (ownerNote) {
+      rebuilt.brief.prompt = [text(rebuilt.brief.prompt), `Owner notes: ${ownerNote}`].filter(Boolean).join('\n\n');
+    }
     events.set(key, {
       brief: rebuilt.brief,
       cancelled: rebuilt.cancelled,
@@ -379,6 +386,7 @@ export async function planEventPostRewrites(deps: PlanDeps, options: PlanOptions
         eventDate,
         facts: rebuilt.facts,
         tone: text(rebuilt.brief.tone),
+        ownerNote,
         notes: lookupNote ? [lookupNote, ...rebuilt.notes] : rebuilt.notes,
       },
     });
@@ -714,6 +722,7 @@ export function renderRewriteReport(plan: RewritePlan): string {
   for (const event of plan.events) {
     const slots = byCampaign.get(event.campaignName) ?? [];
     lines.push('', `## ${event.campaignName}`, '', `${event.eventDate}. ${describeFacts(event.facts)} Tone: ${event.tone ?? DEFAULT_TONE}.`);
+    if (event.ownerNote) lines.push('', `Owner note used: ${event.ownerNote}`);
     for (const note of event.notes) lines.push('', `**Check:** ${note}`);
     for (const slot of slots) {
       lines.push('', `### ${londonLabel(slot.scheduledFor)}${slot.slotLabel ? ` (${slot.slotLabel})` : ''}`);
