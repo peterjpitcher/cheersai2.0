@@ -12,6 +12,7 @@ import { canTransition } from "@/lib/publishing/state-machine";
 import { evaluateTemporalDrift, type TemporalDriftResult } from "@/lib/publishing/temporal-drift";
 import { requireAuthContext } from "@/lib/auth/server";
 import { DEFAULT_TIMEZONE } from "@/lib/constants";
+import { beforePromotionWindow, promotionWindowMessage, storedPromotionWindow } from "@/lib/management-app/promotion-window";
 import { BANNER_EDITABLE_STATUSES } from "@/lib/scheduling/banner-config";
 import { validateBannerText } from "@/lib/banner/text";
 import { listMediaAssets } from "@/lib/library/data";
@@ -1237,6 +1238,15 @@ export async function updatePlannerContentSchedule(payload: unknown) {
 
   if (desiredStart < nowSlot) {
     throw new Error("That time has already passed. Choose a future time.");
+  }
+
+  // The event-order rule (tasks/SPEC-social-calendar-fill.md) still holds once a
+  // post is scheduled: it may not move before the window it was created under.
+  // "Publish now" comes through here too. Slot reservation below never changes
+  // the day, so checking the requested day is enough.
+  const promotion = storedPromotionWindow(content.prompt_context);
+  if (promotion && beforePromotionWindow(desiredStart.setZone(DEFAULT_TIMEZONE).toISODate() ?? "", promotion.window)) {
+    return { error: promotionWindowMessage(promotion.eventName, promotion.window) } as const;
   }
 
   if (content.placement !== "story") {

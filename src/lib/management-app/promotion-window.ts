@@ -73,3 +73,31 @@ export function beforePromotionWindow(londonDate: string, window: PromotionWindo
 export function promotionWindowMessage(eventName: string, window: PromotionWindow): string {
   return `${eventName} can be promoted from ${formatEventDateLong(window.opensOn)}, after the last ${window.category} (${window.afterEvent}) on ${formatEventDateLong(window.afterDate)}.`;
 }
+
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * The window a scheduled post was created under, read from its stored
+ * prompt_context.brief, so a later move is held to the same rule. Null when the
+ * post has none (typed by hand, or scheduled before the rule existed).
+ */
+export function storedPromotionWindow(promptContext: unknown): { eventName: string; window: PromotionWindow } | null {
+  if (!promptContext || typeof promptContext !== 'object') return null;
+  const brief = (promptContext as { brief?: unknown }).brief;
+  if (!brief || typeof brief !== 'object') return null;
+  const { promotionWindow, eventName, title } = brief as { promotionWindow?: unknown; eventName?: unknown; title?: unknown };
+  if (!promotionWindow || typeof promotionWindow !== 'object') return null;
+  const { opensOn, afterEvent, afterDate, category } = promotionWindow as Record<string, unknown>;
+  if (typeof opensOn !== 'string' || !ISO_DATE.test(opensOn)) return null;
+  if (typeof afterDate !== 'string' || !ISO_DATE.test(afterDate)) return null;
+  const name = [eventName, title].find((value): value is string => typeof value === 'string' && value.trim().length > 0);
+  return {
+    eventName: name?.trim() ?? 'This event',
+    window: {
+      opensOn,
+      afterDate,
+      afterEvent: typeof afterEvent === 'string' && afterEvent.trim() ? afterEvent.trim() : 'the last one',
+      category: typeof category === 'string' && category.trim() ? category.trim() : 'event of its type',
+    },
+  };
+}

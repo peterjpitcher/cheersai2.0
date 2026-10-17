@@ -4,6 +4,7 @@ import {
   beforePromotionWindow,
   promotionWindowFrom,
   promotionWindowMessage,
+  storedPromotionWindow,
   type WindowEvent,
 } from '@/lib/management-app/promotion-window';
 
@@ -93,5 +94,28 @@ describe('loadPromotionWindow', () => {
     const { loadPromotionWindow } = await import('@/lib/management-app/promotion-window-loader');
     expect(await loadPromotionWindow({ baseUrl: 'https://management.example', apiKey: 'test' }, { eventDate: '2026-12-11' })).toBeNull();
     expect(listManagementEvents).not.toHaveBeenCalled();
+  });
+});
+
+describe('storedPromotionWindow', () => {
+  const window = { opensOn: '2026-11-19', afterEvent: 'Snowball Showdown', afterDate: '2026-11-18', category: 'Cash Bingo' };
+
+  it("reads the window a post was created under from its stored brief", () => {
+    expect(storedPromotionWindow({ slotKey: 'x', brief: { eventName: 'Christmas Jackpot Cash Bingo', promotionWindow: window } })).toEqual({
+      eventName: 'Christmas Jackpot Cash Bingo',
+      window,
+    });
+  });
+
+  it('has none for a post typed by hand, scheduled before the rule, or stored badly', () => {
+    expect(storedPromotionWindow(null)).toBeNull();
+    expect(storedPromotionWindow({ brief: { eventName: 'Quiz Night' } })).toBeNull();
+    expect(storedPromotionWindow({ brief: { eventName: 'Quiz Night', promotionWindow: { ...window, opensOn: 'soon' } } })).toBeNull();
+    expect(storedPromotionWindow({ brief: 'not an object' })).toBeNull();
+  });
+
+  it('falls back to the title, then to plain words, for the name', () => {
+    expect(storedPromotionWindow({ brief: { title: 'Jackpot night', promotionWindow: window } })?.eventName).toBe('Jackpot night');
+    expect(storedPromotionWindow({ brief: { promotionWindow: window } })?.eventName).toBe('This event');
   });
 });

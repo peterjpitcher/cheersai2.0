@@ -217,8 +217,9 @@ export async function getManagementEventPrefill(
 
     const mapped = mapManagementEventToEventCampaignPrefill(detail);
     // Posts may start only after the last event of the same type has finished
-    // (tasks/SPEC-social-calendar-fill.md). A failed lookup must not block the
-    // import, so it is logged and the event imports without a window.
+    // (tasks/SPEC-social-calendar-fill.md). The rule fails closed: an event
+    // whose window cannot be looked up is not imported, because importing it
+    // without one would let its posts start before the last event of its type.
     let promotionWindow: PromotionWindow | null = null;
     try {
       promotionWindow = await loadPromotionWindow(config, {
@@ -228,9 +229,17 @@ export async function getManagementEventPrefill(
         categoryName: mapped.fields.eventCategoryName,
       });
     } catch (error) {
-      console.warn("[management-import] promotion window lookup failed", {
-        errorType: error instanceof Error ? error.constructor.name : "unknown",
+      logger.error("promotion window lookup failed, so the event was not imported", toLoggableError(error), {
+        eventIdPresent: Boolean(eventId),
       });
+      return {
+        ok: false,
+        error: {
+          code: "FAILED",
+          message:
+            "We could not check when this event can start being promoted, so it was not imported. Please try again in a few minutes.",
+        },
+      };
     }
     return {
       ok: true,
