@@ -2,10 +2,9 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { clearStaleRoundups, deleteFixtureContentItems, gamesLeftBehind } from './generate';
-import { coveredFixtureIds } from '../../../supabase/functions/_shared/tournament-roundup';
 import { isPublishedContentStatus, isPublishedJobStatus } from './published-status';
 import { findContentCoveringFixture } from '@/lib/tournament/content-freshness';
-import type { TournamentFixture } from '@/types/tournament';
+import type { Tournament, TournamentFixture } from '@/types/tournament';
 
 vi.mock('./queries', () => ({ getPublishedPlacements: vi.fn(), getFixturesByTournament: vi.fn().mockResolvedValue([]) }));
 vi.mock('./screening-service', () => ({ projectTournamentFixtures: vi.fn() }));
@@ -15,7 +14,7 @@ vi.mock('@/lib/tournament/content-freshness', () => ({ findContentCoveringFixtur
 
 type Row = Record<string, unknown>;
 
-/** Records deletes and updates; answers selects from fixed rows per table. */
+/** Records deletes and updates; answers selects from fixed rows per table, applying eq, in and is filters. */
 function fakeDb(rows: Record<string, Row[]>, failing: string[] = []) {
   const deleted: Array<{ table: string; ids: unknown[] }> = [];
   const updated: Array<{ table: string; values: Row }> = [];
@@ -23,11 +22,21 @@ function fakeDb(rows: Record<string, Row[]>, failing: string[] = []) {
     let op: 'select' | 'delete' | 'update' = 'select';
     let values: Row = {};
     let ids: unknown[] = [];
+    const filters: Array<(row: Row) => boolean> = [];
     const builder = {
       select: () => builder,
-      eq: () => builder,
-      in: (_column: string, list: unknown[]) => {
-        ids = list;
+      eq: (column: string, value: unknown) => {
+        filters.push((row) => row[column] === value);
+        return builder;
+      },
+      is: (column: string, value: unknown) => {
+        filters.push((row) => (row[column] ?? null) === value);
+        return builder;
+      },
+      contains: () => builder,
+      in: (column: string, list: unknown[]) => {
+        if (column === 'id') ids = list;
+        filters.push((row) => list.includes(row[column]));
         return builder;
       },
       delete: () => {
@@ -43,7 +52,8 @@ function fakeDb(rows: Record<string, Row[]>, failing: string[] = []) {
         if (failing.includes(table)) return Promise.resolve({ data: null, error: { message: `${table} unavailable` } }).then(resolve);
         if (op === 'delete') deleted.push({ table, ids });
         if (op === 'update') updated.push({ table, values });
-        return Promise.resolve({ data: op === 'select' ? rows[table] ?? [] : null, error: null }).then(resolve);
+        const data = op === 'select' ? (rows[table] ?? []).filter((row) => filters.every((filter) => filter(row))) : null;
+        return Promise.resolve({ data, error: null }).then(resolve);
       },
     };
     return builder;
@@ -56,10 +66,11 @@ function item(
   status: string,
   fixtureIds: string[] = ['f1'],
   eventStart = '2026-11-07T14:10:00Z',
-): { id: string; status: string; platform: string; placement: string; scheduled_for: string; prompt_context: Row } {
+): { id: string; status: string; account_id: string; platform: string; placement: string; scheduled_for: string; prompt_context: Row } {
   return {
     id,
     status,
+    account_id: 'account-1',
     platform: 'facebook',
     placement: 'feed',
     scheduled_for: '2026-11-04T11:40:00Z',
@@ -89,11 +100,32 @@ describe('deleteFixtureContentItems, keeping what has gone out', () => {
     vi.mocked(findContentCoveringFixture)
       .mockResolvedValueOnce([item('posted-feed', 'posted'), item('job-succeeded', 'scheduled'), item('pending-story', 'scheduled')])
       .mockResolvedValue([item('posted-feed', 'posted')]);
-    const { db, deleted } = fakeDb({ publish_jobs: [{ content_item_id: 'job-succeeded' }] });
+    const { db, deleted } = fakeDb({
+      publish_jobs: [
+        { content_item_id: 'job-succeeded', account_id: 'account-1', status: 'succeeded' },
+        { content_item_id: 'pending-story', account_id: 'account-1', status: 'queued' },
+      ],
+    });
 
     const count = await deleteFixtureContentItems(db, 'f1', 'account-1', true);
 
     expect(count).toBe(1);
+    expect(deleted).toEqual([{ table: 'content_items', ids: ['pending-story'] }]);
+  });
+
+  it('keeps a post a worker is sending right now', async () => {
+    vi.mocked(findContentCoveringFixture)
+      .mockResolvedValueOnce([item('job-in-progress', 'scheduled'), item('v2-publishing', 'publishing'), item('pending-story', 'scheduled')])
+      .mockResolvedValue([]);
+    const { db, deleted } = fakeDb({
+      publish_jobs: [
+        { content_item_id: 'job-in-progress', account_id: 'account-1', status: 'in_progress' },
+        { content_item_id: 'pending-story', account_id: 'account-1', status: 'queued' },
+      ],
+    });
+
+    await deleteFixtureContentItems(db, 'f1', 'account-1', true);
+
     expect(deleted).toEqual([{ table: 'content_items', ids: ['pending-story'] }]);
   });
 
@@ -142,22 +174,43 @@ describe('gamesLeftBehind', () => {
 
 describe('clearStaleRoundups', () => {
   const fixture = (id: string, kickOffAt: string): TournamentFixture => ({ id, kickOffAt } as TournamentFixture);
+  const tournament = { id: 't1', accountId: 'account-1' } as Tournament;
+  const all = [
+    fixture('moved', '2026-11-14T14:10:00Z'),
+    fixture('moved-too', '2026-11-21T14:10:00Z'),
+    fixture('old-day-a', '2026-11-07T14:10:00Z'),
+    fixture('new-day', '2026-11-14T16:40:00Z'),
+  ];
 
-  it('deletes a stale round-up once, before any day is rebuilt, and returns its day', async () => {
-    const all = [
-      fixture('moved', '2026-11-14T14:10:00Z'),
-      fixture('moved-too', '2026-11-21T14:10:00Z'),
-      fixture('old-day-a', '2026-11-07T14:10:00Z'),
-    ];
-    const stored = [item('old-roundup', 'scheduled', ['old-day-a', 'moved', 'moved-too'])];
-    const { db, deleted } = fakeDb({});
-    const isDeleted = (id: string): boolean => deleted.some((entry) => entry.table === 'content_items' && entry.ids.includes(id));
-    vi.mocked(findContentCoveringFixture).mockImplementation(async (_db, _account, fixtureId) =>
-      stored.filter((entry) => !isDeleted(entry.id) && coveredFixtureIds(entry.prompt_context).includes(fixtureId)));
+  beforeEach(() => {
+    vi.mocked(findContentCoveringFixture).mockResolvedValue([]);
+  });
 
-    const leads = await clearStaleRoundups(db, 'account-1', [all[0], all[1]], all);
-
+  it('deletes a stale round-up once, up front, and returns a game still on its day', async () => {
+    const { db, deleted } = fakeDb({
+      content_items: [
+        item('stale', 'scheduled', ['old-day-a', 'moved'], '2026-11-07T14:10:00Z'),
+        item('fresh', 'scheduled', ['moved', 'new-day'], '2026-11-14T14:10:00Z'),
+      ],
+    });
+    const leads = await clearStaleRoundups(db, tournament, all);
     expect(leads.map((lead) => lead.id)).toEqual(['old-day-a']);
-    expect(deleted.filter((entry) => entry.table === 'content_items')).toEqual([{ table: 'content_items', ids: ['old-roundup'] }]);
+    expect(deleted.filter((entry) => entry.table === 'content_items')).toEqual([{ table: 'content_items', ids: ['stale'] }]);
+  });
+
+  it('deletes a stale round-up even when every game it listed has moved away', async () => {
+    const { db, deleted } = fakeDb({
+      content_items: [item('stale', 'scheduled', ['moved', 'moved-too'], '2026-11-07T14:10:00Z')],
+    });
+    expect(await clearStaleRoundups(db, tournament, all)).toEqual([]);
+    expect(deleted.filter((entry) => entry.table === 'content_items')).toEqual([{ table: 'content_items', ids: ['stale'] }]);
+  });
+
+  it('keeps a stale round-up that has gone out, and does not rebuild its day', async () => {
+    const { db, deleted } = fakeDb({
+      content_items: [item('sent', 'posted', ['old-day-a', 'moved'], '2026-11-07T14:10:00Z')],
+    });
+    expect(await clearStaleRoundups(db, tournament, all)).toEqual([]);
+    expect(deleted).toEqual([]);
   });
 });

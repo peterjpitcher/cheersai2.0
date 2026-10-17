@@ -15,3 +15,14 @@ export function isPublishedContentStatus(status: unknown): boolean {
 export function isPublishedJobStatus(status: unknown): boolean {
   return typeof status === 'string' && PUBLISHED_JOB_STATUSES.includes(status);
 }
+
+/**
+ * Statuses that mean a worker has claimed a post and may be sending it right
+ * now: the live worker marks the job 'in_progress', the v2 handler 'publishing'.
+ * Deleting such a post could leave a live post untracked or a send failing.
+ */
+export const IN_FLIGHT_STATUSES: readonly string[] = ['publishing', 'in_progress'];
+
+export function isInFlightStatus(status: unknown): boolean {
+  return typeof status === 'string' && IN_FLIGHT_STATUSES.includes(status);
+}
