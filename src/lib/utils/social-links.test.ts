@@ -28,6 +28,15 @@ describe('stripDirectLinks', () => {
     expect(stripDirectLinks('See us at the-anchor.pub.')).toBe('See us.');
   });
 
+  // Regression: collapsing all whitespace merged a multi-line post into one
+  // run-on line ("...may be missed Book a table...").
+  it('keeps line breaks and paragraphs when a link is removed', () => {
+    expect(stripDirectLinks('Kick-off 8pm.\n\nKitchen 12pm to 9pm.\n\nSee our menu: https://the-anchor.pub/food-menu'))
+      .toBe('Kick-off 8pm.\n\nKitchen 12pm to 9pm.\n\nSee our menu:');
+    expect(stripDirectLinks('Line one   https://the-anchor.pub/x  \nLine two')).toBe('Line one\nLine two');
+    expect(stripDirectLinks('One.\n\n\n\nTwo.')).toBe('One.\n\nTwo.');
+  });
+
   // Regression: the old unconditional preposition trim ate these final words.
   it('leaves a legitimate trailing "on" / "at" / "via" untouched when there is no link', () => {
     expect(stripDirectLinks('The match is on')).toBe('The match is on');

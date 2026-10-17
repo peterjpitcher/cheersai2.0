@@ -148,7 +148,9 @@ describe('buildTournamentContentPayload', () => {
 
     expect(payload.body).toContain('Thursday 11 June');
     expect(payload.body).toContain('Settle in at The Anchor');
-    expect(payload.body).toContain('Book a table: https://www.the-anchor.pub/book-table.');
+    expect(payload.body).toContain('Book a table: https://www.the-anchor.pub/book-table');
+    // No full stop is added straight after the link.
+    expect(payload.body).not.toContain('book-table.');
     expect(payload.promptContext).toEqual(expect.objectContaining({
       source: 'tournament',
       tournament_id: tournament.id,
@@ -252,9 +254,9 @@ describe('owner-approved rugby copy', () => {
     const hours: ScreeningDayHours = { date: '2026-11-14', state: 'open', regularOpensAt: '2026-11-14T12:00:00Z', bar: { startAt: '2026-11-14T12:00:00Z', endAt: '2026-11-14T22:00:00Z' }, kitchen: [{ startAt: '2026-11-14T12:00:00Z', endAt: '2026-11-14T19:00:00Z' }], kitchenState: 'known', hasSpecialHours: false, fingerprint: 'verified-hours' };
     const screened = { ...facts, hours, screening: resolveScreening(facts, hours, new Date('2026-09-05T09:00:00Z')) };
     const payload = buildTournamentContentPayload({ tournament, fixture: game, screened, platform: 'facebook', placement: 'feed', scheduledFor: new Date('2026-11-13T16:40:00Z') });
-    expect(payload.body).toContain('Book a table for this game');
-    expect(payload.body).toContain('Kitchen service 12:00 to 19:00');
-    expect(payload.body).not.toMatch(/Screen:|commentary|null|undefined/i);
+    expect(payload.body).toContain('Book a table: https://www.the-anchor.pub/live-sport/nations-championship#fixture-');
+    expect(payload.body).toContain('Kitchen times: 12pm to 7pm, so you can eat while you watch.');
+    expect(payload.body).not.toMatch(/Showing on|commentary|null|undefined/i);
   });
 });
 
@@ -275,9 +277,9 @@ describe('rugby menu links follow actual food service', () => {
     if (menu) {
       expect(payload.body).toContain(`https://www.the-anchor.pub${menu}`);
       expect(payload.body).not.toContain(menu === '/sunday-roast' ? '/food-menu' : '/sunday-roast');
-    } else expect(payload.body).not.toMatch(/View the .*menu/);
+    } else expect(payload.body).not.toMatch(/See our .*menu/);
     const instagram = buildTournamentContentPayload({ tournament, fixture: game, screened, platform: 'instagram', placement: 'feed', scheduledFor: new Date('2026-11-06T09:00:00Z') });
-    expect(instagram.body).not.toMatch(/https?:|View the .*menu:/);
+    expect(instagram.body).not.toMatch(/https?:|See our .*menu:/);
     expect(lintContent({ body: payload.body, platform: 'facebook', placement: 'feed', context: payload.promptContext, scheduledFor: new Date('2026-11-06T09:00:00Z') }).pass).toBe(true);
   });
 });

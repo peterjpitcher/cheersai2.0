@@ -11,6 +11,7 @@ import { applyChannelRules } from '@/lib/ai/content-rules';
 import { compositeOverlay } from '@/lib/tournament/overlay';
 import { displayTeamName } from '@/lib/tournament/team-display';
 import { interpolatePostTemplate } from '@/lib/tournament/template';
+import { buildRugbyMatchCopy, buildRugbyMenuLine } from '@/lib/tournament/rugby-copy';
 import { getPublishedPlacements } from '@/lib/tournament/queries';
 import { DEFAULT_TIMEZONE, MEDIA_BUCKET } from '@/lib/constants';
 import { redactId, tournamentDebug, tournamentDebugError } from '@/lib/tournament/debug';
@@ -167,18 +168,19 @@ export function buildTournamentContentPayload({
     : foodPromotion?.kind === 'before_match' ? foodPromotion.serviceWindows : [];
   const hasFoodService = screened?.hours.kitchenState === 'known' && promotedWindows.some(window =>
     Date.parse(window.endAt) > Date.parse(window.startAt));
-  const menuLink = hasFoodService
+  const menuUrl = hasFoodService
     ? kickOffDt.weekday === 7
-      ? 'View the Sunday roast menu: https://www.the-anchor.pub/sunday-roast'
-      : 'View the menu: https://www.the-anchor.pub/food-menu'
+      ? 'https://www.the-anchor.pub/sunday-roast'
+      : 'https://www.the-anchor.pub/food-menu'
     : null;
-  if (menuLink) promptContext.screening_menu_url = menuLink.slice(menuLink.indexOf('https://'));
-  const rawBody = screened
-    ? [`${fixture.teamA} v ${fixture.teamB}`, `${kickOffDt.toFormat('EEEE d MMMM')}, kick-off ${kickOffDt.toFormat('HH:mm')}.`, screened.screening.openingLabel, [screened.screenLabel ? `Screen: ${screened.screenLabel}.` : null, screened.commentary === 'on' ? 'Commentary on.' : screened.commentary === 'off' ? 'Without commentary.' : null].filter(Boolean).join(' '), screened.screening.foodPromotion.message, menuLink, `Book a table for this game: ${promptContext.ctaUrl}`].filter(Boolean).join('\n\n')
+  if (menuUrl) promptContext.screening_menu_url = menuUrl;
+  const rugbyCopy = screened ? buildRugbyMatchCopy({ fixture, screened }) : null;
+  const rawBody = rugbyCopy
+    ? rugbyCopy.lines.join('\n\n')
     : placement === 'feed'
     ? buildTournamentFeedBody({ templateBody, fixture })
     : templateBody;
-  if (screened) promptContext.screening_caption = rawBody;
+  if (rugbyCopy) promptContext.screening_caption = rawBody;
   const { body: processedBody } = applyChannelRules({
     body: rawBody,
     platform,
@@ -187,16 +189,33 @@ export function buildTournamentContentPayload({
     scheduledFor,
   });
 
-  // Channel processing keeps the primary booking CTA; restore only our verified menu link.
-  const body = screened && menuLink && platform === 'facebook' && placement === 'feed'
-    ? processedBody.replace(menuLink.split('https://')[0].trim(), menuLink)
+  const body = rugbyCopy
+    ? finishRugbyBody(processedBody, {
+      menuLine: platform === 'facebook' && placement === 'feed' ? buildRugbyMenuLine(fixture.kickOffAt, menuUrl) : null,
+      ctaUrl: String(promptContext.ctaUrl),
+    })
     : processedBody;
 
-  if (screened && placement === 'feed') {
-    const requiredFacts = [screened.screening.openingLabel, screened.screening.foodPromotion.message].filter(Boolean);
-    if (requiredFacts.some(fact => !body.includes(fact!))) throw new Error('Screening opening or kitchen details were shortened. Review the generated copy before publishing.');
+  if (rugbyCopy && placement === 'feed' && rugbyCopy.requiredLines.some(line => !body.includes(line))) {
+    throw new Error('Screening opening or kitchen details were shortened. Review the generated copy before publishing.');
   }
   return { body, promptContext };
+}
+
+/**
+ * Channel rules return one paragraph per line with the booking line last. Rugby
+ * copy reads better with a blank line between paragraphs, and the verified menu
+ * link (Facebook only, tasks/SPEC-nations-sunday-menu.md) goes just above the
+ * booking line, so the post carries one booking link and at most one menu link.
+ */
+function finishRugbyBody(processedBody: string, { menuLine, ctaUrl }: { menuLine: string | null; ctaUrl: string }): string {
+  const lines = processedBody.split('\n').map(line => line.trim()).filter(Boolean);
+  if (!lines.length) return '';
+  if (menuLine) {
+    const ctaIndex = lines.findIndex(line => line.includes(ctaUrl));
+    lines.splice(ctaIndex >= 0 ? ctaIndex : lines.length, 0, menuLine);
+  }
+  return lines.join('\n\n');
 }
 
 export function buildTournamentOverlayData({
@@ -420,12 +439,10 @@ export async function generateFixtureContent(
     const kickOff = new Date(fixture.kickOffAt);
     const overlayData = buildTournamentOverlayData({ tournament, fixture });
     if (screened) {
-      overlayData.houseRulesText = [screened.screening.openingLabel, screened.screening.foodPromotion.message].filter(Boolean).join(' ');
+      const { imageNote } = buildRugbyMatchCopy({ fixture, screened });
+      overlayData.houseRulesText = imageNote;
       overlayData.bookingLabel = 'Book a table for this game';
-      overlayData.footerNote = [screened.screening.openingLabel, screened.screening.foodPromotion.message]
-        .filter((message): message is string => Boolean(message))
-        .map(message => message.replace(/\.$/, ''))
-        .join('. ');
+      overlayData.footerNote = imageNote;
     }
 
     // Download base images (use cache if provided, otherwise fetch and de-duplicate)
