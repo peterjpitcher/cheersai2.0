@@ -23,6 +23,8 @@ import {
 import { createLogger } from "@/lib/logging";
 import { toLoggableError } from "@/lib/logging/to-error";
 import { isSchemaMissingError } from "@/lib/supabase/errors";
+import { loadPromotionWindow } from "@/lib/management-app/promotion-window-loader";
+import type { PromotionWindow } from "@/lib/management-app/promotion-window";
 
 const logger = createLogger("management-import");
 
@@ -214,9 +216,34 @@ export async function getManagementEventPrefill(
     });
 
     const mapped = mapManagementEventToEventCampaignPrefill(detail);
+    // Posts may start only after the last event of the same type has finished
+    // (tasks/SPEC-social-calendar-fill.md). The rule fails closed: an event
+    // whose window cannot be looked up is not imported, because importing it
+    // without one would let its posts start before the last event of its type.
+    let promotionWindow: PromotionWindow | null = null;
+    try {
+      promotionWindow = await loadPromotionWindow(config, {
+        eventId: detail.id,
+        eventDate: mapped.fields.startDate ?? "",
+        categorySlug: mapped.fields.eventCategorySlug,
+        categoryName: mapped.fields.eventCategoryName,
+      });
+    } catch (error) {
+      logger.error("promotion window lookup failed, so the event was not imported", toLoggableError(error), {
+        eventIdPresent: Boolean(eventId),
+      });
+      return {
+        ok: false,
+        error: {
+          code: "FAILED",
+          message:
+            "We could not check when this event can start being promoted, so it was not imported. Please try again in a few minutes.",
+        },
+      };
+    }
     return {
       ok: true,
-      data: mapped,
+      data: promotionWindow ? { ...mapped, fields: { ...mapped.fields, promotionWindow } } : mapped,
     };
   } catch (error) {
     unstable_rethrow(error);

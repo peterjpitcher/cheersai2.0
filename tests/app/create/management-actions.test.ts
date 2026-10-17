@@ -199,6 +199,62 @@ describe("create actions: management imports", () => {
     });
   });
 
+  it("attaches the promotion window from the last event of the same type", async () => {
+    getManagementConnectionConfigMock.mockResolvedValue({
+      baseUrl: "https://management.example.com",
+      apiKey: "valid-key",
+      enabled: true,
+    });
+    getManagementEventDetailMock.mockResolvedValue({ id: "cb-dec", name: "Christmas Jackpot Cash Bingo" });
+    mapManagementEventToPrefillMock.mockReturnValue({
+      fields: {
+        name: "Christmas Jackpot Cash Bingo",
+        startDate: "2026-12-16",
+        eventCategoryName: "Cash Bingo",
+        eventCategorySlug: "cash-bingo",
+      },
+      sourceLabel: "Christmas Jackpot Cash Bingo (2026-12-16)",
+    });
+    listManagementEventsMock.mockResolvedValue([
+      { id: "cb-nov", name: "Snowball Showdown", date: "2026-11-18", categoryName: "Cash Bingo", categorySlug: "cash-bingo" },
+    ]);
+
+    const { getManagementEventPrefill } = await import("@/app/(app)/create/actions");
+    const result = await getManagementEventPrefill({ eventId: "cb-dec" });
+
+    expect(result.ok && result.data.fields).toMatchObject({
+      promotionWindow: { opensOn: "2026-11-19", afterEvent: "Snowball Showdown", afterDate: "2026-11-18", category: "Cash Bingo" },
+    });
+  });
+
+  it("refuses the import when the promotion window cannot be looked up", async () => {
+    const { ManagementApiError } = await import("@/lib/management-app/client");
+
+    getManagementConnectionConfigMock.mockResolvedValue({
+      baseUrl: "https://management.example.com",
+      apiKey: "valid-key",
+      enabled: true,
+    });
+    getManagementEventDetailMock.mockResolvedValue({ id: "cb-dec", name: "Christmas Jackpot Cash Bingo" });
+    mapManagementEventToPrefillMock.mockReturnValue({
+      fields: { name: "Christmas Jackpot Cash Bingo", startDate: "2026-12-16", eventCategorySlug: "cash-bingo" },
+      sourceLabel: "Christmas Jackpot Cash Bingo (2026-12-16)",
+    });
+    listManagementEventsMock.mockRejectedValue(new ManagementApiError("HTTP_ERROR", "Management API request failed (429).", 429));
+
+    const { getManagementEventPrefill } = await import("@/app/(app)/create/actions");
+    const result = await getManagementEventPrefill({ eventId: "cb-dec" });
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        code: "FAILED",
+        message:
+          "We could not check when this event can start being promoted, so it was not imported. Please try again in a few minutes.",
+      },
+    });
+  });
+
   it("passes event slug to prefill lookup when provided", async () => {
     getManagementConnectionConfigMock.mockResolvedValue({
       baseUrl: "https://management.example.com",

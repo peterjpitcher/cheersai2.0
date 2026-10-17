@@ -3,6 +3,7 @@ import { DateTime } from "luxon";
 import type { EventCampaignFormValues, PromotionCampaignFormValues } from "@/lib/create/schema";
 import type { ManagementEventDetail, ManagementMenuSpecialItem } from "@/lib/management-app/client";
 import { buildEventFactSheet, stripImportedFormatting, toneForCategory, type CopyTone, type EventFactSheet } from "@/lib/management-app/event-facts";
+import type { PromotionWindow } from "@/lib/management-app/promotion-window";
 import { DEFAULT_TIMEZONE } from "@/lib/constants";
 import type { PlatformCtaLinks } from "@/types/content";
 
@@ -30,6 +31,8 @@ interface EventPrefillResult {
     facts?: EventFactSheet;
     /** A starting tone for this kind of event, when the category suggests one. */
     suggestedTone?: CopyTone;
+    /** When posts may start: after the last event of the same type (set by the import action). */
+    promotionWindow?: PromotionWindow;
   };
   sourceLabel: string;
 }
