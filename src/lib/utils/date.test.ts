@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { DateTime } from "luxon";
+import { DateTime, Settings } from "luxon";
 
 import {
   formatEventDateLong,
@@ -7,8 +7,66 @@ import {
   formatUkDateTime,
   formatUkLongDate,
   ordinalSuffix,
+  parseIsoInLondon,
   ukLongDateToIso,
 } from "@/lib/utils/date";
+
+describe("parseIsoInLondon", () => {
+  const originalTimeZone = process.env.TZ;
+  const originalLocale = Settings.defaultLocale;
+
+  afterEach(() => {
+    process.env.TZ = originalTimeZone;
+    Settings.defaultLocale = originalLocale;
+  });
+
+  function londonClock(value: string): string | undefined {
+    return parseIsoInLondon(value)?.toFormat("yyyy-MM-dd HH:mm ZZ");
+  }
+
+  // Vercel runs in UTC: a bare DateTime.fromISO there read this 7pm event as 6pm.
+  it.each(["UTC", "Europe/London", "America/New_York"])(
+    "reads a summer-time instant on the London clock whatever the runtime zone (%s)",
+    (zone) => {
+      process.env.TZ = zone;
+      expect(londonClock("2026-10-07T18:00:00.000Z")).toBe("2026-10-07 19:00 +01:00");
+      expect(londonClock("2026-10-07T19:00:00.000+01:00")).toBe("2026-10-07 19:00 +01:00");
+      expect(parseIsoInLondon("2026-10-07T18:00:00.000Z")?.zoneName).toBe("Europe/London");
+    },
+  );
+
+  it("uses GMT in winter", () => {
+    expect(londonClock("2026-11-04T19:00:00.000Z")).toBe("2026-11-04 19:00 +00:00");
+  });
+
+  it("puts a late summer evening in UTC on the next London day", () => {
+    expect(londonClock("2026-10-07T23:30:00.000Z")).toBe("2026-10-08 00:30 +01:00");
+  });
+
+  it("handles the day the clocks go back", () => {
+    // 01:30 happens twice on 25 October 2026: first in BST, then in GMT.
+    expect(londonClock("2026-10-25T00:30:00.000Z")).toBe("2026-10-25 01:30 +01:00");
+    expect(londonClock("2026-10-25T01:30:00.000Z")).toBe("2026-10-25 01:30 +00:00");
+    expect(londonClock("2026-10-25T19:00:00.000Z")).toBe("2026-10-25 19:00 +00:00");
+  });
+
+  it("takes a string with no offset as London wall-clock time", () => {
+    process.env.TZ = "UTC";
+    expect(londonClock("2026-10-07T19:00:00")).toBe("2026-10-07 19:00 +01:00");
+  });
+
+  it("formats in English whatever the runtime locale", () => {
+    Settings.defaultLocale = "fr-FR";
+    expect(parseIsoInLondon("2026-10-07T18:00:00.000Z")?.toFormat("ccc d LLL")).toBe("Wed 7 Oct");
+  });
+
+  it("returns null for missing or invalid input", () => {
+    expect(parseIsoInLondon(null)).toBeNull();
+    expect(parseIsoInLondon(undefined)).toBeNull();
+    expect(parseIsoInLondon("")).toBeNull();
+    expect(parseIsoInLondon("not a date")).toBeNull();
+  });
+});
 
 describe("ukLongDateToIso", () => {
   it("reads a long UK date back as the same calendar day", () => {

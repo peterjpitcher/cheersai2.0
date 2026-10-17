@@ -75,6 +75,23 @@ export function formatEventDateLong(
   return `${weekday} ${dt.day}${ordinalSuffix(dt.day)} ${month}`;
 }
 
+/**
+ * Read an ISO string as a date and time on the Europe/London clock (en-GB), or
+ * null when it is missing or not a valid date. An instant ("...Z" or with an
+ * offset) is converted to London time; a string with no offset is taken as
+ * London wall-clock time.
+ *
+ * Use this instead of a bare `DateTime.fromISO(value)` in anything that renders
+ * on the server. That converts to the runtime's zone, which is UTC on Vercel,
+ * so a 7pm event in British Summer Time (18:00 UTC) reads as 6pm there but as
+ * 7pm on a London laptop.
+ */
+export function parseIsoInLondon(value: string | null | undefined): DateTime | null {
+  if (!value) return null;
+  const parsed = DateTime.fromISO(value, { zone: DEFAULT_TIMEZONE, locale: "en-GB" });
+  return parsed.isValid ? parsed : null;
+}
+
 function toLondonDateTime(input: Date | string): DateTime {
   return input instanceof Date
     ? DateTime.fromJSDate(input, { zone: DEFAULT_TIMEZONE })

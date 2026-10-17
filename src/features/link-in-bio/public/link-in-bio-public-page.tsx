@@ -16,7 +16,7 @@ import {
   Utensils,
   type LucideIcon,
 } from "lucide-react";
-import { DateTime } from "luxon";
+import type { DateTime } from "luxon";
 
 import {
   MediaFrame,
@@ -33,6 +33,7 @@ import type {
   QuickActionLayout,
 } from "@/lib/link-in-bio/types";
 import { cn } from "@/lib/utils";
+import { formatFriendlyTimeFromZoned, parseIsoInLondon } from "@/lib/utils/date";
 import { renderTemplate } from "./templates";
 import { LinkInBioRefreshTimer } from "./link-in-bio-refresh-timer";
 import { ClickTracker } from "./click-tracker";
@@ -145,20 +146,17 @@ function resolveQuickActionLayout(value: unknown): QuickActionLayout {
   return value === "single" ? "single" : "double";
 }
 
-function parseDate(value: string | null | undefined) {
-  if (!value) return null;
-  const parsed = DateTime.fromISO(value).setLocale("en-GB");
-  return parsed.isValid ? parsed : null;
-}
-
+/** Midnight means the time is not known, so only the date is shown. */
 function formatTime(value: DateTime) {
   if (value.hour === 0 && value.minute === 0) return null;
-  return value.toFormat(value.minute === 0 ? "ha" : "h:mma").toLowerCase();
+  return formatFriendlyTimeFromZoned(value);
 }
 
+// Dates are read on the London clock: this page renders on the server, which
+// runs in UTC, so a bare DateTime.fromISO showed summer events an hour early.
 function formatCampaignTiming(campaign: PublicCampaignCard) {
-  const start = parseDate(campaign.displayStartsAt) ?? parseDate(campaign.scheduledFor);
-  const end = parseDate(campaign.displayEndsAt) ?? parseDate(campaign.endAt);
+  const start = parseIsoInLondon(campaign.displayStartsAt) ?? parseIsoInLondon(campaign.scheduledFor);
+  const end = parseIsoInLondon(campaign.displayEndsAt) ?? parseIsoInLondon(campaign.endAt);
 
   if (campaign.campaignType === "promotion" && end) {
     return `Ends ${end.toFormat("ccc d LLL")}`;
@@ -438,7 +436,7 @@ function AlwaysOnTiles({
 }
 
 function formatWebsiteEventTiming(event: PublicWebsiteEvent) {
-  const start = parseDate(event.startsAt);
+  const start = parseIsoInLondon(event.startsAt);
   if (!start) return null;
   const time = formatTime(start);
   return time ? `${start.toFormat("ccc d LLL")} at ${time}` : start.toFormat("ccc d LLL");
