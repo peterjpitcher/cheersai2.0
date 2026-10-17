@@ -106,7 +106,7 @@ Route that exists but is not in `vercel.json`: `/api/cron/publish` (a 410 tombst
 | `NEXT_PUBLIC_FACEBOOK_APP_ID`, `FACEBOOK_APP_SECRET` | Meta app credentials |
 | `INSTAGRAM_APP_ID`, `INSTAGRAM_APP_SECRET`, `INSTAGRAM_VERIFY_TOKEN` | Instagram app credentials and webhook verification token |
 | `META_GRAPH_VERSION`, `NEXT_PUBLIC_META_GRAPH_VERSION` | Pinned Graph API version (server and client) |
-| `OPENAI_API_KEY`, `OPENAI_MODEL` | OpenAI key; model override (default `gpt-4o-mini`) |
+| `OPENAI_API_KEY`, `OPENAI_MODEL` | OpenAI key; copy model override (default `gpt-5.5`, `DEFAULT_COPY_MODEL` in `src/lib/ai/models.ts`; image tagging keeps `gpt-4o-mini`) |
 | `RESEND_API_KEY`, `RESEND_FROM` | Transactional email; from address in the form `Name <address>` |
 | `CRON_SECRET` | Header secret for all `/api/cron/*` routes |
 | `ALERTS_SECRET` | Internal alerts webhook secret |
