@@ -30,14 +30,17 @@ function linkOf(batch: PlanBatch, platform: FeedPlatform): string | null {
 
 export function renderCalendarReport(plan: CalendarPlan): string {
   const newSlots = plan.batches.reduce((total, batch) => total + batch.slots.length, 0);
-  const movedSlots = plan.moves.length;
+  const required = plan.moves.filter((move) => move.reason !== 'early_build_up');
+  const optional = plan.moves.filter((move) => move.reason === 'early_build_up');
+  const movedSlots = required.length;
   const lines: string[] = [
     `# Posting calendar, ${formatDay(plan.from)} to ${formatDay(plan.to)}`,
     '',
     `Planned ${when(plan.createdAt)} (London) with ${plan.model}. Nothing has changed yet.`,
     '',
     `- **New posts:** ${newSlots}, each on Facebook and Instagram, each with its story at the same minute using the image's upright story version. That is ${newSlots * 4} items.`,
-    `- **Time moves:** ${movedSlots} existing slots (${plan.moves.reduce((total, move) => total + move.items.length, 0)} items, feed and story together).`,
+    `- **Time moves:** ${movedSlots} existing slots (${required.reduce((total, move) => total + move.items.length, 0)} items, feed and story together).`,
+    ...(optional.length ? [`- **Optional moves:** ${optional.length} build-up slots now at 7am could move to 11:00 as well; they are applied only if you agree.`] : []),
     `- **Days left empty:** ${plan.unfilled.length}.`,
     '',
     'Approving applies exactly this list. A post is only added to a day that has had no post added since, and a post is only moved if it is still at its old time and waiting. Anything that has changed is left alone and reported. It can all be undone.',
@@ -47,17 +50,23 @@ export function renderCalendarReport(plan: CalendarPlan): string {
   for (const day of plan.days) {
     const entries = day.entries.length
       ? day.entries
-          .map((entry) => `${entry.time} ${entry.title}${entry.status === 'new' ? ' **(new)**' : entry.status === 'moved' ? ' **(moved)**' : ''}`)
+          .map((entry) => `${entry.time} ${entry.title}${entry.status === 'new' ? ' **(new)**' : entry.status === 'moved' ? ' **(moved)**' : entry.status === 'optional' ? ' (to 11:00 if agreed)' : ''}`)
           .join('<br>')
       : '_empty_';
     lines.push(`| ${formatDay(day.date)} | ${entries} |`);
   }
 
-  if (plan.moves.length) {
+  if (required.length) {
     lines.push('', '## Time moves', '');
-    for (const move of [...plan.moves].sort((a, b) => a.fromIso.localeCompare(b.fromIso))) {
+    for (const move of [...required].sort((a, b) => a.fromIso.localeCompare(b.fromIso))) {
       const why = move.reason === 'collision' ? 'it shared its minute with another post' : 'build-up posts now go out at 11:00';
       lines.push(`- ${move.campaignName}: ${when(move.fromIso)} to ${londonTime(move.toIso)} (${why}); ${move.items.length} items.`);
+    }
+  }
+  if (optional.length) {
+    lines.push('', '## Optional moves: 7am build-up posts to 11:00', '', 'Build-up posts that are not on the event day, now at 7am, where 11:00 is free that day. Applied only if you agree.', '');
+    for (const move of [...optional].sort((a, b) => a.fromIso.localeCompare(b.fromIso))) {
+      lines.push(`- ${move.campaignName}: ${when(move.fromIso)} to ${londonTime(move.toIso)}; ${move.items.length} items.`);
     }
   }
 

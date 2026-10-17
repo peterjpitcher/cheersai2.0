@@ -49,6 +49,7 @@ const planSchema = z.object({
       items: z.array(z.object({ contentItemId: z.string().uuid(), platform: z.string(), placement: z.string() })).min(1),
       fromIso: z.string().min(1),
       toIso: z.string().min(1),
+      reason: z.enum(['build_up_time', 'collision', 'early_build_up']),
     }),
   ),
   batches: z.array(
@@ -84,6 +85,13 @@ export interface ApplyOutcome {
   record: AppliedRecord;
   skipped: Array<{ what: string; reason: string }>;
   failed: Array<{ what: string; error: string }>;
+  /** Optional moves (7am build-ups) left out because they were not asked for. */
+  optionalLeft: number;
+}
+
+export interface ApplyOptions {
+  /** Also move the build-up posts at 7am to 11:00, once the owner has agreed to it. */
+  withEarlyMoves?: boolean;
 }
 
 export interface ApplyDeps {
@@ -173,7 +181,7 @@ async function slotProblem(db: SupabaseClient, plan: CalendarPlan, slot: PlanSlo
  * with the reason, when it no longer matches. Pass the record of an earlier
  * run to carry on from it; everything already done is skipped.
  */
-export async function applyCalendarPlan(deps: ApplyDeps, plan: CalendarPlan, previous?: AppliedRecord): Promise<ApplyOutcome> {
+export async function applyCalendarPlan(deps: ApplyDeps, plan: CalendarPlan, previous?: AppliedRecord, options: ApplyOptions = {}): Promise<ApplyOutcome> {
   const { db } = deps;
   const log = deps.log ?? (() => undefined);
   const schedule = deps.schedule ?? scheduleContentBatch;
@@ -181,8 +189,13 @@ export async function applyCalendarPlan(deps: ApplyDeps, plan: CalendarPlan, pre
   const record: AppliedRecord = previous ? structuredClone(previous) : emptyRecord(plan);
   const skipped: ApplyOutcome['skipped'] = [];
   const failed: ApplyOutcome['failed'] = [];
+  let optionalLeft = 0;
 
   for (const move of plan.moves) {
+    if (move.reason === 'early_build_up' && !options.withEarlyMoves) {
+      optionalLeft += 1;
+      continue;
+    }
     const what = `${move.campaignName}, ${label(move.fromIso)} to ${londonTime(move.toIso)}`;
     const ids = move.items.map((item) => item.contentItemId);
     try {
@@ -314,7 +327,7 @@ export async function applyCalendarPlan(deps: ApplyDeps, plan: CalendarPlan, pre
     }
   }
 
-  return { record, skipped, failed };
+  return { record, skipped, failed, optionalLeft };
 }
 
 export interface VerifyProblem {
@@ -472,5 +485,5 @@ export async function rollbackCalendarPlan(deps: Pick<ApplyDeps, 'db' | 'now' | 
     }
   }
 
-  return { record, skipped, failed };
+  return { record, skipped, failed, optionalLeft: 0 };
 }

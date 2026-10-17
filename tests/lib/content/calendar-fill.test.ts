@@ -104,6 +104,45 @@ describe('decideCalendar: times', () => {
   });
 });
 
+describe('decideCalendar: 7am build-up posts and rugby days', () => {
+  const events = [
+    event('cb-sep', 'Autumn Jackpot', '2026-09-30', 'Cash Bingo'),
+    event('cb-nov', 'Snowball Showdown', '2026-11-18', 'Cash Bingo'),
+    event('q-nov', 'Sparks Quiz', '2026-11-04', 'Quiz Night'),
+    event('q-dec', 'Tinsel & Trivia', '2026-12-02', 'Quiz Night'),
+  ];
+
+  it('lists 7am build-up posts to move to 11:00 as optional, keeping 7am where 11:00 is taken', () => {
+    const posts = [
+      ...slot('2026-11-04 07:00', { campaignId: 'c-sparks', eventName: 'Sparks Quiz', eventDate: '2026-11-04' }),
+      ...slot('2026-11-03 07:00', { campaignId: 'c-cash', eventName: 'Snowball Showdown', eventDate: '2026-11-18' }),
+      ...slot('2026-11-14 07:00', { campaignId: 'c-cash', eventName: 'Snowball Showdown', eventDate: '2026-11-18' }),
+      ...slot('2026-11-14 11:00', { campaignId: 'c-trivia', eventName: 'Tinsel & Trivia', eventDate: '2026-12-02' }),
+      ...slot('2026-11-18 07:00', { campaignId: 'c-cash', eventName: 'Snowball Showdown', eventDate: '2026-11-18' }),
+    ];
+    const decision = decide({ from: '2026-11-01', to: '2026-11-30', posts, events });
+
+    expect(decision.moves.map((move) => [move.fromIso, move.toIso, move.reason])).toEqual([
+      [atLondon('2026-11-03', '07:00'), atLondon('2026-11-03', '11:00'), 'early_build_up'],
+    ]);
+    expect(decision.notes).toContain('Snowball Showdown on Sat 14 Nov stays at 07:00: 11:00 already has a post that day.');
+  });
+
+  it("counts a rugby fixture's separate Facebook and Instagram posts as one post a platform", () => {
+    const rugby = (platform: 'facebook' | 'instagram') =>
+      slot('2026-12-09 20:10', { source: 'tournament', slotKey: `tournament:${platform}` }).filter((post) => post.platform === platform);
+    const decision = decide({
+      from: '2026-11-14',
+      to: '2026-12-02',
+      events: [event('mb-nov', 'Sequins', '2026-11-13', 'Music Bingo'), event('mb-dec', 'Sleigh My Name', '2026-12-11', 'Music Bingo')],
+      posts: [...rugby('facebook'), ...rugby('instagram')],
+    });
+
+    const sleigh = decision.newCampaigns.find((campaign) => campaign.event.name === 'Sleigh My Name');
+    expect(sleigh?.slots.some((entry) => entry.date === '2026-12-09' && entry.label === '2 days to go')).toBe(true);
+  });
+});
+
 describe('decideCalendar: empty days', () => {
   const quizEvents = [event('q-nov', 'Sparks Quiz', '2026-11-04', 'Quiz Night'), event('q-dec', 'Tinsel & Trivia', '2026-12-02', 'Quiz Night')];
   const trivia = (at: string) => slot(at, { campaignId: 'c-trivia', eventName: 'Tinsel & Trivia', eventDate: '2026-12-02' });

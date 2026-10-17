@@ -143,6 +143,24 @@ describe('applyCalendarPlan: moves', () => {
   });
 });
 
+describe('applyCalendarPlan: optional 7am moves', () => {
+  const early = { ...move, reason: 'early_build_up' as const, fromIso: atLondon('2026-10-28', '07:00') };
+
+  it('leaves them alone unless asked, and makes them when asked', async () => {
+    const tables = { content_items: scheduledItems(early.fromIso), publish_jobs: jobsFor(early.fromIso) };
+    const db = fakeDb(tables);
+
+    const left = await applyCalendarPlan({ db, now: () => NOW }, basePlan({ moves: [early] }));
+    expect(left.optionalLeft).toBe(1);
+    expect(tables.content_items.every((row) => row.scheduled_for === early.fromIso)).toBe(true);
+
+    const made = await applyCalendarPlan({ db, now: () => NOW }, basePlan({ moves: [early] }), undefined, { withEarlyMoves: true });
+    expect(made.optionalLeft).toBe(0);
+    expect(made.record.moved).toEqual([{ contentItemIds: ids, fromIso: early.fromIso, toIso: early.toIso }]);
+    expect(tables.content_items.every((row) => row.scheduled_for === early.toIso)).toBe(true);
+  });
+});
+
 describe('applyCalendarPlan: new posts', () => {
   const batch = (slots: PlanSlot[], extra: Partial<CalendarPlan['batches'][number]> = {}): CalendarPlan['batches'][number] => ({
     key: 'lunch',

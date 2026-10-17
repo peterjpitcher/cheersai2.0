@@ -37,7 +37,9 @@ import type { PlatformCopy } from '@/types/content';
  * The rules, in the order they are applied:
  * 1. Build-up posts at 12:00 move to 11:00 the same day. When two posts on one
  *    platform share a minute, the one that is not an event-day post moves to
- *    11:00 (the one for the later event, when neither is).
+ *    11:00 (the one for the later event, when neither is). Build-up posts at
+ *    7am are listed to move to 11:00 too, where 11:00 is free that day, but
+ *    those moves are applied only when the owner agrees to them.
  * 2. An event with no campaign yet gets one when its posts would start in the
  *    period: up to four weekly posts, two days to go, one day to go and the
  *    event day, none before its promotion window opens. A weekly post that
@@ -178,7 +180,8 @@ export interface PlannedMove {
   items: Array<{ contentItemId: string; platform: string; placement: string }>;
   fromIso: string;
   toIso: string;
-  reason: 'build_up_time' | 'collision';
+  /** early_build_up moves are optional: applied only when the owner agrees. */
+  reason: 'build_up_time' | 'collision' | 'early_build_up';
 }
 
 export type SlotKind = 'weekly' | 'countdown' | 'event_day' | 'build_up' | 'venue';
@@ -343,22 +346,29 @@ function groupSlots(posts: CalendarPost[], leadMs: number): SlotGroup[] {
   return [...groups.values()];
 }
 
+interface DayEntry {
+  time: string;
+  eventId: string | null;
+  platforms: FeedPlatform[];
+  group?: SlotGroup;
+}
+
 /** What the plan knows is on each day: the existing slots, as moved, plus the ones it adds. */
 class DayBook {
-  private readonly byDay = new Map<string, Array<{ time: string; eventId: string | null; group?: SlotGroup }>>();
+  private readonly byDay = new Map<string, DayEntry[]>();
   private readonly existingCounts = new Map<string, DayCounts>();
 
   constructor(groups: SlotGroup[], private readonly eventIdOf: (group: SlotGroup) => string | null) {
     for (const group of groups) {
       if (!group.feedPlatforms.size) continue;
-      this.entries(group.date).push({ time: group.time, eventId: eventIdOf(group), group });
+      this.entries(group.date).push({ time: group.time, eventId: eventIdOf(group), platforms: [...group.feedPlatforms], group });
       const counts = this.existingCounts.get(group.date) ?? { facebook: 0, instagram: 0 };
       for (const platform of group.feedPlatforms) counts[platform] += 1;
       this.existingCounts.set(group.date, counts);
     }
   }
 
-  private entries(date: string): Array<{ time: string; eventId: string | null; group?: SlotGroup }> {
+  private entries(date: string): DayEntry[] {
     let list = this.byDay.get(date);
     if (!list) {
       list = [];
@@ -367,8 +377,10 @@ class DayBook {
     return list;
   }
 
+  /** Feed posts on the day, on whichever platform has more. */
   count(date: string): number {
-    return this.byDay.get(date)?.length ?? 0;
+    const entries = this.byDay.get(date) ?? [];
+    return Math.max(0, ...FEED_PLATFORMS.map((platform) => entries.filter((entry) => entry.platforms.includes(platform)).length));
   }
 
   /** Feed posts already scheduled on the day when the plan was made, per platform. */
@@ -391,7 +403,7 @@ class DayBook {
   }
 
   add(date: string, time: string, eventId: string | null): void {
-    this.entries(date).push({ time, eventId });
+    this.entries(date).push({ time, eventId, platforms: [...FEED_PLATFORMS] });
   }
 
   move(group: SlotGroup, time: string): void {
@@ -601,6 +613,20 @@ export function decideCalendar(input: DecideInput): CalendarDecision {
     newCampaigns.push({ event, window, slots });
   }
 
+  // Optional: build-up posts at 7am move to 11:00 too (decision 5), where 11:00
+  // is free that day. Listed for the owner, applied only with their yes.
+  for (const group of groups) {
+    if (!group.movable || !group.eventDate || group.date === group.eventDate || group.time !== EVENT_DAY_TIME) continue;
+    if (group.date < from || group.date > addDays(to, HORIZON_DAYS)) continue;
+    if (moves.some((move) => move.fromIso === group.scheduledFor && move.campaignId === group.campaignId)) continue;
+    if (book.takenAt(group.date, BUILD_UP_TIME, group)) {
+      notes.push(`${group.campaignName} on ${formatDay(group.date)} stays at 07:00: 11:00 already has a post that day.`);
+      continue;
+    }
+    moves.push(slotMove(group, BUILD_UP_TIME, 'early_build_up'));
+    book.move(group, BUILD_UP_TIME);
+  }
+
   // 3. Every day still empty gets one post.
   const empty = new Set(eachDay([from, tomorrow].sort().at(-1) as string, to).filter((day) => book.count(day) === 0));
   const take = (day: string): void => {
@@ -756,7 +782,7 @@ export interface CalendarPlan {
   ruleBreaks: RuleBreak[];
   notes: string[];
   /** Every day of the period as planned, for the report. */
-  days: Array<{ date: string; entries: Array<{ time: string; title: string; status: 'existing' | 'moved' | 'new' }> }>;
+  days: Array<{ date: string; entries: Array<{ time: string; title: string; status: 'existing' | 'moved' | 'optional' | 'new' }> }>;
   sources: Array<{ subject: VenueSubjectKey; title: string; source: string; links: Record<FeedPlatform, string> }>;
   events: Array<{ name: string; date: string; category: string | null; campaign: string | null; opensOn: string | null }>;
 }
@@ -1347,22 +1373,21 @@ export async function planCalendarFill(deps: CalendarFillDeps, options: Calendar
 
   batches.sort((a, b) => a.slots[0].scheduledAt.localeCompare(b.slots[0].scheduledAt));
 
-  // The period day by day, as it will look.
-  const movedFrom = new Map(decision.moves.flatMap((move) => move.items.map((item) => [item.contentItemId, move.toIso] as const)));
+  // The period day by day, as it will look. An optional move shows at the
+  // time the post has now; rugby's separate platform posts show once.
+  const moveOf = new Map(decision.moves.flatMap((move) => move.items.map((item) => [item.contentItemId, move] as const)));
   const days = eachDay(from, to).map((date) => {
-    const entries: Array<{ time: string; title: string; status: 'existing' | 'moved' | 'new' }> = [];
+    const entries: Array<{ time: string; title: string; status: 'existing' | 'moved' | 'optional' | 'new' }> = [];
     const seen = new Set<string>();
     for (const post of posts) {
       if (post.placement !== 'feed' || !OCCUPYING_STATUSES.has(post.status) || londonDate(post.scheduledFor) !== date) continue;
-      const key = `${post.campaignId ?? post.slotKey ?? post.id}|${post.scheduledFor}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      const moved = movedFrom.get(post.id);
-      entries.push({
-        time: londonTime(moved ?? post.scheduledFor),
-        title: post.campaignName ?? (post.source === 'tournament' ? 'Rugby' : 'Post'),
-        status: moved ? 'moved' : 'existing',
-      });
+      const move = moveOf.get(post.id);
+      const optional = move?.reason === 'early_build_up';
+      const time = londonTime(move && !optional ? move.toIso : post.scheduledFor);
+      const title = post.campaignName ?? (post.source === 'tournament' ? 'Rugby' : 'Post');
+      if (seen.has(`${title}|${time}`)) continue;
+      seen.add(`${title}|${time}`);
+      entries.push({ time, title, status: optional ? 'optional' : move ? 'moved' : 'existing' });
     }
     for (const batch of batches) {
       for (const slot of batch.slots) {

@@ -33,12 +33,13 @@ export interface FillArgs {
   subjectsFile: string;
   planFile: string | null;
   outDir: string | null;
+  withEarlyMoves: boolean;
 }
 
 export const USAGE = [
   'Usage:',
   '  npm run ops:calendar-fill -- --account <id> --from <YYYY-MM-DD> --to <YYYY-MM-DD> [--subjects <file>] [--out <dir>]',
-  '  npm run ops:calendar-fill -- --apply --plan <file>',
+  '  npm run ops:calendar-fill -- --apply --plan <file> [--with-7am-moves]',
   '  npm run ops:calendar-fill -- --rollback --plan <file>',
 ].join('\n');
 
@@ -47,7 +48,7 @@ const DEFAULT_SUBJECTS = path.join('scripts', 'ops', 'calendar-fill-subjects.jso
 const EVENT_PAGE = 100;
 
 export function parseArgs(argv: string[]): FillArgs {
-  const args: FillArgs = { mode: 'plan', accountId: null, from: null, to: null, subjectsFile: DEFAULT_SUBJECTS, planFile: null, outDir: null };
+  const args: FillArgs = { mode: 'plan', accountId: null, from: null, to: null, subjectsFile: DEFAULT_SUBJECTS, planFile: null, outDir: null, withEarlyMoves: false };
   const modes = new Set<FillArgs['mode']>();
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
@@ -65,12 +66,14 @@ export function parseArgs(argv: string[]): FillArgs {
     else if (arg === '--subjects') args.subjectsFile = value();
     else if (arg === '--plan') args.planFile = value();
     else if (arg === '--out') args.outDir = value();
+    else if (arg === '--with-7am-moves') args.withEarlyMoves = true;
     else throw new Error(`Unknown option ${arg}.\n${USAGE}`);
   }
   if (modes.size > 1) throw new Error(`Choose --apply or --rollback, not both.\n${USAGE}`);
   args.mode = [...modes][0] ?? 'plan';
   if (args.mode === 'plan' && (!args.accountId || !args.from || !args.to)) throw new Error(`A plan run needs --account, --from and --to.\n${USAGE}`);
   if (args.mode !== 'plan' && !args.planFile) throw new Error(`--${args.mode} needs --plan <file>.\n${USAGE}`);
+  if (args.withEarlyMoves && args.mode !== 'apply') throw new Error(`--with-7am-moves only applies to --apply.\n${USAGE}`);
   return args;
 }
 
@@ -130,11 +133,13 @@ async function main(): Promise<void> {
       },
       plan,
       previous,
+      { withEarlyMoves: args.withEarlyMoves },
     );
     writeFileSync(recordPath, `${JSON.stringify(outcome.record, null, 2)}\n`);
     const created = outcome.record.created.reduce((total, entry) => total + entry.contentItemIds.length, 0);
     const moved = outcome.record.moved.reduce((total, entry) => total + entry.contentItemIds.length, 0);
     console.log(`\nApplied: ${created} items created and ${moved} moved in total; ${outcome.skipped.length} parts left alone, ${outcome.failed.length} failed.`);
+    if (outcome.optionalLeft) console.log(`  ${outcome.optionalLeft} optional 7am moves left as they are (add --with-7am-moves once agreed).`);
     for (const item of outcome.skipped) console.log(`  left ${item.what}: ${item.reason}`);
     for (const item of outcome.failed) console.log(`  FAILED ${item.what}: ${item.error}`);
 
