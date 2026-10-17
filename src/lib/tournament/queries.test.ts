@@ -121,3 +121,38 @@ describe('deriveFixtureContentStatuses', () => {
     expect(statuses.get('fixture-1')).toBe('published');
   });
 });
+
+describe('deriveFixtureContentStatuses with match-day round-ups', () => {
+  it('counts a round-up towards every game it lists, not only its lead fixture', async () => {
+    const calls: Array<{ method: string; column: string; value: unknown }> = [];
+    const from = vi.fn(() => createBuilder({
+      data: [
+        {
+          id: 'roundup-feed',
+          status: 'scheduled',
+          scheduled_for: '2099-11-04T11:40:00+00:00',
+          prompt_context: {
+            source: 'tournament',
+            tournament_fixture_id: 'fixture-1',
+            roundup_fixture_ids: ['fixture-1', 'fixture-2', 'fixture-3'],
+          },
+        },
+      ],
+      error: null,
+    }, calls));
+
+    const fixtures = ['fixture-1', 'fixture-2', 'fixture-3', 'fixture-4'].map((id) => ({
+      id,
+      contentGenerated: true,
+      showing: true,
+      teamsConfirmed: true,
+    }) as TournamentFixture);
+
+    const statuses = await deriveFixtureContentStatuses({ from } as unknown as SupabaseClient, fixtures, 'acct-1');
+
+    expect(statuses.get('fixture-1')).toBe('scheduled');
+    expect(statuses.get('fixture-2')).toBe('scheduled');
+    expect(statuses.get('fixture-3')).toBe('scheduled');
+    expect(statuses.get('fixture-4')).toBe('ready');
+  });
+});

@@ -71,3 +71,48 @@ describe('legacy owner-approved terrestrial delivery', () => {
     expect(await legacyTournamentContentIssue(database(3, approval), 'a', ctx)).not.toBeNull();
   });
 });
+
+describe('match-day round-up delivery gate', () => {
+  const game = { content_revision: 3, showing: true, screening_decision: 'unconfirmed', broadcast_decision: 'confirmed', teams_confirmed: true, planned_end_at: null, kick_off_at: '2026-11-07T12:00:00Z', match_state: 'scheduled', broadcast_checked_at: '2026-09-05T09:00:00Z', screening_confirmed_at: '2026-09-05T09:00:00Z', booking_url: null };
+  const roundupCtx = { ...ctx, roundup_fixture_ids: ['f', 'g'], roundup_revisions: { f: 3, g: 7 } };
+  function roundupDatabase(fixtures: Record<string, Record<string, unknown>>): SupabaseClient {
+    const rows: Record<string, unknown> = {
+      tournaments: { id: 't', sport: 'rugby_union', status: 'active', updated_at: 'updated' },
+      management_app_connections: { base_url: 'https://management.example.test', api_key: 'test-key', enabled: true },
+    };
+    return { from: (table: string) => {
+      let id: unknown;
+      const chain = {
+        select: () => chain,
+        eq: (column: string, value: unknown) => { if (column === 'id') id = value; return chain; },
+        maybeSingle: async () => ({ data: table === 'tournament_fixtures' ? fixtures[String(id)] ?? null : rows[table], error: null }),
+      };
+      return chain;
+    } } as unknown as SupabaseClient;
+  }
+  function stubHours() {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({ success: true, data: { schemaVersion: 1, timezone: 'Europe/London', days: [{ date: '2026-11-07', state: 'open', fingerprint: 'fp', bar: { startAt: '2026-11-07T12:00:00Z', endAt: '2026-11-07T22:00:00Z' } }] } })));
+  }
+
+  it('passes when every listed game still passes', async () => {
+    vi.useFakeTimers(); vi.setSystemTime(new Date('2026-11-04T12:00:00Z')); stubHours();
+    const db = roundupDatabase({ f: game, g: { ...game, content_revision: 7, kick_off_at: '2026-11-07T15:00:00Z' } });
+    expect(await legacyTournamentContentIssue(db, 'a', roundupCtx)).toBeNull();
+  });
+
+  it.each([
+    ['a changed game', { content_revision: 8 }],
+    ['a hidden game', { screening_decision: 'not_showing' }],
+    ['a cancelled game', { match_state: 'cancelled' }],
+    ['a game moved to another day', { kick_off_at: '2026-11-08T15:00:00Z' }],
+  ])('holds the whole post for %s', async (_label, change) => {
+    vi.useFakeTimers(); vi.setSystemTime(new Date('2026-11-04T12:00:00Z')); stubHours();
+    const db = roundupDatabase({ f: game, g: { ...game, content_revision: 7, kick_off_at: '2026-11-07T15:00:00Z', ...change } });
+    expect(await legacyTournamentContentIssue(db, 'a', roundupCtx)).toContain('Screening changed');
+  });
+
+  it('holds the post when a listed game no longer exists', async () => {
+    vi.useFakeTimers(); vi.setSystemTime(new Date('2026-11-04T12:00:00Z')); stubHours();
+    expect(await legacyTournamentContentIssue(roundupDatabase({ f: game }), 'a', roundupCtx)).toContain('Screening changed');
+  });
+});

@@ -40,3 +40,28 @@ it.each([
   expect(await getTournamentContentIssue(db, 'account', { ...context, ...change })).toMatch(/template|destination/);
   expect(projectTournamentFixtures).not.toHaveBeenCalled();
 });
+
+describe('match-day round-ups', () => {
+  const roundup = { ...context, roundup_fixture_ids: ['f1', 'f2'], roundup_revisions: { f1: 4, f2: 9 } };
+  beforeEach(() => {
+    vi.mocked(getFixtureById).mockImplementation(async (_db, id) => ({ id, contentRevision: id === 'f2' ? 9 : 4, kickOffAt: '2026-11-07T12:00:00Z', bookingUrl: null }) as Awaited<ReturnType<typeof getFixtureById>>);
+    vi.mocked(projectTournamentFixtures).mockResolvedValue([
+      { id: 'f1', screening: { canGenerateTeamPromotion: true }, hours: { fingerprint: 'hours-1' } },
+      { id: 'f2', screening: { canGenerateTeamPromotion: true }, hours: { fingerprint: 'hours-1' } },
+    ] as Awaited<ReturnType<typeof projectTournamentFixtures>>);
+  });
+  it('allows a round-up whose games are all unchanged and still showing', async () => {
+    expect(await getTournamentContentIssue(db, 'account', roundup)).toBeNull();
+    expect(getFixtureById).toHaveBeenCalledWith(db, 'f2', 't1');
+  });
+  it('blocks the whole round-up when any listed game changed', async () => {
+    expect(await getTournamentContentIssue(db, 'account', { ...roundup, roundup_revisions: { f1: 4, f2: 8 } })).toMatch(/changed/);
+  });
+  it('blocks the whole round-up when any listed game stops being eligible', async () => {
+    vi.mocked(projectTournamentFixtures).mockResolvedValue([
+      { id: 'f1', screening: { canGenerateTeamPromotion: true }, hours: { fingerprint: 'hours-1' } },
+      { id: 'f2', screening: { canGenerateTeamPromotion: false }, hours: { fingerprint: 'hours-1' } },
+    ] as Awaited<ReturnType<typeof projectTournamentFixtures>>);
+    expect(await getTournamentContentIssue(db, 'account', roundup)).toContain('no longer eligible');
+  });
+});
