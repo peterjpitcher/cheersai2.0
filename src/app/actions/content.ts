@@ -16,6 +16,7 @@ import { normaliseBannerText, validateBannerText } from '@/lib/banner/text';
 import { readPlatformCtaLinks } from '@/lib/publishing/copy-rules';
 import { logPublishAuditEvent } from '@/lib/publishing/audit';
 import { MEDIA_BUCKET, DEFAULT_TIMEZONE, WEEKLY_MAX_OCCURRENCES } from '@/lib/constants';
+import { beforePromotionWindow, promotionWindowMessage } from '@/lib/management-app/promotion-window';
 import type { ContentItem, ContentType, Platform, PlatformCopy } from '@/types/content';
 import { requireEntitledContext } from '@/lib/billing/entitlement-server';
 import { ownerMessage } from '@/lib/errors/owner-message';
@@ -755,6 +756,21 @@ export async function createScheduledBatch(
     }
     if (contentType === 'weekly_recurring' && slotCopies.length < 1) {
       return { error: 'Select at least one date to publish.' };
+    }
+
+    // The event-order rule (tasks/SPEC-social-calendar-fill.md): no post before
+    // the last event of the same type has finished. Checked before any write.
+    const parsedBrief = briefValidation.data;
+    if (parsedBrief.contentType === 'event' && parsedBrief.promotionWindow) {
+      const window = parsedBrief.promotionWindow;
+      const nowLondon = DateTime.now().setZone(DEFAULT_TIMEZONE).toISODate() ?? '';
+      const early = slotCopies.some((slot) => {
+        const day = slot.scheduledAt
+          ? DateTime.fromISO(slot.scheduledAt, { setZone: true }).setZone(DEFAULT_TIMEZONE).toISODate() ?? ''
+          : nowLondon;
+        return beforePromotionWindow(day, window);
+      });
+      if (early) return { error: promotionWindowMessage(parsedBrief.eventName, window) };
     }
 
     // Validate per-post overlay text before any writes (all-or-nothing, like the

@@ -6,6 +6,7 @@ import { DateTime } from 'luxon';
 
 import { Label } from '@/components/ui/label';
 import { DEFAULT_TIMEZONE, STORY_POST_TIME, WEEKLY_MAX_OCCURRENCES } from '@/lib/constants';
+import { formatEventDateLong } from '@/lib/utils/date';
 import { ScheduleCalendar } from '@/features/create/schedule/schedule-calendar';
 import type {
   ExistingPlannerItemDisplay,
@@ -19,6 +20,7 @@ import {
 } from '@/features/create/schedule/suggestion-utils';
 import type { ContentBrief } from '@/features/create/schemas/content-schemas';
 import { inferSlotLabel } from '@/features/create/schedule/infer-slot-label';
+import { beforePromotionWindow, promotionWindowMessage } from '@/lib/management-app/promotion-window';
 import type { ScheduleSlot } from '@/types/content';
 
 // ---------------------------------------------------------------------------
@@ -83,6 +85,12 @@ export function ScheduleStep({
   const [existingItems, setExistingItems] = useState<ExistingPlannerItemDisplay[]>([]);
   const [isLoadingItems, setIsLoadingItems] = useState(false);
   const [calendarWarning, setCalendarWarning] = useState<string | null>(null);
+  // Why the last date the owner picked was refused (the event-order rule).
+  const [slotNotice, setSlotNotice] = useState<string | null>(null);
+  // Posts may start only after the last event of the same type has finished.
+  const promotionWindow = contentBrief.contentType === 'event' ? contentBrief.promotionWindow : undefined;
+  const eventLabel = contentBrief.contentType === 'event' ? contentBrief.eventName : contentBrief.title;
+  const earlySlotCount = selectedSlots.filter((slot) => beforePromotionWindow(slot.date, promotionWindow)).length;
   const fetchedRangesRef = useRef<Set<string>>(new Set());
 
   const loadExistingItems = useCallback(
@@ -152,7 +160,7 @@ export function ScheduleStep({
         startDate: contentBrief.eventDate,
         startTime: contentBrief.eventTime,
         timezone,
-      });
+      }).filter((suggestion) => !beforePromotionWindow(suggestion.date, contentBrief.promotionWindow));
     }
     if (contentBrief.contentType === 'promotion') {
       return buildPromotionSuggestions({
@@ -236,6 +244,13 @@ export function ScheduleStep({
         return;
       }
 
+      // The event-order rule: refuse a date before the window, and say why.
+      if (promotionWindow && beforePromotionWindow(date, promotionWindow)) {
+        setSlotNotice(promotionWindowMessage(eventLabel, promotionWindow));
+        return;
+      }
+      setSlotNotice(null);
+
       // Dedupe check
       const isDuplicate = selectedSlots.some(
         (s) => s.date === date && s.time === time,
@@ -270,7 +285,7 @@ export function ScheduleStep({
       if (isWeeklyRecurring) weeklyDirtyRef.current = true;
       onSlotsChange([...selectedSlots, newSlot]);
     },
-    [selectedSlots, suggestions, maxSlots, contentBrief, onSlotsChange, timezone, isWeeklyRecurring],
+    [selectedSlots, suggestions, maxSlots, contentBrief, onSlotsChange, timezone, isWeeklyRecurring, promotionWindow, eventLabel],
   );
 
   const handleRemoveSlot = useCallback(
@@ -369,6 +384,23 @@ export function ScheduleStep({
       {/* Calendar */}
       {showCalendar && (
         <>
+          {promotionWindow && (
+            <p className="text-sm text-muted-foreground">
+              Posts for {eventLabel} can start on {formatEventDateLong(promotionWindow.opensOn)}, after the last {promotionWindow.category} ({promotionWindow.afterEvent}) on {formatEventDateLong(promotionWindow.afterDate)}.
+            </p>
+          )}
+          {(slotNotice || earlySlotCount > 0) && (
+            <div
+              className="flex items-start gap-2 rounded-lg border p-3 text-sm"
+              style={{ background: 'var(--c-orange-soft)', borderColor: 'var(--c-orange)', color: 'var(--c-ink)' }}
+            >
+              <AlertTriangle className="mt-0.5 size-4 shrink-0" style={{ color: 'var(--c-orange)' }} />
+              <span>
+                {slotNotice ?? (promotionWindow ? promotionWindowMessage(eventLabel, promotionWindow) : '')}
+                {earlySlotCount > 0 && ` Remove the ${earlySlotCount === 1 ? 'date' : `${earlySlotCount} dates`} before then.`}
+              </span>
+            </div>
+          )}
           {calendarWarning && (
             <div
               className="flex items-start gap-2 rounded-lg border p-3 text-sm"

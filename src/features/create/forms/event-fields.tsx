@@ -141,6 +141,8 @@ export function EventFields({
         setValue('facts', facts, { shouldValidate: true });
         setImportedFacts(facts ?? null);
         setValue('prompt', importedBriefText(fields, Boolean(facts)), { shouldValidate: true });
+        // When this event's posts may start; cleared when the event has no earlier one of its type.
+        setValue('promotionWindow', fields.promotionWindow, { shouldValidate: true });
         // A tone the owner picked stays (recorded in toneChosen, which drafts and
         // content-type changes keep); otherwise this event's suggestion applies.
         const chosen = ownerChoseTone({ toneChosen: getValues('toneChosen'), tone: getValues('tone') });

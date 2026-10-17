@@ -645,6 +645,37 @@ describe('createScheduledBatch', () => {
   // Events post to the feed and as a story on the same day
   // -------------------------------------------------------------------------
 
+  it('refuses an event post before the last event of its type has finished, before writing anything', async () => {
+    const { createScheduledBatch } = await import('@/app/actions/content');
+
+    const result = await createScheduledBatch({
+      draftContentId: 'draft-1',
+      contentType: 'event',
+      brief: {
+        title: 'Sleigh My Name',
+        eventName: 'Sleigh My Name',
+        platforms: ['facebook'],
+        eventDate: '2026-12-11',
+        eventTime: '19:00',
+        placements: ['feed'],
+        promotionWindow: { opensOn: '2026-11-14', afterEvent: 'Sequins & Showstoppers', afterDate: '2026-11-13', category: 'Music Bingo' },
+      },
+      selectedMediaIds: [],
+      slotCopies: [
+        { slotKey: 'early', scheduledAt: '2026-11-13T11:00:00.000Z', copy: { facebook: { body: 'Early' }, instagram: { body: 'Early' } } },
+        { slotKey: 'fine', scheduledAt: '2026-11-20T11:00:00.000Z', copy: { facebook: { body: 'Fine' }, instagram: { body: 'Fine' } } },
+      ],
+      platforms: ['facebook'],
+      mode: 'schedule',
+    });
+
+    expect(result).toEqual({
+      error: 'Sleigh My Name can be promoted from Saturday 14th November, after the last Music Bingo (Sequins & Showstoppers) on Friday 13th November.',
+    });
+    expect(supabaseMock.calls.some((call) => call.method === 'insert')).toBe(false);
+    expect(enqueueAndDispatch).not.toHaveBeenCalled();
+  });
+
   it('creates a feed post and a story per platform for every event slot', async () => {
     // One slot, two platforms, two placements = four content items. The story
     // rows carry no body: a story is the artwork, not the copy.

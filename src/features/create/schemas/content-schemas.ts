@@ -159,6 +159,18 @@ export const eventBriefSchema = baseContentSchema.extend({
    * prompt as the only facts to use (tasks/SPEC-event-copy-engine.md B2).
    */
   facts: eventFactSheetSchema.optional(),
+  /**
+   * When posts may start: the day after the last event of the same type in the
+   * events system (tasks/SPEC-social-calendar-fill.md). Set on import.
+   */
+  promotionWindow: z
+    .object({
+      opensOn: z.string().date(),
+      afterEvent: z.string().max(200),
+      afterDate: z.string().date(),
+      category: z.string().max(120),
+    })
+    .optional(),
 });
 
 export const promotionBriefSchema = baseContentSchema

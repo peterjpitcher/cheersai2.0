@@ -23,6 +23,8 @@ import {
 import { createLogger } from "@/lib/logging";
 import { toLoggableError } from "@/lib/logging/to-error";
 import { isSchemaMissingError } from "@/lib/supabase/errors";
+import { loadPromotionWindow } from "@/lib/management-app/promotion-window-loader";
+import type { PromotionWindow } from "@/lib/management-app/promotion-window";
 
 const logger = createLogger("management-import");
 
@@ -214,9 +216,25 @@ export async function getManagementEventPrefill(
     });
 
     const mapped = mapManagementEventToEventCampaignPrefill(detail);
+    // Posts may start only after the last event of the same type has finished
+    // (tasks/SPEC-social-calendar-fill.md). A failed lookup must not block the
+    // import, so it is logged and the event imports without a window.
+    let promotionWindow: PromotionWindow | null = null;
+    try {
+      promotionWindow = await loadPromotionWindow(config, {
+        eventId: detail.id,
+        eventDate: mapped.fields.startDate ?? "",
+        categorySlug: mapped.fields.eventCategorySlug,
+        categoryName: mapped.fields.eventCategoryName,
+      });
+    } catch (error) {
+      console.warn("[management-import] promotion window lookup failed", {
+        errorType: error instanceof Error ? error.constructor.name : "unknown",
+      });
+    }
     return {
       ok: true,
-      data: mapped,
+      data: promotionWindow ? { ...mapped, fields: { ...mapped.fields, promotionWindow } } : mapped,
     };
   } catch (error) {
     unstable_rethrow(error);

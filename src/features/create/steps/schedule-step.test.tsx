@@ -230,6 +230,23 @@ describe("<ScheduleStep /> event timing", () => {
     ]);
   });
 
+  it("suggests nothing before the last event of the same type has finished, and says when posts can start", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-12T08:00:00.000Z"));
+    const brief = {
+      ...eventBrief("2026-10-25", "20:00"),
+      promotionWindow: { opensOn: "2026-10-24", afterEvent: "Spooky Quiz", afterDate: "2026-10-23", category: "Quiz Night" },
+    } as ContentBrief;
+
+    render(<EventScheduleHarness brief={brief} onSlotsChange={vi.fn()} />);
+    await plannerLoaded();
+
+    expect(suggestedSlots()).toEqual(["1 day to go · 12:00", "Event day · 07:00"]);
+    expect(
+      screen.getByText(/can start on Saturday 24th October, after the last Quiz Night \(Spooky Quiz\) on Friday 23rd October\./),
+    ).toBeInTheDocument();
+  });
+
   it("keeps the event-day post at 07:00 and the usual deconfliction when the month already has posts", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-10-12T08:00:00.000Z"));
