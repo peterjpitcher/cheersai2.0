@@ -3,9 +3,12 @@ import { lintContent } from '@/lib/ai/content-rules';
 import {
   buildTournamentOverlayData,
   buildTournamentContentPayload,
+  compareKickOff,
   computeStaggerOffset,
   computeScheduledFor,
   formatRoundLabel,
+  groupByMatchDay,
+  matchDayKey,
 } from './generate';
 import { resolveScreening, toScreeningFacts } from './screening';
 import type { ScreeningDayHours } from '@/lib/management-app/screening-hours';
@@ -292,4 +295,43 @@ it.each([
 ])('does not widen menu permissions to unrelated content %j', context => {
   const result = lintContent({ body: `View the menu: ${context.screening_menu_url}. Book a table: https://www.the-anchor.pub/book-table`, platform: 'facebook', placement: 'feed', context: { ...context, ctaUrl: 'https://www.the-anchor.pub/book-table' }, scheduledFor: new Date('2026-11-06T09:00:00Z') });
   expect(result.issues.some(issue => issue.code === 'url_disallowed')).toBe(true);
+});
+
+
+describe('rugby match days', () => {
+  it('keys a fixture by its London date, across the clock change and midnight', () => {
+    expect(matchDayKey('2026-11-07T23:30:00Z')).toBe('2026-11-07');
+    // 23:30 UTC on a summer date is 00:30 the next morning in London.
+    expect(matchDayKey('2026-07-04T23:30:00Z')).toBe('2026-07-05');
+  });
+
+  it('groups fixtures by day, days in date order and games in kick-off order then match number', () => {
+    const fixtures = [
+      { id: 'late', kickOffAt: '2026-11-21T20:10:00Z', matchNumber: 35 },
+      { id: 'sun', kickOffAt: '2026-11-08T15:10:00Z', matchNumber: 24 },
+      { id: 'second-at-two', kickOffAt: '2026-11-21T14:10:00Z', matchNumber: 32 },
+      { id: 'first-at-two', kickOffAt: '2026-11-21T14:10:00Z', matchNumber: 31 },
+    ];
+    expect(groupByMatchDay(fixtures).map(([day, games]) => [day, games.map(game => game.id)])).toEqual([
+      ['2026-11-08', ['sun']],
+      ['2026-11-21', ['first-at-two', 'second-at-two', 'late']],
+    ]);
+    expect(compareKickOff(fixtures[3], fixtures[2])).toBeLessThan(0);
+  });
+
+  it('lists every game on the round-up artwork', () => {
+    const overlay = buildTournamentOverlayData({
+      tournament,
+      fixture: { ...fixture, kickOffAt: '2026-11-21T14:10:00Z' },
+      roundup: [
+        { teamA: 'England', teamB: 'New Zealand', kickOffAt: '2026-11-21T14:10:00Z' },
+        { teamA: 'Bosnia and Herzegovina', teamB: 'Fiji', kickOffAt: '2026-11-21T20:10:00Z' },
+      ],
+    });
+    expect(overlay.matches).toEqual([
+      { timeDisplay: '2:10 PM', teamA: 'England', teamB: 'New Zealand' },
+      { timeDisplay: '8:10 PM', teamA: 'Bosnia & Herz.', teamB: 'Fiji' },
+    ]);
+    expect(buildTournamentOverlayData({ tournament, fixture }).matches).toBeUndefined();
+  });
 });

@@ -22,6 +22,8 @@ import {
   generateFixtureContent,
   bulkGenerateContent,
   deleteFixtureContentItems,
+  matchDayKey,
+  regenerateMatchDay,
 } from '@/lib/tournament/generate';
 import { redactId, tournamentDebug, tournamentDebugError } from '@/lib/tournament/debug';
 import { areBothTeamsConfirmed } from '@/lib/tournament/placeholder';
@@ -287,8 +289,11 @@ export async function deleteFixture(
     const fixture = await getFixtureById(supabase, fixtureId, tournamentId);
     if (!fixture) return { success: false, error: 'Fixture not found' };
 
+    // A rugby round-up covers the whole day: its published posts stay as history,
+    // its unpublished ones go, and the day is rebuilt for the games that remain.
+    const rugby = tournament.sport === 'rugby_union';
     if (fixture.contentGenerated) {
-      await deleteFixtureContentItems(supabase, fixtureId, accountId);
+      await deleteFixtureContentItems(supabase, fixtureId, accountId, rugby /* onlyUnpublished */);
     }
 
     const { error } = await supabase
@@ -300,6 +305,17 @@ export async function deleteFixture(
     if (error) return { success: false, error: error.message };
 
     revalidatePath(`/tournaments/${tournamentId}`);
+
+    if (rugby && fixture.contentGenerated) {
+      const sameDay = (await getFixturesByTournament(supabase, tournamentId))
+        .find(other => matchDayKey(other.kickOffAt) === matchDayKey(fixture.kickOffAt));
+      try {
+        if (sameDay) await regenerateMatchDay(tournament, sameDay);
+      } catch (err) {
+        unstable_rethrow(err);
+        return { success: false, error: `Game deleted, but that day's round-up could not be rebuilt: ${err instanceof Error ? err.message : String(err)} Use Generate on another game that day.` };
+      }
+    }
 
     return { success: true };
   } catch (err) {
@@ -450,6 +466,14 @@ export async function saveAndGenerateFixture(
     }
     if (!savedFixture.teamsConfirmed) {
       return { success: false, error: 'Teams must be confirmed before content can be generated.' };
+    }
+
+    // Rugby posts once per match day, so any game's Generate rebuilds that
+    // day's round-up for every promotable game (tasks/SPEC-rugby-match-posts.md).
+    if (tournament.sport === 'rugby_union') {
+      await regenerateMatchDay(tournament, savedFixture, { requireFixture: true });
+      revalidatePath(`/tournaments/${tournamentId}`);
+      return { success: true };
     }
 
     // Handle regeneration: if already generated, delete unpublished content items first
@@ -770,6 +794,17 @@ export async function toggleFixtureShowing(
     if (tournament.sport === 'rugby_union') {
       await saveRugbyFixture(supabase, tournament, fixture, { ...fixture, showing, screeningDecision: showing ? (fixture.screeningDecision === 'confirmed' ? 'confirmed' : 'unconfirmed') : 'not_showing', screeningConfirmedAt: showing ? new Date().toISOString() : fixture.screeningConfirmedAt }, {}, fixture.contentRevision);
       revalidatePath(`/tournaments/${tournamentId}`);
+      // Hiding a game that was in a round-up rebuilds the day for the games
+      // still showing, rather than leaving the whole day's post on hold.
+      if (!showing && fixture.contentGenerated) {
+        const saved = await getFixtureById(supabase, fixtureId, tournamentId);
+        try {
+          if (saved) await regenerateMatchDay(tournament, saved);
+        } catch (err) {
+          unstable_rethrow(err);
+          return { success: false, error: `Game hidden, but that day's round-up could not be rebuilt: ${err instanceof Error ? err.message : String(err)} Use Generate on another game that day.` };
+        }
+      }
       return { success: true };
     }
     const { error: toggleError } = await supabase

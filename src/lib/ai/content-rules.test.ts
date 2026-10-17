@@ -112,3 +112,15 @@ describe('applyChannelRules: paragraphs and the booking link', () => {
     ]);
   });
 });
+
+describe('lintContent: Instagram caption word limit', () => {
+  const longCaption = `${Array.from({ length: 110 }, (_, index) => `word${index}`).join(' ')}.\nBook a table via the link in our bio.`;
+  it('keeps the 80-word house limit by default', () => {
+    const result = lintContent({ body: longCaption, platform: 'instagram', placement: 'feed', context: { linkInBioUrl: 'https://www.the-anchor.pub/x' } });
+    expect(result.issues.some((issue) => issue.code === 'word_limit')).toBe(true);
+  });
+  it('lets a round-up raise it, within a hard cap', () => {
+    expect(lintContent({ body: longCaption, platform: 'instagram', placement: 'feed', context: { linkInBioUrl: 'https://www.the-anchor.pub/x', caption_word_limit: 200 } }).issues.some((issue) => issue.code === 'word_limit')).toBe(false);
+    expect(lintContent({ body: longCaption, platform: 'instagram', placement: 'feed', context: { linkInBioUrl: 'https://www.the-anchor.pub/x', caption_word_limit: 5000 } }).issues.some((issue) => issue.code === 'word_limit')).toBe(true);
+  });
+});

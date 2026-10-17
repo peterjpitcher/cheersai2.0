@@ -11,10 +11,11 @@ import { applyChannelRules } from '@/lib/ai/content-rules';
 import { compositeOverlay } from '@/lib/tournament/overlay';
 import { displayTeamName } from '@/lib/tournament/team-display';
 import { interpolatePostTemplate } from '@/lib/tournament/template';
-import { buildRugbyMatchCopy, buildRugbyMenuLine } from '@/lib/tournament/rugby-copy';
+import { buildRugbyMatchCopy, buildRugbyMenuLine, buildRugbyRoundupCopy, joinRugbyParagraphs } from '@/lib/tournament/rugby-copy';
 import { findContentCoveringFixture } from '@/lib/tournament/content-freshness';
 import { coveredFixtureIds } from '../../../supabase/functions/_shared/tournament-roundup';
-import { getPublishedPlacements } from '@/lib/tournament/queries';
+import { getFixturesByTournament, getPublishedPlacements } from '@/lib/tournament/queries';
+import { formatEventDateLong } from '@/lib/utils/date';
 import { DEFAULT_TIMEZONE, MEDIA_BUCKET } from '@/lib/constants';
 import { redactId, tournamentDebug, tournamentDebugError } from '@/lib/tournament/debug';
 import type { Tournament, TournamentFixture, TournamentPlatform, ContentPlacement } from '@/types/tournament';
@@ -112,6 +113,16 @@ function buildTournamentFeedBody({
     .join('\n\n');
 }
 
+/** Instagram word limit for a round-up: its fixture list and notes are never cut. */
+const ROUNDUP_CAPTION_WORD_LIMIT = 200;
+
+/** Whether a screening has verified kitchen service to promote. */
+function hasVerifiedFood(screened: ScreenedFixture): boolean {
+  const food = screened.screening.foodPromotion;
+  const windows = food.kind === 'during_screening' ? food.overlapWindows : food.kind === 'before_match' ? food.serviceWindows : [];
+  return screened.hours.kitchenState === 'known' && windows.some(window => Date.parse(window.endAt) > Date.parse(window.startAt));
+}
+
 export function buildTournamentContentPayload({
   tournament,
   fixture,
@@ -119,6 +130,7 @@ export function buildTournamentContentPayload({
   placement,
   scheduledFor,
   screened,
+  roundup,
 }: {
   tournament: Pick<Tournament, 'id' | 'houseRulesText' | 'postTemplate'> & Partial<Pick<Tournament, 'updatedAt'>>;
   screened?: ScreenedFixture;
@@ -126,10 +138,13 @@ export function buildTournamentContentPayload({
   platform: TournamentPlatform;
   placement: ContentPlacement;
   scheduledFor: Date;
+  /** Every screened game that day, lead first. Two or more make the post a match-day round-up. */
+  roundup?: ScreenedFixture[];
 }): TournamentContentPayload {
   const kickOff = new Date(fixture.kickOffAt);
   const kickOffDt = DateTime.fromJSDate(kickOff, { zone: 'Europe/London' });
-  const title = `${fixture.teamA} vs ${fixture.teamB}`;
+  const games = screened && roundup && roundup.length > 1 ? roundup : null;
+  const title = games ? `Rugby on ${formatEventDateLong(kickOffDt)}` : `${fixture.teamA} vs ${fixture.teamB}`;
 
   const templateVars = {
     team_a: fixture.teamA,
@@ -162,23 +177,27 @@ export function buildTournamentContentPayload({
     promptContext.screening_template_version = NATIONS_TEMPLATE_VERSION;
     Object.assign(promptContext, nationsContentLinks(fixture.id, kickOffDt.toISODate()!, fixture.bookingUrl));
     templateVars.booking_url = String(promptContext.booking_url);
+    if (games) {
+      // The lead keeps tournament_fixture_id; every game the post covers, and
+      // the revision it was written from, is recorded for the safety checks.
+      promptContext.roundup_fixture_ids = games.map(game => game.id);
+      promptContext.roundup_revisions = Object.fromEntries(games.map(game => [game.id, game.contentRevision]));
+      promptContext.caption_word_limit = ROUNDUP_CAPTION_WORD_LIMIT;
+    }
   }
   const templateBody = interpolatePostTemplate(tournament.postTemplate, templateVars);
-  const foodPromotion = screened?.screening.foodPromotion;
-  const promotedWindows = foodPromotion?.kind === 'during_screening'
-    ? foodPromotion.overlapWindows
-    : foodPromotion?.kind === 'before_match' ? foodPromotion.serviceWindows : [];
-  const hasFoodService = screened?.hours.kitchenState === 'known' && promotedWindows.some(window =>
-    Date.parse(window.endAt) > Date.parse(window.startAt));
+  const hasFoodService = screened ? (games ?? [screened]).some(hasVerifiedFood) : false;
   const menuUrl = hasFoodService
     ? kickOffDt.weekday === 7
       ? 'https://www.the-anchor.pub/sunday-roast'
       : 'https://www.the-anchor.pub/food-menu'
     : null;
   if (menuUrl) promptContext.screening_menu_url = menuUrl;
-  const rugbyCopy = screened ? buildRugbyMatchCopy({ fixture, screened }) : null;
+  const rugbyCopy = games
+    ? buildRugbyRoundupCopy(games.map(game => ({ fixture: game, screened: game })))
+    : screened ? buildRugbyMatchCopy({ fixture, screened }) : null;
   const rawBody = rugbyCopy
-    ? rugbyCopy.lines.join('\n\n')
+    ? joinRugbyParagraphs(rugbyCopy.lines)
     : placement === 'feed'
     ? buildTournamentFeedBody({ templateBody, fixture })
     : templateBody;
@@ -206,9 +225,10 @@ export function buildTournamentContentPayload({
 
 /**
  * Channel rules return one paragraph per line with the booking line last. Rugby
- * copy reads better with a blank line between paragraphs, and the verified menu
- * link (Facebook only, tasks/SPEC-nations-sunday-menu.md) goes just above the
- * booking line, so the post carries one booking link and at most one menu link.
+ * copy reads better with a blank line between paragraphs (a round-up's fixture
+ * list stays a tight list), and the verified menu link (Facebook only,
+ * tasks/SPEC-nations-sunday-menu.md) goes just above the booking line, so the
+ * post carries one booking link and at most one menu link.
  */
 function finishRugbyBody(processedBody: string, { menuLine, ctaUrl }: { menuLine: string | null; ctaUrl: string }): string {
   const lines = processedBody.split('\n').map(line => line.trim()).filter(Boolean);
@@ -217,15 +237,18 @@ function finishRugbyBody(processedBody: string, { menuLine, ctaUrl }: { menuLine
     const ctaIndex = lines.findIndex(line => line.includes(ctaUrl));
     lines.splice(ctaIndex >= 0 ? ctaIndex : lines.length, 0, menuLine);
   }
-  return lines.join('\n\n');
+  return joinRugbyParagraphs(lines);
 }
 
 export function buildTournamentOverlayData({
   tournament,
   fixture,
+  roundup,
 }: {
   tournament: Pick<Tournament, 'name' | 'houseRulesText'>;
   fixture: Pick<TournamentFixture, 'teamA' | 'teamB' | 'kickOffAt' | 'round' | 'groupName'>;
+  /** Every game in a match-day round-up, in kick-off order. */
+  roundup?: Array<Pick<TournamentFixture, 'teamA' | 'teamB' | 'kickOffAt'>>;
 }): OverlayData {
   const kickOff = new Date(fixture.kickOffAt);
   const kickOffDt = DateTime.fromJSDate(kickOff, { zone: 'Europe/London' });
@@ -238,6 +261,15 @@ export function buildTournamentOverlayData({
     timeDisplay: kickOffDt.toFormat('h:mm a'),
     roundLabel: formatRoundLabel(fixture.round, fixture.groupName),
     houseRulesText: tournament.houseRulesText,
+    ...(roundup && roundup.length > 1
+      ? {
+        matches: roundup.map(game => ({
+          timeDisplay: DateTime.fromISO(game.kickOffAt, { zone: 'Europe/London' }).toFormat('h:mm a'),
+          teamA: displayTeamName(game.teamA),
+          teamB: displayTeamName(game.teamB),
+        })),
+      }
+      : {}),
   };
 }
 
@@ -338,18 +370,80 @@ interface GenerateFixtureContentOptions {
   baseImageCache?: Map<string, Buffer>;
 }
 
-export async function generateFixtureContent(
+/** A fixture's match day: its kick-off date in London. */
+export function matchDayKey(kickOffAt: string): string {
+  return DateTime.fromISO(kickOffAt, { zone: 'Europe/London' }).toISODate() ?? kickOffAt.slice(0, 10);
+}
+
+/** Kick-off order, then match number, so a day's lead game is stable. */
+export function compareKickOff(
+  first: Pick<TournamentFixture, 'kickOffAt' | 'matchNumber'>,
+  second: Pick<TournamentFixture, 'kickOffAt' | 'matchNumber'>,
+): number {
+  return Date.parse(first.kickOffAt) - Date.parse(second.kickOffAt) || first.matchNumber - second.matchNumber;
+}
+
+/** Fixtures grouped by London match day, days in date order, games in kick-off order. */
+export function groupByMatchDay<T extends Pick<TournamentFixture, 'kickOffAt' | 'matchNumber'>>(fixtures: T[]): Array<[string, T[]]> {
+  const days = new Map<string, T[]>();
+  for (const fixture of fixtures) {
+    const day = matchDayKey(fixture.kickOffAt);
+    days.set(day, [...(days.get(day) ?? []), fixture]);
+  }
+  return [...days.entries()]
+    .sort(([first], [second]) => first.localeCompare(second))
+    .map(([day, games]) => [day, [...games].sort(compareKickOff)]);
+}
+
+interface MatchDayGame {
+  fixture: TournamentFixture;
+  screened: ScreenedFixture;
+}
+
+/**
+ * The games on a fixture's match day that can be promoted (showing, teams
+ * confirmed, screening eligible), in kick-off order then match number. The
+ * first one leads the day's round-up (tasks/SPEC-rugby-match-posts.md part 2).
+ */
+async function resolveMatchDay(
+  supabase: SupabaseClient,
   tournament: Tournament,
   fixture: TournamentFixture,
+): Promise<MatchDayGame[]> {
+  const day = matchDayKey(fixture.kickOffAt);
+  const candidates = (await getFixturesByTournament(supabase, tournament.id))
+    .filter(other => other.id !== fixture.id && matchDayKey(other.kickOffAt) === day);
+  // The caller's copy of the fixture wins, as it may have just been saved.
+  candidates.push(fixture);
+  const promotable = candidates.filter(game => game.showing && game.teamsConfirmed);
+  if (!promotable.length) return [];
+  const projected = await projectTournamentFixtures(supabase, tournament, promotable);
+  return promotable
+    .map((game, index) => ({ fixture: game, screened: projected[index] }))
+    .filter(({ screened }) => screened.screening.canGenerateTeamPromotion)
+    .sort((first, second) => compareKickOff(first.fixture, second.fixture));
+}
+
+export async function generateFixtureContent(
+  tournament: Tournament,
+  requestedFixture: TournamentFixture,
   staggerIndex = 0,
   options: GenerateFixtureContentOptions = {},
 ): Promise<void> {
   const supabase = createServiceSupabaseClient();
+  let fixture = requestedFixture;
   let screened: ScreenedFixture | undefined;
+  let dayGames: MatchDayGame[] = [];
   if (tournament.sport === 'rugby_union') {
-    [screened] = await projectTournamentFixtures(supabase, tournament, [fixture]);
-    if (tournament.status !== 'active' || !screened.screening.canGenerateTeamPromotion) throw new Error('Confirm teams, broadcast and screening within existing hours before generating.');
+    // Rugby posts once per match day: the day's first game leads a round-up of
+    // every promotable game that day, and the others carry no posts of their own.
+    dayGames = await resolveMatchDay(supabase, tournament, requestedFixture);
+    if (tournament.status !== 'active' || !dayGames.some(game => game.fixture.id === requestedFixture.id)) throw new Error('Confirm teams, broadcast and screening within existing hours before generating.');
+    fixture = dayGames[0].fixture;
+    screened = dayGames[0].screened;
   }
+  const roundup = dayGames.length > 1 ? dayGames.map(game => game.screened) : undefined;
+  const coveredIds = dayGames.length ? dayGames.map(game => game.fixture.id) : [fixture.id];
   const lockKey = hashUuidToInt(fixture.id);
   const fixtureDebug = {
     tournamentId: redactId(tournament.id),
@@ -416,7 +510,11 @@ export async function generateFixtureContent(
     });
 
     if (options.skipPublished || tournament.sport === 'rugby_union') {
-      const published = await getPublishedPlacements(supabase, fixture.id, tournament.accountId);
+      // A placement already published for any game that day is not posted again.
+      const published = new Set<string>();
+      for (const id of coveredIds) {
+        for (const placement of await getPublishedPlacements(supabase, id, tournament.accountId)) published.add(placement);
+      }
       specs = allSpecs.filter(
         (s) => !published.has(`${s.platform}:${s.placement}`),
       );
@@ -432,18 +530,20 @@ export async function generateFixtureContent(
       await supabase
         .from('tournament_fixtures')
         .update({ content_generated: true })
-        .eq('id', fixture.id);
+        .in('id', coveredIds);
       tournamentDebug('generate.fixture.no-specs-marked-generated', fixtureDebug);
       return;
     }
 
     // Prepare overlay data
     const kickOff = new Date(fixture.kickOffAt);
-    const overlayData = buildTournamentOverlayData({ tournament, fixture });
+    const overlayData = buildTournamentOverlayData({ tournament, fixture, roundup: dayGames.map(game => game.fixture) });
     if (screened) {
-      const { imageNote } = buildRugbyMatchCopy({ fixture, screened });
+      const { imageNote } = roundup
+        ? buildRugbyRoundupCopy(roundup.map(game => ({ fixture: game, screened: game })))
+        : buildRugbyMatchCopy({ fixture, screened });
       overlayData.houseRulesText = imageNote;
-      overlayData.bookingLabel = 'Book a table for this game';
+      overlayData.bookingLabel = roundup ? 'Book your table at' : 'Book a table for this game';
       overlayData.footerNote = imageNote;
     }
 
@@ -483,7 +583,8 @@ export async function generateFixtureContent(
         outputBytes: composited.byteLength,
       });
 
-      const scheduledFor = computeScheduledFor(kickOff, tournament.postLeadHours, staggerIndex);
+      // A rugby day has one post per placement, so it never needs staggering.
+      const scheduledFor = computeScheduledFor(kickOff, tournament.postLeadHours, dayGames.length ? 0 : staggerIndex);
       const isPastDue = scheduledFor.getTime() < Date.now();
       const { body, promptContext } = buildTournamentContentPayload({
         screened,
@@ -492,6 +593,7 @@ export async function generateFixtureContent(
         platform: spec.platform,
         placement: spec.placement,
         scheduledFor,
+        roundup,
       });
 
       // Upload to storage
@@ -522,7 +624,9 @@ export async function generateFixtureContent(
         .insert({
           account_id: tournament.accountId,
           storage_path: storagePath,
-          file_name: `${fixture.teamA}-vs-${fixture.teamB}-${spec.placement}.jpg`,
+          file_name: roundup
+            ? `rugby-${matchDayKey(fixture.kickOffAt)}-${roundup.length}-games-${spec.placement}.jpg`
+            : `${fixture.teamA}-vs-${fixture.teamB}-${spec.placement}.jpg`,
           media_type: 'image',
           mime_type: 'image/jpeg',
           size_bytes: composited.byteLength,
@@ -675,11 +779,11 @@ export async function generateFixtureContent(
       }
     }
 
-    // Mark fixture as generated
+    // Mark the fixture, and every other game a round-up covers, as generated
     await supabase
       .from('tournament_fixtures')
       .update({ content_generated: true })
-      .eq('id', fixture.id);
+      .in('id', coveredIds);
     tournamentDebug('generate.fixture.success', fixtureDebug);
   } catch (error) {
     // Rollback: clean up any resources created during this attempt
@@ -795,6 +899,10 @@ export async function bulkGenerateContent(
     totalBytes: [...baseImageCache.values()].reduce((sum, buf) => sum + buf.byteLength, 0),
   });
 
+  if (tournament.sport === 'rugby_union') {
+    return bulkGenerateMatchDays(tournament, fixtures, eligible, baseImageCache);
+  }
+
   // Group by kick-off time, then sort within each group by match_number for
   // deterministic stagger ordering
   const byKickOff = new Map<string, TournamentFixture[]>();
@@ -873,6 +981,85 @@ export async function bulkGenerateContent(
   });
 
   return { generated, skipped, errors };
+}
+
+/**
+ * Rugby bulk generation: each match day with a game that has no posts yet is
+ * rebuilt as one round-up, so a newly confirmed game joins its day's post.
+ */
+async function bulkGenerateMatchDays(
+  tournament: Tournament,
+  fixtures: TournamentFixture[],
+  eligible: TournamentFixture[],
+  baseImageCache: Map<string, Buffer>,
+): Promise<{ generated: number; skipped: number; errors: Array<{ fixtureId: string; error: string }> }> {
+  const ordered = groupByMatchDay(eligible);
+  const limit = pLimit(BULK_CONCURRENCY);
+  const results = await Promise.allSettled(ordered.map(([, dayFixtures]) => limit(() =>
+    regenerateMatchDay(tournament, dayFixtures[0], { baseImageCache }))));
+
+  let generated = 0;
+  const errors: Array<{ fixtureId: string; error: string }> = [];
+  results.forEach((result, index) => {
+    const dayFixtures = ordered[index][1];
+    if (result.status === 'fulfilled') {
+      generated += dayFixtures.length;
+      return;
+    }
+    const message = result.reason instanceof Error ? result.reason.message : String(result.reason);
+    tournamentDebugError('bulk.generate.match-day-failed', result.reason, {
+      tournamentId: redactId(tournament.id),
+      day: ordered[index][0],
+      message,
+    });
+    for (const fixture of dayFixtures) errors.push({ fixtureId: fixture.id, error: message });
+  });
+
+  tournamentDebug('bulk.generate.complete', {
+    tournamentId: redactId(tournament.id),
+    generated,
+    skipped: fixtures.length - eligible.length,
+    failed: errors.length,
+    firstError: errors[0]?.error ?? null,
+  });
+  return { generated, skipped: fixtures.length - eligible.length, errors };
+}
+
+/**
+ * Rebuild a rugby match day's round-up from scratch: delete the day's
+ * unpublished posts, then generate one round-up for every promotable game that
+ * day. Placements already published are not posted again. With requireFixture,
+ * the given game must itself be promotable, checked before anything is deleted.
+ * Returns how many games the new round-up covers (0 when none are promotable).
+ */
+export async function regenerateMatchDay(
+  tournament: Tournament,
+  fixture: TournamentFixture,
+  { requireFixture = false, baseImageCache }: { requireFixture?: boolean; baseImageCache?: Map<string, Buffer> } = {},
+): Promise<number> {
+  const supabase = createServiceSupabaseClient();
+  const games = await resolveMatchDay(supabase, tournament, fixture);
+  if (requireFixture && !games.some(game => game.fixture.id === fixture.id)) {
+    throw new Error('Confirm teams, broadcast and screening within existing hours before generating.');
+  }
+
+  const day = matchDayKey(fixture.kickOffAt);
+  const dayIds = (await getFixturesByTournament(supabase, tournament.id))
+    .filter(other => matchDayKey(other.kickOffAt) === day)
+    .map(other => other.id);
+  for (const id of new Set([...dayIds, fixture.id])) {
+    await deleteFixtureContentItems(supabase, id, tournament.accountId, true);
+  }
+  const { error: resetError } = await supabase
+    .from('tournament_fixtures')
+    .update({ content_generated: false })
+    .eq('tournament_id', tournament.id)
+    .in('id', [...new Set([...dayIds, fixture.id])]);
+  if (resetError) throw resetError;
+
+  if (!games.length) return 0;
+  await generateFixtureContent(tournament, games[0].fixture, 0, { skipPublished: true, baseImageCache });
+  return games.length;
 }
 
 // ---------------------------------------------------------------------------

@@ -5,7 +5,7 @@ import type { ServiceWindow } from '@/lib/management-app/screening-hours';
 import { formatEventDateLong, formatFriendlyTimeFromZoned } from '@/lib/utils/date';
 import type { TournamentFixture } from '@/types/tournament';
 
-import { plannedScreeningEndMs } from './screening';
+import { intersectServiceWindows, plannedScreeningEndMs } from './screening';
 import type { ScreenedFixture } from './screening-service';
 
 /**
@@ -162,6 +162,129 @@ export function buildRugbyMatchCopy({ fixture, screened }: { fixture: CopyFixtur
     requiredLines: [...openingLines, ...(kitchenLine ? [kitchenLine] : [])],
     imageNote: buildImageNote(facts, screened),
   };
+}
+
+// ---------------------------------------------------------------------------
+// Match-day round-ups: one post for every game on the same day
+// ---------------------------------------------------------------------------
+
+export interface RugbyGame {
+  fixture: CopyFixture;
+  screened: ScreenedFixture;
+}
+
+const COUNT_WORDS = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight'];
+
+function countWord(count: number): string {
+  return COUNT_WORDS[count] ?? String(count);
+}
+
+/** "the 8:10pm game", "the 8:10pm games", "the 4:40pm and 8:10pm games". */
+function describeKickOffs(games: RugbyGame[]): string {
+  const times = [...new Set(games.map((game) => clock(game.fixture.kickOffAt)))];
+  const list = times.length === 1 ? times[0] : `${times.slice(0, -1).join(', ')} and ${times[times.length - 1]}`;
+  return `the ${list} ${games.length > 1 ? 'games' : 'game'}`;
+}
+
+/** The day's kitchen service inside opening hours, or none when unknown. */
+function dayKitchenWindows(screened: ScreenedFixture): ServiceWindow[] {
+  const bar = screened.hours.state === 'open' ? screened.hours.bar : null;
+  if (!bar || screened.hours.kitchenState !== 'known') return [];
+  return screened.hours.kitchen
+    .map((window) => intersectServiceWindows(window, bar))
+    .filter((window): window is ServiceWindow => window !== null)
+    .sort((first, second) => Date.parse(first.startAt) - Date.parse(second.startAt));
+}
+
+const LIST_LINE = /^\d{1,2}(?::\d{2})?(?:am|pm) \S.* v \S/;
+
+/** A fixture line in a round-up list, e.g. "2:10pm England v New Zealand". */
+export function isRugbyListLine(line: string): boolean {
+  return LIST_LINE.test(line);
+}
+
+function buildListLine({ fixture, screened }: RugbyGame): string {
+  const screen = screened.screenLabel?.trim();
+  const commentary = screened.commentary === 'on' ? 'with commentary' : screened.commentary === 'off' ? 'without commentary' : null;
+  const detail = [screen, commentary].filter(Boolean).join(', ');
+  return `${clock(fixture.kickOffAt)} ${fixture.teamA} v ${fixture.teamB}${detail ? ` (${detail})` : ''}`;
+}
+
+export function buildRugbyRoundupOpeningLine(games: RugbyGame[]): string {
+  const lead = games[0].fixture;
+  const date = formatEventDateLong(zoned(lead.kickOffAt));
+  const count = countWord(games.length);
+  const variants = [
+    `${count} games on our screens on ${date}. 🏉`,
+    `${date}: ${count.toLowerCase()} games, all on our screens. 🏉`,
+    `Catch ${count.toLowerCase()} games with us on ${date}. 🏉`,
+  ];
+  return variants[pickVariant(lead.id, variants.length)];
+}
+
+/**
+ * One post for every game on the same day (owner decision, 17 October 2026).
+ * Games are listed in kick-off order; doors-after-kick-off and late-finish notes
+ * name the kick-off times they apply to, and the kitchen line covers the day.
+ */
+export function buildRugbyRoundupCopy(games: RugbyGame[]): RugbyMatchCopy {
+  const withFacts = games.map((game) => ({ game, facts: resolveOpeningFacts(game.fixture, game.screened) }));
+  const day = withFacts[0].facts;
+  const caveats: string[] = [];
+
+  const lateStartTimes = [...new Set(withFacts.filter(({ facts }) => facts.startsLate).map(({ game }) => game.fixture.kickOffAt))];
+  for (const kickOffAt of lateStartTimes) {
+    const atThatTime = withFacts.filter(({ game }) => game.fixture.kickOffAt === kickOffAt);
+    const { facts } = atThatTime[0];
+    caveats.push(`We open at ${facts.open}, ${describeMinutes(facts.minutesAfterKickOff)} after the ${clock(kickOffAt)} kick-off, so you'll catch the rest of ${atThatTime.length > 1 ? 'those games' : 'that game'}.`);
+  }
+
+  const late = withFacts.filter(({ facts }) => facts.endsEarly);
+  const lateFinishers = late.map(({ game }) => game);
+  // The stay-open policy is only set on games that run past closing, so it is
+  // read from those games, not from the day's first game.
+  const staysOpenForViewers = late.some(({ facts }) => facts.staysOpenForViewers);
+  if (lateFinishers.length && day.close) {
+    // Owner decision, 5 September 2026: a conditional stay, never a guaranteed
+    // late opening, and arrivals stay limited to the usual closing time.
+    caveats.push(staysOpenForViewers
+      ? `We usually close at ${day.close}. If you're still here watching ${describeKickOffs(lateFinishers)}, we'll stay open until the final whistle. Please arrive before ${day.close}.`
+      : `We close at ${day.close}, before the final whistle of ${describeKickOffs(lateFinishers)}, so you may miss the end.`);
+  }
+
+  const kitchen = dayKitchenWindows(games[0].screened);
+  const foodKinds = new Set(games.map((game) => game.screened.screening.foodPromotion.kind));
+  const kitchenLine = kitchen.length
+    ? `Kitchen times: ${describeWindows(kitchen)}${foodKinds.has('during_screening') ? ', so you can eat while you watch.' : foodKinds.has('before_match') ? ', so you can eat before kick-off.' : '.'}`
+    : null;
+
+  const noteParts: string[] = [];
+  if (lateStartTimes.length && day.open) noteParts.push(`Doors ${day.open}`);
+  if (lateFinishers.length && day.close) {
+    noteParts.push(staysOpenForViewers
+      ? `Usually close ${day.close}, open to the final whistle if you're still watching`
+      : `Close ${day.close}`);
+  }
+  if (!noteParts.length && day.open && day.close) noteParts.push(`Open ${day.open} to ${day.close}`);
+  if (kitchen.length) noteParts.push(`Kitchen ${describeWindows(kitchen)}`);
+
+  return {
+    lines: [buildRugbyRoundupOpeningLine(games), ...games.map(buildListLine), ...caveats, ...(kitchenLine ? [kitchenLine] : [])],
+    requiredLines: [...caveats, ...(kitchenLine ? [kitchenLine] : [])],
+    imageNote: noteParts.length ? `${noteParts.join('. ')}.` : '',
+  };
+}
+
+/**
+ * Join caption lines into paragraphs: a blank line between paragraphs, but a
+ * round-up's fixture list stays a tight list, one game per line.
+ */
+export function joinRugbyParagraphs(lines: string[]): string {
+  return lines.reduce((text, line, index) => {
+    if (index === 0) return line;
+    const separator = isRugbyListLine(line) && isRugbyListLine(lines[index - 1]) ? '\n' : '\n\n';
+    return `${text}${separator}${line}`;
+  }, '');
 }
 
 /** The verified menu link line for Facebook, or null when food service is not verified. */
