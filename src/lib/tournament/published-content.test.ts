@@ -2,10 +2,9 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { clearStaleRoundups, deleteFixtureContentItems, gamesLeftBehind } from './generate';
-import { coveredFixtureIds } from '../../../supabase/functions/_shared/tournament-roundup';
 import { isPublishedContentStatus, isPublishedJobStatus } from './published-status';
 import { findContentCoveringFixture } from '@/lib/tournament/content-freshness';
-import type { TournamentFixture } from '@/types/tournament';
+import type { Tournament, TournamentFixture } from '@/types/tournament';
 
 vi.mock('./queries', () => ({ getPublishedPlacements: vi.fn(), getFixturesByTournament: vi.fn().mockResolvedValue([]) }));
 vi.mock('./screening-service', () => ({ projectTournamentFixtures: vi.fn() }));
@@ -26,6 +25,8 @@ function fakeDb(rows: Record<string, Row[]>, failing: string[] = []) {
     const builder = {
       select: () => builder,
       eq: () => builder,
+      is: () => builder,
+      contains: () => builder,
       in: (_column: string, list: unknown[]) => {
         ids = list;
         return builder;
@@ -142,22 +143,43 @@ describe('gamesLeftBehind', () => {
 
 describe('clearStaleRoundups', () => {
   const fixture = (id: string, kickOffAt: string): TournamentFixture => ({ id, kickOffAt } as TournamentFixture);
+  const tournament = { id: 't1', accountId: 'account-1' } as Tournament;
+  const all = [
+    fixture('moved', '2026-11-14T14:10:00Z'),
+    fixture('moved-too', '2026-11-21T14:10:00Z'),
+    fixture('old-day-a', '2026-11-07T14:10:00Z'),
+    fixture('new-day', '2026-11-14T16:40:00Z'),
+  ];
 
-  it('deletes a stale round-up once, before any day is rebuilt, and returns its day', async () => {
-    const all = [
-      fixture('moved', '2026-11-14T14:10:00Z'),
-      fixture('moved-too', '2026-11-21T14:10:00Z'),
-      fixture('old-day-a', '2026-11-07T14:10:00Z'),
-    ];
-    const stored = [item('old-roundup', 'scheduled', ['old-day-a', 'moved', 'moved-too'])];
-    const { db, deleted } = fakeDb({});
-    const isDeleted = (id: string): boolean => deleted.some((entry) => entry.table === 'content_items' && entry.ids.includes(id));
-    vi.mocked(findContentCoveringFixture).mockImplementation(async (_db, _account, fixtureId) =>
-      stored.filter((entry) => !isDeleted(entry.id) && coveredFixtureIds(entry.prompt_context).includes(fixtureId)));
+  beforeEach(() => {
+    vi.mocked(findContentCoveringFixture).mockResolvedValue([]);
+  });
 
-    const leads = await clearStaleRoundups(db, 'account-1', [all[0], all[1]], all);
-
+  it('deletes a stale round-up once, up front, and returns a game still on its day', async () => {
+    const { db, deleted } = fakeDb({
+      content_items: [
+        item('stale', 'scheduled', ['old-day-a', 'moved'], '2026-11-07T14:10:00Z'),
+        item('fresh', 'scheduled', ['moved', 'new-day'], '2026-11-14T14:10:00Z'),
+      ],
+    });
+    const leads = await clearStaleRoundups(db, tournament, all);
     expect(leads.map((lead) => lead.id)).toEqual(['old-day-a']);
-    expect(deleted.filter((entry) => entry.table === 'content_items')).toEqual([{ table: 'content_items', ids: ['old-roundup'] }]);
+    expect(deleted.filter((entry) => entry.table === 'content_items')).toEqual([{ table: 'content_items', ids: ['stale'] }]);
+  });
+
+  it('deletes a stale round-up even when every game it listed has moved away', async () => {
+    const { db, deleted } = fakeDb({
+      content_items: [item('stale', 'scheduled', ['moved', 'moved-too'], '2026-11-07T14:10:00Z')],
+    });
+    expect(await clearStaleRoundups(db, tournament, all)).toEqual([]);
+    expect(deleted.filter((entry) => entry.table === 'content_items')).toEqual([{ table: 'content_items', ids: ['stale'] }]);
+  });
+
+  it('keeps a stale round-up that has gone out, and does not rebuild its day', async () => {
+    const { db, deleted } = fakeDb({
+      content_items: [item('sent', 'posted', ['old-day-a', 'moved'], '2026-11-07T14:10:00Z')],
+    });
+    expect(await clearStaleRoundups(db, tournament, all)).toEqual([]);
+    expect(deleted).toEqual([]);
   });
 });
