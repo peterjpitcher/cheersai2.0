@@ -30,9 +30,10 @@ describe("buildEventCadenceSlots", () => {
     expect(firstSlot.occurs.toMillis()).toBeLessThan(lastSlot.occurs.toMillis());
   });
 
-  it("puts the event-day slot at 07:00 and every earlier slot at midday", () => {
+  it("puts the event-day slot at 07:00 and every earlier slot at 11:00", () => {
     // The rule shipped in PR #31: the event-day post goes out first thing so
-    // people still have time to see it and book; the run-up stays at midday.
+    // people still have time to see it and book; the run-up stays at the
+    // default post time, 11:00.
     const slots = buildEventCadenceSlots({
       startDate: "2024-12-01",
       startTime: "18:00",
@@ -45,12 +46,12 @@ describe("buildEventCadenceSlots", () => {
     expect(eventDay.map((slot) => slot.occurs.toFormat("yyyy-MM-dd HH:mm"))).toEqual(["2024-12-01 07:00"]);
     const runUp = slots.filter((slot) => slot.label !== "Event day");
     expect(runUp.length).toBeGreaterThan(0);
-    expect(runUp.every((slot) => slot.occurs.toFormat("HH:mm") === "12:00")).toBe(true);
+    expect(runUp.every((slot) => slot.occurs.toFormat("HH:mm") === "11:00")).toBe(true);
   });
 
   it("keeps London clock times on the day the clocks go back (Sunday 25 October 2026)", () => {
     // BST ends at 02:00 on the event day, so the event-day post is at 07:00 GMT
-    // (07:00 UTC) while the run-up days are still in BST (12:00 BST = 11:00 UTC).
+    // (07:00 UTC) while the run-up days are still in BST (11:00 BST = 10:00 UTC).
     // 07:00 happens exactly once that day, so there is no ambiguous hour.
     const slots = buildEventCadenceSlots({
       startDate: "2026-10-25",
@@ -60,9 +61,9 @@ describe("buildEventCadenceSlots", () => {
     });
 
     expect(describeSlots(slots)).toEqual([
-      "Weekly hype · 1 week out 2026-10-18T12:00:00.000+01:00",
-      "2 days to go 2026-10-23T12:00:00.000+01:00",
-      "1 day to go 2026-10-24T12:00:00.000+01:00",
+      "Weekly hype · 1 week out 2026-10-18T11:00:00.000+01:00",
+      "2 days to go 2026-10-23T11:00:00.000+01:00",
+      "1 day to go 2026-10-24T11:00:00.000+01:00",
       "Event day 2026-10-25T07:00:00.000+00:00",
     ]);
     expect(slots.at(-1)?.occurs.toUTC().toISO()).toBe("2026-10-25T07:00:00.000Z");
@@ -77,9 +78,9 @@ describe("buildEventCadenceSlots", () => {
     });
 
     expect(describeSlots(slots)).toEqual([
-      "Weekly hype · 1 week out 2026-11-07T12:00:00.000+00:00",
-      "2 days to go 2026-11-12T12:00:00.000+00:00",
-      "1 day to go 2026-11-13T12:00:00.000+00:00",
+      "Weekly hype · 1 week out 2026-11-07T11:00:00.000+00:00",
+      "2 days to go 2026-11-12T11:00:00.000+00:00",
+      "1 day to go 2026-11-13T11:00:00.000+00:00",
       "Event day 2026-11-14T07:00:00.000+00:00",
     ]);
   });
@@ -93,9 +94,9 @@ describe("buildEventCadenceSlots", () => {
     });
 
     expect(describeSlots(slots)).toEqual([
-      "Weekly hype · 1 week out 2026-06-13T12:00:00.000+01:00",
-      "2 days to go 2026-06-18T12:00:00.000+01:00",
-      "1 day to go 2026-06-19T12:00:00.000+01:00",
+      "Weekly hype · 1 week out 2026-06-13T11:00:00.000+01:00",
+      "2 days to go 2026-06-18T11:00:00.000+01:00",
+      "1 day to go 2026-06-19T11:00:00.000+01:00",
       "Event day 2026-06-20T07:00:00.000+01:00",
     ]);
     expect(slots.at(-1)?.occurs.toUTC().toISO()).toBe("2026-06-20T06:00:00.000Z");

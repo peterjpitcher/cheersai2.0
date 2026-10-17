@@ -36,9 +36,9 @@ afterEach(() => {
 describe('the event claims', () => {
   it('names the date strip labels an evening event gets two days before, the day before and on the day', () => {
     // Live music on Friday 9 October 2026 at 8pm; posts on Wednesday and
-    // Thursday at noon and on the day at 7am.
+    // Thursday at 11am and on the day at 7am.
     const timing = { campaignType: 'event' as const, startAt: DateTime.fromISO('2026-10-09T20:00', { zone: TZ }), startTime: '20:00', timezone: TZ };
-    const labels = ['2026-10-07T12:00', '2026-10-08T12:00', '2026-10-09T07:00'].map((at) =>
+    const labels = ['2026-10-07T11:00', '2026-10-08T11:00', '2026-10-09T07:00'].map((at) =>
       getProximityLabel({ referenceAt: DateTime.fromISO(at, { zone: TZ }), campaignTiming: timing }),
     );
 

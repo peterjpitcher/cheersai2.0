@@ -56,7 +56,7 @@ interface ScheduleCalendarProps {
   readOnly?: boolean;
   /**
    * Default time (HH:MM) to use when the user clicks "Add custom slot" on a day
-   * with no existing suggestion. Defaults to DEFAULT_POST_TIME ("12:00") for
+   * with no existing suggestion. Defaults to DEFAULT_POST_TIME ("11:00") for
    * feed-style content; pass STORY_POST_TIME ("07:00") when the form is
    * configured for stories only so manually-added story slots default to 7am.
    */

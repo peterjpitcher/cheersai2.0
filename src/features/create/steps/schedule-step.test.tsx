@@ -109,7 +109,7 @@ describe("<ScheduleStep />", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Event timing: 7am on the day, midday on the days before (PR #31)
+// Event timing: 7am on the day, 11:00 on the days before (PR #31)
 // ---------------------------------------------------------------------------
 
 function eventBrief(eventDate: string, eventTime: string): ContentBrief {
@@ -217,9 +217,9 @@ describe("<ScheduleStep /> event timing", () => {
     await plannerLoaded();
 
     expect(suggestedSlots()).toEqual([
-      "Weekly hype · 1 week out · 12:00",
-      "2 days to go · 12:00",
-      "1 day to go · 12:00",
+      "Weekly hype · 1 week out · 11:00",
+      "2 days to go · 11:00",
+      "1 day to go · 11:00",
       "Event day · 07:00",
     ]);
 
@@ -241,7 +241,7 @@ describe("<ScheduleStep /> event timing", () => {
     render(<EventScheduleHarness brief={brief} onSlotsChange={vi.fn()} />);
     await plannerLoaded();
 
-    expect(suggestedSlots()).toEqual(["1 day to go · 12:00", "Event day · 07:00"]);
+    expect(suggestedSlots()).toEqual(["1 day to go · 11:00", "Event day · 07:00"]);
     expect(
       screen.getByText(/can start on Saturday 24th October, after the last Quiz Night \(Spooky Quiz\) on Friday 23rd October\./),
     ).toBeInTheDocument();
@@ -267,8 +267,8 @@ describe("<ScheduleStep /> event timing", () => {
     // that day; the event-day post stays on its day, at 07:00, despite the post
     // already there. Nothing else moves.
     expect(suggestedSlots()).toEqual([
-      "Weekly hype · 1 week out · 12:00",
-      "2 days to go · 12:00",
+      "Weekly hype · 1 week out · 11:00",
+      "2 days to go · 11:00",
       "Event day · 07:00",
     ]);
   });
@@ -283,9 +283,9 @@ describe("<ScheduleStep /> event timing", () => {
     await plannerLoaded();
 
     expect(suggestedSlots()).toEqual([
-      "Weekly hype · 1 week out · 12:00",
-      "2 days to go · 12:00",
-      "1 day to go · 12:00",
+      "Weekly hype · 1 week out · 11:00",
+      "2 days to go · 11:00",
+      "1 day to go · 11:00",
       "Event day · 07:00",
     ]);
 
@@ -297,8 +297,9 @@ describe("<ScheduleStep /> event timing", () => {
   });
 
   it("suggests the event-day post at 07:00 while the planner is still loading", () => {
-    // A slow planner fetch must not leave a midday event-day suggestion on
-    // screen for the owner to click before the existing posts arrive.
+    // A slow planner fetch must not leave an event-day suggestion at the
+    // default 11:00 on screen for the owner to click before the existing
+    // posts arrive.
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-10-12T08:00:00.000Z"));
     getCalendarItemsActionMock.mockReturnValue(new Promise(() => {}));
@@ -307,7 +308,7 @@ describe("<ScheduleStep /> event timing", () => {
 
     expect(screen.getByText("Loading existing schedule...")).toBeInTheDocument();
     expect(suggestedSlots()).toContain("Event day · 07:00");
-    expect(suggestedSlots()).not.toContain("Event day · 12:00");
+    expect(suggestedSlots()).not.toContain("Event day · 11:00");
   });
 });
 
@@ -342,7 +343,7 @@ describe("<ScheduleStep /> offer suggestions", () => {
     expect(screen.getByText("Quiz night")).toBeInTheDocument();
     const withUnrelatedPost = suggestedSlots();
 
-    expect(onEmptyPlanner).toEqual(["Launch · 12:00", "Last chance · 12:00"]);
+    expect(onEmptyPlanner).toEqual(["Launch · 11:00", "Last chance · 11:00"]);
     expect(withUnrelatedPost).toEqual(onEmptyPlanner);
   });
 
@@ -355,14 +356,14 @@ describe("<ScheduleStep /> offer suggestions", () => {
     render(<EventScheduleHarness brief={offerBrief("2026-10-25")} onSlotsChange={onSlotsChange} />);
     await plannerLoaded();
 
-    expect(suggestedSlots()).toEqual(["Launch · 12:00", "Last chance · 12:00"]);
+    expect(suggestedSlots()).toEqual(["Launch · 11:00", "Last chance · 11:00"]);
 
-    fireEvent.click(screen.getByRole("button", { name: "Add suggested slot · Launch · 12:00" }));
-    fireEvent.click(screen.getByRole("button", { name: "Add suggested slot · Last chance · 12:00" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add suggested slot · Launch · 11:00" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add suggested slot · Last chance · 11:00" }));
 
     expect(onSlotsChange).toHaveBeenLastCalledWith([
-      expect.objectContaining({ date: "2026-10-24", time: "12:00", label: "Launch", source: "suggestion" }),
-      expect.objectContaining({ date: "2026-10-25", time: "12:00", label: "Last chance", source: "suggestion" }),
+      expect.objectContaining({ date: "2026-10-24", time: "11:00", label: "Launch", source: "suggestion" }),
+      expect.objectContaining({ date: "2026-10-25", time: "11:00", label: "Last chance", source: "suggestion" }),
     ]);
   });
 
@@ -376,16 +377,16 @@ describe("<ScheduleStep /> offer suggestions", () => {
     render(<EventScheduleHarness brief={offerBrief("2026-10-29", "2026-10-19")} onSlotsChange={onSlotsChange} />);
     await plannerLoaded();
 
-    expect(suggestedSlots()).toEqual(["Launch · 12:00", "Mid-run reminder · 12:00", "Last chance · 12:00"]);
+    expect(suggestedSlots()).toEqual(["Launch · 11:00", "Mid-run reminder · 11:00", "Last chance · 11:00"]);
 
-    fireEvent.click(screen.getByRole("button", { name: "Add suggested slot · Launch · 12:00" }));
-    fireEvent.click(screen.getByRole("button", { name: "Add suggested slot · Mid-run reminder · 12:00" }));
-    fireEvent.click(screen.getByRole("button", { name: "Add suggested slot · Last chance · 12:00" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add suggested slot · Launch · 11:00" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add suggested slot · Mid-run reminder · 11:00" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add suggested slot · Last chance · 11:00" }));
 
     expect(onSlotsChange).toHaveBeenLastCalledWith([
-      expect.objectContaining({ date: "2026-10-19", time: "12:00", label: "Launch", source: "suggestion" }),
-      expect.objectContaining({ date: "2026-10-24", time: "12:00", label: "Mid-run reminder", source: "suggestion" }),
-      expect.objectContaining({ date: "2026-10-29", time: "12:00", label: "Last chance", source: "suggestion" }),
+      expect.objectContaining({ date: "2026-10-19", time: "11:00", label: "Launch", source: "suggestion" }),
+      expect.objectContaining({ date: "2026-10-24", time: "11:00", label: "Mid-run reminder", source: "suggestion" }),
+      expect.objectContaining({ date: "2026-10-29", time: "11:00", label: "Last chance", source: "suggestion" }),
     ]);
   });
 
@@ -397,10 +398,10 @@ describe("<ScheduleStep /> offer suggestions", () => {
     render(<EventScheduleHarness brief={offerBrief("2026-10-13", "")} onSlotsChange={onSlotsChange} />);
     await plannerLoaded();
 
-    fireEvent.click(screen.getByRole("button", { name: "Add suggested slot · Launch · 12:00" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add suggested slot · Launch · 11:00" }));
 
     expect(onSlotsChange).toHaveBeenLastCalledWith([
-      expect.objectContaining({ date: "2026-10-12", time: "12:00", label: "Launch", source: "suggestion" }),
+      expect.objectContaining({ date: "2026-10-12", time: "11:00", label: "Launch", source: "suggestion" }),
     ]);
   });
 
