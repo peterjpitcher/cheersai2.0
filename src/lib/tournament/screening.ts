@@ -48,6 +48,17 @@ export function intersectServiceWindows(first: ServiceWindow, second: ServiceWin
 function clock(value: string): string {
   return DateTime.fromISO(value).setZone('Europe/London').toFormat('HH:mm');
 }
+
+/**
+ * When the screening is planned to finish, in epoch ms. The established
+ * two-hour table-booking default is a planning window, not a match finish, and
+ * applies only to owner-approved games; NaN when neither is known.
+ */
+export function plannedScreeningEndMs(fixture: Pick<ScreeningFacts, 'plannedEndAt' | 'kickOffAt' | 'bookingApproved'>): number {
+  const kick = Date.parse(fixture.kickOffAt);
+  if (fixture.plannedEndAt) return Date.parse(fixture.plannedEndAt);
+  return fixture.bookingApproved === true ? kick + 120 * 60_000 : NaN;
+}
 function describeWindows(windows: ServiceWindow[]): string {
   return windows.map(w => `${clock(w.startAt)} to ${clock(w.endAt)}`).join(' and ');
 }
@@ -66,8 +77,7 @@ export function resolveScreening(fixture: ScreeningFacts, hours: ScreeningDayHou
   if (fixture.broadcastDecision !== 'confirmed' || (!ownerApproved && !fixture.linearChannel?.trim()) || !fixture.broadcastCheckedAt) return { ...result, status: 'awaiting_channel' };
   if ((!ownerApproved && (fixture.screeningDecision !== 'confirmed' || !fixture.screenLabel?.trim())) || !fixture.screeningConfirmedAt) return result;
   const kick = Date.parse(fixture.kickOffAt);
-  // The established two-hour table-booking default is a planning window, not a match finish.
-  const plannedEnd = fixture.plannedEndAt ? Date.parse(fixture.plannedEndAt) : ownerApproved ? kick + 120 * 60_000 : NaN;
+  const plannedEnd = plannedScreeningEndMs(fixture);
   let end = plannedEnd;
   if (!Number.isFinite(kick) || !Number.isFinite(end) || end <= kick) return result;
   if (hours.state === 'unknown' || (hours.state === 'open' && !hours.bar) || hours.date !== DateTime.fromISO(fixture.kickOffAt).setZone('Europe/London').toISODate()) return { ...result, status: 'hours_unknown' };
