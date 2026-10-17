@@ -102,6 +102,11 @@ describe('campaign plan prompt', () => {
     expect(questionsIn(body)).toEqual(['Which round will you win?']);
   });
 
+  it('reads openings and questions that an emoji follows with no space', () => {
+    expect(openingOf('Big night!🎉 Doors at 6:30pm.')).toBe('Big night!');
+    expect(questionsIn('Which song?🎶 Which outfit?🕺 Book now.')).toEqual(['Which song?', 'Which outfit?']);
+  });
+
   it('finds food and dressing-up in a brief', () => {
     expect(slotJobSignals('Our full dinner menu is available from 4pm.')).toEqual({ hasFood: true, hasDressUpOrPrizes: false });
     expect(slotJobSignals('Fancy dress encouraged, prizes for the best costume.')).toEqual({ hasFood: false, hasDressUpOrPrizes: true });

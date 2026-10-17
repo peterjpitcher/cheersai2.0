@@ -183,13 +183,14 @@ export async function writeCopy(input: WriteCopyInput): Promise<WriteCopyResult>
     ctaLinks: brief.ctaLinks ?? null,
     eventStartIso: temporal.eventStart ?? null,
     allowedRelativeWording: temporal.allowedRelativeWording,
+    protectedTerms: [brief.title, brief.contentType === 'event' ? brief.eventName : ''].filter(Boolean),
   };
 
   const first = postprocessCopy(
     await generatePlatformCopy({ systemPrompt, userPrompt, temperature, usageAccountId: accountId }),
     postprocessConfig,
   );
-  const issues = findCopyIssues(first.copy);
+  const issues = findCopyIssues(first.copy, brief.platforms);
   if (!issues.length) return { processed: first, temporal, temperature };
 
   const rewritten = postprocessCopy(
@@ -201,7 +202,7 @@ export async function writeCopy(input: WriteCopyInput): Promise<WriteCopyResult>
     }),
     postprocessConfig,
   );
-  const remaining = findCopyIssues(rewritten.copy);
+  const remaining = findCopyIssues(rewritten.copy, brief.platforms);
   return {
     processed: {
       ...rewritten,

@@ -159,14 +159,18 @@ export function renderCampaignPlan(plan: CampaignSlotPlan): string {
 
 /** The first sentence of a post body, for the next posts' prompts. */
 export function openingOf(body: string): string {
-  const first = body.trim().split(/(?<=[.!?])\s+|\n/)[0]?.trim() ?? '';
+  const line = body.trim().split('\n')[0] ?? '';
+  // A sentence ends at its mark even when an emoji follows with no space ("Big night!🎉").
+  const first = (line.match(/^.*?[.!?]+/u)?.[0] ?? line).trim();
   return first.length > 140 ? `${first.slice(0, 137).replace(/\s+\S*$/, '')}...` : first;
 }
 
-/** Every question a post body asks. */
+/**
+ * Every question a post body asks, including ones followed straight away by an
+ * emoji ("Which song?🎶 Which outfit?🕺" is two questions).
+ */
 export function questionsIn(body: string): string[] {
-  return body
-    .split(/(?<=[.!?])\s+|\n/)
-    .map((sentence) => sentence.trim())
-    .filter((sentence) => sentence.endsWith('?'));
+  return (body.match(/[^.!?\n]*\?+/gu) ?? [])
+    .map((question) => question.replace(/^[^\p{L}\p{N}"'\u2018\u201C(]+/u, '').trim())
+    .filter(Boolean);
 }
