@@ -33,7 +33,7 @@ import { prepareRugbyFixture, saveRugbyFixture } from '@/lib/tournament/screenin
 import { checkTournamentContentById, findContentCoveringFixture } from '@/lib/tournament/content-freshness';
 import { coveredFixtureIds, coversFixture, expectedFixtureRevision } from '../../../supabase/functions/_shared/tournament-roundup';
 import { projectTournamentFixtures } from '@/lib/tournament/screening-service';
-import { isPublishedContentStatus, isPublishedJobStatus } from '@/lib/tournament/published-status';
+import { isInFlightStatus, isPublishedContentStatus, isPublishedJobStatus } from '@/lib/tournament/published-status';
 import type { TournamentFixture } from '@/types/tournament';
 import type { Tournament } from '@/types/tournament';
 import type { Platform } from '@/types/content';
@@ -42,11 +42,6 @@ import type { Platform } from '@/types/content';
 // Internal helpers
 // ---------------------------------------------------------------------------
 
-const LOCKED_JOB_STATUSES = new Set(['publishing', 'in_progress']);
-
-function isLockedJobStatus(status: unknown): boolean {
-  return typeof status === 'string' && LOCKED_JOB_STATUSES.has(status);
-}
 
 async function isLegacyPublishQueue(
   supabase: ReturnType<typeof createServiceSupabaseClient>,
@@ -666,7 +661,7 @@ export async function publishNowFixture(
       }
 
       const lockedJob = (existingJobs ?? []).find((job: Record<string, unknown>) =>
-        isLockedJobStatus(job.status),
+        isInFlightStatus(job.status),
       );
       if (lockedJob) {
         continue;
@@ -685,7 +680,7 @@ export async function publishNowFixture(
       if (contentUpdateError) return { success: false, error: contentUpdateError.message };
 
       const reusableJob = (existingJobs ?? []).find((job: Record<string, unknown>) =>
-        !isPublishedJobStatus(job.status) && !isLockedJobStatus(job.status),
+        !isPublishedJobStatus(job.status) && !isInFlightStatus(job.status),
       );
 
       if (reusableJob?.id) {

@@ -14,7 +14,7 @@ vi.mock('@/lib/tournament/content-freshness', () => ({ findContentCoveringFixtur
 
 type Row = Record<string, unknown>;
 
-/** Records deletes and updates; answers selects from fixed rows per table. */
+/** Records deletes and updates; answers selects from fixed rows per table, applying eq, in and is filters. */
 function fakeDb(rows: Record<string, Row[]>, failing: string[] = []) {
   const deleted: Array<{ table: string; ids: unknown[] }> = [];
   const updated: Array<{ table: string; values: Row }> = [];
@@ -22,13 +22,21 @@ function fakeDb(rows: Record<string, Row[]>, failing: string[] = []) {
     let op: 'select' | 'delete' | 'update' = 'select';
     let values: Row = {};
     let ids: unknown[] = [];
+    const filters: Array<(row: Row) => boolean> = [];
     const builder = {
       select: () => builder,
-      eq: () => builder,
-      is: () => builder,
+      eq: (column: string, value: unknown) => {
+        filters.push((row) => row[column] === value);
+        return builder;
+      },
+      is: (column: string, value: unknown) => {
+        filters.push((row) => (row[column] ?? null) === value);
+        return builder;
+      },
       contains: () => builder,
-      in: (_column: string, list: unknown[]) => {
-        ids = list;
+      in: (column: string, list: unknown[]) => {
+        if (column === 'id') ids = list;
+        filters.push((row) => list.includes(row[column]));
         return builder;
       },
       delete: () => {
@@ -44,7 +52,8 @@ function fakeDb(rows: Record<string, Row[]>, failing: string[] = []) {
         if (failing.includes(table)) return Promise.resolve({ data: null, error: { message: `${table} unavailable` } }).then(resolve);
         if (op === 'delete') deleted.push({ table, ids });
         if (op === 'update') updated.push({ table, values });
-        return Promise.resolve({ data: op === 'select' ? rows[table] ?? [] : null, error: null }).then(resolve);
+        const data = op === 'select' ? (rows[table] ?? []).filter((row) => filters.every((filter) => filter(row))) : null;
+        return Promise.resolve({ data, error: null }).then(resolve);
       },
     };
     return builder;
@@ -57,10 +66,11 @@ function item(
   status: string,
   fixtureIds: string[] = ['f1'],
   eventStart = '2026-11-07T14:10:00Z',
-): { id: string; status: string; platform: string; placement: string; scheduled_for: string; prompt_context: Row } {
+): { id: string; status: string; account_id: string; platform: string; placement: string; scheduled_for: string; prompt_context: Row } {
   return {
     id,
     status,
+    account_id: 'account-1',
     platform: 'facebook',
     placement: 'feed',
     scheduled_for: '2026-11-04T11:40:00Z',
@@ -90,11 +100,32 @@ describe('deleteFixtureContentItems, keeping what has gone out', () => {
     vi.mocked(findContentCoveringFixture)
       .mockResolvedValueOnce([item('posted-feed', 'posted'), item('job-succeeded', 'scheduled'), item('pending-story', 'scheduled')])
       .mockResolvedValue([item('posted-feed', 'posted')]);
-    const { db, deleted } = fakeDb({ publish_jobs: [{ content_item_id: 'job-succeeded' }] });
+    const { db, deleted } = fakeDb({
+      publish_jobs: [
+        { content_item_id: 'job-succeeded', account_id: 'account-1', status: 'succeeded' },
+        { content_item_id: 'pending-story', account_id: 'account-1', status: 'queued' },
+      ],
+    });
 
     const count = await deleteFixtureContentItems(db, 'f1', 'account-1', true);
 
     expect(count).toBe(1);
+    expect(deleted).toEqual([{ table: 'content_items', ids: ['pending-story'] }]);
+  });
+
+  it('keeps a post a worker is sending right now', async () => {
+    vi.mocked(findContentCoveringFixture)
+      .mockResolvedValueOnce([item('job-in-progress', 'scheduled'), item('v2-publishing', 'publishing'), item('pending-story', 'scheduled')])
+      .mockResolvedValue([]);
+    const { db, deleted } = fakeDb({
+      publish_jobs: [
+        { content_item_id: 'job-in-progress', account_id: 'account-1', status: 'in_progress' },
+        { content_item_id: 'pending-story', account_id: 'account-1', status: 'queued' },
+      ],
+    });
+
+    await deleteFixtureContentItems(db, 'f1', 'account-1', true);
+
     expect(deleted).toEqual([{ table: 'content_items', ids: ['pending-story'] }]);
   });
 

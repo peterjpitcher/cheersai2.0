@@ -15,7 +15,7 @@ import { buildRugbyMatchCopy, buildRugbyMenuLine, buildRugbyRoundupCopy, joinRug
 import { findContentCoveringFixture } from '@/lib/tournament/content-freshness';
 import { coveredFixtureIds } from '../../../supabase/functions/_shared/tournament-roundup';
 import { getFixturesByTournament, getPublishedPlacements } from '@/lib/tournament/queries';
-import { PUBLISHED_JOB_STATUSES, isPublishedContentStatus } from '@/lib/tournament/published-status';
+import { IN_FLIGHT_STATUSES, PUBLISHED_JOB_STATUSES, isInFlightStatus, isPublishedContentStatus } from '@/lib/tournament/published-status';
 import { formatEventDateLong } from '@/lib/utils/date';
 import { DEFAULT_TIMEZONE, MEDIA_BUCKET } from '@/lib/constants';
 import { redactId, tournamentDebug, tournamentDebugError } from '@/lib/tournament/debug';
@@ -1185,22 +1185,23 @@ interface StoredContent {
 }
 
 /**
- * The posts that have not gone out: neither the post nor any of its publish
- * jobs is marked sent. The live worker marks sent posts 'posted' (job
- * 'succeeded'), so checking 'published' alone deleted them. Without the job
- * list nothing can be shown to be unsent, so a failed lookup throws.
+ * The posts that are safe to delete: neither the post nor any of its publish
+ * jobs is marked sent, or claimed by a worker that may be sending it right now.
+ * The live worker marks sent posts 'posted' (job 'succeeded') and a send in
+ * progress 'in_progress'; checking 'published' alone deleted both. Without the
+ * job list nothing can be shown to be safe, so a failed lookup throws.
  */
 async function unsentOnly<T extends StoredContent>(supabase: SupabaseClient, accountId: string, items: T[]): Promise<T[]> {
   if (!items.length) return items;
-  const { data: sentJobs, error } = await supabase
+  const { data: claimedJobs, error } = await supabase
     .from('publish_jobs')
     .select('content_item_id')
     .in('content_item_id', items.map((item) => item.id))
     .eq('account_id', accountId)
-    .in('status', [...PUBLISHED_JOB_STATUSES]);
+    .in('status', [...PUBLISHED_JOB_STATUSES, ...IN_FLIGHT_STATUSES]);
   if (error) throw error;
-  const sent = new Set((sentJobs ?? []).map((job: Record<string, unknown>) => job.content_item_id as string));
-  return items.filter((item) => !sent.has(item.id) && !isPublishedContentStatus(item.status));
+  const claimed = new Set((claimedJobs ?? []).map((job: Record<string, unknown>) => job.content_item_id as string));
+  return items.filter((item) => !claimed.has(item.id) && !isPublishedContentStatus(item.status) && !isInFlightStatus(item.status));
 }
 
 /**
