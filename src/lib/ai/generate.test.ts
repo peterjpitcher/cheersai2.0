@@ -94,3 +94,42 @@ describe('generatePlatformCopy', () => {
     );
   });
 });
+
+describe('generatePlatformCopy with reasoning models', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('leaves the temperature out, which reasoning models reject', async () => {
+    mockParse.mockResolvedValue({ choices: [{ message: { parsed: VALID_RESPONSE } }] });
+    await generatePlatformCopy({ ...DEFAULT_OPTIONS, model: 'gpt-5.5' });
+    const callArgs = mockParse.mock.calls[0]![0];
+    expect(callArgs.model).toBe('gpt-5.5');
+    expect('temperature' in callArgs).toBe(false);
+  });
+
+  it('allows 60 seconds before timing out', async () => {
+    mockParse.mockImplementation(
+      (_opts: unknown, { signal }: { signal: AbortSignal }) =>
+        new Promise((_resolve, reject) => {
+          signal.addEventListener('abort', () => {
+            const err = new Error('The operation was aborted');
+            err.name = 'AbortError';
+            reject(err);
+          });
+        }),
+    );
+    let settled = false;
+    const promise = generatePlatformCopy({ ...DEFAULT_OPTIONS, model: 'gpt-5.4-mini' }).finally(() => { settled = true; });
+    promise.catch(() => undefined);
+    await vi.advanceTimersByTimeAsync(31_000);
+    expect(settled).toBe(false);
+    await vi.advanceTimersByTimeAsync(30_000);
+    await expect(promise).rejects.toThrow('timed out after 60 seconds');
+  });
+});
