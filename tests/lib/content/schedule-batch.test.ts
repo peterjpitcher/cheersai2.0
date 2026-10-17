@@ -173,6 +173,70 @@ describe('scheduleContentBatch with an existing campaign', () => {
   });
 });
 
+describe('scheduleContentBatch for weekly and one-off posts', () => {
+  const weeklyBrief = {
+    title: 'Weekday lunch',
+    platforms: ['facebook', 'instagram'],
+    daysOfWeek: [2, 3, 4, 5],
+    time: '12:00',
+    endDate: '2026-11-26',
+    placement: 'feed',
+    ctaLinks: { facebook: 'https://l.example.com/fb-lunch', instagram: 'https://l.example.com/ig-lunch' },
+  };
+
+  it('keeps a wizard weekly post to its one placement', async () => {
+    const { db, writes } = fakeDb(library);
+    const result = await scheduleContentBatch(db, 'acc-1', {
+      contentType: 'weekly_recurring',
+      brief: weeklyBrief,
+      selectedMediaIds: [],
+      slotCopies: [slot],
+      platforms: ['facebook', 'instagram'],
+      mode: 'schedule',
+    });
+
+    expect(result).toMatchObject({ success: true, placements: ['feed'] });
+    const items = writes.find((write) => write.table === 'content_items' && write.op === 'insert')?.payload as Row[];
+    expect(items.map((item) => item.placement)).toEqual(['feed', 'feed']);
+  });
+
+  it('gives a weekly or one-off post its story when the brief asks for both placements', async () => {
+    for (const [contentType, brief] of [
+      ['weekly_recurring', { ...weeklyBrief, placements: ['feed', 'story'] }],
+      ['instant_post', { title: 'Private hire', platforms: ['facebook', 'instagram'], publishMode: 'schedule', placements: ['feed', 'story'] }],
+    ] as const) {
+      const { db, writes } = fakeDb(library);
+      const result = await scheduleContentBatch(db, 'acc-1', {
+        contentType,
+        brief,
+        selectedMediaIds: [],
+        slotCopies: [slot],
+        platforms: ['facebook', 'instagram'],
+        mode: 'schedule',
+      });
+
+      expect(result).toMatchObject({ success: true, placements: ['feed', 'story'] });
+      const items = writes.find((write) => write.table === 'content_items' && write.op === 'insert')?.payload as Row[];
+      expect(items.map((item) => `${item.platform} ${item.placement}`).sort()).toEqual(['facebook feed', 'facebook story', 'instagram feed', 'instagram story']);
+    }
+  });
+
+  it("puts the Instagram link on a weekly campaign's link-in-bio card", async () => {
+    const { db, writes } = fakeDb(library);
+    await scheduleContentBatch(db, 'acc-1', {
+      contentType: 'weekly_recurring',
+      brief: weeklyBrief,
+      selectedMediaIds: [],
+      slotCopies: [slot],
+      platforms: ['facebook', 'instagram'],
+      mode: 'schedule',
+    });
+
+    const campaign = writes.find((write) => write.table === 'campaigns' && write.op === 'insert')?.payload as Row[];
+    expect(campaign[0].link_in_bio_url).toBe('https://l.example.com/ig-lunch');
+  });
+});
+
 describe('validateScheduleBatch', () => {
   it('applies the event-order rule to tools as well as the wizard', () => {
     const reason = validateScheduleBatch({

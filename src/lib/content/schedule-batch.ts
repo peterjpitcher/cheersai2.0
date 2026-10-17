@@ -83,11 +83,17 @@ function resolveBatchPlacements(
     return contentType === 'event' ? ['feed', 'story'] : ['feed'];
   }
 
+  // An ops tool may ask for a weekly or one-off post on the feed and as a story
+  // together (tasks/SPEC-social-calendar-fill.md). The wizard never sends
+  // placements for these types (a content-type change resets the form), so its
+  // posts are unchanged: one placement, the weekly brief's own choice.
+  const requested = Array.isArray(brief.placements) ? Array.from(new Set(brief.placements.filter(isPlacement))) : [];
   if (contentType === 'weekly_recurring') {
+    if (requested.length) return requested;
     return brief.placement === 'story' ? ['story'] : ['feed'];
   }
 
-  return ['feed'];
+  return requested.length ? requested : ['feed'];
 }
 
 function platformsForPlacement(
@@ -384,10 +390,13 @@ export async function scheduleContentBatch(
 
     // Weekly campaigns surface their CTA on the link-in-bio page for the run.
     // readPlatformCtaLinks only returns http(s) URLs. First entry in the card's
-    // link resolution chain (campaigns.link_in_bio_url -> metadata.*).
+    // link resolution chain (campaigns.link_in_bio_url -> metadata.*). The card
+    // is tapped from the Instagram bio, so it carries the Instagram link when
+    // the brief has its own, and those clicks are counted as Instagram ones.
+    const briefLinks = readPlatformCtaLinks(brief);
     const linkInBioUrl =
       contentType === 'weekly_recurring' && brief.placement !== 'story'
-        ? (readPlatformCtaLinks(brief).facebook ?? null)
+        ? (briefLinks.instagram ?? briefLinks.facebook ?? null)
         : null;
 
     const { data: campaignRow, error: campaignError } = await supabase
