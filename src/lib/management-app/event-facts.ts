@@ -191,16 +191,17 @@ export function stripImportedFormatting(text: string): string {
 export type CopyTone = "friendly_warm" | "professional" | "playful" | "sophisticated" | "community_focused";
 
 /**
- * A tone to start from, by kind of event. Themed and hosted nights suit playful
- * copy; food and tastings warm; sport and cash bingo a community feel. The owner
- * can change it in the wizard; unknown categories keep the default.
+ * A tone to start from, by kind of event (tasks/SPEC-event-copy-engine.md B2).
+ * Themed and hosted nights and parties suit playful copy; food and tastings
+ * warm; quizzes, sport and cash bingo a community feel. The owner can change it
+ * in the wizard; unknown categories keep the default.
  */
 export function toneForCategory(category: string | null | undefined): CopyTone | null {
   const value = category?.toLowerCase() ?? "";
   if (!value) return null;
   if (/cash\s*bingo/.test(value)) return "community_focused";
-  if (/music\s*bingo|drag|party|parties|karaoke|halloween|disco|quiz/.test(value)) return "playful";
+  if (/music\s*bingo|drag|party|parties|karaoke|halloween|disco/.test(value)) return "playful";
   if (/tasting|food|dining|supper|roast|brunch|wine|gin/.test(value)) return "friendly_warm";
-  if (/sport|rugby|football|match/.test(value)) return "community_focused";
+  if (/quiz|sport|rugby|football|match/.test(value)) return "community_focused";
   return null;
 }

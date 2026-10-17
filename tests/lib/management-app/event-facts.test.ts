@@ -102,7 +102,7 @@ describe("imported text and tone", () => {
   });
 
   it.each([
-    ["Music Bingo", "playful"], ["Quiz Night", "playful"], ["Parties", "playful"], ["Cash Bingo", "community_focused"],
+    ["Music Bingo", "playful"], ["Quiz Night", "community_focused"], ["Parties", "playful"], ["Cash Bingo", "community_focused"],
     ["Tasting Nights", "friendly_warm"], ["Live Sport", "community_focused"], ["Open Mic", null], [null, null],
   ] as const)("suggests a tone for %s", (category, tone) => {
     expect(toneForCategory(category)).toBe(tone);

@@ -16,6 +16,7 @@ import {
   type ArtworkUiState,
 } from '@/features/create/artwork-status';
 import type { EventFactSheet } from '@/lib/management-app/event-facts';
+import { importedBriefText, toneAfterImport } from '@/features/create/forms/event-import';
 
 interface EventFieldsProps {
   form: UseFormReturn<FieldValues>;
@@ -40,7 +41,6 @@ function EventFactsSummary({ facts }: { facts: EventFactSheet }): React.JSX.Elem
     ['Host', facts.host ?? ''],
     ['Highlights', (facts.highlights ?? []).join('; ')],
   ].filter((row): row is [string, string] => Boolean(row[1]));
-  const faqCount = facts.faqs?.length ?? 0;
   return (
     <div className="rounded-md border bg-muted/40 p-3 text-xs">
       <p className="font-medium text-foreground">Facts the AI will use (from your events system)</p>
@@ -52,11 +52,18 @@ function EventFactsSummary({ facts }: { facts: EventFactSheet }): React.JSX.Elem
           </div>
         ))}
       </dl>
-      {faqCount > 0 && (
-        <p className="mt-1 text-muted-foreground">
-          Plus {faqCount} question{faqCount === 1 ? '' : 's'} and answer{faqCount === 1 ? '' : 's'} from the event page.
-        </p>
-      )}
+      {facts.faqs?.length ? (
+        <div className="mt-1">
+          <p className="font-medium text-muted-foreground">Questions and answers from the event page</p>
+          <ul className="mt-0.5 space-y-0.5 text-muted-foreground">
+            {facts.faqs.map((faq) => (
+              <li key={faq.question}>
+                <span className="font-medium">{faq.question}</span> {faq.answer}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
       <p className="mt-1 text-muted-foreground">Something wrong? Correct it in the events system, then import again.</p>
     </div>
   );
@@ -78,7 +85,7 @@ export function EventFields({
   canReplaceWithArtwork = false,
   onUseArtwork,
 }: EventFieldsProps): React.JSX.Element {
-  const { register, formState: { errors }, setValue, getValues } = form;
+  const { register, formState: { errors, touchedFields }, setValue, getValues } = form;
   const canImport = useAuth()?.features.managementImport === true;
   const [importOpen, setImportOpen] = useState(false);
   const [events, setEvents] = useState<EventOption[]>([]);
@@ -130,19 +137,13 @@ export function EventFields({
         if (fields.ctaLinks && Object.keys(fields.ctaLinks).length > 0) {
           setValue('ctaLinks', fields.ctaLinks, { shouldValidate: true });
         }
-        // With a fact sheet the summary line would only repeat it, so the brief
-        // keeps just the venue's own notes (tasks/SPEC-event-copy-engine.md B2).
         const facts = fields.facts && Object.keys(fields.facts).length ? fields.facts : undefined;
         setValue('facts', facts, { shouldValidate: true });
         setImportedFacts(facts ?? null);
-        const briefParts = (facts ? [fields.description] : [fields.description, fields.prompt]).filter(Boolean);
-        if (briefParts.length > 0) {
-          setValue('prompt', briefParts.join('\n\n'), { shouldValidate: true });
-        }
-        // A starting tone for this kind of event, unless the owner already picked one.
-        if (fields.suggestedTone && (getValues('tone') ?? 'friendly_warm') === 'friendly_warm') {
-          setValue('tone', fields.suggestedTone, { shouldValidate: true });
-        }
+        setValue('prompt', importedBriefText(fields, Boolean(facts)), { shouldValidate: true });
+        // A tone the owner picked (touched the control) stays; otherwise this event's suggestion.
+        const tone = toneAfterImport({ ownerChoseTone: Boolean(touchedFields.tone), suggestedTone: fields.suggestedTone });
+        if (tone) setValue('tone', tone, { shouldValidate: true });
         setSelectedLabel(sourceLabel);
         setImportOpen(false);
 
