@@ -158,7 +158,9 @@ export function describeSlotJob(job: SlotJob, host?: string | null): string {
     case 'meet_the_host':
       return `Lead with the host, ${host?.trim() || 'the host'}, and what they bring to the night, saying nothing about them that the brief does not.`;
     case 'dress_up_and_prizes':
-      return 'Lead with dressing up and the prizes, using only what the brief says about them.';
+      // Given when the brief mentions either, so it must not assume both: a
+      // prizes-only night was written up as "festive dress-up" (17 Oct 2026).
+      return 'Lead with the prizes or the dress-up theme, whichever the brief mentions (both if it mentions both), using only what the brief says. Never mention dressing up, costumes or outfits unless the brief does.';
     case 'eat_first':
       return 'Lead with eating here before or during the event, using only the food details in the brief.';
     case 'last_call':
