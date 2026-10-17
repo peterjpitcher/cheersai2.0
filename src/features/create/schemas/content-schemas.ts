@@ -92,6 +92,12 @@ const baseContentSchema = z.object({
       'community_focused',
     ])
     .default('friendly_warm'),
+  /**
+   * True once the owner picks a tone themselves, false when the tone came from
+   * an imported event's suggestion. Saved with drafts and kept when the content
+   * type changes, so an import never overwrites a tone the owner chose.
+   */
+  toneChosen: z.boolean().optional(),
   lengthPreference: z
     .enum(['standard', 'short', 'detailed'])
     .default('standard'),

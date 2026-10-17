@@ -289,7 +289,7 @@ export function BriefStep({
             <select
               id="tone"
               className="flex h-9 w-full rounded-md border border-input bg-card px-3 py-2 text-sm shadow-[0_1px_2px_0_rgb(0_0_0/0.04)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-all duration-150"
-              {...register('tone')}
+              {...register('tone', { onChange: () => setValue('toneChosen', true) })}
             >
               {TONE_OPTIONS.map((opt) => (
                 <option key={opt.value} value={opt.value}>
