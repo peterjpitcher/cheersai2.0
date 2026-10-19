@@ -43,6 +43,10 @@ describe("buildBriefFromEvent", () => {
   });
 });
 
+// deriveStartDate works in London dates, so "today" here must be London's too:
+// between 00:00 and 01:00 BST the runner's UTC date is still yesterday.
+const londonNow = (): DateTime => DateTime.now().setZone("Europe/London");
+
 describe("deriveStartDate", () => {
   it("should return 7 days before a far-future event date", () => {
     const result = deriveStartDate("2026-12-25");
@@ -50,27 +54,27 @@ describe("deriveStartDate", () => {
   });
 
   it("should return today when the event is less than 7 days away", () => {
-    const tomorrow = DateTime.now().plus({ days: 1 }).toISODate()!;
-    const today = DateTime.now().toISODate()!;
+    const tomorrow = londonNow().plus({ days: 1 }).toISODate()!;
+    const today = londonNow().toISODate()!;
     const result = deriveStartDate(tomorrow);
     expect(result).toBe(today);
   });
 
   it("should return today when the event is exactly today", () => {
-    const today = DateTime.now().toISODate()!;
+    const today = londonNow().toISODate()!;
     const result = deriveStartDate(today);
     expect(result).toBe(today);
   });
 
   it("should return today for a past event date", () => {
-    const today = DateTime.now().toISODate()!;
+    const today = londonNow().toISODate()!;
     const result = deriveStartDate("2020-01-01");
     expect(result).toBe(today);
   });
 
   it("should return exactly 7 days before when the event is exactly 7 days away", () => {
-    const sevenDaysFromNow = DateTime.now().plus({ days: 7 }).toISODate()!;
-    const expectedStart = DateTime.now().toISODate()!;
+    const sevenDaysFromNow = londonNow().plus({ days: 7 }).toISODate()!;
+    const expectedStart = londonNow().toISODate()!;
     const result = deriveStartDate(sevenDaysFromNow);
     expect(result).toBe(expectedStart);
   });
