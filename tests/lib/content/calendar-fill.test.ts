@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { describe, expect, it } from 'vitest';
 
@@ -220,6 +223,19 @@ describe('decideCalendar: empty days', () => {
     expect(decision.venue.map((entry) => [entry.slot.date, entry.photo.id])).toEqual([['2026-11-26', 'lunch-2']]);
   });
 
+  it('lets a subject with no approved photo step aside, so its day goes to the next rule', () => {
+    const decision = decide({
+      from: '2026-11-28',
+      to: '2026-11-28',
+      events: quizEvents,
+      posts: trivia('2026-11-25 11:00'),
+      subjects: { roast: [], private_hire: photos.private_hire },
+    });
+
+    expect(decision.venue.map((entry) => [entry.slot.date, entry.subject])).toEqual([['2026-11-28', 'private_hire']]);
+    expect(decision.notes).toContain('No usable roast photo, so no roast posts until one is added.');
+  });
+
   it('lists a day it cannot fill', () => {
     const decision = decide({ from: '2026-11-29', to: '2026-11-29', events: quizEvents });
 
@@ -284,6 +300,15 @@ describe('decideCalendar: new campaigns', () => {
     });
 
     expect(decision.ruleBreaks).toEqual([{ campaignName: 'Sleigh My Name', date: '2026-11-10', opensOn: '2026-11-14', afterEvent: 'Sequins' }]);
+  });
+});
+
+describe('the venue subjects file', () => {
+  it('parses for every brand it lists', () => {
+    const file = JSON.parse(readFileSync(path.join(process.cwd(), 'scripts/ops/calendar-fill-subjects.json'), 'utf8')) as Record<string, unknown>;
+    for (const subjects of Object.values(file)) {
+      expect(calendarSubjectsSchema.safeParse(subjects).success).toBe(true);
+    }
   });
 });
 

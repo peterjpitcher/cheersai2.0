@@ -103,8 +103,8 @@ const venueSubjectSchema = z
     notes: z.string().trim().min(1),
     /** Where the facts came from and when they were checked, for the report. */
     source: z.string().trim().min(1),
-    /** Library photos to rotate, best first. */
-    photos: z.array(z.string().uuid()).min(1),
+    /** Library photos to rotate, best first. Empty until the owner approves one: the subject then posts nothing. */
+    photos: z.array(z.string().uuid()),
   })
   .refine((subject) => subject.contentType !== 'weekly_recurring' || (subject.daysOfWeek && subject.time), {
     message: 'A weekly subject needs daysOfWeek and time',
@@ -635,8 +635,15 @@ export function decideCalendar(input: DecideInput): CalendarDecision {
     book.add(day, BUILD_UP_TIME, null);
   };
   const venueDays: Array<{ subject: VenueSubjectKey; date: string }> = [];
+  // A subject with no usable photo steps aside, so its days go to the other
+  // rules rather than being held for a post that cannot have an image.
+  const usable = (key: VenueSubjectKey): boolean => {
+    const photos = input.subjects[key];
+    if (photos && !photos.length) notes.push(`No usable ${key.replace('_', ' ')} photo, so no ${key.replace('_', ' ')} posts until one is added.`);
+    return Boolean(photos?.length);
+  };
 
-  if (input.subjects.roast) {
+  if (usable('roast')) {
     const weeks = new Map<string, string[]>();
     for (const day of empty) {
       const weekStart = DateTime.fromISO(day, { zone: DEFAULT_TIMEZONE }).startOf('week').toISODate() ?? day;
@@ -649,14 +656,14 @@ export function decideCalendar(input: DecideInput): CalendarDecision {
       take(pick);
     }
   }
-  if (input.subjects.lunch) {
+  if (usable('lunch')) {
     for (const day of [...empty].sort()) {
       if (weekdayOf(day) < 2 || weekdayOf(day) > 5) continue;
       venueDays.push({ subject: 'lunch', date: day });
       take(day);
     }
   }
-  if (input.subjects.private_hire) {
+  if (usable('private_hire')) {
     const halves = new Map<string, string[]>();
     for (const day of [...empty].sort()) {
       const half = `${day.slice(0, 7)}|${Number(day.slice(8, 10)) <= 15 ? 1 : 2}`;
