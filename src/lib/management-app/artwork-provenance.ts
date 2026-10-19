@@ -13,8 +13,12 @@ import { createHash } from "node:crypto";
  *
  * It is part of the source key, so an asset rendered by an older version is not
  * silently reused once the renderer has moved on.
+ *
+ * 2 (20 October 2026): a story made from square or landscape artwork shows the
+ * whole design over a blurred copy instead of a centre crop
+ * (tasks/SPEC-story-version-whole-image.md).
  */
-export const ARTWORK_TRANSFORM_VERSION = 1;
+export const ARTWORK_TRANSFORM_VERSION = 2;
 
 export const ARTWORK_SOURCE_PREFIX = "ams:event:";
 

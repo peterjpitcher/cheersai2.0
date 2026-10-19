@@ -207,3 +207,13 @@ describe("renderArtworkRendition", () => {
     expect(meta.height).toBe(1920);
   });
 });
+
+describe("the artwork transform version", () => {
+  it("changes the source key, so artwork rendered before the whole-image story is not reused", async () => {
+    const { ARTWORK_TRANSFORM_VERSION, buildArtworkSourceKey } = await import("@/lib/management-app/artwork-provenance");
+    expect(ARTWORK_TRANSFORM_VERSION).toBeGreaterThanOrEqual(2);
+    const revision = { url: "https://example.supabase.co/a.jpg", updatedAt: "2026-10-17T10:00:00Z" };
+    const key = buildArtworkSourceKey("evt-1", { square: revision, story: null, landscape: null });
+    expect(key).toMatch(/^ams:event:evt-1:[0-9a-f]{32}$/);
+  });
+});
