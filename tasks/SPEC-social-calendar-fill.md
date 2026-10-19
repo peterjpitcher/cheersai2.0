@@ -41,6 +41,7 @@ Owner approval: 17 October 2026, on `tasks/REVIEW-social-calendar-2026-10-17.md`
 - Event posts use the event's imported artwork: the square image for the feed, the designed upright image for the story.
 - Food and venue posts use library photos tagged for the subject that have a story version. The same photo is not used twice within seven days.
 - A day with no suitable photo is listed for the owner rather than filled.
+- 19 October 2026: the owner declined the only square roast photo (it lists pies, which the roast page no longer offers), so the roast has no photo and posts nothing until one is approved. A subject with no photo steps aside, so its days go to the other rules.
 
 ### Copy
 - Copy comes from the shared engine (`src/lib/ai/write-copy.ts`), on gpt-5.5.

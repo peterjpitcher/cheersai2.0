@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { describe, expect, it } from 'vitest';
 
@@ -220,6 +223,19 @@ describe('decideCalendar: empty days', () => {
     expect(decision.venue.map((entry) => [entry.slot.date, entry.photo.id])).toEqual([['2026-11-26', 'lunch-2']]);
   });
 
+  it('lets a subject with no approved photo step aside, so its day goes to the next rule', () => {
+    const decision = decide({
+      from: '2026-11-28',
+      to: '2026-11-28',
+      events: quizEvents,
+      posts: trivia('2026-11-25 11:00'),
+      subjects: { roast: [], private_hire: photos.private_hire },
+    });
+
+    expect(decision.venue.map((entry) => [entry.slot.date, entry.subject])).toEqual([['2026-11-28', 'private_hire']]);
+    expect(decision.notes).toContain('No usable roast photo, so no roast posts until one is added.');
+  });
+
   it('lists a day it cannot fill', () => {
     const decision = decide({ from: '2026-11-29', to: '2026-11-29', events: quizEvents });
 
@@ -284,6 +300,15 @@ describe('decideCalendar: new campaigns', () => {
     });
 
     expect(decision.ruleBreaks).toEqual([{ campaignName: 'Sleigh My Name', date: '2026-11-10', opensOn: '2026-11-14', afterEvent: 'Sequins' }]);
+  });
+});
+
+describe('the venue subjects file', () => {
+  it('parses for every brand it lists', () => {
+    const file = JSON.parse(readFileSync(path.join(process.cwd(), 'scripts/ops/calendar-fill-subjects.json'), 'utf8')) as Record<string, unknown>;
+    for (const subjects of Object.values(file)) {
+      expect(calendarSubjectsSchema.safeParse(subjects).success).toBe(true);
+    }
   });
 });
 
@@ -398,6 +423,31 @@ const sleighDetail = {
   ctaLinks: { facebook: 'https://l.example.com/fb-sleigh' },
   linkInBioUrl: 'https://l.example.com/ig-sleigh',
 } as unknown as ManagementEventDetail;
+
+describe('planCalendarFill with a subject that has no photo', () => {
+  it('names the subject in the report rather than dropping it', async () => {
+    const roastOnly = calendarSubjectsSchema.parse({
+      roast: {
+        title: 'Sunday roast',
+        contentType: 'weekly_recurring',
+        daysOfWeek: [0],
+        time: '13:00',
+        ctaLabel: 'Book your Sunday roast',
+        ctaLinks: { facebook: 'https://l.example.com/fb-roast', instagram: 'https://l.example.com/ig-roast' },
+        notes: 'Roasts every Sunday.',
+        source: 'the website',
+        photos: [],
+      },
+    });
+    const plan = await planCalendarFill(
+      { db: fakeDb({}), listEvents: async () => [], getEventDetail: async () => sleighDetail, now: () => NOW, model: 'test-model' },
+      { accountId: ACCOUNT, from: '2026-11-28', to: '2026-11-28', subjects: roastOnly },
+    );
+
+    expect(plan.notes).toContain('No usable roast photo, so no roast posts until one is added.');
+    expect(plan.batches).toEqual([]);
+  });
+});
 
 describe('planCalendarFill', () => {
   it("writes each new post with its job, both platforms' text and links, and drops a post whose wording is untrue at its time", async () => {
