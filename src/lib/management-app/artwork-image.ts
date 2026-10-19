@@ -14,6 +14,8 @@
 
 import sharp from "sharp";
 
+import { storyLayout } from "@/lib/media/story-layout";
+
 export type ArtworkFormat = "jpeg" | "png" | "webp";
 
 /** Guards the decode itself: roughly a 6000x6000 image, well past any artwork. */
@@ -171,6 +173,32 @@ export async function renderArtworkRendition(
   rendition: ArtworkRendition,
 ): Promise<Buffer> {
   const { width, height } = RENDITION_SIZES[rendition];
+
+  // A story made from artwork that is not story-shaped (an event with no
+  // designed upright artwork) shows the whole design over a blurred copy, as
+  // uploads do (src/lib/media/story-layout.ts): a centre crop cut its words.
+  if (rendition === "story") {
+    const layout = storyLayout(source.width, source.height, { width, height });
+    if (layout.mode === "fit") {
+      const background = await sharp(Buffer.from(source.bytes), SHARP_LIMITS)
+        .rotate()
+        .resize(width, height, { fit: "cover", position: "centre", withoutEnlargement: false })
+        .flatten({ background: "#ffffff" })
+        .blur(40)
+        .modulate({ brightness: 0.55 })
+        .toBuffer();
+      const foreground = await sharp(Buffer.from(source.bytes), SHARP_LIMITS)
+        .rotate()
+        .resize(layout.width, layout.height, { fit: "fill", withoutEnlargement: false })
+        .flatten({ background: "#ffffff" })
+        .toBuffer();
+      return sharp(background)
+        .composite([{ input: foreground, left: layout.x, top: layout.y }])
+        .toColourspace("srgb")
+        .jpeg({ quality: 90, chromaSubsampling: "4:4:4", mozjpeg: false })
+        .toBuffer();
+    }
+  }
 
   return sharp(Buffer.from(source.bytes), SHARP_LIMITS)
     .rotate()
