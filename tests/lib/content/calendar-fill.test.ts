@@ -424,6 +424,31 @@ const sleighDetail = {
   linkInBioUrl: 'https://l.example.com/ig-sleigh',
 } as unknown as ManagementEventDetail;
 
+describe('planCalendarFill with a subject that has no photo', () => {
+  it('names the subject in the report rather than dropping it', async () => {
+    const roastOnly = calendarSubjectsSchema.parse({
+      roast: {
+        title: 'Sunday roast',
+        contentType: 'weekly_recurring',
+        daysOfWeek: [0],
+        time: '13:00',
+        ctaLabel: 'Book your Sunday roast',
+        ctaLinks: { facebook: 'https://l.example.com/fb-roast', instagram: 'https://l.example.com/ig-roast' },
+        notes: 'Roasts every Sunday.',
+        source: 'the website',
+        photos: [],
+      },
+    });
+    const plan = await planCalendarFill(
+      { db: fakeDb({}), listEvents: async () => [], getEventDetail: async () => sleighDetail, now: () => NOW, model: 'test-model' },
+      { accountId: ACCOUNT, from: '2026-11-28', to: '2026-11-28', subjects: roastOnly },
+    );
+
+    expect(plan.notes).toContain('No usable roast photo, so no roast posts until one is added.');
+    expect(plan.batches).toEqual([]);
+  });
+});
+
 describe('planCalendarFill', () => {
   it("writes each new post with its job, both platforms' text and links, and drops a post whose wording is untrue at its time", async () => {
     const posts: Row[] = slot('2026-11-13 07:00', { campaignId: 'c-sequins', eventName: 'Sequins', eventDate: '2026-11-13' }).map((post) => ({

@@ -934,14 +934,18 @@ async function loadSubjectPhotos(
 ): Promise<{ photos: Partial<Record<VenueSubjectKey, PhotoInfo[]>>; notes: string[] }> {
   const ids = VENUE_SUBJECTS.flatMap((key) => subjects[key]?.photos ?? []);
   const notes: string[] = [];
-  if (!ids.length) return { photos: {}, notes };
-  const { data, error } = await db
-    .from('media_assets')
-    .select('id, file_name, media_type, aspect_class, derived_variants, hidden_at')
-    .eq('account_id', accountId)
-    .in('id', ids);
-  if (error) throw new Error(`Could not load the photos: ${error.message}`);
-  const rows = new Map(((data ?? []) as MediaRow[]).map((row) => [row.id, row]));
+  const rows = new Map<string, MediaRow>();
+  // Every configured subject comes back, an empty list included, so one
+  // with no photo is still named in the report rather than vanishing.
+  if (ids.length) {
+    const { data, error } = await db
+      .from('media_assets')
+      .select('id, file_name, media_type, aspect_class, derived_variants, hidden_at')
+      .eq('account_id', accountId)
+      .in('id', ids);
+    if (error) throw new Error(`Could not load the photos: ${error.message}`);
+    for (const row of (data ?? []) as MediaRow[]) rows.set(row.id, row);
+  }
   const photos: Partial<Record<VenueSubjectKey, PhotoInfo[]>> = {};
   for (const key of VENUE_SUBJECTS) {
     const subject = subjects[key];
