@@ -10,3 +10,5 @@
 - When replacing scheduled post artwork, update both content_variants.media_ids and content_media_attachments. Calendar thumbnails prioritise attachments while post details and publishing use variants. Verify both views before reporting the replacement complete.
 
 - Before proposing a change to a repository, account or security setting, search earlier sessions and memory for a past decision about it. On 30 September 2026 I proposed turning on GitHub "Allow auto-merge" for this repo; Peter had been advised elsewhere to keep it off. It stays off: merge by hand once CI is green.
+
+- Before calling scheduled posts verified, look at every image each post will publish, the feed image and the story version, not only the schedule data and the text. On 19 October 2026 the calendar fill scheduled 10 lunch and private hire stories whose story version was a centre crop of a square graphic, cutting its words ("ate Hire Booki"). The crop was visible in my own contact sheet and I missed it; the owner found it in the planner. Story versions now show the whole image (#209), but check them anyway.
