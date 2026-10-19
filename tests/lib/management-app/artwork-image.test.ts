@@ -112,6 +112,46 @@ describe("validateArtworkSource", () => {
   });
 });
 
+describe("renderArtworkRendition: the story version", () => {
+  /** A red image with a blue stripe down its left edge. */
+  async function striped(width: number, height: number): Promise<Uint8Array> {
+    const stripe = await sharp({ create: { width: 40, height, channels: 3, background: { r: 0, g: 0, b: 255 } } }).png().toBuffer();
+    const buffer = await sharp({ create: { width, height, channels: 3, background: { r: 200, g: 0, b: 0 } } })
+      .composite([{ input: stripe, left: 0, top: 0 }])
+      .png()
+      .toBuffer();
+    return new Uint8Array(buffer);
+  }
+
+  async function pixel(image: Buffer, x: number, y: number): Promise<{ r: number; g: number; b: number }> {
+    const { data, info } = await sharp(image).raw().toBuffer({ resolveWithObject: true });
+    const index = (y * info.width + x) * info.channels;
+    return { r: data[index], g: data[index + 1], b: data[index + 2] };
+  }
+
+  it("keeps the whole of square artwork, edges included, over a darker copy", async () => {
+    const source = await validateArtworkSource(await striped(1080, 1080));
+    const story = await renderArtworkRendition(source, "story");
+
+    // The stripe at the artwork's left edge survives (a centre crop removed it).
+    const edge = await pixel(story, 10, 960);
+    expect(edge.b).toBeGreaterThan(150);
+    expect(edge.r).toBeLessThan(100);
+    // Above the artwork is the blurred, darkened copy, not the artwork itself.
+    const above = await pixel(story, 540, 100);
+    expect(above.r).toBeLessThan(150);
+  });
+
+  it("lets story-shaped artwork fill the frame as before", async () => {
+    const source = await validateArtworkSource(await striped(1080, 1920));
+    const story = await renderArtworkRendition(source, "story");
+
+    const top = await pixel(story, 540, 100);
+    expect(top.r).toBeGreaterThan(180);
+    expect((await pixel(story, 10, 960)).b).toBeGreaterThan(150);
+  });
+});
+
 describe("renderArtworkRendition", () => {
   it("produces exactly the size the publish path expects, as JPEG", async () => {
     const source = await validateArtworkSource(await png(1080, 1080));
@@ -165,5 +205,15 @@ describe("renderArtworkRendition", () => {
 
     expect(meta.width).toBe(1080);
     expect(meta.height).toBe(1920);
+  });
+});
+
+describe("the artwork transform version", () => {
+  it("changes the source key, so artwork rendered before the whole-image story is not reused", async () => {
+    const { ARTWORK_TRANSFORM_VERSION, buildArtworkSourceKey } = await import("@/lib/management-app/artwork-provenance");
+    expect(ARTWORK_TRANSFORM_VERSION).toBeGreaterThanOrEqual(2);
+    const revision = { url: "https://example.supabase.co/a.jpg", updatedAt: "2026-10-17T10:00:00Z" };
+    const key = buildArtworkSourceKey("evt-1", { square: revision, story: null, landscape: null });
+    expect(key).toMatch(/^ams:event:evt-1:[0-9a-f]{32}$/);
   });
 });

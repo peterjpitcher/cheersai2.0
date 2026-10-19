@@ -1,5 +1,7 @@
 "use client";
 
+import { storyLayout } from "@/lib/media/story-layout";
+
 type DerivativeKey = "square" | "story" | "landscape";
 
 export type AspectClass = "square" | "story" | "landscape";
@@ -23,7 +25,9 @@ export async function generateImageDerivatives(file: File): Promise<DerivativeRe
   for (const [key, { width, height }] of Object.entries(VARIANT_DIMENSIONS) as Array<
     [DerivativeKey, { width: number; height: number }]
   >) {
-    derivatives[key] = await renderVariant(image, width, height);
+    derivatives[key] = key === "story"
+      ? await renderStoryVariant(image, width, height)
+      : await renderVariant(image, width, height);
   }
 
   const ratio = image.naturalWidth / image.naturalHeight;
@@ -56,6 +60,58 @@ async function renderVariant(image: HTMLImageElement, width: number, height: num
     throw new Error("Failed to encode derivative image");
   }
 
+  return blob;
+}
+
+/** The square-edge of the tiny canvas the background is blurred through. */
+const BLUR_DOWNSCALE = 24;
+
+/**
+ * The story version: the whole image over a blurred, darkened copy of itself,
+ * unless the image is already story-shaped (src/lib/media/story-layout.ts).
+ * Cropping the middle cut the words off designed graphics.
+ */
+async function renderStoryVariant(image: HTMLImageElement, width: number, height: number): Promise<Blob> {
+  const imageWidth = image.naturalWidth || image.width;
+  const imageHeight = image.naturalHeight || image.height;
+  const layout = storyLayout(imageWidth, imageHeight, { width, height });
+  if (layout.mode === "fill") {
+    return renderVariant(image, width, height);
+  }
+
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext("2d");
+  const small = document.createElement("canvas");
+  small.width = Math.max(1, Math.round(width / BLUR_DOWNSCALE));
+  small.height = Math.max(1, Math.round(height / BLUR_DOWNSCALE));
+  const smallContext = small.getContext("2d");
+  if (!context || !smallContext) {
+    throw new Error("Canvas context unavailable for derivative generation");
+  }
+
+  // Blurred by drawing the covering image tiny and scaling it back up, which
+  // every browser supports (canvas filters are missing from some).
+  const cover = Math.max(small.width / imageWidth, small.height / imageHeight);
+  smallContext.drawImage(
+    image,
+    (small.width - imageWidth * cover) / 2,
+    (small.height - imageHeight * cover) / 2,
+    imageWidth * cover,
+    imageHeight * cover,
+  );
+  context.imageSmoothingEnabled = true;
+  context.imageSmoothingQuality = "high";
+  context.drawImage(small, 0, 0, width, height);
+  context.fillStyle = "rgba(0, 0, 0, 0.45)";
+  context.fillRect(0, 0, width, height);
+  context.drawImage(image, layout.x, layout.y, layout.width, layout.height);
+
+  const blob = await canvasToBlob(canvas, "image/jpeg", 0.9);
+  if (!blob) {
+    throw new Error("Failed to encode derivative image");
+  }
   return blob;
 }
 
