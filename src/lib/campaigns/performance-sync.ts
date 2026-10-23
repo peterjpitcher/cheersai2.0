@@ -23,6 +23,7 @@ interface SyncCampaignRow {
   id: string;
   account_id: string;
   meta_campaign_id: string | null;
+  status: string | null;
   start_date: string;
   end_date: string | null;
   ad_sets?: SyncAdSetRow[];
@@ -48,7 +49,7 @@ export async function syncMetaCampaignPerformance(
   const supabase = options?.supabase ?? createServiceSupabaseClient();
   let campaignQuery = supabase
     .from('meta_campaigns')
-    .select('id, account_id, meta_campaign_id, start_date, end_date, ad_sets(id, meta_adset_id, ads(id, meta_ad_id))')
+    .select('id, account_id, meta_campaign_id, status, start_date, end_date, ad_sets(id, meta_adset_id, ads(id, meta_ad_id))')
     .eq('id', campaignId);
 
   if (options?.accountId) {
@@ -92,6 +93,7 @@ export async function syncMetaCampaignPerformance(
   const campaignInsights = await fetchMetaObjectInsights(campaign.meta_campaign_id, adAccount.access_token, dateRange);
 
   await updatePerformanceMetrics(supabase, 'meta_campaigns', campaign.id, campaignInsights, syncedAt);
+  await followMetaCampaignStatus(supabase, campaign, campaignInsights.status);
 
   let adSetsSynced = 0;
   let adsSynced = 0;
@@ -128,6 +130,50 @@ export async function syncMetaCampaignPerformance(
     adSetsSynced,
     adsSynced,
   };
+}
+
+/**
+ * The status the app should hold for a campaign Meta reports as `metaStatus`, or null to leave
+ * it as it is. Without this, a campaign paused or switched back on in Ads Manager keeps its old
+ * status for good: the campaign page and list show it, and the optimiser works only on ACTIVE
+ * campaigns. Only a move between ACTIVE and PAUSED is followed; anything else Meta reports
+ * (ARCHIVED, DELETED) stays in meta_status, which the dashboard already reads first.
+ */
+export function statusFollowingMeta(
+  appStatus: string | null | undefined,
+  metaStatus: string | null | undefined,
+): 'ACTIVE' | 'PAUSED' | null {
+  const meta = metaStatus?.trim().toUpperCase();
+  if (appStatus === 'ACTIVE' && meta === 'PAUSED') return 'PAUSED';
+  if (appStatus === 'PAUSED' && meta === 'ACTIVE') return 'ACTIVE';
+  return null;
+}
+
+async function followMetaCampaignStatus(
+  supabase: SupabaseClientLike,
+  campaign: Pick<SyncCampaignRow, 'id' | 'account_id' | 'status'>,
+  metaStatus: string,
+) {
+  const next = statusFollowingMeta(campaign.status, metaStatus);
+  if (!next || !campaign.status) return;
+
+  // Only while the row still holds the status read above, so a pause or resume made in the
+  // app during this sync is never overwritten. Scoped to the brand: the service-role client
+  // bypasses RLS.
+  const { error } = await supabase
+    .from('meta_campaigns')
+    .update({ status: next })
+    .eq('id', campaign.id)
+    .eq('account_id', campaign.account_id)
+    .eq('status', campaign.status);
+  if (error) {
+    throw new Error(error.message);
+  }
+  console.info('[performance-sync] campaign status now follows Meta', {
+    campaignId: campaign.id,
+    from: campaign.status,
+    to: next,
+  });
 }
 
 async function updatePerformanceMetrics(

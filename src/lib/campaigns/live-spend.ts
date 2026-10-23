@@ -10,8 +10,8 @@ import { DEFAULT_TIMEZONE } from '@/lib/constants';
  *
  * A campaign can still spend when:
  * - either view says it is on: `status` is the app's view and `meta_status` is
- *   what Meta last reported, which differs when a campaign is switched back on
- *   in Ads Manager; and
+ *   what Meta last reported, which differs when a campaign is switched on or off
+ *   in Ads Manager until the next sync brings `status` into line; and
  * - its end date has not passed. Rows stay ACTIVE after the end date (Meta
  *   stops delivery, the row is not updated), so only a campaign with no end
  *   date, or one ending today or later, counts. "Today" is the London calendar
