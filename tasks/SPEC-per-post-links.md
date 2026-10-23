@@ -19,6 +19,9 @@ Owner approval: 23 October 2026, relayed by the chief of staff session. Peter an
 - **Management app (its own PR, `/Users/peterpitcher/Cursor/OJ-AnchorManagementTools`):**
   - `POST /api/marketing/social-post-links`, with the same API-key permissions as the ads endpoint. It takes the event (its id, or the code of one of its short links) and up to 50 posts. For each post it makes or reuses a variant of the event's own Facebook link, labelled `facebook_post`, that differs only by the post's `utm_content`.
   - Every lookup of an event's own link skips variants, which also closes the gap for ad variants.
+  - A variant can never take over the event's own link or any other link (review finding on management PR #244). The management app reuses any link with the same destination, so it now:
+    - refuses a `utm_content` equal to the parent link's;
+    - writes only to a row that is this variant.
   - No migration.
 - **CheersAI (this PR):**
   - When the wizard schedules an event's Facebook feed posts and the brand has an events-system connection, it asks for one link per post. The link is keyed by when the post goes out, in London time (`post_20261026_1100`), and is written into that post's caption and stored copy.
