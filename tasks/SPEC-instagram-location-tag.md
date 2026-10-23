@@ -11,7 +11,7 @@ Owner approval: 23 October 2026 ("8 yes", relayed by the chief of staff session)
 - Instagram feed posts send `location_id` = the Page saved as "Facebook Page ID" in Settings (`posting_defaults.facebook_location_id`), when it is a number. The Instagram ID beside it is not used.
 - Stories are unchanged: this step covers feed posts only, where the location shows above the photo.
 - Facebook posts are unchanged for now. The only location on offer is the Page itself, and a Page post tagged with its own Page would read "The Anchor is at The Anchor", which adds nothing. Built only if Peter wants it.
-- If Instagram refuses the location, the worker creates the container again without it, once, and logs a warning, so a bad tag can never stop a post. Any other error is handled exactly as today.
+- If Instagram refuses the location, the worker creates the container again without it, once, and logs a warning, so a bad tag can never stop a post. A refusal is any error that mentions the location in any field, since Meta's error shapes vary; a false match only costs one more try. Any other error is handled exactly as today.
 - If the Settings read fails, the post goes out without a location and the worker logs a warning.
 - Only the live publisher changes: the `publish-queue` edge function. The Next.js publishing path in `src/lib/publishing` is not the one that posts.
 
