@@ -237,6 +237,74 @@ describe('scheduleContentBatch for weekly and one-off posts', () => {
   });
 });
 
+describe('scheduleContentBatch with per-post Facebook links', () => {
+  const linkedBrief = {
+    ...eventBrief,
+    ctaLinks: { facebook: 'https://l.the-anchor.pub/fb6e761f', instagram: 'https://l.the-anchor.pub/ig6e761f' },
+  };
+
+  async function variants(facebookPostLinks?: Map<string, string>, slotCopies: Array<typeof slot> = [slot]): Promise<Row[]> {
+    const { db, writes } = fakeDb(library);
+    const result = await scheduleContentBatch(db, 'acc-1', {
+      contentType: 'event',
+      brief: linkedBrief,
+      selectedMediaIds: [],
+      slotCopies,
+      platforms: ['facebook', 'instagram'],
+      mode: 'schedule',
+      facebookPostLinks,
+    });
+    expect(result.success).toBe(true);
+    return writes.find((write) => write.table === 'content_variants' && write.op === 'upsert')?.payload as Row[];
+  }
+
+  it("puts the post's own link on its Facebook feed post, and nowhere else", async () => {
+    const rows = await variants(new Map([[slot.slotKey, 'https://l.the-anchor.pub/fp0001']]));
+    const withBody = rows.filter((row) => typeof row.body === 'string' && row.body);
+    const facebook = withBody.find((row) => String(row.body).includes('Cash bingo on Wednesday'));
+    const instagram = withBody.find((row) => String(row.body).includes('Cash bingo, Wednesday'));
+
+    expect(facebook?.body).toContain('https://l.the-anchor.pub/fp0001');
+    expect(facebook?.body).not.toContain('fb6e761f');
+    expect((facebook?.preview_data as Row).ctaUrl).toBe('https://l.the-anchor.pub/fp0001');
+    expect(JSON.stringify(instagram)).not.toContain('fp0001');
+  });
+
+  it("keeps the event's shared link when there are no per-post links", async () => {
+    const rows = await variants();
+    const facebook = rows.find((row) => String(row.body ?? '').includes('Cash bingo on Wednesday'));
+    expect(facebook?.body).toContain('https://l.the-anchor.pub/fb6e761f');
+  });
+
+  // Codex review on #220: an edited caption is published as written, so it needs the swap too.
+  const edited = {
+    ...slot,
+    copy: {
+      ...slot.copy,
+      facebook: {
+        ...slot.copy.facebook,
+        publishBodyOverride: 'Cash bingo on Wednesday, written by hand.\n\nBook now: https://l.the-anchor.pub/fb6e761f. See you there!',
+      },
+    },
+  };
+
+  it("puts the post's own link into a caption the owner edited, keeping every other edit", async () => {
+    const rows = await variants(new Map([[slot.slotKey, 'https://l.the-anchor.pub/fp0001']]), [edited]);
+    const facebook = rows.find((row) => String(row.body ?? '').includes('written by hand'));
+    const preview = facebook?.preview_data as Row;
+
+    expect(facebook?.body).toBe('Cash bingo on Wednesday, written by hand.\n\nBook now: https://l.the-anchor.pub/fp0001. See you there!');
+    expect((preview.structuredCopy as Row).publishBodyOverride).toBe(facebook?.body);
+    expect(preview.ctaUrl).toBe('https://l.the-anchor.pub/fp0001');
+  });
+
+  it('leaves an edited caption exactly as written when there are no per-post links', async () => {
+    const rows = await variants(undefined, [edited]);
+    const facebook = rows.find((row) => String(row.body ?? '').includes('written by hand'));
+    expect(facebook?.body).toBe(edited.copy.facebook.publishBodyOverride);
+  });
+});
+
 describe('validateScheduleBatch', () => {
   it('applies the event-order rule to tools as well as the wizard', () => {
     const reason = validateScheduleBatch({

@@ -9,6 +9,7 @@ import { createLogger } from '@/lib/logging';
 import { toLoggableError } from '@/lib/logging/to-error';
 import { beforePromotionWindow, promotionWindowMessage } from '@/lib/management-app/promotion-window';
 import { buildCampaignMetadata, mapCampaignType } from '@/lib/publishing/build-campaign-metadata';
+import { withPostLink } from '@/lib/content/post-links';
 import { buildPreviewData, composePublishBody } from '@/lib/publishing/compose-body';
 import { readPlatformCtaLinks } from '@/lib/publishing/copy-rules';
 import { enqueueAndDispatch } from '@/lib/publishing/queue';
@@ -49,6 +50,11 @@ export interface ScheduleBatchInput {
   mode: 'schedule' | 'queue_now';
   /** Add the posts to this campaign (it must be the account's) instead of creating one. */
   existingCampaignId?: string;
+  /**
+   * Each slot's own Facebook link, by slot key (tasks/SPEC-per-post-links.md). A Facebook feed
+   * post of a slot listed here carries it instead of the event's shared link.
+   */
+  facebookPostLinks?: ReadonlyMap<string, string>;
 }
 
 export interface ScheduleBatchResult {
@@ -501,19 +507,26 @@ export async function scheduleContentBatch(
     const { slotIdx, platform, placement } = slotPlatformIndex[index];
     const slot = slotCopies[slotIdx];
     const copy = slot.copy[platform as Platform];
+    // A Facebook post's own link, when the management app made one for its slot.
+    const postLink = platform === 'facebook' ? input.facebookPostLinks?.get(slot.slotKey) : undefined;
+    const slotCtaLinks = postLink ? { ...ctaLinks, facebook: postLink } : ctaLinks;
+    // A caption the owner edited is published as written, so the post's link goes into it too.
+    const slotCopy = postLink && copy && typeof copy.publishBodyOverride === 'string'
+      ? { ...copy, publishBodyOverride: withPostLink(copy.publishBodyOverride, ctaLinks.facebook, postLink) }
+      : copy;
     const body = placement === 'story'
       ? ''
-      : copy
-      ? composePublishBody(platform as Platform, copy, { ctaLinks, contentType, ctaLabel })
+      : slotCopy
+      ? composePublishBody(platform as Platform, slotCopy, { ctaLinks: slotCtaLinks, contentType, ctaLabel })
       : '';
     const previewData = placement === 'story'
       ? null
-      : copy
-      ? buildPreviewData(platform as Platform, copy, {
+      : slotCopy
+      ? buildPreviewData(platform as Platform, slotCopy, {
           slotLabel: slot.label,
           slotKey: slot.slotKey,
           brief,
-        }, { ctaLinks, contentType })
+        }, { ctaLinks: slotCtaLinks, contentType })
       : null;
     const variantMedia = resolvePlacementMedia(resolveSlotMedia(slot), placement);
 
