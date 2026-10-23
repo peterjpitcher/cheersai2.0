@@ -82,6 +82,7 @@ project: cheersai-2.0
 |------|--------|------|
 | `/api/cron/materialise-food-windows` | GET, POST | `src/app/api/cron/materialise-food-windows/route.ts` |
 | `/api/cron/notify-expiring-connections` | GET, POST | `src/app/api/cron/notify-expiring-connections/route.ts` |
+| `/api/cron/check-event-order` | GET, POST | `src/app/api/cron/check-event-order/route.ts` |
 | `/api/cron/notify-failures` | GET, POST | `src/app/api/cron/notify-failures/route.ts` |
 | `/api/cron/optimise-meta-campaigns` | GET, POST | `src/app/api/cron/optimise-meta-campaigns/route.ts` |
 | `/api/cron/publish` | GET, POST | `src/app/api/cron/publish/route.ts` |
