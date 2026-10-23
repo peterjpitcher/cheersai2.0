@@ -26,6 +26,7 @@ import { PlatformBadge } from '@/components/ui/platform-badge';
 import { generateContent, regenerateWithModifier } from '@/app/actions/ai-generate';
 import { campaignSlotPlan, planCampaignJobs } from '@/features/create/steps/campaign-plan';
 import { GENERATION_BATCH_SIZE, selectNextGenerationBatch } from '@/features/create/steps/generation-batch';
+import { defaultSlotMedia } from '@/features/create/steps/slot-media';
 import { SLOT_JOB_LABELS } from '@/lib/ai/slot-jobs';
 import { DEFAULT_TIMEZONE } from '@/lib/constants';
 import { useToast } from '@/components/providers/toast-provider';
@@ -354,6 +355,18 @@ export function GenerateStep({
     [contentBrief, effectiveSlots, isStorySchedule],
   );
 
+  // Event campaigns: a default picture for each slot from its job (B6, slot-media.ts). The
+  // announcement and the day keep the campaign's artwork (undefined); the posts in between
+  // take photos the owner tagged "reuse". Applied only to slots with no picture of their own.
+  const slotMediaDefaults = useMemo(
+    () => (slotJobs
+      ? defaultSlotMedia(slotJobs, libraryItems ?? [], {
+          host: contentBrief.contentType === 'event' ? contentBrief.facts?.host ?? null : null,
+        })
+      : null),
+    [contentBrief, libraryItems, slotJobs],
+  );
+
   useEffect(() => {
     if (!isStorySchedule) return;
 
@@ -463,8 +476,12 @@ export function GenerateStep({
     const byKey = new Map<string, SlotGeneratedCopy>(
       generatedSlotCopies.map((c) => [c.slotKey, c] as const),
     );
-    for (const slot of effectiveSlots) {
-      if (!byKey.has(slot.key)) {
+    effectiveSlots.forEach((slot, index) => {
+      const existing = byKey.get(slot.key);
+      // A default picture only where the slot has none of its own: undefined, never an
+      // explicit choice (an empty array included).
+      const defaultMedia = slotMediaDefaults?.[index];
+      if (!existing) {
         byKey.set(slot.key, {
           slotKey: slot.key,
           scheduledAt: publishMode === 'now' && slot.key === 'now' ? null : slotToIso(slot),
@@ -472,9 +489,12 @@ export function GenerateStep({
           copy: null,
           warnings: [],
           status: 'pending',
+          ...(defaultMedia ? { mediaIds: defaultMedia } : {}),
         });
+      } else if (existing.mediaIds === undefined && defaultMedia) {
+        byKey.set(slot.key, { ...existing, mediaIds: defaultMedia });
       }
-    }
+    });
 
     // 'all' (Regenerate All) resets and regenerates every slot; 'next' generates
     // the next page of not-yet-ready slots, up to GENERATION_BATCH_SIZE.
@@ -528,8 +548,9 @@ export function GenerateStep({
             : undefined;
           // Timing facts are derived server-side from the brief plus slotIso so
           // the browser clock never decides what "now" means.
+          // Written from the slot's own pictures when it has them, so the words match what shows.
           const result = await generateContent(contentId, contentBrief, {
-            mediaIds: selectedMediaIds,
+            mediaIds: byKey.get(slot.key)!.mediaIds ?? selectedMediaIds,
             scheduledAt: slotIso,
             slotLabel: slot.label,
             campaign,
@@ -584,7 +605,7 @@ export function GenerateStep({
     });
 
     setIsGeneratingBatch(false);
-  }, [contentId, contentBrief, effectiveSlots, slotJobs, selectedMediaIds, publishMode, onSlotCopiesChange, onGeneratedWithContext, generatedSlotCopies, isStorySchedule, isGeneratingBatch, toast]);
+  }, [contentId, contentBrief, effectiveSlots, slotJobs, slotMediaDefaults, selectedMediaIds, publishMode, onSlotCopiesChange, onGeneratedWithContext, generatedSlotCopies, isStorySchedule, isGeneratingBatch, toast]);
 
   const handleGenerateAll = useCallback(() => runGeneration('all'), [runGeneration]);
   const handleGenerateNext = useCallback(() => runGeneration('next'), [runGeneration]);
@@ -622,7 +643,8 @@ export function GenerateStep({
           )
         : undefined;
       // See the batch path above: the server owns every temporal fact.
-      const context = { mediaIds: selectedMediaIds, scheduledAt: slotIso, slotLabel: slot.label, campaign };
+      const slotMedia = generatedSlotCopies.find((sc) => sc.slotKey === slotKey)?.mediaIds;
+      const context = { mediaIds: slotMedia ?? selectedMediaIds, scheduledAt: slotIso, slotLabel: slot.label, campaign };
       const result = modifier
         ? await regenerateWithModifier(contentId, contentBrief, modifier, context)
         : await generateContent(contentId, contentBrief, context);

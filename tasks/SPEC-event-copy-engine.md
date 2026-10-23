@@ -89,10 +89,12 @@ A flagged post is rewritten once with the problems listed, like any other house-
 ### B5. Location tag (review 12)
 
 - The publish worker sends the saved location with each post: `location_id` on the Instagram media container, `place` on the Facebook photo post, only when Settings holds a valid id. Worker deployed separately, by name.
+- As built (23 October 2026, PRs #213 and #214, worker v50): Settings held the Page and Instagram account ids, not location tags, so Instagram feed posts are tagged with the Page saved as "Facebook Page ID", which has an address. Facebook posts are unchanged. See `tasks/SPEC-instagram-location-tag.md`.
 
 ### B6. Vary the picture (review 15)
 
 - The wizard lets each slot use its own image. Default: the event artwork for the announcement and the day itself; for the slots between, library images tagged with the event type, food, the host or the venue, when there are any.
+- As built (23 October 2026): the per-post picture already existed; the defaults are new, and draw only on photos the owner tags `reuse` in the Library, because the library's own tags can mislead the copy. See `tasks/SPEC-vary-the-picture.md`.
 
 ### B7. Later: performer tags and collab posts (review 10)
 
