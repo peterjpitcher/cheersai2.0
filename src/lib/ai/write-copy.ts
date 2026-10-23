@@ -140,7 +140,8 @@ function deriveAspectClass(
 
 /**
  * Write, tidy and check one post. When the first draft breaks the house style
- * (a stock opening, repeated filler, more than one question or an empty one),
+ * (a stock opening, repeated filler, more than one question or an empty one, or
+ * its campaign plan: a question it may not ask, an opening or question reused),
  * the model rewrites once with the problems listed; anything still wrong after
  * that is returned as a warning for the owner rather than blocking the post.
  */
@@ -191,7 +192,7 @@ export async function writeCopy(input: WriteCopyInput): Promise<WriteCopyResult>
     await generatePlatformCopy({ systemPrompt, userPrompt, temperature, usageAccountId: accountId }),
     postprocessConfig,
   );
-  const issues = findCopyIssues(first.copy, brief.platforms);
+  const issues = findCopyIssues(first.copy, brief.platforms, campaign);
   if (!issues.length) return { processed: first, temporal, temperature };
 
   const rewritten = postprocessCopy(
@@ -203,7 +204,7 @@ export async function writeCopy(input: WriteCopyInput): Promise<WriteCopyResult>
     }),
     postprocessConfig,
   );
-  const remaining = findCopyIssues(rewritten.copy, brief.platforms);
+  const remaining = findCopyIssues(rewritten.copy, brief.platforms, campaign);
   return {
     processed: {
       ...rewritten,

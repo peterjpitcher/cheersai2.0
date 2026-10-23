@@ -104,8 +104,12 @@ describe('campaign plan from the wizard (B3)', () => {
   };
   const refused = 'We could not write this post. Refresh the page and try again.';
 
+  // The Instagram drafts here must not open like the plan's earlier post ("Two rounds of..."),
+  // or the house-style check asks for a rewrite.
+  const freshInstagram = 'Jo on the mic for two rounds of 70s disco.';
+
   it('writes the plan into the prompt, naming the host from the brief', async () => {
-    generatePlatformCopy.mockResolvedValueOnce(draft('Jo hosts two rounds of 70s disco on Friday 13th November.'));
+    generatePlatformCopy.mockResolvedValueOnce(draft('Jo hosts two rounds of 70s disco on Friday 13th November.', freshInstagram));
     const { generateContent } = await import('@/app/actions/ai-generate');
     const result = await generateContent('content-1', hostedBrief, { scheduledAt: '2026-11-06T08:00:00Z', campaign: plan });
 
@@ -119,6 +123,24 @@ describe('campaign plan from the wizard (B3)', () => {
     expect(prompt).toContain('You may ask one question');
   });
 
+  it('rewrites a post that opens like another in its campaign, or asks a question its plan does not allow', async () => {
+    generatePlatformCopy
+      .mockResolvedValueOnce(draft('Two rounds of 70s disco and Jo on the mic. Which decade suits you?', freshInstagram))
+      .mockResolvedValueOnce(draft('Jo hosts two rounds of 70s disco on Friday 13th November.', freshInstagram));
+    const { generateContent } = await import('@/app/actions/ai-generate');
+    const result = await generateContent('content-1', hostedBrief, {
+      scheduledAt: '2026-11-06T08:00:00Z',
+      campaign: { ...plan, allowQuestion: false },
+    });
+
+    expect(generatePlatformCopy).toHaveBeenCalledTimes(2);
+    const rewrite = generatePlatformCopy.mock.calls[1][0].userPrompt as string;
+    expect(rewrite).toContain("Facebook: open differently from the campaign's other posts");
+    expect(rewrite).toContain('Facebook: ask no question in this post');
+    expect(result.error).toBeUndefined();
+    expect(result.data?.warnings).toEqual([]);
+  });
+
   it('writes no campaign block without a plan', async () => {
     generatePlatformCopy.mockResolvedValueOnce(draft('Two rounds of 70s disco and Jo on the mic, Friday 13th November.'));
     const { generateContent } = await import('@/app/actions/ai-generate');
@@ -128,7 +150,7 @@ describe('campaign plan from the wizard (B3)', () => {
   });
 
   it('passes the plan when a post is rewritten with a modifier', async () => {
-    generatePlatformCopy.mockResolvedValueOnce(draft('Jo hosts two rounds of 70s disco on Friday 13th November.'));
+    generatePlatformCopy.mockResolvedValueOnce(draft('Jo hosts two rounds of 70s disco on Friday 13th November.', freshInstagram));
     const { regenerateWithModifier } = await import('@/app/actions/ai-generate');
     const result = await regenerateWithModifier('content-1', hostedBrief, 'Make the copy shorter and more concise.', {
       scheduledAt: '2026-11-06T08:00:00Z',
