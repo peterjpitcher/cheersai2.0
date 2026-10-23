@@ -2,7 +2,7 @@ import { DateTime } from "luxon";
 
 import { nameEventInBookingLine } from "@/lib/ai/booking-line";
 import { scrubBannedPhrases } from "@/lib/ai/voice";
-import { questionsIn } from "@/lib/ai/slot-jobs";
+import { openingOf, questionsIn, type CampaignSlotPlan } from "@/lib/ai/slot-jobs";
 import { DEFAULT_TIMEZONE } from "@/lib/constants";
 import { formatEventDateLong } from "@/lib/utils/date";
 import { collapseWhitespacePreservingBreaks, stripMarkdown } from "@/lib/utils/markdown";
@@ -550,14 +550,62 @@ const FILLER_WORD = /\b(?:fun|fun-filled|lively|exciting|amazing|fantastic|perfe
 const EMPTY_QUESTION =
   /\bwho(?:'s| is| are you)? (?:coming|joining|ready|excited|in|bringing)\b|\btag (?:a|your) (?:mates?|friends?|pals?|partner)\b|\bshare this(?: post)?\b|\bcomment below\b/i;
 
+/** The words a line starts with, compared without case, punctuation or emoji. */
+function leadingWords(text: string, count: number): string {
+  return normaliseApostrophes(text)
+    .toLowerCase()
+    .replace(/'/g, "")
+    .replace(/\.{3}$/, "")
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter(Boolean)
+    .slice(0, count)
+    .join(" ");
+}
+
+/** Openings count as the same when their first three words are (the Tinsel & Tipples posts all began "Hot mulled cider"). */
+const sameOpening = (a: string, b: string): boolean => {
+  const lead = leadingWords(a, 3);
+  return lead.split(" ").length === 3 && lead === leadingWords(b, 3);
+};
+
+/** Questions count as the same when their first four words are. */
+const sameQuestion = (a: string, b: string): boolean => {
+  const lead = leadingWords(a, 4);
+  return lead.length > 0 && lead === leadingWords(b, 4);
+};
+
+/**
+ * Where a post breaks its campaign plan (tasks/SPEC-event-copy-engine.md B3): a question when the
+ * plan saves questions for other posts, an opening or a question another post already used.
+ */
+function campaignPlanIssues(platform: string, text: string, plan: CampaignSlotPlan): string[] {
+  const issues: string[] = [];
+  const questions = questionsIn(text);
+  if (!plan.allowQuestion && questions.length) {
+    issues.push(`${platform}: ask no question in this post; the campaign plan keeps questions for other posts.`);
+  }
+  const opening = openingOf(text);
+  const repeated = plan.earlierOpenings.find((earlier) => sameOpening(opening, earlier));
+  if (repeated) {
+    issues.push(`${platform}: open differently from the campaign's other posts; "${opening.slice(0, 60)}" starts like "${repeated.slice(0, 60)}".`);
+  }
+  for (const question of questions) {
+    const asked = plan.earlierQuestions.find((earlier) => sameQuestion(question, earlier));
+    if (asked) issues.push(`${platform}: ask something new; another post in this campaign already asked "${asked.slice(0, 80)}".`);
+  }
+  return issues;
+}
+
 /**
  * House-style problems in finished copy, as instructions the model can act on
  * when it rewrites. Empty when the copy passes. Applies to both platforms'
- * bodies; the composer adds booking lines and hashtags separately.
+ * bodies; the composer adds booking lines and hashtags separately. With a
+ * campaign plan, the post is also held to it.
  */
 export function findCopyIssues(
   copy: AiGenerationResponse,
   platforms: readonly string[] = ["facebook", "instagram"],
+  campaign?: CampaignSlotPlan,
 ): string[] {
   const issues = new Set<string>();
   const bodies = [["facebook", "Facebook", copy.facebook.body], ["instagram", "Instagram", copy.instagram.body]] as const;
@@ -579,6 +627,9 @@ export function findCopyIssues(
     if (questions.length > 1) issues.add(`${platform}: ask at most one question.`);
     if (questions.some((question) => EMPTY_QUESTION.test(question)) || EMPTY_QUESTION.test(text)) {
       issues.add(`${platform}: drop questions like "Who's coming?" and any request to tag, share or comment; ask only about the event itself, or ask nothing.`);
+    }
+    if (campaign) {
+      for (const issue of campaignPlanIssues(platform, text, campaign)) issues.add(issue);
     }
   }
   return [...issues];

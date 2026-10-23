@@ -68,6 +68,14 @@ Wizard part built 17 October 2026 (`src/features/create/steps/campaign-plan.ts`,
 - Each card shows "Job: ..." above its copy. The job is stored with the slot's copy, so it shows what the copy was written for, and a saved draft keeps it.
 - Writing in order is slower: a seven-post campaign is seven model calls one after another rather than three at a time.
 
+House-style check holds each post to its plan, built 23 October 2026 (Peter's "8 yes", relayed by the chief of staff session). Until then the plan was only advice in the prompt. `findCopyIssues` (`src/lib/ai/postprocess.ts`), given the plan by `writeCopy`, now also flags:
+
+- a question in a post whose plan says to ask none;
+- an opening that starts with the same three words as another post's in the campaign, ignoring case, punctuation and emoji (the Tinsel & Tipples posts all began "Hot mulled cider");
+- a question that starts with the same four words as one another post asked.
+
+A flagged post is rewritten once with the problems listed, like any other house-style failure, and anything still wrong is shown to the owner as a warning. Posts written without a plan are checked as before. Rollback: revert the PR.
+
 ### B4. Stronger model and best of three (review 3 and 4)
 
 - New ops script runs the current model and two or three candidates on 10 recent real briefs (stored in `content_items.ai_generation_params`), scores each draft with the B1 checks and a judging model, and prints a side-by-side for the owner. Candidates available to this account's key on 17 October 2026 include the GPT-5.4 and GPT-5.5 families and GPT-6 variants.

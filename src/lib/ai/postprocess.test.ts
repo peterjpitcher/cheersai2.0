@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import type { CampaignSlotPlan } from './slot-jobs';
 import type { AiGenerationResponse } from './schemas';
 import {
   containsEmDash,
@@ -718,5 +719,55 @@ describe('Instagram booking line names the event', () => {
   it('adds no line when there is no Instagram link', () => {
     const result = postprocessCopy(makeRawCopy(), makeConfig({ eventName: 'Snowball Showdown Cash Bingo' }));
     expect(result.copy.instagram.link_in_bio_line).toBeNull();
+  });
+});
+
+describe('house-style check holds a post to its campaign plan', () => {
+  const copy = (facebook: string, instagram = 'Six blind tastings and a full Christmas supper.') => makeRawCopy({
+    facebook: { body: facebook, cta_text: null, hashtags: [] },
+    instagram: { body: instagram, hashtags: [], link_in_bio_line: null },
+  });
+  const plan = (overrides: Partial<CampaignSlotPlan> = {}): CampaignSlotPlan => ({
+    job: 'how_it_works',
+    position: 3,
+    total: 7,
+    earlierOpenings: ['Hot mulled cider on arrival, then six blind tastings.'],
+    earlierQuestions: ['Which Christmas drink would you never give up?'],
+    allowQuestion: true,
+    ...overrides,
+  });
+
+  it('passes a post that follows its plan', () => {
+    expect(findCopyIssues(copy('Six glasses, no labels. Guess each one before Peter reveals it. Which will you get right?'), ['facebook'], plan())).toEqual([]);
+  });
+
+  it('flags a question when the plan keeps questions for other posts', () => {
+    const issues = findCopyIssues(copy('Six glasses, no labels. Ready to guess?'), ['facebook'], plan({ allowQuestion: false }));
+    expect(issues).toEqual(['Facebook: ask no question in this post; the campaign plan keeps questions for other posts.']);
+  });
+
+  it('flags an opening another post already used, ignoring case and punctuation', () => {
+    const issues = findCopyIssues(copy('HOT, mulled cider waiting for you, and Peter hosts.'), ['facebook'], plan());
+    expect(issues.join(' ')).toMatch(/^Facebook: open differently from the campaign's other posts/);
+  });
+
+  it('does not count a shared first word or two as the same opening', () => {
+    expect(findCopyIssues(copy('Hot food at 8pm: a giant Christmas Yorkshire wrap.'), ['facebook'], plan())).toEqual([]);
+  });
+
+  it('flags a question another post already asked', () => {
+    const issues = findCopyIssues(copy('Six glasses, no labels. Which Christmas drink would you pick first?'), ['facebook'], plan());
+    expect(issues).toEqual([
+      'Facebook: ask something new; another post in this campaign already asked "Which Christmas drink would you never give up?".',
+    ]);
+  });
+
+  it('checks each platform the brief posts to', () => {
+    const issues = findCopyIssues(copy('Six glasses, no labels.', 'Hot mulled cider on arrival, every guest.'), ['facebook', 'instagram'], plan());
+    expect(issues.join(' ')).toMatch(/^Instagram: open differently/);
+  });
+
+  it('changes nothing without a plan', () => {
+    expect(findCopyIssues(copy('Hot mulled cider on arrival. Ready?'), ['facebook'])).toEqual([]);
   });
 });
