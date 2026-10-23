@@ -1,6 +1,6 @@
 # SPEC: move CheersAI to Supabase's publishable and secret API keys
 
-Status: Peter approved writing it on 29 September 2026, and the same day approved building and deploying the caller check: report-only first (step 1), then enforced (step 2) after a clean day of logs. Step 1 is built on branch `fix/publish-queue-caller-check-report-only` and waits for its deploy. No key has been created, and no Supabase, Vercel or database setting has changed. Every step that deploys, changes a setting or handles a key needs Peter's yes at the time. Claude never enters, reads or prints a key value; Peter adds and removes every key himself.
+Status: Peter approved writing it on 29 September 2026, and the same day approved building and deploying the caller check: report-only first (step 1), then enforced (step 2) after a clean day of logs. Step 1 went live on 29 September 2026 (#172). Step 2 was approved on 23 October 2026 (Peter's "7 yes", relayed by his chief of staff session) and enforced that day, after seven days of logs with about 1,440 accepted calls a day and none refused. No key has been created, and no Supabase, Vercel or database setting has changed. Every step that deploys, changes a setting or handles a key needs Peter's yes at the time. Claude never enters, reads or prints a key value; Peter adds and removes every key himself.
 
 ## Why
 
@@ -185,6 +185,11 @@ What: a one-line change so refused callers get an empty 401 before the body is r
 Checks: heartbeat, publishing and scheduler checks for 30 minutes. A GET with no key and a GET with the anon key (public, so safe to use) both get 401 from our code, which the function edge log shows as a run with an execution id.
 
 Rollback: redeploy the step 1 version (report-only).
+
+As built (23 October 2026):
+- `CALLER_CHECK_ENFORCED` is `true` in `caller-auth.ts`; nothing else in the function changed. `tests/publish-queue-index.test.ts` now runs `index.ts` against the shipped flag and mocks it back to `false` for the report-only tests, so the rollback stays proven.
+- Logs before the switch (`function_logs`): about 1,440 accepted calls a day from 16 to 23 October and none refused. In the 24 hours before the deploy, all 1,438 calls used the legacy key on both headers.
+- The two GET probes were not run, because Claude does not handle key values, even public ones. While `verify_jwt` is on, a GET with no key is refused by the platform before our code runs, so it proves nothing about step 2; the anon-key GET would. The refusal path is covered by the tests, and the 30-minute watch covers the real callers.
 
 ### Step 3. Turn `verify_jwt` off for publish-queue
 

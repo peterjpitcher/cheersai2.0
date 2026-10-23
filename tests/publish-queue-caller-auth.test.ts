@@ -61,8 +61,8 @@ function keyFragments(key: string): string[] {
 }
 
 describe('checkCaller', () => {
-  it('is report-only in step 1', () => {
-    expect(CALLER_CHECK_ENFORCED).toBe(false);
+  it('is enforced from step 2', () => {
+    expect(CALLER_CHECK_ENFORCED).toBe(true);
   });
 
   it('accepts the legacy service-role key on both headers, as supabase-js sends it', async () => {

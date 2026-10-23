@@ -26,13 +26,15 @@
 // (tests/publish-queue-caller-auth.test.ts); index.ts passes in its environment reader.
 
 /**
- * Step 1 of the spec is report-only: index.ts logs every verdict and a refused caller carries on
- * exactly as before, so publishing cannot break while the logs are checked.
+ * Step 1 of the spec was report-only: index.ts logged every verdict and a refused caller carried
+ * on exactly as before, so publishing could not break while the logs were checked.
  *
- * STEP 2 IS THIS ONE LINE: set it to true. index.ts then answers a refused caller with an empty
- * 401 before the method check, before the body is read and before the database is touched.
+ * Step 2, enforced from 23 October 2026 with Peter's yes, after 24 days of logs from 29 September
+ * (the last seven days: about 1,440 calls a day, all accepted, none refused): index.ts answers a
+ * refused caller with an empty 401 before the method check, before the body is read and before
+ * the database is touched. Rollback is setting this back to false and redeploying.
  */
-export const CALLER_CHECK_ENFORCED = false;
+export const CALLER_CHECK_ENFORCED = true;
 
 export type CallerKeyKind = "legacy_service_role" | "secret_key";
 

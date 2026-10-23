@@ -10,8 +10,8 @@ const worker = new PublishQueueWorker(config);
 const readEnv = (name: string) => Deno.env.get(name);
 
 Deno.serve(async (request: Request) => {
-  // Who is calling, before the method check and before the body is read (caller-auth.ts). While
-  // CALLER_CHECK_ENFORCED is false (step 1, report-only) a refused caller is only logged.
+  // Who is calling, before the method check and before the body is read (caller-auth.ts). With
+  // CALLER_CHECK_ENFORCED on (step 2, from 23 October 2026) a refused caller gets an empty 401.
   const caller = await checkCaller(request.headers, readEnv);
   logCallerVerdict(caller, { method: request.method, enforced: CALLER_CHECK_ENFORCED });
   if (CALLER_CHECK_ENFORCED && !caller.accepted) {

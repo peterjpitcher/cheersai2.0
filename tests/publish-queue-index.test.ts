@@ -6,10 +6,10 @@ import { createServiceSupabaseClient } from '@/lib/supabase/service';
 
 /**
  * publish-queue's entry point, loaded as the edge runtime loads it, under a stubbed Deno global
- * (Deno.serve and Deno.env). Step 1 of tasks/SPEC-supabase-new-api-keys.md: the caller check runs
- * before anything else and only logs its verdict, so every caller, refused or not, still gets
- * exactly today's behaviour and publishing cannot break. The "step 2" tests switch the one flag
- * in caller-auth.ts on through a module mock, to show what that one-line change will do.
+ * (Deno.serve and Deno.env). Step 2 of tasks/SPEC-supabase-new-api-keys.md, as shipped: the caller
+ * check runs before anything else and a refused caller gets an empty 401. The "report-only" tests
+ * switch the one flag in caller-auth.ts back off through a module mock, so the rollback (step 1's
+ * behaviour, where every caller carries on and only the verdict is logged) stays proven.
  *
  * index.ts is Deno code outside the app's tsconfig (Deno global, URL imports), so it is imported
  * by a runtime path that tsc does not follow. worker.ts is mocked, so no database is involved.
@@ -51,15 +51,16 @@ const appEnv = vi.hoisted(() => ({
 }));
 vi.mock('@/env', () => ({ env: appEnv }));
 
-async function loadFunction(env: Env, { enforced = false } = {}): Promise<Handler> {
+/** Loads index.ts with caller-auth.ts as shipped, or with its flag mocked to `enforced`. */
+async function loadFunction(env: Env, { enforced }: { enforced?: boolean } = {}): Promise<Handler> {
   vi.resetModules();
-  if (enforced) {
+  if (enforced === undefined) {
+    vi.doUnmock(CALLER_AUTH);
+  } else {
     vi.doMock(CALLER_AUTH, async (importOriginal: () => Promise<Record<string, unknown>>) => ({
       ...(await importOriginal()),
-      CALLER_CHECK_ENFORCED: true,
+      CALLER_CHECK_ENFORCED: enforced,
     }));
-  } else {
-    vi.doUnmock(CALLER_AUTH);
   }
   let handler: Handler | undefined;
   vi.stubGlobal('Deno', {
@@ -170,13 +171,16 @@ afterEach(() => {
   vi.doUnmock(CALLER_AUTH);
 });
 
-describe('publish-queue caller check, step 1 (report-only)', () => {
+/** Step 1's behaviour, which redeploying with the flag off restores (the spec's rollback). */
+const REPORT_ONLY = { enforced: false };
+
+describe('publish-queue caller check, report-only (step 1, and the rollback)', () => {
   it("accepts the scheduler's request exactly as supabase-js sends it, with the legacy key on both headers", async () => {
     const request = await requestFromServiceClient(LEGACY, 'vercel-publish-scheduler');
     expect(request.headers.get('apikey')).toBe(LEGACY);
     expect(request.headers.get('authorization')).toBe(`Bearer ${LEGACY}`);
 
-    const handler = await loadFunction(LIVE_TODAY);
+    const handler = await loadFunction(LIVE_TODAY, REPORT_ONLY);
     const response = await handler(request);
 
     expect(response.status).toBe(200);
@@ -199,7 +203,7 @@ describe('publish-queue caller check, step 1 (report-only)', () => {
   });
 
   it("accepts tournament publishing's request the same way", async () => {
-    const handler = await loadFunction(LIVE_TODAY);
+    const handler = await loadFunction(LIVE_TODAY, REPORT_ONLY);
     const response = await handler(await requestFromServiceClient(LEGACY, 'tournament-publish-now'));
 
     expect(response.status).toBe(200);
@@ -208,7 +212,7 @@ describe('publish-queue caller check, step 1 (report-only)', () => {
   });
 
   it('accepts the same app request once the service client holds a secret key (step 9)', async () => {
-    const handler = await loadFunction(WITH_NEW_KEYS);
+    const handler = await loadFunction(WITH_NEW_KEYS, REPORT_ONLY);
     const response = await handler(await requestFromServiceClient(SECRET_DEFAULT, 'vercel-publish-scheduler'));
 
     expect(response.status).toBe(200);
@@ -220,7 +224,7 @@ describe('publish-queue caller check, step 1 (report-only)', () => {
   it('still processes jobs for a refused caller, so publishing cannot break in this step', async () => {
     const refused = [both(ANON), both(PUBLISHABLE), { apikey: 'wrong-key' }, both(LEGACY.slice(0, -1)), {}];
     for (const headers of refused) {
-      const handler = await loadFunction(WITH_NEW_KEYS);
+      const handler = await loadFunction(WITH_NEW_KEYS, REPORT_ONLY);
       const response = await handler(post(headers, { leadWindowMinutes: 5, source: 'someone' }));
 
       expect(response.status).toBe(200);
@@ -236,7 +240,7 @@ describe('publish-queue caller check, step 1 (report-only)', () => {
   });
 
   it('keeps answering a GET with 405, as today, and logs the refusal first', async () => {
-    const handler = await loadFunction(LIVE_TODAY);
+    const handler = await loadFunction(LIVE_TODAY, REPORT_ONLY);
     const response = await handler(new Request(FUNCTION_URL, { method: 'GET' }));
 
     expect(response.status).toBe(405);
@@ -247,7 +251,7 @@ describe('publish-queue caller check, step 1 (report-only)', () => {
   });
 
   it('accepts a secret key from SUPABASE_SECRET_KEYS on apikey alone', async () => {
-    const handler = await loadFunction(WITH_NEW_KEYS);
+    const handler = await loadFunction(WITH_NEW_KEYS, REPORT_ONLY);
     const response = await handler(post({ apikey: SECRET_DEFAULT }));
 
     expect(response.status).toBe(200);
@@ -255,7 +259,7 @@ describe('publish-queue caller check, step 1 (report-only)', () => {
   });
 
   it('logs an error, and still carries on, when no allowed key is configured', async () => {
-    const handler = await loadFunction({ SUPABASE_ANON_KEY: ANON });
+    const handler = await loadFunction({ SUPABASE_ANON_KEY: ANON }, REPORT_ONLY);
     const response = await handler(post(both(LEGACY)));
 
     expect(response.status).toBe(200);
@@ -264,7 +268,7 @@ describe('publish-queue caller check, step 1 (report-only)', () => {
   });
 
   it('logs a malformed SUPABASE_SECRET_KEYS and still accepts the legacy key', async () => {
-    const handler = await loadFunction({ ...LIVE_TODAY, SUPABASE_SECRET_KEYS: 'not json' });
+    const handler = await loadFunction({ ...LIVE_TODAY, SUPABASE_SECRET_KEYS: 'not json' }, REPORT_ONLY);
     const response = await handler(post(both(LEGACY)));
 
     expect(response.status).toBe(200);
@@ -274,7 +278,7 @@ describe('publish-queue caller check, step 1 (report-only)', () => {
 
   it('reads the environment on every request, so keys the platform adds later are seen', async () => {
     const env: Env = { ...LIVE_TODAY };
-    const handler = await loadFunction(env);
+    const handler = await loadFunction(env, REPORT_ONLY);
 
     await handler(post({ apikey: SECRET_DEFAULT }));
     expect(loggedVerdicts(warn, 'refused')).toContainEqual(expect.objectContaining({ reason: 'no_match' }));
@@ -285,10 +289,10 @@ describe('publish-queue caller check, step 1 (report-only)', () => {
   });
 });
 
-describe('publish-queue caller check, step 2 (CALLER_CHECK_ENFORCED = true)', () => {
+describe('publish-queue caller check, step 2 (enforced, as shipped)', () => {
   it('refuses with an empty 401 before the body is read or the worker runs', async () => {
     for (const headers of [both(ANON), both(PUBLISHABLE), { apikey: 'wrong-key' }, {}]) {
-      const handler = await loadFunction(LIVE_TODAY, { enforced: true });
+      const handler = await loadFunction(LIVE_TODAY);
       const request = post(headers);
       const response = await handler(request);
 
@@ -301,14 +305,14 @@ describe('publish-queue caller check, step 2 (CALLER_CHECK_ENFORCED = true)', ()
   });
 
   it('checks the caller before the method, so a GET without a key gets 401, not 405', async () => {
-    const handler = await loadFunction(LIVE_TODAY, { enforced: true });
+    const handler = await loadFunction(LIVE_TODAY);
     const response = await handler(new Request(FUNCTION_URL, { method: 'GET' }));
 
     expect(response.status).toBe(401);
   });
 
   it('refuses everyone when no allowed key is configured', async () => {
-    const handler = await loadFunction({}, { enforced: true });
+    const handler = await loadFunction({});
     const response = await handler(post(both(LEGACY)));
 
     expect(response.status).toBe(401);
@@ -316,7 +320,7 @@ describe('publish-queue caller check, step 2 (CALLER_CHECK_ENFORCED = true)', ()
   });
 
   it('lets the app callers through unchanged', async () => {
-    const handler = await loadFunction(LIVE_TODAY, { enforced: true });
+    const handler = await loadFunction(LIVE_TODAY);
     const response = await handler(await requestFromServiceClient(LEGACY, 'vercel-publish-scheduler'));
 
     expect(response.status).toBe(200);
