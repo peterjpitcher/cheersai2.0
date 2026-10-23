@@ -71,7 +71,7 @@ describe("buildOAuthRedirectUrl (organic publishing scopes)", () => {
     return (new URL(url).searchParams.get("scope") ?? "").split(",");
   }
 
-  it("requests exactly the Facebook publishing permissions", async () => {
+  it("requests exactly the Facebook publishing and results permissions", async () => {
     const { buildOAuthRedirectUrl } = await import("@/lib/connections/oauth");
     expect(scopesOf(buildOAuthRedirectUrl("facebook", "s"))).toEqual([
       "pages_show_list",
@@ -80,10 +80,12 @@ describe("buildOAuthRedirectUrl (organic publishing scopes)", () => {
       "instagram_basic",
       "instagram_content_publish",
       "business_management",
+      "read_insights",
+      "instagram_manage_insights",
     ]);
   });
 
-  it("requests exactly the Instagram publishing permissions", async () => {
+  it("requests exactly the Instagram publishing and results permissions", async () => {
     const { buildOAuthRedirectUrl } = await import("@/lib/connections/oauth");
     expect(scopesOf(buildOAuthRedirectUrl("instagram", "s"))).toEqual([
       "instagram_basic",
@@ -91,6 +93,7 @@ describe("buildOAuthRedirectUrl (organic publishing scopes)", () => {
       "pages_show_list",
       "pages_read_engagement",
       "business_management",
+      "instagram_manage_insights",
     ]);
   });
 

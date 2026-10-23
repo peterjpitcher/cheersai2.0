@@ -256,11 +256,12 @@ export default function PrivacyPolicyPage() {
           <li>
             When an owner connects a Facebook Page or Instagram account, we receive the Page and account ids and
             names, access tokens, and your app-scoped Meta user id. We ask Meta for these permissions:
-            pages_show_list, pages_read_engagement, pages_manage_posts, instagram_basic, instagram_content_publish
-            and business_management.
+            pages_show_list, pages_read_engagement, pages_manage_posts, instagram_basic, instagram_content_publish,
+            business_management, read_insights and instagram_manage_insights.
           </li>
           <li>
-            We use this only to publish the posts you schedule, show whether they published, and handle deletion
+            We use this only to publish the posts you schedule, show whether they published, show how the posts we
+            published performed (views, reach, reactions, comments, shares and link clicks), and handle deletion
             requests. We do not sell it or use it for advertising.
           </li>
           <li>Access tokens are stored encrypted at rest (AES-256-GCM).</li>

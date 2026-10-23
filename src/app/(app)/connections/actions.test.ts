@@ -341,6 +341,7 @@ describe('completeOAuthConnect', () => {
     expect(row?.scopes).toEqual([
       'pages_show_list', 'pages_read_engagement', 'pages_manage_posts',
       'instagram_basic', 'instagram_content_publish', 'business_management',
+      'read_insights', 'instagram_manage_insights',
     ]);
     expect(mockStoreEncryptedToken).toHaveBeenCalledTimes(1);
     expect(mockStoreEncryptedToken).toHaveBeenCalledWith(row?.id, 'access', 'page-token-1');
