@@ -797,10 +797,16 @@ describe("<GenerateStep />", () => {
     brief,
     slots,
     initialCopies = [],
+    libraryItems = [],
+    selectedMediaIds = [],
+    onCopies,
   }: {
     brief: Record<string, unknown>;
     slots: ScheduleSlot[];
     initialCopies?: SlotGeneratedCopy[];
+    libraryItems?: MediaAssetSummary[];
+    selectedMediaIds?: string[];
+    onCopies?: (copies: SlotGeneratedCopy[]) => void;
   }) {
     const [copies, setCopies] = useState<SlotGeneratedCopy[]>(initialCopies);
     return (
@@ -810,8 +816,11 @@ describe("<GenerateStep />", () => {
           contentBrief={brief as unknown as ContentBrief}
           selectedSlots={slots}
           generatedSlotCopies={copies}
-          onSlotCopiesChange={setCopies}
-          selectedMediaIds={[]}
+          onSlotCopiesChange={(next) => {
+            setCopies(next);
+            onCopies?.(next);
+          }}
+          selectedMediaIds={selectedMediaIds}
           publishMode="schedule"
           isContextStale={false}
           onGeneratedWithContext={vi.fn()}
@@ -820,7 +829,7 @@ describe("<GenerateStep />", () => {
           onQueueAll={vi.fn()}
           isSubmitting={false}
           accountId="acc-1"
-          libraryItems={[]}
+          libraryItems={libraryItems}
           bannerDefaults={null}
         />
       </ToastProvider>
@@ -978,5 +987,71 @@ describe("<GenerateStep />", () => {
     expect(writes.maxInFlight()).toBe(3);
     expect(vi.mocked(generateContent).mock.calls.map((call) => call[2]?.campaign)).toEqual([undefined, undefined, undefined]);
     expect(screen.queryByText(/^Job:/)).not.toBeInTheDocument();
+  });
+
+  it("gives the posts between the announcement and the day a reuse photo, and writes each from its own picture (B6)", async () => {
+    mockNumberedWrites();
+    const library = [
+      storyReadyAsset("artwork", { tags: ["event-artwork"] }),
+      storyReadyAsset("bar", { tags: ["reuse", "bar", "pints"] }),
+      storyReadyAsset("crowd", { tags: ["reuse", "music bingo crowd"] }),
+      storyReadyAsset("burger", { tags: ["reuse", "burger"] }),
+      storyReadyAsset("untagged", { tags: ["pub", "interior"] }),
+    ];
+    let latest: SlotGeneratedCopy[] = [];
+    render(
+      <CampaignHarness
+        brief={CAMPAIGN_BRIEF}
+        slots={CAMPAIGN_SLOTS}
+        libraryItems={library}
+        selectedMediaIds={["artwork"]}
+        onCopies={(copies) => {
+          latest = copies;
+        }}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /generate all \(5\)/i }));
+    await waitFor(() => expect(screen.getAllByText(/^Job:/)).toHaveLength(5));
+
+    // Send order: announce, how it works, meet the host (Jo: no photo of Jo), last call, tonight.
+    const byKey = new Map(latest.map((copy) => [copy.slotKey, copy.mediaIds] as const));
+    expect(["launch", "week", "host", "last", "day"].map((key) => byKey.get(key))).toEqual([
+      undefined,
+      ["bar"],
+      ["crowd"],
+      undefined,
+      undefined,
+    ]);
+    expect(vi.mocked(generateContent).mock.calls.map((call) => call[2]?.mediaIds)).toEqual([
+      ["artwork"],
+      ["bar"],
+      ["crowd"],
+      ["artwork"],
+      ["artwork"],
+    ]);
+  });
+
+  it("never replaces a picture the owner chose for a post", async () => {
+    mockNumberedWrites();
+    const library = [storyReadyAsset("bar", { tags: ["reuse", "bar"] })];
+    let latest: SlotGeneratedCopy[] = [];
+    render(
+      <CampaignHarness
+        brief={CAMPAIGN_BRIEF}
+        slots={CAMPAIGN_SLOTS.slice(0, 2).concat(CAMPAIGN_SLOTS[4])}
+        libraryItems={library}
+        initialCopies={[{ slotKey: "week", scheduledAt: slotIso("2026-11-06", "07:00"), status: "pending", copy: null, warnings: [], mediaIds: [] }]}
+        onCopies={(copies) => {
+          latest = copies;
+        }}
+      />,
+    );
+
+    // A slot already has a (pending) copy, so the button is Regenerate All.
+    fireEvent.click(screen.getByRole("button", { name: /regenerate all/i }));
+    await waitFor(() => expect(screen.getAllByText(/^Job:/)).toHaveLength(3));
+
+    expect(latest.find((copy) => copy.slotKey === "week")?.mediaIds).toEqual([]);
   });
 });
