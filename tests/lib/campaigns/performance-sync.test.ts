@@ -275,7 +275,7 @@ describe('syncMetaCampaignPerformance', () => {
   });
 });
 
-/** A conditional update: records the payload and both filters, then resolves on the second eq. */
+/** A conditional update: records the payload and its three filters, then resolves on the third eq. */
 function statusUpdateBuilder(
   calls: Array<{ payload: Record<string, unknown>; filters: Array<[string, unknown]> }>,
   error: { message: string } | null = null,
@@ -287,7 +287,7 @@ function statusUpdateBuilder(
       const chain = {
         eq: vi.fn((column: string, value: unknown) => {
           filters.push([column, value]);
-          return filters.length === 2 ? Promise.resolve({ error }) : chain;
+          return filters.length === 3 ? Promise.resolve({ error }) : chain;
         }),
       };
       return chain;
@@ -327,14 +327,14 @@ describe('a campaign paused or switched back on in Ads Manager', () => {
     return { updates, statusCalls, supabase, sync };
   }
 
-  it('shows a campaign paused in Ads Manager as paused, only if the app has not changed it meanwhile', async () => {
+  it('shows a campaign paused in Ads Manager as paused, scoped to the brand and only if the app has not changed it meanwhile', async () => {
     const info = vi.spyOn(console, 'info').mockImplementation(() => undefined);
     try {
       const { updates, statusCalls, sync } = setUp('ACTIVE', 'PAUSED');
       await sync();
 
       expect(updates[0].payload).toMatchObject({ meta_status: 'PAUSED' });
-      expect(statusCalls).toEqual([{ payload: { status: 'PAUSED' }, filters: [['id', 'campaign-1'], ['status', 'ACTIVE']] }]);
+      expect(statusCalls).toEqual([{ payload: { status: 'PAUSED' }, filters: [['id', 'campaign-1'], ['account_id', 'account-1'], ['status', 'ACTIVE']] }]);
       expect(info).toHaveBeenCalledWith('[performance-sync] campaign status now follows Meta', { campaignId: 'campaign-1', from: 'ACTIVE', to: 'PAUSED' });
     } finally {
       info.mockRestore();
@@ -347,7 +347,7 @@ describe('a campaign paused or switched back on in Ads Manager', () => {
       const { statusCalls, sync } = setUp('PAUSED', 'ACTIVE');
       await sync();
 
-      expect(statusCalls).toEqual([{ payload: { status: 'ACTIVE' }, filters: [['id', 'campaign-1'], ['status', 'PAUSED']] }]);
+      expect(statusCalls).toEqual([{ payload: { status: 'ACTIVE' }, filters: [['id', 'campaign-1'], ['account_id', 'account-1'], ['status', 'PAUSED']] }]);
     } finally {
       info.mockRestore();
     }

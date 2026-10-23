@@ -151,18 +151,20 @@ export function statusFollowingMeta(
 
 async function followMetaCampaignStatus(
   supabase: SupabaseClientLike,
-  campaign: Pick<SyncCampaignRow, 'id' | 'status'>,
+  campaign: Pick<SyncCampaignRow, 'id' | 'account_id' | 'status'>,
   metaStatus: string,
 ) {
   const next = statusFollowingMeta(campaign.status, metaStatus);
   if (!next || !campaign.status) return;
 
   // Only while the row still holds the status read above, so a pause or resume made in the
-  // app during this sync is never overwritten.
+  // app during this sync is never overwritten. Scoped to the brand: the service-role client
+  // bypasses RLS.
   const { error } = await supabase
     .from('meta_campaigns')
     .update({ status: next })
     .eq('id', campaign.id)
+    .eq('account_id', campaign.account_id)
     .eq('status', campaign.status);
   if (error) {
     throw new Error(error.message);
