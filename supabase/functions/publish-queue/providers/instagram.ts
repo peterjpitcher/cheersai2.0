@@ -126,16 +126,19 @@ function graphError(payload: unknown): Record<string, unknown> | null {
 /**
  * Whether Instagram refused the container over its location (for example
  * INSTAGRAM_PLATFORM_API__INVALID_LOCATION_ID, for a Page without location data).
+ * Any field of the error may say so, since Meta's error shapes vary; a false match
+ * only costs one more try without the tag.
  */
 function isLocationRefused(payload: unknown): boolean {
   const error = graphError(payload);
   if (!error) {
     return false;
   }
-  return ["message", "error_user_title", "error_user_msg", "type"].some((field) => {
-    const value = error[field];
-    return typeof value === "string" && /location/i.test(value);
-  });
+  try {
+    return /location/i.test(JSON.stringify(error));
+  } catch {
+    return false;
+  }
 }
 
 /** What to log about a Graph error: codes and Meta's message only, never the request. */

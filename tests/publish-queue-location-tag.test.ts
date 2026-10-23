@@ -138,6 +138,27 @@ describe("publishToInstagram location tag", () => {
         expect(JSON.stringify(warn.mock.calls)).not.toContain("fixture-access-token");
     });
 
+    it("spots a refused location in any field of the error", async () => {
+        const fetchMock = vi.fn()
+            .mockResolvedValueOnce(response(400, {
+                error: {
+                    message: "Invalid parameter",
+                    type: "OAuthException",
+                    code: 100,
+                    error_data: { code_name: "INSTAGRAM_PLATFORM_API__INVALID_LOCATION_ID" },
+                },
+            }))
+            .mockResolvedValueOnce(response(200, { id: "container-2" }))
+            .mockResolvedValueOnce(response(200, { id: "ig-media-2" }));
+        vi.stubGlobal("fetch", fetchMock);
+
+        const { publishToInstagram } = await loadProvider();
+        const result = await publishToInstagram(request());
+
+        expect(result.externalId).toBe("ig-media-2");
+        expect(sentParams(fetchMock, 1).has("location_id")).toBe(false);
+    });
+
     it("does not try again for an error that is not about the location", async () => {
         const fetchMock = vi.fn().mockResolvedValueOnce(response(400, {
             error: { message: "Media download has failed.", type: "OAuthException", code: 9004, error_subcode: 2207052 },
