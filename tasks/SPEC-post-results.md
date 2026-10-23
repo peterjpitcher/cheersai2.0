@@ -55,6 +55,23 @@ Owner approval: 23 October 2026, relayed by the chief of staff session. Peter an
 5. Do not click **Change Page** or **Disconnect**, and do not remove CheersAI in Facebook's settings. Removing it deletes every Meta token, the paid-ads one included.
 6. Nothing in CheersAI checks which permissions were granted. A declined permission still shows the card as connected, and only the results job will show what is missing.
 
+## As built (23 October 2026)
+- `src/lib/analytics/post-results.ts` reads and stores the results, and `post-results-token.ts` reads each brand's stored token. The cron `/api/cron/sync-post-results` runs at 05:15 UTC daily, with a 300-second limit.
+- The Graph requests send the token in the `Authorization` header, never in the URL.
+- Facebook:
+  - the post's own counts come from `GET /{post-id}?fields=shares,reactions.summary(total_count),comments.summary(total_count)`;
+  - the insights are `post_media_view` (views), `post_total_media_view_unique` (viewers) and `post_clicks_by_type` (its "link clicks").
+- Instagram:
+  - the counts come from `GET /{media-id}?fields=like_count,comments_count`;
+  - the insights are `views`, `reach`, `shares`, `saved` and `total_interactions`.
+- A post Meta no longer knows is skipped and logged. An expired or revoked token (code 190) stops that platform for the brand in this run.
+- The Analytics page shows Views, People reached, Engagement rate (on reach when known, otherwise on views), Link clicks and Posts published. Until reach arrives it shows "Not yet" and a line asking for the reconnect.
+- Partial results (Codex review on #221):
+  - Every engagement rate, on the overview and in the By Platform and By Content Type views, divides engagement by reach or views from the same posts. A post its platform has no figure for yet never inflates the rate.
+  - Rows holding only counts (before the reconnect) still show on the overview instead of the "no metrics yet" state.
+  - The reconnect line names only the cards still missing reach.
+- Found while building it: `analytics_snapshots`, like 26 other tables, grants the `anon` role write access. RLS is on and every policy needs brand membership, so the API refuses anonymous reads and writes; revoking the grants is a separate change.
+
 ## Rollback
 - Permissions: revert the PR. Tokens already granted keep the extra permissions until the next reconnect, and nothing calls them.
 - Job: revert the PR and delete the rows it wrote (derived data, safe to remove).

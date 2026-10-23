@@ -6,7 +6,7 @@ import { DateTime } from 'luxon';
 import { DEFAULT_TIMEZONE } from '@/lib/constants';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { describeEmptyReason } from '@/lib/analytics/aggregations';
+import { describeEmptyReason, hasPostResults, reconnectNote, summarisePostResults } from '@/lib/analytics/aggregations';
 import type { DateRange } from '@/lib/analytics/types';
 
 import { useAnalyticsData, usePlatformComparison, useContentTypeComparison, useBestTimes } from './hooks/use-analytics-data';
@@ -62,25 +62,15 @@ export function AnalyticsDashboard() {
   const contentTypeQuery = useContentTypeComparison(dateRange);
   const bestTimesQuery = useBestTimes();
 
-  // Compute summary metrics from posts data
-  const summary = useMemo(() => {
-    const posts = postsQuery.data ?? [];
-    const totalImpressions = posts.reduce((sum, p) => sum + (p.impressions ?? 0), 0);
-    const totalEngagement = posts.reduce((sum, p) => sum + (p.engagementCount ?? 0), 0);
-    const totalClicks = posts.reduce((sum, p) => sum + (p.clicks ?? 0), 0);
-    const engagementRate = totalImpressions > 0 ? totalEngagement / totalImpressions : 0;
-    return {
-      impressions: totalImpressions,
-      engagementRate,
-      clicks: totalClicks,
-      postCount: posts.length,
-    };
-  }, [postsQuery.data]);
+  // Compute summary metrics from posts data. Reach and views need the results permissions
+  // (tasks/SPEC-post-results.md); until Meta returns them the counts still show.
+  const summary = useMemo(() => summarisePostResults(postsQuery.data ?? []), [postsQuery.data]);
+  const missingReachNote = useMemo(() => reconnectNote(postsQuery.data ?? []), [postsQuery.data]);
 
-  // Empty state reason for overview
+  // Empty state reason for overview: a stored row with counts but no reach yet is still a result.
   const overviewEmptyReason = describeEmptyReason({
     publishJobCount: postsQuery.data?.length ?? 0,
-    snapshotCount: postsQuery.data?.filter((p) => p.engagementRate !== null).length ?? 0,
+    snapshotCount: postsQuery.data?.filter(hasPostResults).length ?? 0,
   });
 
   return (
@@ -119,6 +109,7 @@ export function AnalyticsDashboard() {
           ) : (
             <div className="flex flex-col gap-6">
               <PostPerformanceCard {...summary} />
+              {missingReachNote ? <p className="text-sm text-muted-foreground">{missingReachNote}</p> : null}
               <Card>
                 <CardHeader>
                   <CardTitle>Engagement Over Time</CardTitle>

@@ -12,6 +12,9 @@ import {
   computeBestTimeSlots,
   computeEngagementRate,
   describeEmptyReason,
+  hasPostResults,
+  reconnectNote,
+  summarisePostResults,
 } from './aggregations';
 import type { PostAnalytics } from './types';
 
@@ -226,5 +229,89 @@ describe('describeEmptyReason', () => {
 
   it('should return null when data is present', () => {
     expect(describeEmptyReason({ publishJobCount: 5, snapshotCount: 10 })).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Partial results: a platform not yet reconnected with the results permissions
+// (Codex review on #221)
+// ---------------------------------------------------------------------------
+
+// Before the reconnect Meta returns only the counts: no views, reach or link clicks.
+const countsOnly = (overrides: Partial<PostAnalytics> = {}): PostAnalytics =>
+  makePost({ impressions: null, reach: null, engagementRate: null, clicks: null, engagementCount: 30, ...overrides });
+
+describe('aggregateByPlatform and aggregateByContentType with partial results', () => {
+  it('rates only the rows that have views, so counts-only rows never inflate it', () => {
+    const rows = [makePost({ impressions: 1000, engagementCount: 50 }), countsOnly({ engagementCount: 500 })];
+
+    const [facebook] = aggregateByPlatform(rows);
+    expect(facebook.totalEngagement).toBe(550);
+    expect(facebook.totalImpressions).toBe(1000);
+    expect(facebook.weightedEngagementRate).toBeCloseTo(0.05);
+
+    const [byType] = aggregateByContentType(rows);
+    expect(byType.weightedEngagementRate).toBeCloseTo(0.05);
+  });
+});
+
+describe('summarisePostResults', () => {
+  it('rates engagement over reach, using only the posts that have reach', () => {
+    const summary = summarisePostResults([
+      makePost({ platform: 'instagram', reach: 800, impressions: 1000, engagementCount: 40 }),
+      countsOnly({ platform: 'facebook', engagementCount: 400 }),
+    ]);
+    expect(summary.engagementRate).toBeCloseTo(40 / 800);
+    expect(summary.reach).toBe(800);
+    expect(summary.impressions).toBe(1000);
+    expect(summary.postCount).toBe(2);
+  });
+
+  it('falls back to views when no post has reach, still over the same posts', () => {
+    const summary = summarisePostResults([
+      makePost({ reach: null, impressions: 2000, engagementCount: 100 }),
+      countsOnly({ engagementCount: 900 }),
+    ]);
+    expect(summary.engagementRate).toBeCloseTo(100 / 2000);
+    expect(summary.reach).toBeNull();
+  });
+
+  it('has no rate and no reach before any views or reach arrive, but keeps the counts', () => {
+    const summary = summarisePostResults([countsOnly({ clicks: null }), countsOnly({ platform: 'instagram' })]);
+    expect(summary).toEqual({ impressions: 0, reach: null, engagementRate: null, clicks: 0, postCount: 2 });
+  });
+});
+
+describe('hasPostResults', () => {
+  it('counts a row with only reactions, comments or shares as a result', () => {
+    expect(hasPostResults(countsOnly())).toBe(true);
+    expect(hasPostResults(makePost({ impressions: null, reach: null, engagementCount: null, clicks: null, shares: null, comments: null }))).toBe(false);
+  });
+
+  it('lets the overview show counts-only rows instead of the empty state', () => {
+    const rows = [countsOnly(), countsOnly({ platform: 'instagram' })];
+    expect(describeEmptyReason({ publishJobCount: rows.length, snapshotCount: rows.filter(hasPostResults).length })).toBeNull();
+  });
+});
+
+describe('reconnectNote', () => {
+  it('names both cards when neither platform has reach yet', () => {
+    expect(reconnectNote([countsOnly(), countsOnly({ platform: 'instagram' })])).toBe(
+      'People reached and link clicks will show once the results permissions are granted: open Connections and click Update connection on the Facebook Page and Instagram Business cards.',
+    );
+  });
+
+  it('names only the platform still missing reach', () => {
+    expect(reconnectNote([makePost({ platform: 'instagram' }), countsOnly({ platform: 'facebook' })])).toBe(
+      'People reached and link clicks will show once the results permissions are granted: open Connections and click Update connection on the Facebook Page card.',
+    );
+    expect(reconnectNote([makePost({ platform: 'facebook' }), countsOnly({ platform: 'instagram' })])).toBe(
+      'People reached will show once the results permissions are granted: open Connections and click Update connection on the Instagram Business card.',
+    );
+  });
+
+  it('says nothing once every platform has reach, or when there are no posts', () => {
+    expect(reconnectNote([makePost({ platform: 'facebook' }), makePost({ platform: 'instagram' }), countsOnly({ platform: 'facebook' })])).toBeNull();
+    expect(reconnectNote([])).toBeNull();
   });
 });
