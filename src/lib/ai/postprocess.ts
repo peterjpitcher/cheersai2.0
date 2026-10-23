@@ -1,5 +1,6 @@
 import { DateTime } from "luxon";
 
+import { nameEventInBookingLine } from "@/lib/ai/booking-line";
 import { scrubBannedPhrases } from "@/lib/ai/voice";
 import { questionsIn } from "@/lib/ai/slot-jobs";
 import { DEFAULT_TIMEZONE } from "@/lib/constants";
@@ -364,6 +365,8 @@ export interface PostprocessConfig {
    * the cliché clean-up must not turn "Christmas Extravaganza" into "Christmas night".
    */
   protectedTerms?: readonly string[];
+  /** The event's name, on event posts only: the Instagram booking line must name it. */
+  eventName?: string | null;
 }
 
 /**
@@ -484,6 +487,12 @@ export function postprocessCopy(
     raw.instagram.link_in_bio_line,
     hasInstagramLink,
   );
+  // An event post's booking line says which event to tap on the bio page, which lists them all
+  // (booking-line.ts). Settled before the body is tidied, so the body never keeps its own.
+  const eventName = config.eventName?.trim();
+  if (hasInstagramLink && eventName) {
+    instagramLinkInBioLine = nameEventInBookingLine(instagramLinkInBioLine, eventName);
+  }
   const instagramSanitised = sanitiseInstagramBody(
     instagram,
     Boolean(instagramLinkInBioLine),

@@ -677,3 +677,46 @@ describe('official names', () => {
     expect(result.copy.facebook.body).toBe('The Christmas Extravaganza is on Friday. A festive night for all.');
   });
 });
+
+describe('Instagram booking line names the event', () => {
+  const IG_LINK = { instagram: 'https://l.the-anchor.pub/bio' };
+
+  it('puts the event name in a line that leaves it out', () => {
+    const result = postprocessCopy(makeRawCopy({
+      instagram: {
+        body: 'Five rounds of cash bingo.',
+        hashtags: [],
+        link_in_bio_line: 'Book a place for each person through the link in our bio.',
+      },
+    }), makeConfig({ ctaLinks: IG_LINK, eventName: 'Snowball Showdown Cash Bingo' }));
+    expect(result.copy.instagram.link_in_bio_line)
+      .toBe('For Snowball Showdown Cash Bingo, book a place for each person through the link in our bio.');
+  });
+
+  it('keeps a line that names it', () => {
+    const result = postprocessCopy(makeRawCopy({
+      instagram: { body: 'Five rounds.', hashtags: [], link_in_bio_line: 'Book Snowball Showdown through the link in our bio.' },
+    }), makeConfig({ ctaLinks: IG_LINK, eventName: 'Snowball Showdown Cash Bingo' }));
+    expect(result.copy.instagram.link_in_bio_line).toBe('Book Snowball Showdown through the link in our bio.');
+  });
+
+  it('writes the line when the model left it out, and takes the booking sentence out of the body', () => {
+    const result = postprocessCopy(makeRawCopy({
+      instagram: { body: 'Five rounds of cash bingo.\nBook through the link in our bio.', hashtags: [], link_in_bio_line: null },
+    }), makeConfig({ ctaLinks: IG_LINK, eventName: 'Sleigh My Name: Festive Music Bingo' }));
+    expect(result.copy.instagram.link_in_bio_line).toBe('Book Sleigh My Name through the link in our bio.');
+    expect(result.copy.instagram.body).toBe('Five rounds of cash bingo.');
+  });
+
+  it('leaves other posts alone', () => {
+    const result = postprocessCopy(makeRawCopy({
+      instagram: { body: 'Sunday roast.', hashtags: [], link_in_bio_line: 'Book a table via the link in our bio.' },
+    }), makeConfig({ ctaLinks: IG_LINK }));
+    expect(result.copy.instagram.link_in_bio_line).toBe('Book a table via the link in our bio.');
+  });
+
+  it('adds no line when there is no Instagram link', () => {
+    const result = postprocessCopy(makeRawCopy(), makeConfig({ eventName: 'Snowball Showdown Cash Bingo' }));
+    expect(result.copy.instagram.link_in_bio_line).toBeNull();
+  });
+});
