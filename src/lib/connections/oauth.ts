@@ -1,13 +1,17 @@
 import { env } from "@/env";
 import { getMetaOAuthBase } from "@/lib/meta/graph";
 
-// Only what publishing uses. Meta App Review rejects permissions the app never
+// Only what CheersAI uses. Meta App Review rejects permissions the app never
 // calls, so pages_manage_metadata and instagram_manage_comments were dropped
 // (no webhook subscription or comment call exists). Facebook posts and stories
 // need pages_show_list, pages_read_engagement and pages_manage_posts; Instagram
 // publishing needs instagram_basic, instagram_content_publish and
 // pages_read_engagement; business_management lists Pages held in a business
-// portfolio. See docs/runbooks/meta-app-review.md.
+// portfolio. read_insights and instagram_manage_insights read the results of
+// the posts CheersAI published (views, reach, link clicks), added 23 October
+// 2026 on Peter's yes (tasks/SPEC-post-results.md). The Facebook login asks for
+// both, because choosing a new Page there re-saves Instagram with its token.
+// See docs/runbooks/meta-app-review.md.
 export const FACEBOOK_SCOPE_LIST: readonly string[] = [
   "pages_show_list",
   "pages_read_engagement",
@@ -15,6 +19,8 @@ export const FACEBOOK_SCOPE_LIST: readonly string[] = [
   "instagram_basic",
   "instagram_content_publish",
   "business_management",
+  "read_insights",
+  "instagram_manage_insights",
 ];
 
 export const INSTAGRAM_SCOPE_LIST: readonly string[] = [
@@ -23,6 +29,7 @@ export const INSTAGRAM_SCOPE_LIST: readonly string[] = [
   "pages_show_list",
   "pages_read_engagement",
   "business_management",
+  "instagram_manage_insights",
 ];
 
 const FACEBOOK_SCOPES = FACEBOOK_SCOPE_LIST.join(",");

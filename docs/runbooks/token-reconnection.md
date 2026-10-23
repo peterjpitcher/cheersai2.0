@@ -31,10 +31,11 @@
 ### For Facebook / Instagram (Long-lived tokens)
 
 1. Navigate to /connections
-2. Click "Reconnect" on the affected connection
+2. Click the card's main button: "Update connection" (active), "Renew access" (expiring) or "Reconnect" (needs action). Facebook and Instagram are separate logins, so do each card.
 3. Complete the OAuth flow -- sign in to Facebook/Instagram when prompted
-4. Grant all requested permissions (pages_manage_posts, instagram_content_publish, etc.)
+4. Grant all requested permissions (pages_manage_posts, instagram_content_publish, read_insights, instagram_manage_insights, etc.). Nothing checks what was granted, so a declined permission still shows the card as connected.
 5. Verify the connection card shows green status after redirect
+6. Do not click "Change Page" unless the Page is wrong, and do not remove the app in Facebook's settings: that deletes every Meta token, including the paid-ads one.
 
 ### For Google Business Profile (1-hour tokens)
 

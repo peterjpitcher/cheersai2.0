@@ -37,6 +37,8 @@ verification and are a later, separate submission.
 | `instagram_basic` | Reads the linked Instagram professional account's id and username, shown on the Connections page, and checks the publishing limit after an unclear failure | `GET /{ig-id}?fields=id,username`, `GET /{ig-id}/content_publishing_limit` |
 | `instagram_content_publish` | Publishes the venue's approved feed posts and stories to Instagram | `POST /{ig-id}/media`, `POST /{ig-id}/media_publish` |
 | `business_management` | Many venues hold their Page in a Meta business portfolio; this lets `/me/accounts` return those Pages when the owner connects. CheersAI makes no other Business Manager API call | none of its own |
+| `read_insights` | Shows the venue how each Facebook post CheersAI published performed (views, viewers, link clicks) on the Analytics page; read once a day for posts from the last 28 days. Added 23 October 2026 (`tasks/SPEC-post-results.md`) | `GET /{post-id}/insights?metric=post_media_view`, `post_total_media_view_unique`, `post_clicks_by_type` |
+| `instagram_manage_insights` | Shows the venue how each Instagram post CheersAI published performed (views, reach, saves, shares) on the Analytics page; read once a day for posts from the last 28 days. Added 23 October 2026 | `GET /{ig-media-id}/insights?metric=views`, `reach`, `shares`, `saved`, `total_interactions` |
 
 These match `FACEBOOK_SCOPE_LIST` and `INSTAGRAM_SCOPE_LIST` in `src/lib/connections/oauth.ts`.
 `pages_manage_metadata` and `instagram_manage_comments` were removed on 26 September 2026 because
@@ -74,7 +76,7 @@ Meta's requirements (checked 26 September 2026): Page posts and stories need `pa
 ## 4. The recording
 
 Meta wants one screen recording that shows the whole flow: signing in to CheersAI, Meta's dialog
-granting each permission, and CheersAI using each one. The same video is uploaded against all six
+granting each permission, and CheersAI using each one. The same video is uploaded against all eight
 permissions.
 
 ### Everything you need
@@ -150,7 +152,11 @@ permissions.
    stories (1)**. When the planner shows "Published", show the story on the Page and on Instagram.
    (Stories cannot be posted instantly; cut the wait from the video.) Caption: "CheersAI also
    publishes approved stories."
-10. **Disconnect.** On **Connections**, click **Disconnect** on each card and confirm. Caption:
+10. **Results.** The next day (results are read once a day), open **Analytics** and show the post's
+    views, reach and link clicks. Record this part on the second day and join the two clips.
+    Caption: "read_insights and instagram_manage_insights: CheersAI shows how each published post
+    performed."
+11. **Disconnect.** On **Connections**, click **Disconnect** on each card and confirm. Caption:
     "Owners can disconnect at any time; CheersAI deletes the stored tokens."
 
 ### After recording: finish the draft and submit
@@ -158,7 +164,7 @@ permissions.
 1. Open the saved draft (link in the table above). **Reviewer instructions**: in the test login
    box, type the reviewer password after "Password:". Remove the old file "CheersAI Supporting
    Documentation.pdf" (from August 2025; it describes the old set-up).
-2. **Allowed usage**: for each of the six permissions click **Get started**, upload the video,
+2. **Allowed usage**: for each of the eight permissions click **Get started**, upload the video,
    tick "If approved, I agree...", and **Save**. The descriptions are already filled in.
 3. **Data handling**: check the four boxes about requests from public authorities are still true
    for Orange Jelly.
@@ -179,8 +185,9 @@ Paste one block into each permission's "How will your app use this permission?" 
 > When the owner connects, CheersAI reads the Page's id, name and Page access token, and the
 > Instagram professional account linked to that Page. The Page name and Instagram username are
 > shown on the Connections page so the owner can see what is connected. The Page access token is
-> used, encrypted at rest, to publish the posts the owner approves. CheersAI does not read the
-> Page's posts, followers or insights.
+> used, encrypted at rest, to publish the posts the owner approves. Once a day CheersAI also reads
+> the reaction, comment and share counts of the posts it published, to show them on its Analytics
+> page. It does not read other posts, followers or Page insights.
 
 **pages_manage_posts**
 > Venue owners write posts in CheersAI (text plus an image), review and approve each one, and
@@ -205,6 +212,20 @@ Paste one block into each permission's "How will your app use this permission?" 
 > business_management so that, when the owner connects, Pages held in their business portfolio
 > are returned by /me/accounts and can be linked. CheersAI makes no other Business Manager API
 > calls and does not create, read or change business assets or users.
+
+**read_insights**
+> CheersAI shows venue owners how each post it published to their Facebook Page performed, so
+> they can see which posts bring people in. Once a day, for the posts CheersAI published in the
+> last 28 days, it reads each post's views, viewers and link clicks via /{post-id}/insights and
+> shows them on its Analytics page. It reads only the posts it published, never the Page's
+> other insights, and the owner can disconnect at any time.
+
+**instagram_manage_insights**
+> CheersAI shows venue owners how each post it published to their Instagram professional account
+> performed. Once a day, for the posts CheersAI published in the last 28 days, it reads each
+> post's views, reach, shares and saves via /{ig-media-id}/insights and shows them on its
+> Analytics page. It reads only the posts it published and does not read followers or other
+> accounts.
 
 **App verification details (test instructions)**
 > 1. Go to https://cheers.orangejelly.co.uk/login and sign in with the email and password below.
