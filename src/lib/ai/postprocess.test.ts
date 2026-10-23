@@ -691,7 +691,7 @@ describe('Instagram booking line names the event', () => {
       },
     }), makeConfig({ ctaLinks: IG_LINK, eventName: 'Snowball Showdown Cash Bingo' }));
     expect(result.copy.instagram.link_in_bio_line)
-      .toBe('For Snowball Showdown Cash Bingo, book a place for each person through the link in our bio.');
+      .toBe('Book a place for each person at Snowball Showdown Cash Bingo through the link in our bio.');
   });
 
   it('keeps a line that names it', () => {

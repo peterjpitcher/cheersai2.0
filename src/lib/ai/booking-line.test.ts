@@ -36,6 +36,10 @@ describe('bookingName', () => {
     expect(bookingName('Bingo: Rocktober')).toBe('Rocktober');
   });
 
+  it('passes over a tagline before a colon', () => {
+    expect(bookingName('Enter If You Dare: The House of Horrors Halloween Party')).toBe('The House of Horrors Halloween Party');
+  });
+
   it('keeps the whole name when no part says which event it is', () => {
     expect(bookingName('Quiz Night: Halloween Special')).toBe('Quiz Night: Halloween Special');
   });
@@ -53,19 +57,40 @@ describe('nameEventInBookingLine', () => {
       .toBe('Book Snowball Showdown through the link in our bio.');
   });
 
-  it('puts the name in front of a line that does not, keeping its wording', () => {
+  it('puts the name where the line says what to book, keeping its wording', () => {
     expect(nameEventInBookingLine('Book a place for each person through the link in our bio.', EVENT))
-      .toBe('For Snowball Showdown Cash Bingo, book a place for each person through the link in our bio.');
+      .toBe('Book a place for each person at Snowball Showdown Cash Bingo through the link in our bio.');
+    expect(nameEventInBookingLine('Shared tables: book a place for each person via the link in bio.', EVENT))
+      .toBe('Shared tables: book a place for each person at Snowball Showdown Cash Bingo via the link in bio.');
   });
 
-  it('keeps every sentence of the line', () => {
+  it('makes the event what is booked when the line only says "Book"', () => {
     expect(nameEventInBookingLine('Book through the link in our bio. Payment confirms your booking.', EVENT))
-      .toBe('For Snowball Showdown Cash Bingo, book through the link in our bio. Payment confirms your booking.');
+      .toBe('Book Snowball Showdown Cash Bingo through the link in our bio. Payment confirms your booking.');
+  });
+
+  it('reads on from "attending", and uses "for" when the line already says "at"', () => {
+    expect(nameEventInBookingLine('Book a place for each person attending through the link in bio.', EVENT))
+      .toBe('Book a place for each person attending Snowball Showdown Cash Bingo through the link in bio.');
+    expect(nameEventInBookingLine('Book a table at The Anchor via the link in bio.', EVENT))
+      .toBe('Book a table at The Anchor for Snowball Showdown Cash Bingo via the link in bio.');
+  });
+
+  it('names the event at the end of a line that starts with the link', () => {
+    expect(nameEventInBookingLine('Use the link in bio to book a place for each person.', EVENT))
+      .toBe('Use the link in bio to book a place for each person at Snowball Showdown Cash Bingo.');
+    expect(nameEventInBookingLine('Use the link in bio to book a place for each person attending.', EVENT))
+      .toBe('Use the link in bio to book a place for each person attending Snowball Showdown Cash Bingo.');
   });
 
   it('uses the part before a colon', () => {
     expect(nameEventInBookingLine('Book your table via the link in bio.', 'Sleigh My Name: Festive Music Bingo'))
-      .toBe('For Sleigh My Name, book your table via the link in bio.');
+      .toBe('Book your table at Sleigh My Name via the link in bio.');
+  });
+
+  it('puts the name in front of a line that does not say what to book', () => {
+    expect(nameEventInBookingLine('Tap the link in our bio for tickets.', EVENT))
+      .toBe('For Snowball Showdown Cash Bingo, tap the link in our bio for tickets.');
   });
 
   it('keeps the capitals of a first word that is not an ordinary word', () => {

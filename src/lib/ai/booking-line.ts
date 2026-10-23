@@ -77,18 +77,23 @@ export function bookingLineNamesEvent(line: string, eventName: string): boolean 
   return nameForms(eventName).some((form) => text.includes(` ${form} `));
 }
 
+/** A part of a name that urges rather than names, as in "Enter If You Dare: The House of Horrors". */
+const TAGLINE_START = /^(?:enter|join|come|step|get|grab|discover|celebrate|experience|dare)\b/i;
+
 /**
- * The event's name as a booking line says it: the first part before a colon that identifies the
- * event ("Sleigh My Name" for "Sleigh My Name: Festive Music Bingo"), otherwise the whole name.
+ * The event's name as a booking line says it: the first part either side of a colon that
+ * identifies the event and is not a tagline ("Sleigh My Name" for "Sleigh My Name: Festive Music
+ * Bingo", "The House of Horrors Halloween Party" for "Enter If You Dare: The House of Horrors
+ * Halloween Party"), otherwise the whole name.
  */
 export function bookingName(eventName: string): string {
   const whole = eventName.trim();
   if (!whole.includes(":")) return whole;
-  const part = whole
+  const parts = whole
     .split(":")
     .map((piece) => piece.trim())
-    .find((piece) => hasDistinctiveWord(comparable(piece).split(" ").filter(Boolean)));
-  return part || whole;
+    .filter((piece) => hasDistinctiveWord(comparable(piece).split(" ").filter(Boolean)));
+  return parts.find((piece) => !TAGLINE_START.test(piece)) ?? parts[0] ?? whole;
 }
 
 /** "Book a place..." reads on after "For <name>, "; a word with more capitals keeps them. */
@@ -96,14 +101,43 @@ function lowerFirstWord(line: string): string {
   return /^[A-Z][a-z]+\b/.test(line) ? `${line[0].toLowerCase()}${line.slice(1)}` : line;
 }
 
+/** " through the link in our bio", where the line says how to get there. */
+const LINK_ROUTE = /\s+(?:through|via|using|from)\s+(?:the|our)?\s*link in (?:our |the )?bio/i;
+const BOOKING_LINK = /link in (?:our |the )?bio/i;
+
 /**
- * The line to publish: kept as written when it names the event; otherwise the name goes in
- * front and the model's wording (often how booking works) stays.
+ * The line with the name where a person would put it, keeping the model's wording (often how
+ * booking works): "Book a place for each person at <name> through the link in our bio.", "Book
+ * <name> via the link in bio.", "Use the link in bio to book a place for each person at <name>."
+ * Null when the line does not say what to book.
+ */
+function placeName(line: string, name: string): string | null {
+  const route = LINK_ROUTE.exec(line);
+  if (route) {
+    const before = line.slice(0, route.index);
+    const after = line.slice(route.index);
+    if (/^book$/i.test(before.trim())) return `${before.trim()} ${name}${after}`;
+    if (!/\bbook/i.test(before)) return null;
+    if (/\battending$/i.test(before)) return `${before} ${name}${after}`;
+    return `${before} ${/\sat\s/i.test(before) ? "for" : "at"} ${name}${after}`;
+  }
+  const sentences = line.match(/[^.!?]+[.!?]*\s*/g) ?? [line];
+  const index = sentences.findIndex((sentence) => BOOKING_LINK.test(sentence) && /\bbook/i.test(sentence));
+  if (index < 0) return null;
+  const [, words, ending] = /^(.*?)([.!?]*\s*)$/.exec(sentences[index]) ?? [];
+  if (!words) return null;
+  const joined = /\battending$/i.test(words) ? `${words} ${name}` : `${words} ${/\sat\s/i.test(words) ? "for" : "at"} ${name}`;
+  return [...sentences.slice(0, index), `${joined}${ending}`, ...sentences.slice(index + 1)].join("");
+}
+
+/**
+ * The line to publish: kept as written when it names the event; otherwise the name goes where
+ * the line says what to book, or, when it does not, in front ("For <name>, ...").
  */
 export function nameEventInBookingLine(line: string | null | undefined, eventName: string): string {
   const name = bookingName(eventName);
   const trimmed = line?.trim() ?? "";
   if (!trimmed || GENERIC_LINE.test(trimmed)) return `Book ${name} through the link in our bio.`;
   if (bookingLineNamesEvent(trimmed, eventName)) return trimmed;
-  return `For ${name}, ${lowerFirstWord(trimmed)}`;
+  return placeName(trimmed, name) ?? `For ${name}, ${lowerFirstWord(trimmed)}`;
 }
