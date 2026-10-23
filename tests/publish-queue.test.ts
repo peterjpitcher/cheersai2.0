@@ -22,6 +22,12 @@ class TestWorker extends PublishQueueWorker {
         return null;
     }
 
+    // The Instagram location lookup is covered in tests/publish-queue-location-tag.test.ts;
+    // stubbed here for the same reason.
+    protected async loadLocationPageId(): Promise<null> {
+        return null;
+    }
+
     // Spy on this method to inject responses
     async publishByPlatform(platform: ProviderPlatform, request: ProviderPublishRequest): Promise<ProviderPublishResult> {
         return super.publishByPlatform(platform, request);
