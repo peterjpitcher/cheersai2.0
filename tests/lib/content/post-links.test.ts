@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const { createManagementSocialPostLinksMock } = vi.hoisted(() => ({ createManagementSocialPostLinksMock: vi.fn() }));
 vi.mock('@/lib/management-app/client', () => ({ createManagementSocialPostLinks: createManagementSocialPostLinksMock }));
 
-import { loadManagementConfig, postLinkKey, resolveFacebookPostLinks, shortCodeOf } from '@/lib/content/post-links';
+import { loadManagementConfig, postLinkKey, resolveFacebookPostLinks, shortCodeOf, withPostLink } from '@/lib/content/post-links';
 
 const CONFIG = { baseUrl: 'https://management.example.com', apiKey: 'fixture-management-key' };
 
@@ -115,5 +115,24 @@ describe('loadManagementConfig', () => {
     await expect(loadManagementConfig(db({ data: { base_url: 'https://m', api_key: 'k', enabled: false }, error: null }).client, 'acc-1')).resolves.toBeNull();
     await expect(loadManagementConfig(db({ data: { base_url: 'https://m', api_key: ' ', enabled: true }, error: null }).client, 'acc-1')).resolves.toBeNull();
     await expect(loadManagementConfig(db({ data: null, error: { message: 'timeout' } }).client, 'acc-1')).rejects.toThrow('could not be read: timeout');
+  });
+});
+
+describe('withPostLink', () => {
+  const shared = 'https://l.example.com/fb6e761f';
+  const own = 'https://l.example.com/fp0001';
+
+  it('swaps every copy of the shared link and keeps everything else', () => {
+    expect(withPostLink(`Book now: ${shared}. Or tap ${shared}!`, shared, own)).toBe(`Book now: ${own}. Or tap ${own}!`);
+    expect(withPostLink(`Book: ${shared}`, `  ${shared}  `, own)).toBe(`Book: ${own}`);
+    expect(withPostLink('Go https://l.example.com/a+b now', 'https://l.example.com/a+b', own)).toBe(`Go ${own} now`);
+  });
+
+  it('leaves a changed, removed or longer link as it is', () => {
+    expect(withPostLink('Book at the bar.', shared, own)).toBe('Book at the bar.');
+    const longer = `${shared}-vip, ${shared}/more and ${shared}?x=1`;
+    expect(withPostLink(longer, shared, own)).toBe(longer);
+    expect(withPostLink('https://lXexample.com/fb6e761f', shared, own)).toBe('https://lXexample.com/fb6e761f');
+    expect(withPostLink(`Book: ${shared}`, null, own)).toBe(`Book: ${shared}`);
   });
 });

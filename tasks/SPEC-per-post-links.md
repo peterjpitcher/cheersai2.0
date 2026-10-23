@@ -26,6 +26,7 @@ Owner approval: 23 October 2026, relayed by the chief of staff session. Peter an
 - **CheersAI (this PR):**
   - When the wizard schedules an event's Facebook feed posts and the brand has an events-system connection, it asks for one link per post. The link is keyed by when the post goes out, in London time (`post_20261026_1100`), and is written into that post's caption and stored copy.
   - Two posts at the same minute share one link.
+  - A caption the owner edited by hand is published exactly as written, so the post's link replaces the event's shared link inside it. Every other edit stays. A caption whose link the owner changed or removed is left alone (Codex review on #220).
   - If the request fails, the posts keep the event's shared link and a warning is logged, so scheduling never fails over attribution.
   - Instagram posts and stories are unchanged.
 - **Not covered yet:**

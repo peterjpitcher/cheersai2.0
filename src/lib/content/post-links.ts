@@ -36,6 +36,20 @@ export function shortCodeOf(url: string | null | undefined): string | null {
 }
 
 /**
+ * An owner-edited Facebook caption with the event's shared link swapped for the post's own link.
+ * An edited caption is published exactly as written, so without this it would keep the shared
+ * link. Every other edit stays. Only the exact shared link is swapped, wherever it appears, and
+ * not where it is the start of a longer link; a caption whose link the owner changed or removed
+ * is left as it is.
+ */
+export function withPostLink(caption: string, sharedLink: string | null | undefined, postLink: string): string {
+  const shared = sharedLink?.trim();
+  if (!shared) return caption;
+  const escaped = shared.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return caption.replace(new RegExp(`${escaped}(?![A-Za-z0-9_\\-/?#=&%])`, 'g'), () => postLink);
+}
+
+/**
  * Each post's own Facebook link, by slot key. Two posts at the same minute share one. Throws when
  * the event link is not a short link or the management app cannot make them, so the caller can
  * fall back to the event's own link.
