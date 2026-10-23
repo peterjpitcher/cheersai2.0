@@ -1,6 +1,6 @@
 'use client';
 
-import { Eye, MousePointerClick, Percent, FileText } from 'lucide-react';
+import { Eye, MousePointerClick, Percent, FileText, Users } from 'lucide-react';
 
 import { Card, CardContent } from '@/components/ui/card';
 
@@ -10,6 +10,8 @@ import { Card, CardContent } from '@/components/ui/card';
 
 interface PostPerformanceCardProps {
   impressions: number;
+  /** People reached; null until Meta has returned reach for at least one post. */
+  reach: number | null;
   engagementRate: number;
   clicks: number;
   postCount: number;
@@ -28,39 +30,45 @@ function formatNumber(n: number): string {
 }
 
 /**
- * Renders 4 summary metric cards in a responsive 2x2 / 4x1 grid.
+ * Renders the summary metric cards in a responsive grid.
  */
 export function PostPerformanceCard({
   impressions,
+  reach,
   engagementRate,
   clicks,
   postCount,
 }: PostPerformanceCardProps) {
   const metrics: MetricCardData[] = [
     {
-      label: 'Total Impressions',
+      label: 'Views',
       value: formatNumber(impressions),
       icon: Eye,
     },
     {
-      label: 'Engagement Rate',
+      label: 'People reached',
+      value: reach === null ? 'Not yet' : formatNumber(reach),
+      icon: Users,
+    },
+    {
+      label: 'Engagement rate',
       value: `${(engagementRate * 100).toFixed(1)}%`,
       icon: Percent,
     },
     {
-      label: 'Total Clicks',
+      label: 'Link clicks',
       value: formatNumber(clicks),
       icon: MousePointerClick,
     },
     {
-      label: 'Posts Published',
+      label: 'Posts published',
       value: formatNumber(postCount),
       icon: FileText,
     },
   ];
 
   return (
-    <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+    <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-5">
       {metrics.map((metric) => {
         const Icon = metric.icon;
         return (

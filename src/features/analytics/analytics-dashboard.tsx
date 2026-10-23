@@ -68,9 +68,15 @@ export function AnalyticsDashboard() {
     const totalImpressions = posts.reduce((sum, p) => sum + (p.impressions ?? 0), 0);
     const totalEngagement = posts.reduce((sum, p) => sum + (p.engagementCount ?? 0), 0);
     const totalClicks = posts.reduce((sum, p) => sum + (p.clicks ?? 0), 0);
-    const engagementRate = totalImpressions > 0 ? totalEngagement / totalImpressions : 0;
+    // Reach needs the results permissions (tasks/SPEC-post-results.md); until Meta returns it the
+    // rate falls back to views.
+    const withReach = posts.filter((p) => p.reach !== null);
+    const totalReach = withReach.length ? withReach.reduce((sum, p) => sum + (p.reach ?? 0), 0) : null;
+    const base = totalReach && totalReach > 0 ? totalReach : totalImpressions;
+    const engagementRate = base > 0 ? totalEngagement / base : 0;
     return {
       impressions: totalImpressions,
+      reach: totalReach,
       engagementRate,
       clicks: totalClicks,
       postCount: posts.length,
@@ -119,6 +125,12 @@ export function AnalyticsDashboard() {
           ) : (
             <div className="flex flex-col gap-6">
               <PostPerformanceCard {...summary} />
+              {summary.reach === null ? (
+                <p className="text-sm text-muted-foreground">
+                  People reached and link clicks appear once Facebook and Instagram are reconnected with the results
+                  permissions: open Connections and click Update connection on each card.
+                </p>
+              ) : null}
               <Card>
                 <CardHeader>
                   <CardTitle>Engagement Over Time</CardTitle>
