@@ -51,7 +51,7 @@ type Presenter = {
 // ---------------------------------------------------------------------------
 
 const ERROR_TYPES: FeedEventType[] = ["publish_failure", "token_expiry", "media_derivative_failed"];
-const WARNING_TYPES: FeedEventType[] = ["publish_retry", "connection_change", "media_derivative_skipped"];
+const WARNING_TYPES: FeedEventType[] = ["publish_retry", "connection_change", "media_derivative_skipped", "event_order_conflict"];
 
 function feedEventTypeToLevel(type: FeedEventType): "info" | "warning" | "error" {
   if (ERROR_TYPES.includes(type)) return "error";

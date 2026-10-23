@@ -13,6 +13,7 @@ Owner approval: 23 October 2026 ("8 yes", relayed by the chief of staff session)
 - The window is worked out exactly as at creation (`loadPromotionWindow`): the day after the last event of the same type in the 120 days before.
 - A post breaks the rule when its London date is before the window opens.
 - The owner is told in the app only: one notification per campaign, at most once a day, naming the event, how many posts break the rule and from when the event may be promoted. Nothing is emailed or sent anywhere else, and no post is changed.
+- The notice is a planner problem like a failed post: it stays in the planner feed and the notifications page after a reload, counts towards the header badge, and shows as a warning ("Heads up"). Review finding on #215, 23 October 2026: without that, the planner's list filtered it out.
 - Every run logs a summary (brands, campaigns, posts checked, posts flagged). A brand whose events-system lookup fails is logged as an error and the run answers 500, so a broken check shows in the Vercel cron logs.
 
 ## Rollback
