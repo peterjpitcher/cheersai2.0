@@ -36,6 +36,9 @@ export async function publishToInstagram({
   }
 
   const caption = placement === "story" ? "" : payload.body.trim();
+  // Feed posts carry the venue's location, a Facebook Page with location data (B5,
+  // tasks/SPEC-instagram-location-tag.md). Stories are left as they are.
+  const locationId = placement === "story" ? "" : validLocationId(payload.locationPageId);
 
   const createUrl = `${GRAPH_BASE}/${igBusinessId}/media`;
   const createParams = new URLSearchParams({
@@ -48,13 +51,29 @@ export async function publishToInstagram({
   } else if (caption) {
     createParams.set("caption", caption);
   }
+  if (locationId) {
+    createParams.set("location_id", locationId);
+  }
 
-  const createResponse = await fetch(createUrl, {
+  let createResponse = await fetch(createUrl, {
     method: "POST",
     body: createParams,
   });
 
-  const createJson = await safeJson(createResponse);
+  let createJson = await safeJson(createResponse);
+  if (!createResponse.ok && locationId && isLocationRefused(createJson)) {
+    // A location Instagram will not accept must never stop the post: one more try without it.
+    console.warn("[instagram] location tag refused; publishing without it", {
+      status: createResponse.status,
+      ...graphErrorSummary(createJson),
+    });
+    createParams.delete("location_id");
+    createResponse = await fetch(createUrl, {
+      method: "POST",
+      body: createParams,
+    });
+    createJson = await safeJson(createResponse);
+  }
   if (!createResponse.ok) {
     throw new MetaGraphApiError(createResponse.status, createJson, "instagram_create_container");
   }
@@ -87,6 +106,45 @@ export async function publishToInstagram({
     payloadPreview: placement === "story" ? "Instagram story image" : caption.slice(0, 140),
     publishedAt: new Date().toISOString(),
     rawResponse: publishJson,
+  };
+}
+
+/** A Page id is a number; anything else is not sent. */
+function validLocationId(value: unknown): string {
+  const id = typeof value === "string" ? value.trim() : "";
+  return /^\d{5,30}$/.test(id) ? id : "";
+}
+
+function graphError(payload: unknown): Record<string, unknown> | null {
+  if (!payload || typeof payload !== "object" || !("error" in payload)) {
+    return null;
+  }
+  const error = (payload as { error?: unknown }).error;
+  return error && typeof error === "object" ? error as Record<string, unknown> : null;
+}
+
+/**
+ * Whether Instagram refused the container over its location (for example
+ * INSTAGRAM_PLATFORM_API__INVALID_LOCATION_ID, for a Page without location data).
+ */
+function isLocationRefused(payload: unknown): boolean {
+  const error = graphError(payload);
+  if (!error) {
+    return false;
+  }
+  return ["message", "error_user_title", "error_user_msg", "type"].some((field) => {
+    const value = error[field];
+    return typeof value === "string" && /location/i.test(value);
+  });
+}
+
+/** What to log about a Graph error: codes and Meta's message only, never the request. */
+function graphErrorSummary(payload: unknown) {
+  const error = graphError(payload);
+  return {
+    code: typeof error?.code === "number" ? error.code : null,
+    subcode: typeof error?.error_subcode === "number" ? error.error_subcode : null,
+    message: typeof error?.message === "string" ? error.message.slice(0, 300) : null,
   };
 }
 

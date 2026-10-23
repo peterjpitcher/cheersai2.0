@@ -16,6 +16,11 @@ export interface ProviderPublishPayload {
   promptContext?: Record<string, unknown> | null;
   previewData?: Record<string, unknown> | null;
   placement: ProviderPlacement;
+  /**
+   * The Facebook Page an Instagram feed post is tagged with as its location (B5,
+   * tasks/SPEC-instagram-location-tag.md). The provider ignores it for stories.
+   */
+  locationPageId?: string | null;
 }
 
 export interface ProviderAuthContext {

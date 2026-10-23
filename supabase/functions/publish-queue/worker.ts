@@ -962,6 +962,7 @@ export class PublishQueueWorker {
             return;
         }
 
+        const locationPageId = await this.loadLocationPageId(content);
         const request: ProviderPublishRequest = {
             payload: {
                 body: copy,
@@ -971,6 +972,7 @@ export class PublishQueueWorker {
                 promptContext: content.prompt_context,
                 previewData: variant.preview_data,
                 placement: content.placement,
+                locationPageId,
             },
             auth: {
                 connectionId: connection.id,
@@ -1081,6 +1083,36 @@ export class PublishQueueWorker {
     }
 
     // --- Helpers ---
+
+    /**
+     * The location an Instagram feed post is tagged with (B5, tasks/SPEC-instagram-location-tag.md):
+     * the Facebook Page saved as "Facebook Page ID" in Settings, which must have location data.
+     * Optional, so a failed read publishes without it rather than holding the post.
+     * NOTE: overridden in tests whose database mocks are ordered.
+     */
+    protected async loadLocationPageId(content: ContentRow): Promise<string | null> {
+        if (content.platform !== "instagram" || content.placement !== "feed") {
+            return null;
+        }
+        try {
+            const { data, error } = await this.supabase
+                .from("posting_defaults")
+                .select("facebook_location_id")
+                .eq("account_id", content.account_id)
+                .maybeSingle();
+            if (error) {
+                throw new Error(error.message);
+            }
+            const pageId = typeof data?.facebook_location_id === "string" ? data.facebook_location_id.trim() : "";
+            return pageId || null;
+        } catch (error) {
+            console.warn("[publish-queue] location tag unavailable; publishing without it", {
+                contentId: content.id,
+                message: this.extractErrorMessage(error),
+            });
+            return null;
+        }
+    }
 
     // NOTE: This can be overridden in tests
     protected async publishByPlatform(platform: ProviderPlatform, request: ProviderPublishRequest): Promise<ProviderPublishResult> {
