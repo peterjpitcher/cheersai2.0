@@ -63,6 +63,9 @@ const PROBLEM_NOTIFICATION_CATEGORIES = [
   "connection_disconnected",
   "connection_needs_action",
   "media_derivative_failed",
+  // Scheduled event posts that break the event-order rule (the daily check in
+  // src/lib/content/event-order-check.ts): the owner has to move them.
+  "event_order_conflict",
 ] as const;
 
 const PROBLEM_NOTIFICATION_FILTER = `urgency.eq.urgent,category.in.(${PROBLEM_NOTIFICATION_CATEGORIES.join(",")})`;

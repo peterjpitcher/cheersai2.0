@@ -89,6 +89,7 @@ Vercel Cron (`vercel.json`; Vercel evaluates schedules in UTC), all authenticate
 | `/api/cron/sync-meta-campaigns` | 06:00 daily | pull Meta campaign performance |
 | `/api/cron/optimise-meta-campaigns` | 06:30 daily | run the campaign optimiser |
 | `/api/cron/notify-expiring-connections` | 08:00 daily | warn about expiring tokens |
+| `/api/cron/check-event-order` | 06:45 daily | in-app notice for scheduled event posts that break the event-order rule (`tasks/SPEC-daily-event-order-check.md`) |
 | `/api/cron/materialise-food-windows` | Sundays 01:00 | extend rolling food campaigns (no-op unless `FOOD_AUTO_MATERIALISE_ENABLED`) |
 
 Route that exists but is not in `vercel.json`: `/api/cron/publish` (a 410 tombstone). `/api/cron/token-health` was removed on 2026-09-26, with its nightly schedule (`tasks/SPEC-remove-token-health-cron.md`): it would have emailed offboarded brands and people who disconnected on purpose every night. There are no Supabase-side schedules: the live project has neither `pg_cron` nor `pg_net` installed (checked 2026-09-26), so the two edge functions run only when something invokes them (see `docs/runbook.md` section 11). `supabase/config.toml` only declares the two functions.

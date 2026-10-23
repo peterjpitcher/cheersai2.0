@@ -987,6 +987,7 @@ export function mapCategoryToLevel(category: string | null): PlannerActivity["le
     case "story_publish_retry":
     case "connection_metadata_updated":
     case "connection_reconnected":
+    case "event_order_conflict":
       return "warning";
     default: {
       const lower = category.toLowerCase();

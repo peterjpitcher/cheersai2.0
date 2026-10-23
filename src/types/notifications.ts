@@ -13,7 +13,8 @@ export type FeedEventType =
   | 'connection_change'
   | 'weekly_materialised'
   | 'media_derivative_skipped'
-  | 'media_derivative_failed';
+  | 'media_derivative_failed'
+  | 'event_order_conflict';
 
 export interface FeedEvent {
   id: string;

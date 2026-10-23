@@ -59,6 +59,7 @@ describe("planner notifications", () => {
     expect(isHeaderBadgeNotification({ urgency: "standard", category: "publish_failed" })).toBe(true);
     expect(isHeaderBadgeNotification({ urgency: "standard", category: "connection_expiring" })).toBe(true);
     expect(isHeaderBadgeNotification({ urgency: "standard", category: "media_derivative_failed" })).toBe(true);
+    expect(isHeaderBadgeNotification({ urgency: "standard", category: "event_order_conflict" })).toBe(true);
     expect(isHeaderBadgeNotification({ urgency: "urgent", category: "custom_alert" })).toBe(true);
   });
 
@@ -123,5 +124,7 @@ describe("planner notifications", () => {
 
     expect(notifications).toEqual([]);
     expect(query.is).toHaveBeenCalledWith("dismissed_at", null);
+    // The daily event-order check's notices stay in the feed after a reload.
+    expect(query.or).toHaveBeenCalledWith(expect.stringContaining("event_order_conflict"));
   });
 });
