@@ -184,6 +184,7 @@ export async function writeCopy(input: WriteCopyInput): Promise<WriteCopyResult>
     eventStartIso: temporal.eventStart ?? null,
     allowedRelativeWording: temporal.allowedRelativeWording,
     protectedTerms: [brief.title, brief.contentType === 'event' ? brief.eventName : ''].filter(Boolean),
+    eventName: brief.contentType === 'event' ? brief.eventName : null,
   };
 
   const first = postprocessCopy(

@@ -1,5 +1,6 @@
 import { DateTime } from "luxon";
 
+import { bookingName } from "@/lib/ai/booking-line";
 import { buildTemporalInstructions } from "@/lib/ai/temporal-instructions";
 import { renderCampaignPlan, type CampaignSlotPlan } from "@/lib/ai/slot-jobs";
 import { BANNED_PHRASES, PREFERRED_PHRASES, TONE_PROFILE, type BrandVoiceConfig, buildVoiceInstructions } from "@/lib/ai/voice";
@@ -686,7 +687,11 @@ export function buildUserPrompt(
     sections.push("Use one or two emojis where they add something, preferably the brand's own, and never more than three.");
   }
 
-  const ctaInstruction = buildCtaInstruction(brief.contentType, brief.ctaLinks);
+  const ctaInstruction = buildCtaInstruction(
+    brief.contentType,
+    brief.ctaLinks,
+    brief.contentType === 'event' ? brief.eventName : null,
+  );
   if (ctaInstruction) {
     sections.push(ctaInstruction);
   }
@@ -916,7 +921,7 @@ function quoteList(values: string[]): string {
   return `${quoted.slice(0, -1).join(', ')} or ${quoted[quoted.length - 1]}`;
 }
 
-function buildCtaInstruction(contentType: ContentType, ctaLinks?: PlatformCtaLinks | null) {
+function buildCtaInstruction(contentType: ContentType, ctaLinks?: PlatformCtaLinks | null, eventName?: string | null) {
   const links = ctaLinks ?? {};
   const lines: string[] = [];
   const defaultFacebookLabel = contentType === 'event' ? 'Book now' : 'Learn more';
@@ -931,6 +936,12 @@ function buildCtaInstruction(contentType: ContentType, ctaLinks?: PlatformCtaLin
     lines.push(
       'Instagram event link-in-bio destination is available from the source system and is canonical. Put the CTA only in instagram.link_in_bio_line using natural link-in-bio wording. Do not put any URL, bare domain, direct booking link, or duplicate link-in-bio line in instagram.body.',
     );
+    if (eventName?.trim()) {
+      // The bio page lists every upcoming event, so the line must say which one (booking-line.ts).
+      lines.push(
+        `instagram.link_in_bio_line must name the event, by its name or the part of it before a colon, because the bio page lists several events: for example "Book ${bookingName(eventName)} through the link in our bio."`,
+      );
+    }
   }
 
   if (!lines.length) return null;

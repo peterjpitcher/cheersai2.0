@@ -337,6 +337,32 @@ describe("buildUserPrompt", () => {
     expect(prompt).not.toContain("https://vip-club.uk/bio-live-jazz");
     expect(prompt).toContain("instagram.link_in_bio_line");
     expect(prompt).toContain("Do not put any URL, bare domain, direct booking link");
+    expect(prompt).toContain('instagram.link_in_bio_line must name the event');
+    expect(prompt).toContain('"Book Live Jazz through the link in our bio."');
+  });
+
+  it("names the part before a colon in the booking-line example, and asks only when Instagram has a link", () => {
+    const brief = {
+      title: "Sleigh My Name: Festive Music Bingo",
+      prompt: "Christmas music bingo.",
+      platforms: ["facebook", "instagram"],
+      tone: "friendly_warm",
+      lengthPreference: "standard",
+      includeHashtags: true,
+      includeEmojis: true,
+      ctaStyle: "default",
+      proofPoints: [],
+      contentType: "event",
+      placements: ["feed"],
+      eventName: "Sleigh My Name: Festive Music Bingo",
+      eventDate: "2026-12-11",
+      eventTime: "19:00",
+      ctaLinks: { instagram: "https://l.the-anchor.pub/bio" },
+    } satisfies ContentBrief;
+
+    expect(buildUserPrompt(brief)).toContain('"Book Sleigh My Name through the link in our bio."');
+    expect(buildUserPrompt({ ...brief, ctaLinks: { facebook: "https://l.the-anchor.pub/fb" } }))
+      .not.toContain("must name the event");
   });
 });
 
