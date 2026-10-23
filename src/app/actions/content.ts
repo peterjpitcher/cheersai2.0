@@ -11,6 +11,9 @@ import { getContentForCalendar } from '@/lib/content/queries';
 import { logPublishAuditEvent } from '@/lib/publishing/audit';
 import { MEDIA_BUCKET, DEFAULT_TIMEZONE } from '@/lib/constants';
 import { scheduleContentBatch, validateScheduleBatch, type ScheduleSlotCopy } from '@/lib/content/schedule-batch';
+import { loadManagementConfig, resolveFacebookPostLinks } from '@/lib/content/post-links';
+import { readPlatformCtaLinks } from '@/lib/publishing/copy-rules';
+import { createServiceSupabaseClient } from '@/lib/supabase/service';
 import type { ContentItem, ContentType, Platform } from '@/types/content';
 import { requireEntitledContext } from '@/lib/billing/entitlement-server';
 import { ownerMessage } from '@/lib/errors/owner-message';
@@ -604,6 +607,43 @@ interface CreateScheduledBatchInput {
  * When mode is 'queue_now', publish jobs are also enqueued for each item.
  * The original wizard draft row is deleted after successful batch creation.
  */
+/**
+ * Each Facebook event post's own short link (tasks/SPEC-per-post-links.md). Optional: when the
+ * events system cannot make them, the posts keep the event's shared link and a warning is
+ * logged, so scheduling never fails over attribution.
+ */
+async function facebookPostLinksFor({
+  accountId,
+  contentType,
+  brief,
+  slotCopies,
+  platforms,
+}: {
+  accountId: string;
+  contentType: ContentType;
+  brief: Record<string, unknown>;
+  slotCopies: ScheduleSlotCopy[];
+  platforms: Platform[];
+}): Promise<Map<string, string> | undefined> {
+  if (contentType !== 'event' || !platforms.includes('facebook')) return undefined;
+  const facebookLink = readPlatformCtaLinks(brief).facebook;
+  if (!facebookLink) return undefined;
+  try {
+    const config = await loadManagementConfig(createServiceSupabaseClient(), accountId);
+    if (!config) return undefined;
+    return await resolveFacebookPostLinks(config, {
+      facebookLink,
+      slots: slotCopies.map((slot) => ({ slotKey: slot.slotKey, scheduledAt: slot.scheduledAt })),
+    });
+  } catch (error) {
+    logger.warn('per-post Facebook links unavailable; the posts keep the event link', {
+      accountId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return undefined;
+  }
+}
+
 export async function createScheduledBatch(
   input: CreateScheduledBatchInput,
 ): Promise<{
@@ -650,6 +690,7 @@ export async function createScheduledBatch(
       slotCopies,
       platforms,
       mode,
+      facebookPostLinks: await facebookPostLinksFor({ accountId, contentType, brief, slotCopies, platforms }),
     });
     if (!scheduled.success || !scheduled.contentItemIds) {
       return { error: scheduled.error ?? CONTENT_MESSAGES.scheduleFailed };

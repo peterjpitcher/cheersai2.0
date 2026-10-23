@@ -49,6 +49,11 @@ export interface ScheduleBatchInput {
   mode: 'schedule' | 'queue_now';
   /** Add the posts to this campaign (it must be the account's) instead of creating one. */
   existingCampaignId?: string;
+  /**
+   * Each slot's own Facebook link, by slot key (tasks/SPEC-per-post-links.md). A Facebook feed
+   * post of a slot listed here carries it instead of the event's shared link.
+   */
+  facebookPostLinks?: ReadonlyMap<string, string>;
 }
 
 export interface ScheduleBatchResult {
@@ -501,10 +506,13 @@ export async function scheduleContentBatch(
     const { slotIdx, platform, placement } = slotPlatformIndex[index];
     const slot = slotCopies[slotIdx];
     const copy = slot.copy[platform as Platform];
+    // A Facebook post's own link, when the management app made one for its slot.
+    const postLink = platform === 'facebook' ? input.facebookPostLinks?.get(slot.slotKey) : undefined;
+    const slotCtaLinks = postLink ? { ...ctaLinks, facebook: postLink } : ctaLinks;
     const body = placement === 'story'
       ? ''
       : copy
-      ? composePublishBody(platform as Platform, copy, { ctaLinks, contentType, ctaLabel })
+      ? composePublishBody(platform as Platform, copy, { ctaLinks: slotCtaLinks, contentType, ctaLabel })
       : '';
     const previewData = placement === 'story'
       ? null
@@ -513,7 +521,7 @@ export async function scheduleContentBatch(
           slotLabel: slot.label,
           slotKey: slot.slotKey,
           brief,
-        }, { ctaLinks, contentType })
+        }, { ctaLinks: slotCtaLinks, contentType })
       : null;
     const variantMedia = resolvePlacementMedia(resolveSlotMedia(slot), placement);
 

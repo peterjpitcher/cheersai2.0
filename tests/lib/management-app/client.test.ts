@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   getManagementEventDetail,
   createManagementMetaAdsLink,
+  createManagementSocialPostLinks,
   listManagementEventBookingConversions,
   listManagementEvents,
   listManagementMenuSpecials,
@@ -301,6 +302,51 @@ describe("management app client", () => {
       utmContent: "ad_one",
       parentShortCode: "ma123",
     });
+  });
+
+  it("asks for per-post Facebook links by the event link's code and reads them back", async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse(200, {
+        success: true,
+        data: {
+          eventId: "evt-1",
+          parentShortCode: "fb6e761f",
+          parentShortUrl: "https://l.the-anchor.pub/fb6e761f",
+          variants: [
+            { utmContent: "post_20261026_1100", shortUrl: "https://vip-club.uk/fp0001", shortCode: "fp0001", alreadyExists: false },
+            { utmContent: "broken" },
+          ],
+        },
+      }),
+    );
+
+    const result = await createManagementSocialPostLinks(TEST_CONFIG, {
+      eventShortCode: "fb6e761f",
+      posts: [{ utmContent: "post_20261026_1100", name: "CheersAI Facebook post_20261026_1100" }],
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://management.example.com/api/marketing/social-post-links",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          eventShortCode: "fb6e761f",
+          posts: [{ utmContent: "post_20261026_1100", name: "CheersAI Facebook post_20261026_1100" }],
+        }),
+      }),
+    );
+    // A retired-domain link comes back on the canonical host; a variant without a link is dropped.
+    expect(result).toEqual({
+      eventId: "evt-1",
+      parentShortCode: "fb6e761f",
+      variants: [{ utmContent: "post_20261026_1100", shortUrl: "https://l.the-anchor.pub/fp0001", shortCode: "fp0001", alreadyExists: false }],
+    });
+  });
+
+  it("refuses a per-post link response without its event or variants", async () => {
+    fetchMock.mockResolvedValue(jsonResponse(200, { success: true, data: { variants: [] } }));
+    await expect(createManagementSocialPostLinks(TEST_CONFIG, { eventShortCode: "fb1", posts: [{ utmContent: "p1" }] }))
+      .rejects.toThrow("missing required fields");
   });
 
   it("lists confirmed management booking conversions for event ids", async () => {

@@ -237,6 +237,46 @@ describe('scheduleContentBatch for weekly and one-off posts', () => {
   });
 });
 
+describe('scheduleContentBatch with per-post Facebook links', () => {
+  const linkedBrief = {
+    ...eventBrief,
+    ctaLinks: { facebook: 'https://l.the-anchor.pub/fb6e761f', instagram: 'https://l.the-anchor.pub/ig6e761f' },
+  };
+
+  async function variants(facebookPostLinks?: Map<string, string>): Promise<Row[]> {
+    const { db, writes } = fakeDb(library);
+    const result = await scheduleContentBatch(db, 'acc-1', {
+      contentType: 'event',
+      brief: linkedBrief,
+      selectedMediaIds: [],
+      slotCopies: [slot],
+      platforms: ['facebook', 'instagram'],
+      mode: 'schedule',
+      facebookPostLinks,
+    });
+    expect(result.success).toBe(true);
+    return writes.find((write) => write.table === 'content_variants' && write.op === 'upsert')?.payload as Row[];
+  }
+
+  it("puts the post's own link on its Facebook feed post, and nowhere else", async () => {
+    const rows = await variants(new Map([[slot.slotKey, 'https://l.the-anchor.pub/fp0001']]));
+    const withBody = rows.filter((row) => typeof row.body === 'string' && row.body);
+    const facebook = withBody.find((row) => String(row.body).includes('Cash bingo on Wednesday'));
+    const instagram = withBody.find((row) => String(row.body).includes('Cash bingo, Wednesday'));
+
+    expect(facebook?.body).toContain('https://l.the-anchor.pub/fp0001');
+    expect(facebook?.body).not.toContain('fb6e761f');
+    expect((facebook?.preview_data as Row).ctaUrl).toBe('https://l.the-anchor.pub/fp0001');
+    expect(JSON.stringify(instagram)).not.toContain('fp0001');
+  });
+
+  it("keeps the event's shared link when there are no per-post links", async () => {
+    const rows = await variants();
+    const facebook = rows.find((row) => String(row.body ?? '').includes('Cash bingo on Wednesday'));
+    expect(facebook?.body).toContain('https://l.the-anchor.pub/fb6e761f');
+  });
+});
+
 describe('validateScheduleBatch', () => {
   it('applies the event-order rule to tools as well as the wizard', () => {
     const reason = validateScheduleBatch({

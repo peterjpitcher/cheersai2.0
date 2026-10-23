@@ -218,6 +218,20 @@ export interface ManagementMetaAdsLink {
   variants: ManagementMetaAdsLinkVariant[];
 }
 
+/** One organic Facebook post's own short link (the management app's /api/marketing/social-post-links). */
+export interface ManagementSocialPostLink {
+  utmContent: string;
+  shortUrl: string;
+  shortCode: string;
+  alreadyExists: boolean;
+}
+
+export interface ManagementSocialPostLinks {
+  eventId: string;
+  parentShortCode: string;
+  variants: ManagementSocialPostLink[];
+}
+
 const DEFAULT_TIMEOUT_MS = 10_000;
 const CANONICAL_SHORT_LINK_BASE_URL = "https://l.the-anchor.pub";
 
@@ -405,6 +419,45 @@ export async function createManagementMetaAdsLink(
   }
 
   return shapeMetaAdsLink(data);
+}
+
+/**
+ * Per-post short links for organic Facebook posts: one variant of the event's own Facebook link
+ * per post, differing only by utm_content (tasks/SPEC-per-post-links.md). The event is named by
+ * the code of its Facebook link, which CheersAI keeps with each post.
+ */
+export async function createManagementSocialPostLinks(
+  config: ManagementApiConfig,
+  input: { eventShortCode: string; posts: Array<{ utmContent: string; name?: string }> },
+): Promise<ManagementSocialPostLinks> {
+  const data = await requestManagementData<unknown>(config, "/api/marketing/social-post-links", {
+    method: "POST",
+    body: { eventShortCode: input.eventShortCode, posts: input.posts },
+  });
+  if (!data || typeof data !== "object") {
+    throw new ManagementApiError("INVALID_RESPONSE", "Social post link response was invalid.");
+  }
+  const row = data as Record<string, unknown>;
+  const eventId = asOptionalString(row.eventId);
+  const parentShortCode = asOptionalString(row.parentShortCode);
+  if (!eventId || !parentShortCode || !Array.isArray(row.variants)) {
+    throw new ManagementApiError("INVALID_RESPONSE", "Social post link response was missing required fields.");
+  }
+  const variants = row.variants.flatMap((value): ManagementSocialPostLink[] => {
+    if (!value || typeof value !== "object") return [];
+    const variant = value as Record<string, unknown>;
+    const utmContent = asOptionalString(variant.utmContent);
+    const shortUrl = asOptionalString(variant.shortUrl);
+    const shortCode = asOptionalString(variant.shortCode);
+    if (!utmContent || !shortUrl || !shortCode) return [];
+    return [{
+      utmContent,
+      shortUrl: canonicaliseShortLinkUrl(shortUrl) ?? shortUrl,
+      shortCode,
+      alreadyExists: Boolean(variant.alreadyExists),
+    }];
+  });
+  return { eventId, parentShortCode, variants };
 }
 
 export async function listManagementEventBookingConversions(
