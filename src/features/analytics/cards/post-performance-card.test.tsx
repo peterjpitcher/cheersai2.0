@@ -23,5 +23,12 @@ describe('PostPerformanceCard', () => {
   it('says reach is not in yet, rather than showing nought', () => {
     render(<PostPerformanceCard impressions={0} reach={null} engagementRate={0} clicks={0} postCount={2} />);
     expect(screen.getByText('Not yet')).toBeInTheDocument();
+    expect(screen.getByText('0.0%')).toBeInTheDocument();
+  });
+
+  it('says the rate is not in yet when there is nothing to rate it over', () => {
+    render(<PostPerformanceCard impressions={0} reach={null} engagementRate={null} clicks={0} postCount={2} />);
+    expect(screen.getAllByText('Not yet')).toHaveLength(2);
+    expect(screen.queryByText('0.0%')).not.toBeInTheDocument();
   });
 });

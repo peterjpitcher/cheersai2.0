@@ -12,7 +12,8 @@ interface PostPerformanceCardProps {
   impressions: number;
   /** People reached; null until Meta has returned reach for at least one post. */
   reach: number | null;
-  engagementRate: number;
+  /** Null until Meta has returned reach or views for at least one post. */
+  engagementRate: number | null;
   clicks: number;
   postCount: number;
 }
@@ -52,7 +53,7 @@ export function PostPerformanceCard({
     },
     {
       label: 'Engagement rate',
-      value: `${(engagementRate * 100).toFixed(1)}%`,
+      value: engagementRate === null ? 'Not yet' : `${(engagementRate * 100).toFixed(1)}%`,
       icon: Percent,
     },
     {

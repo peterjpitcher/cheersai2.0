@@ -16,23 +16,41 @@ import type {
   AnalyticsEmptyReason,
 } from './types';
 
+interface RateTotals {
+  impressions: number;
+  engagement: number;
+  /** Views and engagement of only the rows Meta returned views for, so the rate compares like with like. */
+  ratedImpressions: number;
+  ratedEngagement: number;
+  count: number;
+}
+
+function addRow(totals: RateTotals | undefined, row: PostAnalytics): RateTotals {
+  const next = totals ?? { impressions: 0, engagement: 0, ratedImpressions: 0, ratedEngagement: 0, count: 0 };
+  next.impressions += row.impressions ?? 0;
+  next.engagement += row.engagementCount ?? 0;
+  if (row.impressions !== null && row.impressions > 0) {
+    next.ratedImpressions += row.impressions;
+    next.ratedEngagement += row.engagementCount ?? 0;
+  }
+  next.count += 1;
+  return next;
+}
+
+const weightedRate = (totals: RateTotals): number =>
+  totals.ratedImpressions > 0 ? totals.ratedEngagement / totals.ratedImpressions : 0;
+
 /**
  * Group analytics rows by platform and compute weighted engagement rate.
- * Weighted rate = sum(engagementCount) / sum(impressions).
+ * Weighted rate = sum(engagementCount) / sum(impressions), over only the rows that have
+ * impressions: a post Meta has not returned views for (its platform not yet reconnected with the
+ * results permissions) would otherwise add engagement with nothing to divide it by.
  */
 export function aggregateByPlatform(rows: PostAnalytics[]): PlatformEngagement[] {
   if (rows.length === 0) return [];
 
-  const groups = new Map<string, { impressions: number; engagement: number; count: number }>();
-
-  for (const row of rows) {
-    const key = row.platform;
-    const existing = groups.get(key) ?? { impressions: 0, engagement: 0, count: 0 };
-    existing.impressions += row.impressions ?? 0;
-    existing.engagement += row.engagementCount ?? 0;
-    existing.count += 1;
-    groups.set(key, existing);
-  }
+  const groups = new Map<string, RateTotals>();
+  for (const row of rows) groups.set(row.platform, addRow(groups.get(row.platform), row));
 
   const result: PlatformEngagement[] = [];
   for (const [platform, agg] of groups) {
@@ -40,7 +58,7 @@ export function aggregateByPlatform(rows: PostAnalytics[]): PlatformEngagement[]
       platform: platform as PlatformEngagement['platform'],
       totalImpressions: agg.impressions,
       totalEngagement: agg.engagement,
-      weightedEngagementRate: agg.impressions > 0 ? agg.engagement / agg.impressions : 0,
+      weightedEngagementRate: weightedRate(agg),
       postCount: agg.count,
     });
   }
@@ -49,21 +67,17 @@ export function aggregateByPlatform(rows: PostAnalytics[]): PlatformEngagement[]
 }
 
 /**
- * Group analytics rows by content type and compute weighted engagement rate.
- * Rows with null contentType are grouped under "unknown".
+ * Group analytics rows by content type and compute weighted engagement rate, over only the rows
+ * that have impressions (see aggregateByPlatform). Rows with null contentType are grouped under
+ * "unknown".
  */
 export function aggregateByContentType(rows: PostAnalytics[]): ContentTypePerformance[] {
   if (rows.length === 0) return [];
 
-  const groups = new Map<string, { impressions: number; engagement: number; count: number }>();
-
+  const groups = new Map<string, RateTotals>();
   for (const row of rows) {
     const key = row.contentType ?? 'unknown';
-    const existing = groups.get(key) ?? { impressions: 0, engagement: 0, count: 0 };
-    existing.impressions += row.impressions ?? 0;
-    existing.engagement += row.engagementCount ?? 0;
-    existing.count += 1;
-    groups.set(key, existing);
+    groups.set(key, addRow(groups.get(key), row));
   }
 
   const result: ContentTypePerformance[] = [];
@@ -72,12 +86,68 @@ export function aggregateByContentType(rows: PostAnalytics[]): ContentTypePerfor
       contentType,
       totalImpressions: agg.impressions,
       totalEngagement: agg.engagement,
-      weightedEngagementRate: agg.impressions > 0 ? agg.engagement / agg.impressions : 0,
+      weightedEngagementRate: weightedRate(agg),
       postCount: agg.count,
     });
   }
 
   return result;
+}
+
+export interface PostResultsSummary {
+  impressions: number;
+  /** People reached; null until Meta has returned reach for at least one post. */
+  reach: number | null;
+  /** Null until Meta has returned reach or views for at least one post. */
+  engagementRate: number | null;
+  clicks: number;
+  postCount: number;
+}
+
+const sumOf = (values: Array<number | null>): number =>
+  values.reduce<number>((total, value) => total + (value ?? 0), 0);
+
+/**
+ * The Analytics overview's totals. The engagement rate is over reach where Meta returned reach,
+ * otherwise over views, and its numerator and denominator always come from the same posts: a
+ * post without the figure (its platform not yet reconnected with the results permissions) never
+ * inflates the rate.
+ */
+export function summarisePostResults(rows: PostAnalytics[]): PostResultsSummary {
+  const withReach = rows.filter((row) => row.reach !== null && row.reach > 0);
+  const withViews = rows.filter((row) => row.impressions !== null && row.impressions > 0);
+  const rated = withReach.length
+    ? { rows: withReach, base: sumOf(withReach.map((row) => row.reach)) }
+    : { rows: withViews, base: sumOf(withViews.map((row) => row.impressions)) };
+  return {
+    impressions: sumOf(rows.map((row) => row.impressions)),
+    reach: rows.some((row) => row.reach !== null) ? sumOf(rows.map((row) => row.reach)) : null,
+    engagementRate: rated.base > 0 ? sumOf(rated.rows.map((row) => row.engagementCount)) / rated.base : null,
+    clicks: sumOf(rows.map((row) => row.clicks)),
+    postCount: rows.length,
+  };
+}
+
+/** Whether a stored row carries any result yet: counts arrive before reach and views do. */
+export function hasPostResults(row: PostAnalytics): boolean {
+  return [row.impressions, row.reach, row.engagementCount, row.clicks, row.shares, row.comments].some(
+    (value) => value !== null,
+  );
+}
+
+/**
+ * What the overview says when a platform's posts have no reach yet, which means its connection
+ * lacks the results permissions (tasks/SPEC-post-results.md), or null when nothing is missing.
+ * Only Facebook posts carry links, so link clicks are named only for Facebook.
+ */
+export function reconnectNote(rows: PostAnalytics[]): string | null {
+  const platforms = (['facebook', 'instagram'] as const).filter(
+    (platform) => rows.some((row) => row.platform === platform) && !rows.some((row) => row.platform === platform && row.reach !== null),
+  );
+  if (!platforms.length) return null;
+  const figures = platforms.includes('facebook') ? 'People reached and link clicks' : 'People reached';
+  const cards = platforms.map((platform) => (platform === 'facebook' ? 'Facebook Page' : 'Instagram Business'));
+  return `${figures} will show once the results permissions are granted: open Connections and click Update connection on the ${cards.join(' and ')} card${cards.length > 1 ? 's' : ''}.`;
 }
 
 /**

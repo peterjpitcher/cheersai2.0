@@ -66,6 +66,10 @@ Owner approval: 23 October 2026, relayed by the chief of staff session. Peter an
   - the insights are `views`, `reach`, `shares`, `saved` and `total_interactions`.
 - A post Meta no longer knows is skipped and logged. An expired or revoked token (code 190) stops that platform for the brand in this run.
 - The Analytics page shows Views, People reached, Engagement rate (on reach when known, otherwise on views), Link clicks and Posts published. Until reach arrives it shows "Not yet" and a line asking for the reconnect.
+- Partial results (Codex review on #221):
+  - Every engagement rate, on the overview and in the By Platform and By Content Type views, divides engagement by reach or views from the same posts. A post its platform has no figure for yet never inflates the rate.
+  - Rows holding only counts (before the reconnect) still show on the overview instead of the "no metrics yet" state.
+  - The reconnect line names only the cards still missing reach.
 - Found while building it: `analytics_snapshots`, like 26 other tables, grants the `anon` role write access. RLS is on and every policy needs brand membership, so the API refuses anonymous reads and writes; revoking the grants is a separate change.
 
 ## Rollback
