@@ -24,6 +24,8 @@ import { z } from 'zod';
 
 import { nameEventInBookingLine } from '@/lib/ai/booking-line';
 import { DEFAULT_TIMEZONE } from '@/lib/constants';
+import { composePublishBody } from '@/lib/publishing/compose-body';
+import type { PlatformCopy, PlatformCtaLinks } from '@/types/content';
 
 /** Posts due sooner than this are left alone: the publish worker may be loading them. */
 export const BACKFILL_LEAD_MINUTES = 60;
@@ -99,23 +101,28 @@ export function changeForPost(
   if (newLine === oldLine.trim()) return { reason: 'the line already names the event' };
 
   const structured = asRecord(previewData?.structuredCopy);
-  if (structured && typeof structured.publishBodyOverride === 'string') {
-    return { reason: 'the caption was edited by hand' };
-  }
-  if (structured && structured.linkInBioLine !== undefined && structured.linkInBioLine !== oldLine.trim()) {
-    return { reason: 'the stored booking line does not match the caption' };
-  }
+  if (!structured) return { reason: 'no stored copy to check the caption against' };
+  if (typeof structured.publishBodyOverride === 'string') return { reason: 'the caption was edited by hand' };
+  if (structured.linkInBioLine !== oldLine.trim()) return { reason: 'the stored booking line does not match the caption' };
+
+  // A caption edited in the planner changes the caption but not the stored copy, so a caption
+  // that no longer composes from its stored copy has been edited by hand (review finding on #218).
+  const ctaLinks = (asRecord(asRecord(previewData?.brief)?.ctaLinks) ?? null) as PlatformCtaLinks | null;
+  const compose = (copy: Row): string =>
+    composePublishBody('instagram', copy as unknown as PlatformCopy['instagram'], { ctaLinks, contentType: 'event' });
+  if (compose(structured) !== body) return { reason: 'the caption was edited by hand' };
 
   const newLines = [...lines];
   newLines[indexes[0]] = newLine;
+  const newBody = newLines.join('\n');
+  const newStructured = { ...structured, linkInBioLine: newLine };
+  // Only the line may change: the new stored copy must compose to exactly the new caption.
+  if (compose(newStructured) !== newBody) return { reason: 'the new line would change more than the booking line' };
   return {
     oldLine,
     newLine,
-    newBody: newLines.join('\n'),
-    newPreviewData: {
-      ...(previewData ?? {}),
-      ...(structured ? { structuredCopy: { ...structured, linkInBioLine: newLine } } : {}),
-    },
+    newBody,
+    newPreviewData: { ...(previewData ?? {}), structuredCopy: newStructured },
   };
 }
 

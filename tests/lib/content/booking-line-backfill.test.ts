@@ -65,8 +65,8 @@ const OLD_LINE = 'Book a place for each person through the link in our bio.';
 const NEW_LINE = 'Book a place for each person at Snowball Showdown Cash Bingo through the link in our bio.';
 const caption = (line: string): string => `Game 10 grows with every bingo book sold.\n\n${line}\n\n#CashBingo #StanwellMoor`;
 const preview = (line: string): Row => ({
-  brief: { eventName: 'Snowball Showdown Cash Bingo', contentType: 'event' },
-  structuredCopy: { body: 'Game 10 grows with every bingo book sold.', hashtags: ['#CashBingo'], linkInBioLine: line },
+  brief: { eventName: 'Snowball Showdown Cash Bingo', contentType: 'event', ctaLinks: { instagram: 'https://l.the-anchor.pub/ig1' } },
+  structuredCopy: { body: 'Game 10 grows with every bingo book sold.', hashtags: ['#CashBingo', '#StanwellMoor'], linkInBioLine: line },
   platform: 'instagram',
 });
 
@@ -121,6 +121,12 @@ describe('changeForPost', () => {
     expect(changeForPost(caption(OLD_LINE), preview('Link in bio to book.'), 'Snowball Showdown Cash Bingo'))
       .toEqual({ reason: 'the stored booking line does not match the caption' });
   });
+
+  it('leaves alone a caption edited in the planner, which changes the caption but not the stored copy', () => {
+    const edited = caption(OLD_LINE).replace('Game 10 grows', 'The Game 10 jackpot grows');
+    expect(changeForPost(edited, preview(OLD_LINE), 'Snowball Showdown Cash Bingo')).toEqual({ reason: 'the caption was edited by hand' });
+    expect(changeForPost(caption(OLD_LINE), { brief: {} }, 'Snowball Showdown Cash Bingo')).toEqual({ reason: 'no stored copy to check the caption against' });
+  });
 });
 
 describe('planBookingLineBackfill', () => {
@@ -160,8 +166,9 @@ describe('planBookingLineBackfill', () => {
   });
 
   it("reads the event name from the post's context when the stored copy has no brief", async () => {
+    const { brief, ...withoutBrief } = preview(OLD_LINE);
     const tables = tablesFor([
-      post('a', { prompt_context: { brief: { eventName: 'Snowball Showdown Cash Bingo' } } }, { preview_data: { structuredCopy: { linkInBioLine: OLD_LINE } } }),
+      post('a', { prompt_context: { brief } }, { preview_data: withoutBrief }),
     ]);
     const plan = await planBookingLineBackfill(fakeDb(tables).db, { accountId: ACCOUNT, now: NOW });
     expect(plan.posts[0]?.newLine).toBe(NEW_LINE);
