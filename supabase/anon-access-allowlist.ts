@@ -82,16 +82,23 @@
  *        SUPABASE_DB_URL='postgresql://...' npx vitest run tests/anon-access.test.ts
  *
  * A NOTE ON THE TABLE ENTRIES
- *   Anon holds all eight table privileges on all 39 listed tables. That is not a
- *   decision anyone here made: it is what the default ACL grants, and stripping
- *   it project-wide is a change with real blast radius. RLS is therefore the
- *   control, and every listed table has RLS enabled with policies. The `why` on
- *   each entry records what the table holds and what the RLS gate is, so a reader
- *   can see what would be exposed if that gate ever slipped. Every one of the 39
- *   was checked by running `set local role anon` and counting rows on 4 September
- *   2026: all 39 returned zero, including `content_items`, which holds 1212 rows
- *   to an owner. The check is self-validating, since a failed role switch would
- *   have returned the owner's counts.
+ *   Until 24 October 2026 anon held all eight table privileges on these tables,
+ *   which is what the default ACL used to grant, and RLS was the only control.
+ *   The revoke_anon_table_writes migration (24 October 2026, approved by the
+ *   owner) took INSERT, UPDATE, DELETE and TRUNCATE away from anon on every table
+ *   and view that still had them, after checking that no policy, function or app
+ *   path relies on anon writing. Those entries now allow only what anon keeps:
+ *   SELECT, which RLS gates on the account, plus REFERENCES, TRIGGER and
+ *   MAINTAIN, which the API cannot use. A write grant on any of them now fails
+ *   this check as widened. The eight entries still on the default grant
+ *   (audit_log, auth_rate_limits, management_app_connections, meta_ad_accounts,
+ *   oauth_states, provider_rate_limits, token_vault, user_auth_snapshot) give
+ *   anon nothing at all today; the live check reports them as no longer granted.
+ *   Every one of the 39 was checked by running `set local role anon` and
+ *   counting rows on 4 September 2026: all 39 returned zero, including
+ *   `content_items`, which holds 1212 rows to an owner. The check is
+ *   self-validating, since a failed role switch would have returned the owner's
+ *   counts.
  *
  *   The value of listing tables that anon cannot read is that a NEW table shows
  *   up here as a failure on the day it is created, while it is still empty and
@@ -175,11 +182,26 @@ const SUPABASE_DEFAULT_TABLE_GRANT = [
   'UPDATE',
 ];
 
-/** Shorthand for the 39 tables that share the default grant and the RLS gate. */
+/** Shorthand for the tables still on the default grant, with the RLS gate. */
 const defaultGrantTable = (name: string, why: string): AnonAllowlistEntry => ({
   kind: 'table',
   name,
   privileges: SUPABASE_DEFAULT_TABLE_GRANT,
+  why,
+});
+
+/**
+ * What anon keeps on a table or view after revoke_anon_table_writes (24 October
+ * 2026): SELECT, gated by RLS, plus three privileges the API cannot use. No
+ * INSERT, UPDATE, DELETE or TRUNCATE.
+ */
+const ANON_READ_ONLY_TABLE_GRANT = ['MAINTAIN', 'REFERENCES', 'SELECT', 'TRIGGER'];
+
+/** Shorthand for the tables anon can only read, with the RLS gate. */
+const readOnlyTable = (name: string, why: string): AnonAllowlistEntry => ({
+  kind: 'table',
+  name,
+  privileges: ANON_READ_ONLY_TABLE_GRANT,
   why,
 });
 
@@ -193,23 +215,23 @@ export const ANON_ALLOWLIST: readonly AnonAllowlistEntry[] = [
   // Tables. Grant is the default ACL in every case; RLS is the control. Each
   // `why` says what the table holds and which gate keeps anon out of it.
   // -------------------------------------------------------------------------
-  defaultGrantTable(
+  readOnlyTable(
     'accounts',
     'The tenant root. Holds email, business_name and booking_ingest_secret, which is the shared secret the venue sites use to post booking conversions. RLS gates every command on is_account_member or the service role. Verified: anon counts zero rows.',
   ),
-  defaultGrantTable(
+  readOnlyTable(
     'ad_metrics_history',
     'Per-account paid performance history: impressions, clicks, ctr, frequency and spend. Commercially sensitive between tenants. Single RLS policy gated on the account. Verified: anon counts zero rows.',
   ),
-  defaultGrantTable(
+  readOnlyTable(
     'ad_sets',
     'Per-account Meta ad set records. Single RLS policy gated on the account. Verified: anon counts zero rows.',
   ),
-  defaultGrantTable(
+  readOnlyTable(
     'ads',
     'Per-account Meta ad records. Single RLS policy gated on the account. Verified: anon counts zero rows.',
   ),
-  defaultGrantTable(
+  readOnlyTable(
     'analytics_snapshots',
     'Per-account social performance snapshots including the raw provider payload in raw_data. Four RLS policies, all gated on the account. Verified: anon counts zero rows.',
   ),
@@ -221,51 +243,51 @@ export const ANON_ALLOWLIST: readonly AnonAllowlistEntry[] = [
     'auth_rate_limits',
     'Sign-in throttling counters. The only RLS policy requires auth.role() = service_role, so anon matches nothing for any command. Verified: anon counts zero rows.',
   ),
-  defaultGrantTable(
+  readOnlyTable(
     'booking_conversion_events',
     'Booking conversions forwarded from the venue websites, with booking ids, event names and dates. The only policy is a SELECT gated on is_account_member, so anon has no policy at all for writes. Verified: anon counts zero rows.',
   ),
-  defaultGrantTable(
+  readOnlyTable(
     'brand_profile',
     'Per-account brand voice: tone, key phrases, banned topics, default hashtags and the platform signatures. This is the customer intellectual property the product is built around. Single RLS policy gated on the account. Verified: anon counts zero rows.',
   ),
-  defaultGrantTable(
+  readOnlyTable(
     'campaigns',
     'Per-account campaign records. Two RLS policies gated on the account. Verified: anon counts zero rows.',
   ),
-  defaultGrantTable(
+  readOnlyTable(
     'content_item_versions',
     'Version history of generated content. Four RLS policies gated on the account. Verified: anon counts zero rows.',
   ),
-  defaultGrantTable(
+  readOnlyTable(
     'content_items',
     'The generated posts themselves, and the largest body of customer data in the database. Five RLS policies gated on the account. Verified: anon counts zero rows against 1212 owner-visible rows, which also proves the role switch in that check took effect.',
   ),
-  defaultGrantTable(
+  readOnlyTable(
     'content_media_attachments',
     'Joins content items to media. Four RLS policies gated on the account. Verified: anon counts zero rows.',
   ),
-  defaultGrantTable(
+  readOnlyTable(
     'content_templates',
     'Per-account content templates. Single RLS policy gated on the account. Verified: anon counts zero rows.',
   ),
-  defaultGrantTable(
+  readOnlyTable(
     'content_variants',
     'Per-platform variants of a content item. Single RLS policy gated on the account. Verified: anon counts zero rows.',
   ),
-  defaultGrantTable(
+  readOnlyTable(
     'link_in_bio_clicks',
-    'Click analytics for the public link-in-bio pages. SELECT is gated on the owning account. INSERT is NOT gated: see the link_in_bio_clicks_service_insert entry in ANON_OPEN_ITEMS. The read side is what this entry allows, and it is verified: anon counts zero rows.',
+    'Click analytics for the public link-in-bio pages. SELECT is gated on the owning account. Rows are written only by the service role: the insert policy names service_role since 20260905063918, and anon holds no INSERT since revoke_anon_table_writes. Verified: anon counts zero rows.',
   ),
-  defaultGrantTable(
+  readOnlyTable(
     'link_in_bio_page_views',
-    'Page-view analytics for the public link-in-bio pages. SELECT is gated on the owning account. INSERT is NOT gated: see the link_in_bio_page_views_service_insert entry in ANON_OPEN_ITEMS. The read side is what this entry allows, and it is verified: anon counts zero rows.',
+    'Page-view analytics for the public link-in-bio pages. SELECT is gated on the owning account. Rows are written only by the service role: the insert policy names service_role since 20260905063918, and anon holds no INSERT since revoke_anon_table_writes. Verified: anon counts zero rows.',
   ),
-  defaultGrantTable(
+  readOnlyTable(
     'link_in_bio_profiles',
     'The link-in-bio profile record. Despite the public page it backs, anon reads nothing: every policy is gated on is_account_member or the service role, because the public page is rendered server-side with the service-role client (src/lib/link-in-bio/click-tracking.ts). Verified: anon counts zero rows.',
   ),
-  defaultGrantTable(
+  readOnlyTable(
     'link_in_bio_tiles',
     'The tiles shown on a link-in-bio page. Same shape as link_in_bio_profiles: served through the service role, not the anon key. Verified: anon counts zero rows.',
   ),
@@ -273,11 +295,11 @@ export const ANON_ALLOWLIST: readonly AnonAllowlistEntry[] = [
     'management_app_connections',
     'Holds base_url and api_key in plain text for each tenant venue management app. A read here is a credential handover to a third system, so the RLS gate on this table matters more than most. Single policy gated on the account. Verified: anon counts zero rows.',
   ),
-  defaultGrantTable(
+  readOnlyTable(
     'media_assets',
     'Per-account media metadata, storage paths and derived variants. Single RLS policy gated on the account. Verified: anon counts zero rows.',
   ),
-  defaultGrantTable(
+  readOnlyTable(
     'media_library',
     'The older per-account media metadata table, including file_url. Four RLS policies gated on the account. Verified: anon counts zero rows.',
   ),
@@ -285,19 +307,19 @@ export const ANON_ALLOWLIST: readonly AnonAllowlistEntry[] = [
     'meta_ad_accounts',
     'Linked Meta ad account identifiers per tenant. Single RLS policy gated on the account. Verified: anon counts zero rows.',
   ),
-  defaultGrantTable(
+  readOnlyTable(
     'meta_campaigns',
     'Local mirror of Meta campaigns per tenant. Single RLS policy gated on the account. Verified: anon counts zero rows.',
   ),
-  defaultGrantTable(
+  readOnlyTable(
     'meta_optimisation_actions',
     'Records of automated spend actions taken against a tenant ad account. Single RLS policy gated on the account. Verified: anon counts zero rows.',
   ),
-  defaultGrantTable(
+  readOnlyTable(
     'meta_optimisation_runs',
     'Log of optimisation runs. Single RLS policy gated on the account. Verified: anon counts zero rows.',
   ),
-  defaultGrantTable(
+  readOnlyTable(
     'notifications',
     'Per-account in-app notifications, including message and body text. Five RLS policies gated on the account. Verified: anon counts zero rows.',
   ),
@@ -305,11 +327,11 @@ export const ANON_ALLOWLIST: readonly AnonAllowlistEntry[] = [
     'oauth_states',
     'Live OAuth handshakes: state, code_verifier and auth_code. This is short-lived credential material, and a readable row here is an account takeover on the linked social profile. Four RLS policies gated on the account. Verified: anon counts zero rows.',
   ),
-  defaultGrantTable(
+  readOnlyTable(
     'posting_defaults',
     'Per-account posting defaults, platform location ids and venue coordinates. Single RLS policy gated on the account. Verified: anon counts zero rows.',
   ),
-  defaultGrantTable(
+  readOnlyTable(
     'profiles',
     'Per-user profile inside an account: display name, avatar and brand voice defaults. Four RLS policies gated on the account. Verified: anon counts zero rows.',
   ),
@@ -317,15 +339,15 @@ export const ANON_ALLOWLIST: readonly AnonAllowlistEntry[] = [
     'provider_rate_limits',
     'Per-account provider rate-limit counters. Three RLS policies, all gated on is_account_member, so anon can neither read nor write this table directly. It can still be written indirectly: see increment_rate_limit in ANON_OPEN_ITEMS. Verified: anon counts zero rows.',
   ),
-  defaultGrantTable(
+  readOnlyTable(
     'publish_attempts',
     'Per-job publish attempt log, including provider errors. Four RLS policies gated on the account. Verified: anon counts zero rows.',
   ),
-  defaultGrantTable(
+  readOnlyTable(
     'publish_jobs',
     'The publish queue. Five RLS policies gated on the account. Verified: anon counts zero rows.',
   ),
-  defaultGrantTable(
+  readOnlyTable(
     'social_connections',
     'The linked social accounts per tenant. Five RLS policies gated on the account. Verified: anon counts zero rows.',
   ),
@@ -333,11 +355,11 @@ export const ANON_ALLOWLIST: readonly AnonAllowlistEntry[] = [
     'token_vault',
     'Encrypted social access tokens: ciphertext, iv, tag and key_version. The highest-value table in the database, and the reason the tenant boundary here is not negotiable. Four RLS policies gated on the account through social_connections. Verified: anon counts zero rows.',
   ),
-  defaultGrantTable(
+  readOnlyTable(
     'tournament_fixtures',
     'Fixture data behind the tournament content feature, reachable through the owning tournament account. Single RLS policy. Verified: anon counts zero rows.',
   ),
-  defaultGrantTable(
+  readOnlyTable(
     'tournaments',
     'Per-account tournament records. Single RLS policy gated on the account or the service role. Verified: anon counts zero rows.',
   ),
@@ -345,7 +367,7 @@ export const ANON_ALLOWLIST: readonly AnonAllowlistEntry[] = [
     'user_auth_snapshot',
     'A mirror of auth.users holding email, status and last_sign_in_at. The strongest configuration in the schema: RLS is FORCED, and the single policy names authenticated and service_role explicitly, so anon has no policy at all rather than a policy it fails. Verified: anon counts zero rows.',
   ),
-  defaultGrantTable(
+  readOnlyTable(
     'worker_heartbeats',
     'Background worker liveness. The only policy requires auth.role() = service_role, so anon matches nothing. Verified: anon counts zero rows.',
   ),
@@ -356,7 +378,7 @@ export const ANON_ALLOWLIST: readonly AnonAllowlistEntry[] = [
   {
     kind: 'view',
     name: 'publish_jobs_with_variant',
-    privileges: SUPABASE_DEFAULT_TABLE_GRANT,
+    privileges: ANON_READ_ONLY_TABLE_GRANT,
     why: 'Joins publish_jobs to its content variant. Safe because it is declared security_invoker = true, so it runs with the caller rights and the RLS on the underlying tables applies to anon rather than to the view owner. A view without that setting would run as postgres and hand anon everything it selects, which is why the test reads views as well as tables. Verified: anon counts zero rows.',
   },
 
@@ -514,32 +536,9 @@ export const ANON_OPEN_ITEMS: readonly AnonOpenItem[] = [
  * appear as a finding below.
  */
 export const ANON_POLICY_OPEN_ITEMS: readonly AnonOpenItem[] = [
-  {
-    kind: 'table',
-    name: 'link_in_bio_clicks (policy link_in_bio_clicks_service_insert)',
-    why: [
-      'CROSSES THE TENANT BOUNDARY. The policy is named service_insert but it has no',
-      'TO clause, so it applies to PUBLIC, and its check expression is literally',
-      'true. Combined with the INSERT privilege anon holds from the default ACL, any',
-      'holder of the public anon key can insert click rows against any profile_id,',
-      "including another customer's. The comment above it in",
-      '00000000000009_link_in_bio_reconcile.sql reads "Service-role INSERT", so the',
-      'intent was service-role only; the code agrees, since',
-      'src/lib/link-in-bio/click-tracking.ts inserts through the service-role client.',
-      'The effect is corrupted analytics for an arbitrary tenant rather than a data',
-      'read. The fix is a migration that recreates the policy with',
-      "TO service_role, or a check on auth.role() = 'service_role'.",
-    ].join(' '),
-  },
-  {
-    kind: 'table',
-    name: 'link_in_bio_page_views (policy link_in_bio_page_views_service_insert)',
-    why: [
-      'Identical to link_in_bio_clicks_service_insert, from the same migration: no TO',
-      'clause, check expression true, and anon holds INSERT. Any holder of the anon',
-      "key can inflate any tenant's page-view counts. Same fix.",
-    ].join(' '),
-  },
+  // The two link-in-bio analytics insert policies that applied to PUBLIC with a
+  // true check were closed by 20260905063918 (recreated TO service_role), and
+  // revoke_anon_table_writes took INSERT away from anon on both tables as well.
 ];
 
 /**
