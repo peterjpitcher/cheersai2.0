@@ -144,6 +144,11 @@ jobs:
       - name: Start local Supabase database
         run: supabase start --ignore-health-check -x gotrue,realtime,storage-api,imgproxy,kong,mailpit,postgrest,postgres-meta,studio,edge-runtime,logflare,vector,supavisor
       - run: supabase db lint --schema public
+      - name: Anon cannot write to any public table
+        # The revoke_anon_table_writes migration took every write privilege away from anon
+        # (tasks/SPEC-revoke-anon-table-writes.md). A fresh rebuild must end the same way, so a
+        # later migration that grants anon a write fails here.
+        run: psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -f supabase/tests/anon_table_writes_revoked_verify.sql
       - name: Stop local Supabase database
         if: always()
         run: supabase stop --no-backup
