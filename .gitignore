@@ -65,3 +65,43 @@ node-compile-cache/
 
 # graphify knowledge-graph output (generated tooling artifact)
 graphify-out/
+
+# ======== Workspace ignore baseline (added 6 November 2026) ========
+
+# ---- Local private data: never committed ----
+# Traffic figures, Search Console or Keyword Planner exports, client numbers
+# and contact lists live in private/ (or a raw/ folder beside a task). Reports in git cite numbers by summary only.
+private/
+**/raw/
+
+# ---- Environment and secrets (templates stay tracked) ----
+!.env.example
+!.env.*.example
+*.key
+*.p12
+*.pfx
+
+# ---- Build output ----
+dist/
+.turbo/
+
+# ---- Tests ----
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
+.playwright-mcp/
+.eslintcache
+
+# ---- Logs and editor or OS noise ----
+*.log
+*.swp
+*.swo
+*.bak
+Thumbs.db
+.idea/
+
+# ---- Claude Code and agent tooling ----
+.superpowers/
+tasks/claude-audit-backups/
+tasks/codex-qa-review/*.log
