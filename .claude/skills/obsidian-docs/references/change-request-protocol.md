@@ -18,12 +18,12 @@ Users wrap change requests in `#change-request` / `#end-change-request` tags:
 The dashboard shows total revenue for the current month.
 
 #change-request
-Add a comparison to the previous month — show the delta as a percentage
+Add a comparison to the previous month: show the delta as a percentage
 with a green/red indicator. Also add a sparkline for the last 6 months.
 #end-change-request
 ```
 
-The surrounding context matters — the request is about the dashboard revenue section specifically.
+The surrounding context matters: the request is about the dashboard revenue section specifically.
 
 ### Pattern 2: Section-Based
 
@@ -65,7 +65,7 @@ When scanning for change requests:
    - `TODO:` and `FIXME:` annotations
    - New feature documents that describe unimplemented functionality
 3. **Collect** findings into `Change Requests/_Active.md`
-4. **Preserve context** — note which document and section each request came from
+4. **Preserve context**: note which document and section each request came from
 
 ---
 
@@ -73,10 +73,10 @@ When scanning for change requests:
 
 When multiple change requests exist, prioritize by:
 
-1. **User-specified priority** — If the user has numbered or ordered them, respect that order
-2. **Dependencies** — If CR-3 depends on CR-1, do CR-1 first regardless of other factors
-3. **Complexity** — Start with smaller changes to build momentum and validate understanding
-4. **Risk** — Database migrations and auth changes go last (they need more care)
+1. **User-specified priority**: If the user has numbered or ordered them, respect that order
+2. **Dependencies**: If CR-3 depends on CR-1, do CR-1 first regardless of other factors
+3. **Complexity**: Start with smaller changes to build momentum and validate understanding
+4. **Risk**: Database migrations and auth changes go last (they need more care)
 
 ---
 
@@ -103,7 +103,7 @@ For each change request:
 1. Mark the change request as completed:
    - For tag-based: Remove the `#change-request` / `#end-change-request` tags and replace with a completion note
    - For checkbox-based: Check the box and add completion date
-2. Update `Change Requests/_Active.md` — move the item to the Completed section
+2. Update `Change Requests/_Active.md`: move the item to the Completed section
 3. Add a change log entry to `Change Log/[today].md`
 4. Update any other affected documentation via the Sync workflow
 
@@ -117,7 +117,7 @@ If two change requests contradict each other (e.g., one says "add feature X" and
 
 ### Ambiguous change requests
 
-If a change request is unclear about scope or behavior, check if the surrounding document context clarifies it. If not, ask the user one focused question to resolve the ambiguity. Don't guess — incorrect implementation wastes more time than asking.
+If a change request is unclear about scope or behavior, check if the surrounding document context clarifies it. If not, ask the user one focused question to resolve the ambiguity. Don't guess: incorrect implementation wastes more time than asking.
 
 ### Change requests that conflict with existing standards
 

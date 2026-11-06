@@ -4,23 +4,23 @@ description: >
   Maintain a living Obsidian documentation vault with Mermaid diagrams, health audits, and tech debt tracking.
   Trigger on: "documentation", "docs", "Obsidian", "vault", "document this", "update the docs", "sync the docs",
   "initialize docs", "scan for change requests", "check for optimizations", "find tech debt", "what needs
-  improving", "review the architecture", "what does this project do". Also trigger proactively after ANY code
-  change to keep docs current. Reads #change-request tags in Obsidian docs as work instructions. Spots
+  improving", "review the architecture", "what does this project do". Also use when a code change has made
+  existing vault docs inaccurate. Reads #change-request tags in Obsidian docs as work instructions. Spots
   optimization opportunities and flags tech debt during every documentation pass.
 ---
 
-# Obsidian Documentation Vault — Living Project Documentation
+# Obsidian Documentation Vault: Living Project Documentation
 
 ## What This Skill Does
 
 This skill maintains an `Obsidian/` folder at the root of each project as a **living documentation vault**. The vault serves four purposes:
 
-1. **Reference** — Always-current documentation of architecture, features, schema, and APIs that Claude and humans can consult
-2. **Communication** — A two-way channel where the user edits docs to express intent (via `#change-request` tags) and Claude reads them as work instructions
-3. **Validation** — Drift detection that warns when code and documentation have diverged
-4. **Optimization** — Active code quality analysis that flags performance issues, architectural smells, and tech debt as Claude discovers them during documentation
+1. **Reference**: Always-current documentation of architecture, features, schema, and APIs that Claude and humans can consult
+2. **Communication**: A two-way channel where the user edits docs to express intent (via `#change-request` tags) and Claude reads them as work instructions
+3. **Validation**: Drift detection that warns when code and documentation have diverged
+4. **Optimization**: Active code quality analysis that flags performance issues, architectural smells, and tech debt as Claude discovers them during documentation
 
-The vault uses Obsidian-flavored markdown with `[[wikilinks]]` for cross-referencing, YAML frontmatter for metadata, tags for workflow signals, and **Mermaid diagrams** for visual architecture maps (Obsidian renders these natively — use them liberally).
+The vault uses Obsidian-flavored markdown with `[[wikilinks]]` for cross-referencing, YAML frontmatter for metadata, tags for workflow signals, and **Mermaid diagrams** for visual architecture maps (Obsidian renders these natively: use them liberally).
 
 ---
 
@@ -50,13 +50,13 @@ Every time this skill is invoked, follow this decision tree:
 
 ## Initialize Workflow
 
-Create the vault from scratch by scanning the entire project. This is the most intensive operation — it reads the codebase and generates comprehensive documentation. **Use parallel agents to speed this up significantly.**
+Create the vault from scratch by scanning the entire project. This is the most intensive operation: it reads the codebase and generates comprehensive documentation. **Use parallel agents to speed this up significantly.**
 
 ### Vault Structure
 
 ```
 Obsidian/
-├── _Index.md                         # Master dashboard — map of contents (MOC)
+├── _Index.md                         # Master dashboard: map of contents (MOC)
 ├── Architecture/
 │   ├── _Architecture MOC.md          # Section hub with Dataview queries
 │   ├── Overview.md                   # Stack, deployment, key decisions
@@ -64,7 +64,7 @@ Obsidian/
 │   ├── Route Map.md                  # All pages/routes with navigation flow
 │   └── Auth & Security.md           # Auth model, RBAC, middleware
 ├── Features/
-│   ├── _Features MOC.md              # Section hub — auto-lists all features
+│   ├── _Features MOC.md              # Section hub: auto-lists all features
 │   └── [Feature Name].md            # One file per feature/module
 ├── Database/
 │   ├── _Database MOC.md              # Section hub with schema overview
@@ -72,7 +72,7 @@ Obsidian/
 │   ├── RLS Policies.md              # Row-level security documentation
 │   └── Migrations.md                # Migration history and notes
 ├── API/
-│   ├── _API MOC.md                   # Section hub — all endpoints at a glance
+│   ├── _API MOC.md                   # Section hub: all endpoints at a glance
 │   ├── Server Actions.md            # All server actions with signatures
 │   ├── Route Handlers.md            # API routes with methods and auth
 │   └── External Integrations.md     # Third-party APIs and contracts
@@ -80,7 +80,7 @@ Obsidian/
 │   ├── _Components MOC.md            # Section hub with component tree
 │   └── Component Index.md           # UI component catalog with dependency map
 ├── Business Rules/
-│   ├── _Business Rules MOC.md        # Section hub — domain rules index
+│   ├── _Business Rules MOC.md        # Section hub: domain rules index
 │   └── [Domain Area].md             # One file per domain (e.g., Bookings, Deposits, Pricing)
 ├── Health/
 │   ├── _Health MOC.md                # Section hub with audit summary
@@ -96,7 +96,7 @@ Obsidian/
 
 Before launching agents, the **orchestrator** (you) does a fast scan to understand the project shape:
 
-1. Read `CLAUDE.md`, `package.json`, `.env.example` — get the project overview
+1. Read `CLAUDE.md`, `package.json`, `.env.example`: get the project overview
 2. Run `ls` on `src/app/` to identify all routes and features
 3. Run `ls` on `supabase/migrations/` to confirm DB presence
 4. Create the empty `Obsidian/` directory structure (all folders and subfolders)
@@ -107,7 +107,7 @@ This takes ~30 seconds and gives you the context needed to brief the agents.
 
 Deploy **6 agents in parallel**, each responsible for one vault section. Launch them all in a **single message** using the Agent tool so they run concurrently. Each agent receives the project root path, the vault path, and a focused brief.
 
-**CRITICAL**: Every agent prompt must include:
+Every agent prompt includes:
 - The project root path and vault output path
 - Instructions to read `references/templates.md` from the skill for formatting standards
 - Instructions to use structured frontmatter tags, breadcrumb navigation, callout blocks, and Mermaid diagrams
@@ -120,11 +120,11 @@ Here are the 6 agents to launch simultaneously:
 
 ```
 Scan the project and generate all files in Obsidian/Architecture/:
-- _Architecture MOC.md — Section hub with Dataview query and overview diagram
-- Overview.md — Tech stack, project structure, key dependencies, env vars, architectural decisions
-- Data Flow.md — Request lifecycle and data mutation patterns with sequenceDiagram and graph TD
-- Route Map.md — All routes from src/app/ with navigation flow diagram (graph LR), grouped by auth level
-- Auth & Security.md — Middleware pipeline, sign-in flow, RBAC table, security headers (with sequenceDiagram and graph LR)
+- _Architecture MOC.md: Section hub with Dataview query and overview diagram
+- Overview.md: Tech stack, project structure, key dependencies, env vars, architectural decisions
+- Data Flow.md: Request lifecycle and data mutation patterns with sequenceDiagram and graph TD
+- Route Map.md: All routes from src/app/ with navigation flow diagram (graph LR), grouped by auth level
+- Auth & Security.md: Middleware pipeline, sign-in flow, RBAC table, security headers (with sequenceDiagram and graph LR)
 
 Read: CLAUDE.md, package.json, .env.example, middleware.ts, src/app/ directory structure, src/lib/supabase/, src/lib/auth/
 ```
@@ -133,10 +133,10 @@ Read: CLAUDE.md, package.json, .env.example, middleware.ts, src/app/ directory s
 
 ```
 Scan the database layer and generate all files in Obsidian/Database/:
-- _Database MOC.md — Section hub with Dataview query
-- Schema.md — All tables with columns, types, relationships, indexes, and a full erDiagram
-- RLS Policies.md — Document all RLS policies per table
-- Migrations.md — Migration history with dates and descriptions
+- _Database MOC.md: Section hub with Dataview query
+- Schema.md: All tables with columns, types, relationships, indexes, and a full erDiagram
+- RLS Policies.md: Document all RLS policies per table
+- Migrations.md: Migration history with dates and descriptions
 
 Read: supabase/migrations/*.sql, supabase/schema.sql, src/types/database.ts, src/lib/utils (for fromDb mapping)
 ```
@@ -145,10 +145,10 @@ Read: supabase/migrations/*.sql, supabase/schema.sql, src/types/database.ts, src
 
 ```
 Scan all server actions and API routes, generate files in Obsidian/API/:
-- _API MOC.md — Section hub with Dataview query
-- Server Actions.md — Every server action with file, auth requirements, params, return type, side effects
-- Route Handlers.md — Every API route handler with method, auth, purpose
-- External Integrations.md — All third-party API integrations with dependency map (graph LR)
+- _API MOC.md: Section hub with Dataview query
+- Server Actions.md: Every server action with file, auth requirements, params, return type, side effects
+- Route Handlers.md: Every API route handler with method, auth, purpose
+- External Integrations.md: All third-party API integrations with dependency map (graph LR)
 
 Read: src/app/actions/ (or src/actions/), src/app/api/, src/lib/ (for integration clients)
 ```
@@ -157,10 +157,10 @@ Read: src/app/actions/ (or src/actions/), src/app/api/, src/lib/ (for integratio
 
 ```
 Identify all distinct features/modules and generate:
-- Obsidian/Features/_Features MOC.md — Section hub with feature map diagram
-- Obsidian/Features/[Feature Name].md — One file per feature with purpose, user flow diagram, key files, data model, permissions, edge cases
-- Obsidian/Business Rules/_Business Rules MOC.md — Section hub
-- Obsidian/Business Rules/[Domain].md — One file per domain area with rules, lifecycle state diagrams, validation rules
+- Obsidian/Features/_Features MOC.md: Section hub with feature map diagram
+- Obsidian/Features/[Feature Name].md: One file per feature with purpose, user flow diagram, key files, data model, permissions, edge cases
+- Obsidian/Business Rules/_Business Rules MOC.md: Section hub
+- Obsidian/Business Rules/[Domain].md: One file per domain area with rules, lifecycle state diagrams, validation rules
 
 Read: src/app/ (page.tsx files for features), src/components/, src/app/actions/
 Identify features by grouping related routes, components, and server actions.
@@ -170,8 +170,8 @@ Identify features by grouping related routes, components, and server actions.
 
 ```
 Scan all React components and generate files in Obsidian/Components/:
-- _Components MOC.md — Section hub with component tree overview
-- Component Index.md — Full component catalog with tree diagram (graph TD), tables for layout/feature/shared components
+- _Components MOC.md: Section hub with component tree overview
+- Component Index.md: Full component catalog with tree diagram (graph TD), tables for layout/feature/shared components
 
 Read: src/components/, src/app/ (for page-level components), identify Server vs Client components by checking for 'use client'
 ```
@@ -180,13 +180,13 @@ Read: src/components/, src/app/ (for page-level components), identify Server vs 
 
 ```
 Perform a full code quality audit and generate files in Obsidian/Health/:
-- _Health MOC.md — Section hub with audit summary
-- Optimization Opportunities.md — Performance and architecture issues with severity, file:line references, fix recommendations, hotspot visualization diagram
-- Tech Debt.md — Code quality and security issues, TODOs/FIXMEs extracted from codebase, severity ratings
+- _Health MOC.md: Section hub with audit summary
+- Optimization Opportunities.md: Performance and architecture issues with severity, file:line references, fix recommendations, hotspot visualization diagram
+- Tech Debt.md: Code quality and security issues, TODOs/FIXMEs extracted from codebase, severity ratings
 
 Scan for: N+1 queries, missing pagination, unnecessary 'use client', missing error handling, missing auth checks, as any casts, TODO/FIXME/HACK comments, missing input validation, hardcoded values, dead code, accessibility gaps, RLS gaps, missing CSRF protection.
 
-Read: ALL files in src/ — this agent does the deepest scan.
+Read: ALL files in src/: this agent does the deepest scan.
 ```
 
 ### Agent prompt template
@@ -208,24 +208,24 @@ FORMATTING REQUIREMENTS:
 - Mermaid diagrams wherever structure/flow/relationships need visualization
 - Callout blocks (> [!WARNING], > [!TIP], > [!NOTE], > [!danger]) for important caveats
 - Wikilinks ([[Other Document]]) for cross-references
-- Accurate content from actual code — never assume or fabricate
+- Accurate content from actual code: never assume or fabricate
 
 READ THESE FILES: [specific file paths relevant to this section]
 
 HEALTH FINDINGS: While reading code, note any optimization opportunities or tech debt you discover.
 Return them at the end of your response in this format:
 HEALTH_FINDINGS:
-- [SEVERITY] [file:line] [category] — [description] — [recommended fix]
+- [SEVERITY] [file:line] [category]: [description]. Fix: [recommended fix]
 
-Write all files directly to the vault path. Do not ask questions — use your best judgment.
+Write all files directly to the vault path. Do not ask questions: use your best judgment.
 ```
 
 ### Step 3: Assemble the vault (after all agents complete)
 
 Once all 6 agents return, the orchestrator:
 
-1. **Collect health findings** — If any non-Health agents reported findings, merge them into the Health docs
-2. **Generate `_Index.md`** — The master dashboard with:
+1. **Collect health findings**: If any non-Health agents reported findings, merge them into the Health docs
+2. **Generate `_Index.md`**: The master dashboard with:
    - Project name and one-line description
    - High-level Mermaid architecture diagram (graph TD)
    - Quick-reference links to every section MOC
@@ -233,20 +233,10 @@ Once all 6 agents return, the orchestrator:
    - "Recently Updated" section (populated from what was just created)
    - "Health Summary" with counts from the Health docs
    - Project health indicators (last sync date, drift status)
-3. **Generate `Change Requests/_Active.md`** — Empty initial template
-4. **Generate `Change Log/[today's date].md`** — Initial entry documenting vault creation
-5. **Cross-reference check** — Quickly scan for broken `[[wikilinks]]` across all generated docs and fix any mismatches
-6. **Report to user** — Summarize what was generated, highlight any CRITICAL or HIGH health findings
-
-### Why parallel agents?
-
-Sequential initialization of a medium-sized project (15-20 features, 30+ tables, 100+ components) can take 10-15 minutes. The parallel approach:
-
-- **Architecture, Database, API, Features, Components, Health** agents all run simultaneously
-- Each agent reads only the code relevant to its section (no wasted reads)
-- Total time drops to roughly the duration of the slowest agent (~3-4 minutes for Health, which scans the most code)
-- The assembly step adds ~1 minute for cross-referencing and _Index.md generation
-- **Net result: ~4-5 minutes instead of ~12-15 minutes**
+3. **Generate `Change Requests/_Active.md`**: Empty initial template
+4. **Generate `Change Log/[today's date].md`**: Initial entry documenting vault creation
+5. **Cross-reference check**: Quickly scan for broken `[[wikilinks]]` across all generated docs and fix any mismatches
+6. **Report to user**: Summarize what was generated, highlight any CRITICAL or HIGH health findings
 
 ### Fallback: Sequential initialization
 
@@ -257,7 +247,7 @@ If the Agent tool is unavailable or agents cannot be launched in parallel, fall 
 Every document generated by any agent must have:
 
 - **YAML frontmatter** with structured tags (`type/`, `section/`, `module/`, `status/`) and domain-specific fields where relevant
-- **Breadcrumb navigation** — `← [[_Index]] / [[_Section MOC]]` immediately after frontmatter
+- **Breadcrumb navigation**: `← [[_Index]] / [[_Section MOC]]` immediately after frontmatter
 - **Wikilinks** (`[[Other Document]]`) connecting related docs
 - **Callout blocks** (`> [!WARNING]`, `> [!TIP]`, `> [!NOTE]`, `> [!danger]`, `> [!INFO]`) for important caveats, risks, and tips
 - **Accurate content** derived from actual code, not assumptions
@@ -267,7 +257,7 @@ Every document generated by any agent must have:
 
 ## Mermaid Diagram Standards
 
-Obsidian renders Mermaid diagrams natively inside fenced code blocks. Use them throughout the vault to give the user a visual understanding of the application. Diagrams are not decoration — they should communicate structure that's hard to grasp from text alone.
+Obsidian renders Mermaid diagrams natively inside fenced code blocks. Use them throughout the vault to give the user a visual understanding of the application. Diagrams are not decoration: they should communicate structure that's hard to grasp from text alone.
 
 ### Where to use Mermaid diagrams
 
@@ -287,9 +277,9 @@ Obsidian renders Mermaid diagrams natively inside fenced code blocks. Use them t
 
 ### Mermaid syntax tips
 
-Keep diagrams readable — aim for 5-15 nodes. If a diagram would have more than 15 nodes, split it into multiple focused diagrams. Use subgraphs to group related items.
+Keep diagrams readable: aim for 5-15 nodes. If a diagram would have more than 15 nodes, split it into multiple focused diagrams. Use subgraphs to group related items.
 
-**Example — Route Map:**
+**Example: Route Map:**
 ````markdown
 ```mermaid
 graph LR
@@ -317,7 +307,7 @@ graph LR
 ```
 ````
 
-**Example — Entity Relationship:**
+**Example: Entity Relationship:**
 ````markdown
 ```mermaid
 erDiagram
@@ -329,7 +319,7 @@ erDiagram
 ```
 ````
 
-**Example — Auth Sequence:**
+**Example: Auth Sequence:**
 ````markdown
 ```mermaid
 sequenceDiagram
@@ -348,7 +338,7 @@ sequenceDiagram
 
 ### Keeping diagrams accurate
 
-When updating any document, also check its Mermaid diagrams. If you added a new route, it must appear in the Route Map. If you added a table, it must appear in the ER diagram. Stale diagrams are worse than no diagrams — they mislead.
+When updating any document, also check its Mermaid diagrams. If you added a new route, it must appear in the Route Map. If you added a table, it must appear in the ER diagram. Stale diagrams are worse than no diagrams: they mislead.
 
 ---
 
@@ -358,10 +348,10 @@ This is what turns the vault from passive documentation into an active improveme
 
 ### When to run
 
-- **During initialization** — Perform a full audit of the entire codebase
-- **During sync** — Evaluate the specific files you just changed or read
-- **On request** — When the user asks about optimization, performance, or improvements
-- **During drift detection** — Flag any issues discovered while comparing docs to code
+- **During initialization**: Perform a full audit of the entire codebase
+- **During sync**: Evaluate the specific files you just changed or read
+- **On request**: When the user asks about optimization, performance, or improvements
+- **During drift detection**: Flag any issues discovered while comparing docs to code
 
 ### What to look for
 
@@ -369,51 +359,51 @@ Evaluate code against these categories. Each finding goes into either `Health/Op
 
 #### Performance (→ Optimization Opportunities)
 
-- **N+1 queries** — Loops that make individual DB calls instead of batch queries
-- **Missing database indexes** — Columns used in WHERE/ORDER BY clauses without indexes, especially on large or growing tables
-- **Client components that should be server components** — Components with `'use client'` that don't use hooks, event handlers, or browser APIs (they're paying the client bundle cost for no reason)
-- **Unnecessary client-side data fetching** — `useEffect` + `fetch` patterns that could be server component data loading or server actions
-- **Missing pagination** — Queries that fetch unbounded result sets (no LIMIT)
-- **Heavy re-renders** — Components passing new object/array references as props on every render (missing useMemo/useCallback where it matters)
-- **Bundle size concerns** — Large dependencies imported for small functionality, or imports that could use tree-shaking
-- **Missing loading/streaming** — Server components that could use Suspense boundaries for progressive loading
-- **Unoptimized images** — Images without `next/image`, missing width/height, or no lazy loading
+- **N+1 queries**: Loops that make individual DB calls instead of batch queries
+- **Missing database indexes**: Columns used in WHERE/ORDER BY clauses without indexes, especially on large or growing tables
+- **Client components that should be server components**: Components with `'use client'` that don't use hooks, event handlers, or browser APIs (they're paying the client bundle cost for no reason)
+- **Unnecessary client-side data fetching**: `useEffect` + `fetch` patterns that could be server component data loading or server actions
+- **Missing pagination**: Queries that fetch unbounded result sets (no LIMIT)
+- **Heavy re-renders**: Components passing new object/array references as props on every render (missing useMemo/useCallback where it matters)
+- **Bundle size concerns**: Large dependencies imported for small functionality, or imports that could use tree-shaking
+- **Missing loading/streaming**: Server components that could use Suspense boundaries for progressive loading
+- **Unoptimized images**: Images without `next/image`, missing width/height, or no lazy loading
 
 #### Architecture (→ Optimization Opportunities)
 
-- **Duplicated logic** — Same business logic implemented in multiple places instead of shared utility
-- **Tight coupling** — Components or modules with circular dependencies or excessive cross-imports
-- **Feature-level god components** — Single components doing too many things (data fetching, business logic, rendering, error handling all in one)
-- **Missing abstraction** — Repeated patterns that should be extracted (e.g., same Supabase query pattern copied across 5 server actions)
-- **Inconsistent patterns** — Same thing done different ways across the codebase (e.g., some features use React Query, others use raw useEffect)
+- **Duplicated logic**: Same business logic implemented in multiple places instead of shared utility
+- **Tight coupling**: Components or modules with circular dependencies or excessive cross-imports
+- **Feature-level god components**: Single components doing too many things (data fetching, business logic, rendering, error handling all in one)
+- **Missing abstraction**: Repeated patterns that should be extracted (e.g., same Supabase query pattern copied across 5 server actions)
+- **Inconsistent patterns**: Same thing done different ways across the codebase (e.g., some features use React Query, others use raw useEffect)
 
 #### Code Quality (→ Tech Debt)
 
-- **TODOs and FIXMEs in code** — Scan for `// TODO`, `// FIXME`, `// HACK`, `// TEMP` comments
-- **Missing error handling** — Server actions without try/catch, missing error boundaries, fetch calls without error handling
-- **Missing input validation** — Server actions accepting user input without Zod validation
-- **Hardcoded values** — Magic numbers, hardcoded URLs, inline configuration that should be env vars or constants
-- **Type safety gaps** — `as any` casts, `@ts-ignore` comments, loose types where strict types are possible
-- **Missing tests** — Features or server actions with no test coverage, especially business-critical paths
-- **Accessibility gaps** — Interactive elements missing aria attributes, missing keyboard navigation, color-only state indicators
-- **Stale dependencies** — Outdated packages with known security issues or breaking changes available
-- **Dead code** — Unused exports, unreachable branches, commented-out code blocks
+- **TODOs and FIXMEs in code**: Scan for `// TODO`, `// FIXME`, `// HACK`, `// TEMP` comments
+- **Missing error handling**: Server actions without try/catch, missing error boundaries, fetch calls without error handling
+- **Missing input validation**: Server actions accepting user input without Zod validation
+- **Hardcoded values**: Magic numbers, hardcoded URLs, inline configuration that should be env vars or constants
+- **Type safety gaps**: `as any` casts, `@ts-ignore` comments, loose types where strict types are possible
+- **Missing tests**: Features or server actions with no test coverage, especially business-critical paths
+- **Accessibility gaps**: Interactive elements missing aria attributes, missing keyboard navigation, color-only state indicators
+- **Stale dependencies**: Outdated packages with known security issues or breaking changes available
+- **Dead code**: Unused exports, unreachable branches, commented-out code blocks
 
 #### Security (→ Tech Debt, high priority)
 
-- **Missing auth checks** — Server actions or API routes that don't verify the user session
-- **Missing RBAC enforcement** — UI-only permission checks without server-side verification
-- **RLS gaps** — Tables without appropriate RLS policies
-- **Exposed secrets** — Hardcoded API keys, connection strings, or tokens (flag as CRITICAL)
-- **Missing CSRF protection** — Mutation routes without CSRF validation
-- **Input injection risks** — Unsanitized user input used in queries or rendered in HTML
+- **Missing auth checks**: Server actions or API routes that don't verify the user session
+- **Missing RBAC enforcement**: UI-only permission checks without server-side verification
+- **RLS gaps**: Tables without appropriate RLS policies
+- **Exposed secrets**: Hardcoded API keys, connection strings, or tokens (flag as CRITICAL)
+- **Missing CSRF protection**: Mutation routes without CSRF validation
+- **Input injection risks**: Unsanitized user input used in queries or rendered in HTML
 
 ### How to record findings
 
-Each finding should be specific and actionable — not vague. Include the file path, line reference where possible, what the issue is, and what the fix would be.
+Each finding should be specific and actionable: not vague. Include the file path, line reference where possible, what the issue is, and what the fix would be.
 
 **Good finding:**
-> `src/app/actions/content.ts:45` — `getContentItems()` fetches all content for an account with no LIMIT clause. As the content library grows this will become slow. Add pagination with a default limit of 50 and cursor-based navigation.
+> `src/app/actions/content.ts:45`: `getContentItems()` fetches all content for an account with no LIMIT clause. As the content library grows this will become slow. Add pagination with a default limit of 50 and cursor-based navigation.
 
 **Bad finding:**
 > Performance could be improved in the content module.
@@ -450,16 +440,16 @@ Determine which docs are affected by the changes you just made:
 | Architecture change | `Architecture/Overview.md`, `Architecture/Data Flow.md` (including flow diagrams) |
 | Dependency change | `Architecture/Overview.md` |
 | Environment variable added | `Architecture/Overview.md` (env vars section) |
-| Business logic change | `Business Rules/[domain].md` — update the relevant domain rules. Create the file if the domain area doesn't exist yet |
+| Business logic change | `Business Rules/[domain].md`: update the relevant domain rules. Create the file if the domain area doesn't exist yet |
 | Any code change | Evaluate changed files for `Health/` findings |
 
 ### How to sync
 
 1. Read the existing doc that needs updating
 2. Read the code that changed
-3. Update the doc to reflect reality — don't append, integrate the change naturally
+3. Update the doc to reflect reality: don't append, integrate the change naturally
 4. **Update any Mermaid diagrams** in the affected docs (new routes → update Route Map, new tables → update ER diagram, etc.)
-5. **Evaluate the changed code** for optimization opportunities and tech debt — update `Health/` docs if you find anything
+5. **Evaluate the changed code** for optimization opportunities and tech debt: update `Health/` docs if you find anything
 6. Update the `last_updated` frontmatter field
 7. Add a brief entry to `Change Log/[today's date].md`
 8. Update `_Index.md` "Recently Updated" section and "Health Summary" if health docs changed
@@ -467,7 +457,7 @@ Determine which docs are affected by the changes you just made:
 ### Change Log entry format
 
 ```markdown
-### [HH:MM] — [Brief description]
+### [HH:MM]: [Brief description]
 - **What changed**: [1-2 sentences]
 - **Files affected**: `path/to/file.ts`, `path/to/other.ts`
 - **Docs updated**: [[Document Name]], [[Other Document]]
@@ -478,13 +468,13 @@ Determine which docs are affected by the changes you just made:
 
 ## Process Change Requests
 
-This turns documentation edits into development work — the skill's most powerful feature.
+This turns documentation edits into development work: the skill's most powerful feature.
 
 ### How users create change requests
 
-**Method 1: Tag-based** — Add `#change-request` / `#end-change-request` anywhere in a document.
+**Method 1: Tag-based**: Add `#change-request` / `#end-change-request` anywhere in a document.
 
-**Method 2: Dedicated section** — Add a `## Change Requests` section with unchecked `- [ ]` items.
+**Method 2: Dedicated section**: Add a `## Change Requests` section with unchecked `- [ ]` items.
 
 See `references/change-request-protocol.md` for the full protocol including edge cases, prioritization, and conflict resolution.
 
@@ -494,9 +484,9 @@ See `references/change-request-protocol.md` for the full protocol including edge
 2. **Collect** all requests into `Change Requests/_Active.md` with source links
 3. **Analyze** each request for scope, complexity, dependencies, and risk
 4. **Present** a summary to the user with estimated complexity
-5. **Implement** the changes (following the project's CLAUDE.md and workspace standards)
+5. **Implement** only the requests Peter approves in chat (following the project's CLAUDE.md and workspace standards)
 6. **Sync** the documentation to reflect the implemented changes (including diagrams)
-7. **Mark completed** — check the boxes and add a completion note with date and change log link
+7. **Mark completed**: check the boxes and add a completion note with date and change log link
 
 ---
 
@@ -506,15 +496,15 @@ Compare documentation against the actual codebase to find discrepancies.
 
 ### What to check
 
-1. **Schema drift** — `Database/Schema.md` vs actual schema/migrations
-2. **API drift** — `API/` docs vs actual `src/app/actions/` and `src/app/api/`
-3. **Route drift** — `Architecture/Route Map.md` vs actual `src/app/` page structure
-4. **Component drift** — `Components/Component Index.md` vs actual component files
-5. **Feature drift** — Each `Features/[name].md` vs the code it documents
-6. **Architecture drift** — `Architecture/Overview.md` vs `package.json` and project structure
-7. **Business rules drift** — `Business Rules/` docs vs actual implemented logic in server actions and utilities
-8. **Health drift** — Re-scan code and compare against `Health/` docs (fixed items still listed? new issues?)
-9. **Diagram drift** — Check all Mermaid diagrams against current code structure
+1. **Schema drift**: `Database/Schema.md` vs actual schema/migrations
+2. **API drift**: `API/` docs vs actual `src/app/actions/` and `src/app/api/`
+3. **Route drift**: `Architecture/Route Map.md` vs actual `src/app/` page structure
+4. **Component drift**: `Components/Component Index.md` vs actual component files
+5. **Feature drift**: Each `Features/[name].md` vs the code it documents
+6. **Architecture drift**: `Architecture/Overview.md` vs `package.json` and project structure
+7. **Business rules drift**: `Business Rules/` docs vs actual implemented logic in server actions and utilities
+8. **Health drift**: Re-scan code and compare against `Health/` docs (fixed items still listed? new issues?)
+9. **Diagram drift**: Check all Mermaid diagrams against current code structure
 
 For each category, flag specific discrepancies with file paths and details. Produce a drift report in the conversation with clear counts of what's in sync vs drifted, and recommended actions.
 
@@ -541,11 +531,11 @@ When asked to document a specific feature or area in isolation:
 
 ### Voice and style
 
-- **Factual, present-tense** — "The system uses JWT authentication" not "We implemented JWT"
-- **Code-referenced** — Include file paths: "Authentication middleware (`middleware.ts`) checks..."
-- **Concise** — Paragraphs over bullet lists for explanations; bullets for reference lists
-- **Accurate** — Every claim should be verifiable by reading the referenced code
-- **Visual-first** — If a concept involves relationships or flow, reach for a Mermaid diagram before writing paragraphs of explanation
+- **Factual, present-tense**: "The system uses JWT authentication" not "We implemented JWT"
+- **Code-referenced**: Include file paths: "Authentication middleware (`middleware.ts`) checks..."
+- **Concise**: Paragraphs over bullet lists for explanations; bullets for reference lists
+- **Accurate**: Every claim should be verifiable by reading the referenced code
+- **Visual-first**: If a concept involves relationships or flow, reach for a Mermaid diagram before writing paragraphs of explanation
 
 ### Breadcrumb navigation
 
@@ -563,7 +553,7 @@ This gives users one-click navigation back to the parent MOC and vault index. Th
 
 ### Obsidian callout blocks
 
-Use Obsidian's native callout syntax to highlight important information. Callouts render as styled blocks in Obsidian — use them for warnings, tips, and important notes rather than bold text or plain blockquotes.
+Use Obsidian's native callout syntax to highlight important information. Callouts render as styled blocks in Obsidian: use them for warnings, tips, and important notes rather than bold text or plain blockquotes.
 
 ```markdown
 > [!WARNING] Breaking Change
@@ -573,7 +563,7 @@ Use Obsidian's native callout syntax to highlight important information. Callout
 > This server action has no auth check. See TD-005 in [[Tech Debt]].
 
 > [!TIP] Performance
-> Consider adding an index on `account_id` — this query runs on every page load.
+> Consider adding an index on `account_id`: this query runs on every page load.
 
 > [!NOTE]
 > This feature depends on the OpenAI API. See [[External Integrations]] for rate limits.
@@ -616,14 +606,14 @@ Dataview queries require the Dataview plugin in Obsidian. They auto-generate tab
 
 ### Business Rules section
 
-The `Business Rules/` directory documents **domain logic that exists independently of code architecture**. These are the rules that a product owner or business stakeholder would recognize — pricing logic, booking policies, deposit rules, lifecycle states, notification rules, etc.
+The `Business Rules/` directory documents **domain logic that exists independently of code architecture**. These are the rules that a product owner or business stakeholder would recognize: pricing logic, booking policies, deposit rules, lifecycle states, notification rules, etc.
 
 Business rules documentation helps Claude understand the "why" behind code decisions and catch violations when code doesn't match stated policy. Each domain area gets its own file.
 
 Examples:
-- `Business Rules/Bookings.md` — reservation rules, cancellation policies, capacity limits
-- `Business Rules/Pricing.md` — pricing tiers, discount rules, tax handling
-- `Business Rules/Notifications.md` — when emails/SMS are sent, to whom, content rules
+- `Business Rules/Bookings.md`: reservation rules, cancellation policies, capacity limits
+- `Business Rules/Pricing.md`: pricing tiers, discount rules, tax handling
+- `Business Rules/Notifications.md`: when emails/SMS are sent, to whom, content rules
 
 ### Frontmatter template
 
@@ -639,7 +629,7 @@ tags:
   - module/[module-name]        # e.g., module/auth, module/bookings, module/content
   - status/active | status/deprecated | status/draft
   - integration/[service-name]  # e.g., integration/stripe, integration/openai (only if relevant)
-# Domain-specific fields — include only the ones relevant to this document:
+# Domain-specific fields: include only the ones relevant to this document:
 module: auth | bookings | content | [module-name]
 route: /dashboard | /admin/users | [route-path]
 table: accounts | content_items | [table-name]
@@ -661,7 +651,7 @@ The structured tag taxonomy enables Dataview queries across the vault. Use prefi
 | `status/` | Document status | `status/active`, `status/deprecated`, `status/draft` |
 | `integration/` | External service | `integration/stripe`, `integration/openai` |
 
-Domain-specific frontmatter fields (`module:`, `route:`, `table:`, `integration:`, `typescript:`) make documents queryable by Dataview. Only include fields relevant to the document — don't add empty fields.
+Domain-specific frontmatter fields (`module:`, `route:`, `table:`, `integration:`, `typescript:`) make documents queryable by Dataview. Only include fields relevant to the document: don't add empty fields.
 
 ### Wikilink conventions
 
@@ -680,7 +670,7 @@ Domain-specific frontmatter fields (`module:`, `route:`, `table:`, `integration:
 
 ## Integration with Project CLAUDE.md
 
-The Obsidian vault complements — never replaces — the project's `CLAUDE.md`:
+The Obsidian vault complements, and never replaces, the project's `CLAUDE.md`:
 
 | Content | Lives in | Reason |
 |---------|---------|--------|
@@ -700,7 +690,7 @@ The Obsidian vault complements — never replaces — the project's `CLAUDE.md`:
 
 ## Integration with Existing `docs/` Folders
 
-Many projects already have a `docs/` folder. During initialization, read and import relevant content into vault sections. Do not delete `docs/` — it may be referenced by CI or external tooling. Add a note to `_Index.md` explaining the relationship.
+Many projects already have a `docs/` folder. During initialization, read and import relevant content into vault sections. Do not delete `docs/`: it may be referenced by CI or external tooling. Add a note to `_Index.md` explaining the relationship.
 
 ---
 
@@ -708,5 +698,5 @@ Many projects already have a `docs/` folder. During initialization, read and imp
 
 Read these when you need detailed templates or examples:
 
-- `references/templates.md` — Full templates for every document type including Mermaid examples and Health section templates
-- `references/change-request-protocol.md` — Detailed change request protocol including edge cases, prioritization, and conflict resolution
+- `references/templates.md`: Full templates for every document type including Mermaid examples and Health section templates
+- `references/change-request-protocol.md`: Detailed change request protocol including edge cases, prioritization, and conflict resolution

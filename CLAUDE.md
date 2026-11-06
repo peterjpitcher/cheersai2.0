@@ -10,9 +10,9 @@ CheersAI is an AI-assisted social media tool for hospitality venues. An owner cr
 
 - Next.js **16.2** App Router (workspace default is 15), React 19.2, Tailwind v4, TypeScript strict. Node **24.x** (`engines`, CI and Vercel), npm with `package-lock.json`.
 - `npm run build` runs `next build --webpack`: webpack, not Turbopack. The build type-checks against `tsconfig.build.json` (src only); `npm run typecheck` uses `tsconfig.json`, which also covers `tests/` and `scripts/`, so the two can disagree.
-- Tests are **Vitest 4** (node environment, `TZ` forced to Europe/London) plus **Playwright** for e2e. Not Jest.
+- Tests are **Vitest 4** (node environment, `TZ` defaults to Europe/London; `npm run test:utc` runs the suite under UTC) plus **Playwright** for e2e. Not Jest.
 - No `middleware.ts` or `proxy.ts`. The auth gate is `src/app/(app)/layout.tsx` calling `getCurrentUser()` (redirects to `/auth/login` or `/no-access`); server actions and routes call `requireAuthContext()` from `src/lib/auth/server.ts`.
-- Background work: Vercel Cron (`vercel.json`, region `lhr1`) for scheduling, **Upstash QStash** for publish delivery, and one Supabase edge function (`publish-queue`) for the legacy publish path. A second, `media-derivatives`, was retired on 29 September 2026 (`tasks/SPEC-retire-media-derivatives.md`): nothing called it, it had failed to start for about a year, and uploads build their image sizes in the browser.
+- Background work: Vercel Cron (`vercel.json`, region `lhr1`) for scheduling, **Upstash QStash** for publish delivery, and one Supabase edge function (`publish-queue`) for the legacy publish path. Uploads build their image sizes in the browser; there is no server-side derivatives function.
 - Logging is **Axiom** via `createLogger()` in `src/lib/logging`. Auth rate limits live in our own database (`src/lib/auth/rate-limit.ts` calling `public.consume_rate_limit`, keys HMAC'd with a key derived from `TOKEN_VAULT_KEY`); a limiter failure refuses sign-in rather than allowing it.
 - `cheersai.uk` is retired and 307-redirects to the new host (`src/lib/routing/legacy-host-redirects.ts`), browser traffic only.
 
@@ -23,13 +23,13 @@ npm run dev                 # local server on :3000
 npm run lint:ci             # eslint --max-warnings=0 (what CI runs; `npm run lint` is the lenient form)
 npm run typecheck           # tsc --noEmit against tsconfig.json
 npm run test:ci             # CI=1 vitest run (`npm test` is watch mode)
-npm run ci:verify           # lint:ci + typecheck + test:ci + build; all four must pass before a PR
+npm run ci:verify           # lint:ci + typecheck + test:ci + test:utc + build; all must pass before a PR
 npm run test:e2e:smoke      # Playwright smoke suite; needs E2E_TEST_EMAIL, E2E_TEST_PASSWORD, BASE_URL
 npm run db:rebuild          # reset the LOCAL Supabase DB with the v1 baseline staged (see gotchas)
 npm run ops:<name>          # tsx scripts in scripts/ops/ (catalogue in docs/agent-reference.md)
 ```
 
-CI (`.github/workflows/ci.yml`) runs typecheck, lint, test:ci and build as separate jobs, then `supabase db lint` on a from-scratch local database and the e2e smoke suite when credentials are configured.
+CI (`.github/workflows/ci.yml`) runs typecheck, lint, the tests (test:ci and test:utc) and build as separate jobs, then `supabase db lint` on a from-scratch local database and the e2e smoke suite when credentials are configured.
 
 ## Architecture
 
@@ -41,7 +41,7 @@ src/features/<domain>   feature components: analytics, campaigns, connections, c
 src/lib/<domain>        domain logic: ai, banner, campaigns, meta, providers, publishing, scheduling,
                         token-vault, management-app, supabase, security, logging, and more
 src/types/              central types        src/env.ts   Zod env validation
-supabase/               migrations/ (30), baseline/ (v1 baseline, NOT a migration), functions/, SCHEMA.md snapshot
+supabase/               migrations/, baseline/ (v1 baseline, NOT a migration), functions/, SCHEMA.md snapshot
 tests/                  mirrors src/ (co-located src/**/*.test.ts also run)     e2e/  Playwright
 tasks/                  SPEC-*.md, PLAN-*.md, ADS-PLAYBOOK-the-anchor.md
 ```
@@ -49,7 +49,7 @@ tasks/                  SPEC-*.md, PLAN-*.md, ADS-PLAYBOOK-the-anchor.md
 ## Domain and business rules
 
 - **Platforms are Facebook and Instagram only** (`Platform` in `src/types/content.ts`, adapters in `src/lib/providers/`). Google Business Profile was removed deliberately (`tasks/SPEC-weekly-recurrence-story-gbp-removal.md`, June 2026); do not reintroduce it without an explicit brief. `HANDOFF.md`, `docs/integration-spec.md` and older plans still mention GBP and are stale on that point.
-- **Tenancy**: a "brand" is a `public.accounts` row and every content table is `account_id`-scoped. Most reads use the service-role client (52 files), so scoping is the code's job: every such query must carry an explicit `.eq('account_id', accountId)`. RLS membership (the `20260714_multibrand_*` migrations) is the second layer; keep both in lockstep. A read that relies on RLS alone (historically `src/lib/content/queries.ts` and `src/lib/media/resolve-thumbnails.ts`) becomes a cross-brand leak once RLS is membership-based.
+- **Tenancy**: a "brand" is a `public.accounts` row and every content table is `account_id`-scoped. Most reads use the service-role client, so scoping is the code's job: every such query must carry an explicit `.eq('account_id', accountId)`. RLS membership (the `20260714_multibrand_*` migrations) is the second layer; keep both in lockstep. A read that relies on RLS alone (historically `src/lib/content/queries.ts` and `src/lib/media/resolve-thumbnails.ts`) becomes a cross-brand leak once RLS is membership-based.
 - **Timezone**: Europe/London everywhere (`DEFAULT_TIMEZONE` in `src/lib/constants.ts`; `accounts.timezone` defaults to it; Vitest and CI set `TZ`). Use Luxon for all date maths and comment GMT/BST edge cases.
 - **Publishing pipeline** (`src/lib/publishing/`): jobs move `approved -> scheduled -> queued -> publishing -> published | failed`, and `failed -> queued` on retry (`state-machine.ts`). The `publish-scheduler` cron runs every minute, promotes due jobs to `queued` and dispatches them to QStash (`dispatch.ts`); QStash calls `/api/webhooks/qstash-publish` (signature-verified), which runs `handler.ts`; failures land on `/api/webhooks/qstash-publish/failure`. Run `preflight.ts` before anything is queued. `/api/cron/publish` is a 410 tombstone. The scheduler falls back to the Supabase `publish-queue` edge function only while `publish_jobs` lacks a `platform` column, and tournament publishing (`src/app/actions/tournament.ts`) still invokes `publish-queue` directly.
 - **Paid Meta ads**: campaigns publish **through the app** (`src/lib/meta/marketing.ts`), never by hand in Ads Manager, so the dashboard, performance sync and optimiser all see them. The wizard builds `event` and `evergreen` campaigns (custom promotions use evergreen), plus `food_booking` behind `NEXT_PUBLIC_ENABLE_FOOD_BOOKING`; only what the API layer cannot do is off-app work. **Read `tasks/ADS-PLAYBOOK-the-anchor.md` before any ads brief**: it holds the verified ad account, Page, pixel and venue facts, real CPC and CTR benchmarks, the copy guardrails and the brief template. **Then follow `docs/runbooks/paid-meta-ads.md`** to build, check, launch, monitor and report: it holds the step-by-step process, the pre-launch checklist and the lessons learned. Re-verify the account facts against Supabase before anything that spends money.
@@ -66,7 +66,7 @@ tasks/                  SPEC-*.md, PLAN-*.md, ADS-PLAYBOOK-the-anchor.md
 | Resend | `src/lib/email/`, `src/lib/notifications/` | failure and expiring-connection alerts |
 | Upstash QStash | `src/lib/qstash/client.ts` | delivery queue |
 | Axiom | `src/lib/logging/axiom.ts` | structured logs; silent when `AXIOM_TOKEN` is unset |
-| Supabase edge function | `supabase/functions/publish-queue` | legacy publish worker; `media-derivatives` (image sizes via FFmpeg WASM) was retired on 29 September 2026 |
+| Supabase edge function | `supabase/functions/publish-queue` | legacy publish worker |
 | The Anchor management app | `src/lib/management-app/` | event artwork import; per-account settings in `management_app_connections`; allowed hosts in `MANAGEMENT_ARTWORK_ORIGINS` |
 | Booking conversions ingest | `/api/booking-conversions` | per-brand `bce_` secrets; hourly `retry-capi-conversions` cron |
 | Banner rendering | `src/lib/banner/`, `/api/internal/render-banner` | satori, sharp, text-to-svg; fetches only from the project's Supabase Storage host over https |
