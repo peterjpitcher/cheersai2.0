@@ -11,6 +11,8 @@
     "node_modules",
     "tests",
     "scripts",
-    "supabase"
+    "supabase",
+    "src/**/*.test.ts",
+    "src/**/*.test.tsx"
   ]
 }
