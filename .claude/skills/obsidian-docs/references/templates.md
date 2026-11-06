@@ -1,6 +1,6 @@
 # Document Templates
 
-These are the standard templates for each document type in the Obsidian vault. Use them as starting points — adapt content to the actual project, but keep the structure consistent.
+These are the standard templates for each document type in the Obsidian vault. Use them as starting points: adapt content to the actual project, but keep the structure consistent.
 
 Every template includes:
 - **Mermaid diagram** placeholders for visual maps
@@ -77,7 +77,7 @@ graph TD
 
 ## Recently Updated
 
-1. [[Document]] — YYYY-MM-DD — Brief description of change
+1. [[Document]] (YYYY-MM-DD): Brief description of change
 
 ## Change Requests
 
@@ -164,7 +164,7 @@ graph LR
 
 | Route | Auth | Role | Component | Purpose |
 |-------|------|------|-----------|---------|
-| `/auth/login` | Public | — | `LoginPage` | Email/password sign-in |
+| `/auth/login` | Public | - | `LoginPage` | Email/password sign-in |
 | `/dashboard` | Required | viewer+ | `DashboardPage` | Main landing page |
 | `/admin/users` | Required | admin | `UsersPage` | User management |
 
@@ -206,9 +206,9 @@ related:
 | Framework | Next.js | [version] |
 | Language | TypeScript | strict mode |
 | Styling | Tailwind CSS | [version] |
-| Database | Supabase (PostgreSQL) | — |
-| Auth | Supabase Auth + custom session | — |
-| Hosting | Vercel | — |
+| Database | Supabase (PostgreSQL) | - |
+| Auth | Supabase Auth + custom session | - |
+| Hosting | Vercel | - |
 
 ## Project Structure
 
@@ -228,7 +228,7 @@ related:
 
 ## Key Architectural Decisions
 
-[Major decisions with rationale — why this approach over alternatives]
+[Major decisions with rationale: why this approach over alternatives]
 ```
 
 ---
@@ -374,7 +374,7 @@ sequenceDiagram
 
 ## Security Headers
 
-[CSP policy, X-Frame-Options, HSTS — as configured in middleware]
+[CSP policy, X-Frame-Options, HSTS: as configured in middleware]
 ```
 
 ---
@@ -401,7 +401,7 @@ related:
 # Database Schema
 
 > [!WARNING]
-> Always update this document when running migrations. Stale schema docs are worse than no schema docs — they mislead.
+> Always update this document when running migrations. Stale schema docs are worse than no schema docs: they mislead.
 
 ## Entity Relationship Diagram
 
@@ -430,7 +430,7 @@ erDiagram
 - Referenced by: `[other_table].[column]`
 
 **Indexes:**
-- `idx_[table]_[column]` on `[column]` — [why this index exists]
+- `idx_[table]_[column]` on `[column]`: [why this index exists]
 
 **RLS:** See [[RLS Policies#table_name]]
 
@@ -472,7 +472,7 @@ related:
 
 ## Purpose
 
-[What this feature does and why it exists — 2-3 sentences]
+[What this feature does and why it exists: 2-3 sentences]
 
 ## User Flow
 
@@ -502,7 +502,7 @@ graph TD
 
 ## Data Model
 
-[Which database tables are involved — reference [[Schema]] for full details]
+[Which database tables are involved: reference [[Schema]] for full details]
 
 ## Permissions
 
@@ -699,12 +699,12 @@ related:
 - **Category**: Performance
 - **Location**: `src/path/to/file.ts:LINE`
 - **Issue**: [What's wrong and why it matters]
-- **Impact**: [What happens if this isn't fixed — slowness, memory, user experience]
+- **Impact**: [What happens if this isn't fixed: slowness, memory, user experience]
 - **Fix**: [Specific recommendation with approach]
 - **Effort**: XS / S / M / L
 - **Status**: open | in-progress | fixed
 - **Found**: YYYY-MM-DD
-- **Fixed**: — (date when resolved)
+- **Fixed**: - (date when resolved)
 
 [Repeat for each finding]
 
@@ -778,7 +778,7 @@ related:
 - **Effort**: XS / S / M / L
 - **Status**: open | in-progress | fixed
 - **Found**: YYYY-MM-DD
-- **Fixed**: — (date when resolved)
+- **Fixed**: - (date when resolved)
 
 ## Medium Priority
 
@@ -806,7 +806,7 @@ These were extracted from comments in the codebase:
 
 | ID | Title | Fixed Date | Resolution |
 |----|-------|-----------|------------|
-| — | — | — | — |
+| - | - | - | - |
 ```
 
 ---
@@ -815,7 +815,7 @@ These were extracted from comments in the codebase:
 
 ```markdown
 ---
-title: "Change Log — YYYY-MM-DD"
+title: "Change Log: YYYY-MM-DD"
 created: YYYY-MM-DD
 last_updated: YYYY-MM-DD
 status: current
@@ -826,9 +826,9 @@ tags:
 
 ← [[_Index]]
 
-# Changes — YYYY-MM-DD
+# Changes: YYYY-MM-DD
 
-### [HH:MM] — [Brief description]
+### [HH:MM]: [Brief description]
 
 - **What changed**: [1-2 sentences describing the change]
 - **Files affected**: `path/to/file.ts`, `path/to/other.ts`
@@ -881,7 +881,7 @@ tags:
 
 | # | Request | Completed | Change Log |
 |---|---------|-----------|------------|
-| — | — | — | — |
+| - | - | - | - |
 ```
 
 ---
@@ -890,7 +890,7 @@ tags:
 
 ```markdown
 ---
-title: "[Section Name] — Map of Content"
+title: "[Section Name]: Map of Content"
 created: YYYY-MM-DD
 last_updated: YYYY-MM-DD
 status: current
@@ -919,19 +919,19 @@ SORT last_updated DESC
 
 ## Section Overview
 
-[Mermaid diagram appropriate to the section — e.g., ER diagram for Database, route map for Architecture, component tree for Components]
+[Mermaid diagram appropriate to the section: e.g., ER diagram for Database, route map for Architecture, component tree for Components]
 
 ## Related Sections
 
-- [[_Features MOC]] — [how this section relates to features]
-- [[_API MOC]] — [how this section relates to APIs]
+- [[_Features MOC]]: [how this section relates to features]
+- [[_API MOC]]: [how this section relates to APIs]
 ```
 
-**Example — Features MOC:**
+**Example (Features MOC):**
 
 ```markdown
 ---
-title: "Features — Map of Content"
+title: "Features: Map of Content"
 created: YYYY-MM-DD
 last_updated: YYYY-MM-DD
 status: current
@@ -987,9 +987,9 @@ graph TD
 
 ## Related Sections
 
-- [[_API MOC]] — Server actions that power these features
-- [[_Database MOC]] — Data models underlying each feature
-- [[_Business Rules MOC]] — Domain rules governing feature behavior
+- [[_API MOC]]: Server actions that power these features
+- [[_Database MOC]]: Data models underlying each feature
+- [[_Business Rules MOC]]: Domain rules governing feature behavior
 ```
 
 ---
@@ -998,7 +998,7 @@ graph TD
 
 ```markdown
 ---
-title: "[Domain Area] — Business Rules"
+title: "[Domain Area]: Business Rules"
 created: YYYY-MM-DD
 last_updated: YYYY-MM-DD
 status: current
@@ -1015,7 +1015,7 @@ related:
 
 ← [[_Index]] / [[_Business Rules MOC]]
 
-# [Domain Area] — Business Rules
+# [Domain Area]: Business Rules
 
 ## Overview
 
@@ -1026,13 +1026,13 @@ related:
 ### BR-001: [Rule Name]
 
 - **Rule**: [Clear statement of the business rule in plain English]
-- **Rationale**: [Why this rule exists — business context]
-- **Implementation**: `src/path/to/file.ts` — [how it's implemented in code]
+- **Rationale**: [Why this rule exists: business context]
+- **Implementation**: `src/path/to/file.ts`: [how it's implemented in code]
 - **Exceptions**: [Any exceptions or edge cases]
-- **Owner**: [Who decides if this rule changes — product, legal, ops]
+- **Owner**: [Who decides if this rule changes: product, legal, ops]
 
 > [!WARNING]
-> [Any critical caveats about this rule — e.g., "Changing this requires updating the Terms of Service"]
+> [Any critical caveats about this rule: e.g., "Changing this requires updating the Terms of Service"]
 
 ### BR-002: [Rule Name]
 
@@ -1062,9 +1062,9 @@ stateDiagram-v2
 
 ## Related
 
-- [[Feature Name]] — Feature that implements these rules
-- [[Schema#table_name]] — Database tables storing this data
-- [[Server Actions]] — Actions that enforce these rules
+- [[Feature Name]]: Feature that implements these rules
+- [[Schema#table_name]]: Database tables storing this data
+- [[Server Actions]]: Actions that enforce these rules
 ```
 
 ---
@@ -1073,7 +1073,7 @@ stateDiagram-v2
 
 ```markdown
 ---
-title: "Business Rules — Map of Content"
+title: "Business Rules: Map of Content"
 created: YYYY-MM-DD
 last_updated: YYYY-MM-DD
 status: current
@@ -1090,10 +1090,10 @@ related:
 
 # Business Rules
 
-Business rules document the domain logic that exists independently of code architecture. These are the rules a product owner or business stakeholder would recognize — pricing, policies, lifecycle states, notification triggers, etc.
+Business rules document the domain logic that exists independently of code architecture. These are the rules a product owner or business stakeholder would recognize: pricing, policies, lifecycle states, notification triggers, etc.
 
 > [!TIP]
-> When implementing a feature, check the relevant business rules document first. If a rule doesn't have a document yet, create one before coding — it clarifies requirements and catches edge cases early.
+> When implementing a feature, check the relevant business rules document first. If a rule doesn't have a document yet, create one before coding: it clarifies requirements and catches edge cases early.
 
 ## All Business Rules
 
@@ -1106,9 +1106,9 @@ SORT module ASC
 
 ## Related Sections
 
-- [[_Features MOC]] — Features that implement these rules
-- [[_Database MOC]] — Data models that store business data
-- [[_API MOC]] — Server actions that enforce rules
+- [[_Features MOC]]: Features that implement these rules
+- [[_Database MOC]]: Data models that store business data
+- [[_API MOC]]: Server actions that enforce rules
 ```
 
 ---
