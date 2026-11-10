@@ -93,7 +93,7 @@ jobs:
   e2e-smoke:
     name: E2E Smoke Tests
     needs: [build]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04 # Playwright cannot install Chromium on ubuntu-latest (26.04) as of 10 November 2026
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
