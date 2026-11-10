@@ -112,6 +112,15 @@ describe('turnstileRemoteIp', () => {
     expect(turnstileRemoteIp(new Headers({ 'x-forwarded-for': '203.0.113.7' }))).toBe('203.0.113.7');
   });
 
+  it('sends the visitor from cf-connecting-ip behind Cloudflare, never the edge address', () => {
+    expect(
+      turnstileRemoteIp(new Headers({ 'x-forwarded-for': '104.16.0.1', 'cf-connecting-ip': '203.0.113.7' })),
+    ).toBe('203.0.113.7');
+    expect(turnstileRemoteIp(new Headers({ 'x-forwarded-for': '198.51.100.2', 'cf-connecting-ip': '203.0.113.7' }))).toBe(
+      '198.51.100.2',
+    );
+  });
+
   it('leaves it out when it is missing or not an IP', () => {
     expect(turnstileRemoteIp(new Headers())).toBeNull();
     expect(turnstileRemoteIp(new Headers({ 'x-forwarded-for': 'unknown' }))).toBeNull();

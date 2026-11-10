@@ -5,6 +5,7 @@ import net from 'node:net';
 
 import { env } from '@/env';
 import { reportAuthFailure } from '@/lib/auth/alerts';
+import { clientIp } from '@/lib/client-ip';
 import { createServiceSupabaseClient } from '@/lib/supabase/service';
 
 // ---------------------------------------------------------------------------
@@ -176,14 +177,13 @@ export function rateLimitKey(
 // ---------------------------------------------------------------------------
 
 /**
- * The visitor's IP: the first x-forwarded-for entry, which Vercel sets and
- * overwrites so a client cannot choose it. `unknown` when there is none (never
- * on Vercel).
+ * The visitor's IP from `clientIp()` (src/lib/client-ip.ts): the address Vercel
+ * saw, which it sets and overwrites so a client cannot choose it, or
+ * cf-connecting-ip when that address is a Cloudflare edge. `unknown` when there
+ * is none (never on Vercel).
  */
 export function clientIpFromHeaders(headers: Pick<Headers, 'get'>): string {
-  const forwarded = headers.get('x-forwarded-for')?.split(',')[0]?.trim();
-  const candidate = forwarded || headers.get('x-real-ip')?.trim() || '';
-  return normaliseIp(candidate);
+  return normaliseIp(clientIp(headers) ?? '');
 }
 
 /**
@@ -334,27 +334,8 @@ function hashValue(value: string): string {
   return crypto.createHash('sha256').update(value).digest('hex').slice(0, 16);
 }
 
-function extractIp(request: Request): string | null {
-  const candidates = [
-    request.headers.get('x-forwarded-for'),
-    request.headers.get('x-real-ip'),
-    request.headers.get('cf-connecting-ip'),
-    request.headers.get('x-vercel-forwarded-for'),
-    request.headers.get('x-client-ip'),
-  ];
-
-  for (const entry of candidates) {
-    if (!entry) continue;
-    const [first] = entry.split(',');
-    const trimmed = first?.trim();
-    if (trimmed) return trimmed;
-  }
-
-  return null;
-}
-
 export function getRateLimitKey(request: Request, prefix: string): string {
-  const ip = extractIp(request);
+  const ip = clientIp(request.headers);
   const base = ip
     ? `ip:${ip}`
     : `ua:${hashValue(request.headers.get('user-agent') ?? 'unknown')}`;

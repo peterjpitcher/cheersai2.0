@@ -3,6 +3,7 @@ import 'server-only';
 import net from 'node:net';
 
 import { env } from '@/env';
+import { clientIp } from '@/lib/client-ip';
 import { COMPANY } from '@/lib/legal/company';
 
 // ---------------------------------------------------------------------------
@@ -37,13 +38,15 @@ export type TurnstileResult =
 const VISITOR_ERROR_CODES = new Set(['missing-input-response', 'invalid-input-response', 'timeout-or-duplicate']);
 
 /**
- * The visitor's IP as Cloudflare wants it: the first x-forwarded-for entry,
- * which Vercel sets and overwrites. Not the /64-grouped form the rate limiter
- * uses. Null when it is not a plain IP address (it is optional for siteverify).
+ * The visitor's IP as Cloudflare wants it, from `clientIp()` (src/lib/client-ip.ts):
+ * the address Vercel saw, which it sets and overwrites, or cf-connecting-ip when
+ * that address is a Cloudflare edge, so siteverify never gets Cloudflare's own
+ * address. Not the /64-grouped form the rate limiter uses. Null when it is not a
+ * plain IP address (it is optional for siteverify).
  */
 export function turnstileRemoteIp(headers: Pick<Headers, 'get'>): string | null {
-  const first = headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? '';
-  return net.isIP(first) ? first : null;
+  const ip = clientIp(headers) ?? '';
+  return net.isIP(ip) ? ip : null;
 }
 
 interface SiteverifyResponse {

@@ -26,6 +26,7 @@ const {
   consumeAuthRateLimit,
   peekAuthRateLimit,
   clientIpFromHeaders,
+  getRateLimitKey,
   normaliseIp,
   rateLimitKey,
   AUTH_RATE_LIMIT_RULES,
@@ -360,6 +361,31 @@ describe('client IP', () => {
   it('falls back to x-real-ip, then to unknown', () => {
     expect(clientIpFromHeaders(new Headers({ 'x-real-ip': '198.51.100.2' }))).toBe('198.51.100.2');
     expect(clientIpFromHeaders(new Headers())).toBe('unknown');
+  });
+
+  it('behind Cloudflare, counts the visitor from cf-connecting-ip, not the shared edge', () => {
+    const edge = { 'x-vercel-forwarded-for': '104.16.0.1', 'x-forwarded-for': '104.16.0.1' };
+    expect(clientIpFromHeaders(new Headers({ ...edge, 'cf-connecting-ip': '203.0.113.7' }))).toBe('203.0.113.7');
+    expect(clientIpFromHeaders(new Headers({ ...edge, 'cf-connecting-ip': '2001:db8:1:2::7' }))).toBe('2001:db8:1:2::/64');
+  });
+
+  it('ignores cf-connecting-ip from a client that did not come through Cloudflare', () => {
+    expect(
+      clientIpFromHeaders(new Headers({ 'x-forwarded-for': '198.51.100.2', 'cf-connecting-ip': '203.0.113.7' })),
+    ).toBe('198.51.100.2');
+  });
+
+  it('keys the in-memory route limits by the same visitor IP, or the user agent when there is none', () => {
+    const viaCloudflare = new Request('https://cheers.orangejelly.co.uk/api/feed/x', {
+      headers: { 'x-forwarded-for': '104.16.0.1', 'cf-connecting-ip': '203.0.113.7' },
+    });
+    expect(getRateLimitKey(viaCloudflare, 'feed:x')).toBe('feed:x:ip:203.0.113.7');
+    const forged = new Request('https://cheers.orangejelly.co.uk/api/feed/x', {
+      headers: { 'x-forwarded-for': '198.51.100.2', 'cf-connecting-ip': '203.0.113.7' },
+    });
+    expect(getRateLimitKey(forged, 'feed:x')).toBe('feed:x:ip:198.51.100.2');
+    const noIp = new Request('https://cheers.orangejelly.co.uk/api/feed/x', { headers: { 'user-agent': 'test-agent' } });
+    expect(getRateLimitKey(noIp, 'feed:x')).toMatch(/^feed:x:ua:[0-9a-f]{16}$/);
   });
 
   it('counts IPv6 per /64 so one network cannot rotate addresses', () => {
