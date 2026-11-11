@@ -13,7 +13,8 @@ const NOT_INDEXABLE = [
   '/help',
   '/api/cron/publish-scheduler',
   '/l/the-anchor',
-  '/robots.txt',
+  '/robots.txt/',
+  '/robots.txtx',
   '/terms/old',
   '/terms-and-conditions',
   '/privacy-policy',
@@ -30,8 +31,13 @@ const NOT_INDEXABLE = [
   '/brand/',
   '/brand/sub/file.png',
   '/brands/logo.png',
-  '/sitemap.xml',
+  '/sitemap.xml/',
+  '/sitemap.xml.bak',
+  '/sitemapxxml',
 ];
+
+/** The crawl files, which must never tell a search engine to ignore them. */
+const CRAWL_FILES = ['/sitemap.xml', '/robots.txt'];
 
 /** Each guide sits one level below /guides and may be indexed once the switch is on. */
 const GUIDE_PAGES = ['/guides/some-guide', '/guides/some-guide/', '/guides/plan-a-week-of-pub-posts'];
@@ -44,7 +50,7 @@ const INDEXABLE_FILES = ['/brand/cheers-icon-512.png', '/og', '/og/', '/og/guide
 
 describe('security headers', () => {
   it('send the security headers on every path, indexable or not', () => {
-    for (const path of [...INDEXABLE_PATHS, ...GUIDE_PAGES, ...INDEXABLE_FILES, ...NOT_INDEXABLE]) {
+    for (const path of [...INDEXABLE_PATHS, ...GUIDE_PAGES, ...INDEXABLE_FILES, ...CRAWL_FILES, ...NOT_INDEXABLE]) {
       const headers = headersFor(path);
       expect(headers['X-Frame-Options'], path).toBe('DENY');
       expect(headers['X-Content-Type-Options'], path).toBe('nosniff');
@@ -69,6 +75,12 @@ describe('security headers', () => {
 
   it('never send X-Robots-Tag on the logo or the share images the structured data names', () => {
     for (const path of INDEXABLE_FILES) {
+      expect(headersFor(path)['X-Robots-Tag'], path).toBeUndefined();
+    }
+  });
+
+  it('never send X-Robots-Tag on /sitemap.xml or /robots.txt, so the sitemap stays a clean crawl signal', () => {
+    for (const path of CRAWL_FILES) {
       expect(headersFor(path)['X-Robots-Tag'], path).toBeUndefined();
     }
   });

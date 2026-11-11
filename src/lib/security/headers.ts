@@ -58,12 +58,18 @@ export const INDEXABLE_SECTIONS = ['/guides'] as const;
  * and /og/guides/<slug>). The share images answer 404 while the switch is off;
  * the static /brand files stay out of search through robots.txt until then.
  *
+ * It also leaves out /sitemap.xml and /robots.txt: the guides' own header
+ * comment (src/lib/signup/front-door.ts) says the sitemap must stay crawlable,
+ * and a noindex header on the file that lists every indexable page sends
+ * search engines a mixed signal. Both files already follow the switch.
+ *
  * `.+` leaves out `/`; the lookahead leaves out the legal pages, /guides,
  * /guides/<slug>, /brand/<file>, /og and /og/guides/<slug> (each with or
- * without a trailing slash), but not paths below those.
+ * without a trailing slash), and /sitemap.xml and /robots.txt (exactly), but
+ * not paths below those.
  */
 const NOT_INDEXABLE_SOURCE =
-  '/:path((?!(?:terms|privacy|data-processing|guides(?:/[^/]+)?|brand/[^/]+|og(?:/guides/[^/]+)?)/?$).+)';
+  '/:path((?!(?:(?:terms|privacy|data-processing|guides(?:/[^/]+)?|brand/[^/]+|og(?:/guides/[^/]+)?)/?|sitemap\\.xml|robots\\.txt)$).+)';
 
 /** Security headers for all routes. Import into next.config.ts headers(). */
 export const securityHeaders: HeaderConfig[] = [
