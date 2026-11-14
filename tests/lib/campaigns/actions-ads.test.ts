@@ -88,7 +88,7 @@ describe("startAdsOAuth", () => {
   const ownerContext = (role: "owner" | "member" = "owner") => ({
     accountId: ACCOUNT,
     user: { id: USER },
-    features: { paidAds: true, tournaments: true, managementImport: true },
+    features: { paidAds: true, tournaments: true, managementImport: true, googlePosts: false },
     role,
   });
 
@@ -161,7 +161,7 @@ describe("selectAdAccount", () => {
     revalidatePathMock.mockReset();
     fromQueue = [];
     useStoredTokens(null);
-    requireAuthContextMock.mockResolvedValue({ accountId: "account-uuid-1", features: { paidAds: true, tournaments: true, managementImport: true }, role: "owner" });
+    requireAuthContextMock.mockResolvedValue({ accountId: "account-uuid-1", features: { paidAds: true, tournaments: true, managementImport: true, googlePosts: false }, role: "owner" });
   });
 
   it("should return error when no ads token exists", async () => {
@@ -329,7 +329,7 @@ describe("getAdAccountSetupStatus", () => {
     revalidatePathMock.mockReset();
     fromQueue = [];
     useStoredTokens(null);
-    requireAuthContextMock.mockResolvedValue({ accountId: "account-uuid-1", features: { paidAds: true, tournaments: true, managementImport: true }, role: "owner" });
+    requireAuthContextMock.mockResolvedValue({ accountId: "account-uuid-1", features: { paidAds: true, tournaments: true, managementImport: true, googlePosts: false }, role: "owner" });
   });
 
   it("logs database errors instead of silently reporting disconnected status", async () => {
@@ -441,7 +441,7 @@ describe("updateAdAccountConversionSettings", () => {
     revalidatePathMock.mockReset();
     fromQueue = [];
     useStoredTokens(null);
-    requireAuthContextMock.mockResolvedValue({ accountId: "account-uuid-1", features: { paidAds: true, tournaments: true, managementImport: true }, role: "owner" });
+    requireAuthContextMock.mockResolvedValue({ accountId: "account-uuid-1", features: { paidAds: true, tournaments: true, managementImport: true, googlePosts: false }, role: "owner" });
   });
 
   it("allows the legacy seed pixel ID when it is entered explicitly", async () => {

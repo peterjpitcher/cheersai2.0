@@ -7,7 +7,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
  * live ad spend can always be stopped.
  */
 
-const OFF = { paidAds: false, tournaments: false, managementImport: false };
+const OFF = { paidAds: false, tournaments: false, managementImport: false, googlePosts: false };
 const mockRequireAuthContext = vi.fn();
 vi.mock('@/lib/auth/server', () => ({ requireAuthContext: () => mockRequireAuthContext() }));
 

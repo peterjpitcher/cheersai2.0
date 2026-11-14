@@ -72,6 +72,9 @@ export interface ManagementEventDetail {
   meta_ads_short_link?: string | null;
   metaAdsDestinationUrl?: string | null;
   meta_ads_destination_url?: string | null;
+  /** The event's Google Business Profile tracked link (tasks/SPEC-gbp-posting-reintroduction.md). */
+  googleBusinessProfileShortLink?: string | null;
+  google_business_profile_short_link?: string | null;
   ctaLinks?: ManagementEventCtaLinks | null;
   cta_links?: ManagementEventCtaLinks | null;
   booking_mode?: string | null;
@@ -93,6 +96,8 @@ export interface ManagementEventDetail {
   performer_name?: string | null;
   performer_type?: string | null;
   end_time?: string | null;
+  /** How long the event runs, in minutes; used for the end only when end_time is missing. */
+  duration_minutes?: number | null;
   last_entry_time?: string | null;
   ticket_price?: number | null;
   online_discount_type?: string | null;
@@ -153,6 +158,8 @@ export interface ManagementEventCtaLinks {
   facebook?: string | null;
   instagram?: string | null;
   meta_ads?: string | null;
+  /** Google Business Profile; the API sends it as both `gbp` and `google_business_profile`. */
+  gbp?: string | null;
 }
 
 export interface ManagementBookingConversion {
@@ -668,6 +675,8 @@ function shapeEventDetail(value: unknown): ManagementEventDetail {
     meta_ads_short_link: canonicaliseShortLinkUrl(asOptionalString(row.meta_ads_short_link)),
     metaAdsDestinationUrl: asOptionalString(row.metaAdsDestinationUrl),
     meta_ads_destination_url: asOptionalString(row.meta_ads_destination_url),
+    googleBusinessProfileShortLink: canonicaliseShortLinkUrl(asOptionalString(row.googleBusinessProfileShortLink)),
+    google_business_profile_short_link: canonicaliseShortLinkUrl(asOptionalString(row.google_business_profile_short_link)),
     ctaLinks: readCtaLinks(row.ctaLinks),
     cta_links: readCtaLinks(row.cta_links),
     booking_mode: asOptionalString(row.booking_mode),
@@ -686,6 +695,7 @@ function shapeEventDetail(value: unknown): ManagementEventDetail {
     performer_name: asOptionalString(row.performer_name),
     performer_type: asOptionalString(row.performer_type),
     end_time: asOptionalString(row.end_time),
+    duration_minutes: asOptionalNumber(row.duration_minutes),
     last_entry_time: asOptionalString(row.last_entry_time),
     ticket_price: asOptionalNumber(row.ticket_price),
     online_discount_type: asOptionalString(row.online_discount_type),
@@ -726,10 +736,12 @@ function readCtaLinks(value: unknown): ManagementEventCtaLinks | null {
   const facebook = asOptionalString(row.facebook);
   const instagram = asOptionalString(row.instagram);
   const metaAds = asOptionalString(row.meta_ads);
+  const gbp = asOptionalString(row.gbp) ?? asOptionalString(row.google_business_profile);
 
   if (facebook) links.facebook = canonicaliseShortLinkUrl(facebook);
   if (instagram) links.instagram = canonicaliseShortLinkUrl(instagram);
   if (metaAds) links.meta_ads = canonicaliseShortLinkUrl(metaAds);
+  if (gbp) links.gbp = canonicaliseShortLinkUrl(gbp);
 
   return Object.keys(links).length ? links : null;
 }

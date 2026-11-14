@@ -13,7 +13,7 @@ vi.mock('@/lib/meta/ad-account-tokens', () => ({
 // --- Mocks must be declared before imports ---
 
 vi.mock('@/lib/auth/server', () => ({
-  requireAuthContext: vi.fn().mockResolvedValue({ features: { paidAds: true, tournaments: true, managementImport: true }, accountId: 'account-123', user: { id: 'user-123' } }),
+  requireAuthContext: vi.fn().mockResolvedValue({ features: { paidAds: true, tournaments: true, managementImport: true, googlePosts: false }, accountId: 'account-123', user: { id: 'user-123' } }),
 }));
 
 vi.mock('@/lib/supabase/service', () => ({

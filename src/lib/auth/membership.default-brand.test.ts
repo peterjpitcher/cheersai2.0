@@ -10,7 +10,7 @@ import { loadBrands, resolveActiveBrand } from '@/lib/auth/membership';
  */
 
 function account(id: string, name: string) {
-  return { id, business_name: name, timezone: 'Europe/London', paid_ads_enabled: false, tournaments_enabled: false, management_import_enabled: false };
+  return { id, business_name: name, timezone: 'Europe/London', paid_ads_enabled: false, tournaments_enabled: false, management_import_enabled: false, google_posts_enabled: false };
 }
 
 /** Accounts come back ordered by name, as the real query asks. */
@@ -156,7 +156,7 @@ describe('resolveActiveBrand edge cases', () => {
   });
 
   it('keeps name order on a tie and ignores unreadable dates', () => {
-    const base = { timezone: 'Europe/London', features: { paidAds: false, tournaments: false, managementImport: false }, role: 'owner' as const };
+    const base = { timezone: 'Europe/London', features: { paidAds: false, tournaments: false, managementImport: false, googlePosts: false }, role: 'owner' as const };
     const brands = [
       { ...base, accountId: 'a', name: 'Alpha', joinedAt: '2026-07-14T14:13:00Z' },
       { ...base, accountId: 'b', name: 'Bravo', joinedAt: '2026-07-14T14:13:00Z' },

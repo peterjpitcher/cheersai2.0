@@ -130,3 +130,61 @@ describe("management app mappers: copy facts", () => {
     expect(mapped.fields.facts).toMatchObject({ category: "Music Bingo", times: "starts 7pm; doors 6:30pm" });
   });
 });
+
+
+describe("management app mappers: Google event post fields", () => {
+  const base = { id: "evt-20", name: "Quiz Night", date: "2026-12-04", time: "19:00" };
+
+  it("carries the event id, the Google link and whether it takes bookings", () => {
+    const mapped = mapManagementEventToEventCampaignPrefill({
+      ...base,
+      booking_url: "https://www.the-anchor.pub/events/quiz-night",
+      cta_links: { gbp: "https://l.the-anchor.pub/gbp-quiz" },
+    });
+    expect(mapped.fields).toMatchObject({
+      managementEventId: "evt-20",
+      googleCtaUrl: "https://l.the-anchor.pub/gbp-quiz",
+      takesBookings: true,
+    });
+    // The Facebook and Instagram links are unchanged by the Google one.
+    expect(mapped.fields.ctaLinks).toEqual({});
+  });
+
+  it("falls back to the Google short link field, and reports no bookings without a booking link", () => {
+    const mapped = mapManagementEventToEventCampaignPrefill({
+      ...base,
+      google_business_profile_short_link: "https://l.the-anchor.pub/gbp-quiz-2",
+    });
+    expect(mapped.fields.googleCtaUrl).toBe("https://l.the-anchor.pub/gbp-quiz-2");
+    expect(mapped.fields.takesBookings).toBe(false);
+  });
+
+  it("uses the management app's end time, with or without seconds", () => {
+    expect(mapManagementEventToEventCampaignPrefill({ ...base, end_time: "22:30:00" }).fields.endTime).toBe("22:30");
+    expect(mapManagementEventToEventCampaignPrefill({ ...base, end_time: "00:00" }).fields.endTime).toBe("00:00");
+  });
+
+  it("prefers the end time over the duration", () => {
+    const mapped = mapManagementEventToEventCampaignPrefill({ ...base, end_time: "22:30:00", duration_minutes: 60 });
+    expect(mapped.fields.endTime).toBe("22:30");
+    expect(mapped.fields.endDate).toBeUndefined();
+  });
+
+  it("works the end out from the duration when there is no end time", () => {
+    const mapped = mapManagementEventToEventCampaignPrefill({ ...base, duration_minutes: 150 });
+    expect(mapped.fields.endTime).toBe("21:30");
+    expect(mapped.fields.endDate).toBeUndefined();
+  });
+
+  it("never guesses an end: no end time and no usable duration leaves it empty", () => {
+    expect(mapManagementEventToEventCampaignPrefill({ ...base }).fields.endTime).toBeUndefined();
+    expect(mapManagementEventToEventCampaignPrefill({ ...base, duration_minutes: 0 }).fields.endTime).toBeUndefined();
+    expect(mapManagementEventToEventCampaignPrefill({ ...base, end_time: "late" }).fields.endTime).toBeUndefined();
+  });
+
+  it("does not work an end out from a placeholder start time", () => {
+    const mapped = mapManagementEventToEventCampaignPrefill({ id: "evt-21", name: "No time yet", date: "2026-12-04", duration_minutes: 120 });
+    expect(mapped.fields.startTime).toBe("19:00");
+    expect(mapped.fields.endTime).toBeUndefined();
+  });
+});

@@ -375,16 +375,17 @@ function siteUrlOrThrow(): string {
 
 // ---------------------------------------------------------------------------
 // setBrandFeature -- per-brand feature switches (paid ads, tournaments,
-// management-app import). See src/lib/auth/features.ts.
+// management-app import, Google posting). See src/lib/auth/features.ts.
 // ---------------------------------------------------------------------------
 
 const FEATURE_COLUMNS = {
   paidAds: 'paid_ads_enabled',
   tournaments: 'tournaments_enabled',
   managementImport: 'management_import_enabled',
+  googlePosts: 'google_posts_enabled',
 } as const satisfies Record<BrandFeature, string>;
 
-const brandFeatureSchema = z.enum(['paidAds', 'tournaments', 'managementImport']);
+const brandFeatureSchema = z.enum(['paidAds', 'tournaments', 'managementImport', 'googlePosts']);
 
 export async function setBrandFeature(
   accountId: string,

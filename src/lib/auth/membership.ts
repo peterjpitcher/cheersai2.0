@@ -19,16 +19,18 @@ interface AccountRow {
   paid_ads_enabled: boolean | null;
   tournaments_enabled: boolean | null;
   management_import_enabled: boolean | null;
+  google_posts_enabled: boolean | null;
 }
 
 const ACCOUNT_COLUMNS =
-  'id, business_name, timezone, paid_ads_enabled, tournaments_enabled, management_import_enabled';
+  'id, business_name, timezone, paid_ads_enabled, tournaments_enabled, management_import_enabled, google_posts_enabled';
 
 /** Every feature switch off: the default for a brand, and for a user with no brand. */
 export const NO_FEATURES: BrandFeatures = Object.freeze({
   paidAds: false,
   tournaments: false,
   managementImport: false,
+  googlePosts: false,
 });
 
 /** Whether the user is a global super-admin (app_admins registry). */
@@ -104,6 +106,7 @@ export async function loadBrands(
       paidAds: row.paid_ads_enabled === true,
       tournaments: row.tournaments_enabled === true,
       managementImport: row.management_import_enabled === true,
+      googlePosts: row.google_posts_enabled === true,
     },
     role: superAdmin ? 'owner' : roleByAccount.get(row.id) ?? 'member',
     joinedAt: joinedAtByAccount.get(row.id) ?? null,

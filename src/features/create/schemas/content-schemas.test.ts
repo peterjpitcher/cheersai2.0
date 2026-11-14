@@ -76,6 +76,56 @@ describe('Content Zod Schemas', () => {
     });
   });
 
+  describe('eventBriefSchema end time and Google event fields', () => {
+    const event = {
+      ...baseFields,
+      contentType: 'event' as const,
+      eventName: 'Quiz Night',
+      eventDate: '2026-12-04',
+      eventTime: '19:00',
+    };
+
+    it('accepts an event with no end time (Facebook and Instagram never need one)', () => {
+      const result = eventBriefSchema.safeParse(event);
+      expect(result.success).toBe(true);
+      if (result.success) expect(result.data.eventEndTime).toBeUndefined();
+    });
+
+    it('keeps an end time and treats an empty one as not set', () => {
+      const withEnd = eventBriefSchema.safeParse({ ...event, eventEndTime: '22:30' });
+      expect(withEnd.success && withEnd.data.eventEndTime).toBe('22:30');
+      const empty = eventBriefSchema.safeParse({ ...event, eventEndTime: '' });
+      expect(empty.success).toBe(true);
+      if (empty.success) expect(empty.data.eventEndTime).toBeUndefined();
+    });
+
+    it('rejects a malformed end time', () => {
+      expect(eventBriefSchema.safeParse({ ...event, eventEndTime: '25:00' }).success).toBe(false);
+      expect(eventBriefSchema.safeParse({ ...event, eventEndTime: '9pm' }).success).toBe(false);
+    });
+
+    it('keeps the imported event id, Google link and booking flag', () => {
+      const result = eventBriefSchema.safeParse({
+        ...event,
+        managementEventId: 'evt-20',
+        googleCtaUrl: 'https://l.the-anchor.pub/gbp-quiz',
+        takesBookings: true,
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data).toMatchObject({
+          managementEventId: 'evt-20',
+          googleCtaUrl: 'https://l.the-anchor.pub/gbp-quiz',
+          takesBookings: true,
+        });
+      }
+    });
+
+    it('rejects a Google link that is not http or https', () => {
+      expect(eventBriefSchema.safeParse({ ...event, googleCtaUrl: 'javascript:alert(1)' }).success).toBe(false);
+    });
+  });
+
   describe('eventBriefSchema placements', () => {
     const base = {
       contentType: 'event' as const,

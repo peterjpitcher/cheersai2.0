@@ -8,7 +8,7 @@ function brand(accountId: string, role: BrandSummary['role']): BrandSummary {
     accountId,
     name: accountId,
     timezone: 'Europe/London',
-    features: { paidAds: false, tournaments: false, managementImport: false },
+    features: { paidAds: false, tournaments: false, managementImport: false, googlePosts: false },
     role,
     joinedAt: null,
   };

@@ -152,8 +152,29 @@ export const eventBriefSchema = baseContentSchema.extend({
     .union([z.string().date(), z.literal('')])
     .transform((v) => v || undefined)
     .optional(),
+  /**
+   * When the event ends (HH:MM). Optional for Facebook and Instagram; a Google
+   * Business Profile event post needs it (tasks/SPEC-gbp-posting-reintroduction.md §3).
+   * Pre-filled on import and editable.
+   */
+  eventEndTime: z
+    .union([z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Time must be HH:MM format'), z.literal('')])
+    .transform((v) => v || undefined)
+    .optional(),
   venue: z.string().max(200).optional(),
   placements: eventPlacementsSchema,
+  /**
+   * Set on import, for Google profile event posts: which management
+   * app event this is (one Google post per event), the event's Google tracked
+   * link, and whether it takes bookings (BOOK or LEARN_MORE button).
+   */
+  managementEventId: z.string().max(100).optional(),
+  googleCtaUrl: z
+    .string()
+    .max(2000)
+    .refine((u) => /^https?:\/\//i.test(u), 'Link must start with http:// or https://')
+    .optional(),
+  takesBookings: z.boolean().optional(),
   /**
    * Facts the management app holds about the event, rendered into the copy
    * prompt as the only facts to use (tasks/SPEC-event-copy-engine.md B2).

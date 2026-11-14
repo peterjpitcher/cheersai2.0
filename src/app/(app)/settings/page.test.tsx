@@ -10,7 +10,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mockSwitch = vi.fn<() => Promise<'open' | 'closed' | 'enforcement_off' | 'unavailable'>>(async () => 'open');
 vi.mock('@/lib/signup/switch', () => ({ getSelfServeSignupSwitch: () => mockSwitch() }));
 
-const OWNER_CTX = { features: { managementImport: false }, role: 'owner', supabase: {}, accountId: 'a1', user: { id: 'u1' }, isSuperAdmin: false };
+const OWNER_CTX = { features: { managementImport: false, googlePosts: false }, role: 'owner', supabase: {}, accountId: 'a1', user: { id: 'u1' }, isSuperAdmin: false };
 const mockAuth = vi.fn(async (): Promise<Record<string, unknown>> => OWNER_CTX);
 vi.mock('@/lib/auth/server', () => ({ requireAuthContext: () => mockAuth() }));
 

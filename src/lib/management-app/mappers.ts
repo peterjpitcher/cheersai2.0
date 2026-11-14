@@ -5,6 +5,7 @@ import type { ManagementEventDetail, ManagementMenuSpecialItem } from "@/lib/man
 import { buildEventFactSheet, stripImportedFormatting, toneForCategory, type CopyTone, type EventFactSheet } from "@/lib/management-app/event-facts";
 import type { PromotionWindow } from "@/lib/management-app/promotion-window";
 import { DEFAULT_TIMEZONE } from "@/lib/constants";
+import { eventEndFromDuration } from "@/lib/scheduling/event-end";
 import type { PlatformCtaLinks } from "@/types/content";
 
 interface EventPrefillResult {
@@ -27,6 +28,16 @@ interface EventPrefillResult {
     seatsRemaining?: number;
     isFree?: boolean;
     ctaLinks?: PlatformCtaLinks;
+    /**
+     * For Google profile event posts (tasks/SPEC-gbp-posting-reintroduction.md §3).
+     * endTime is the management app's end time, or start plus its duration when it has none;
+     * endDate is set only for an event that ends on a later day than the form would work out.
+     */
+    endTime?: string;
+    endDate?: string;
+    managementEventId?: string;
+    googleCtaUrl?: string;
+    takesBookings?: boolean;
     /** What the management app knows about the event, for the copy prompt. */
     facts?: EventFactSheet;
     /** A starting tone for this kind of event, when the category suggests one. */
@@ -76,6 +87,15 @@ export function mapManagementEventToEventCampaignPrefill(
     undefined;
   const metaAdsDestinationUrl =
     detail.metaAdsDestinationUrl?.trim() || detail.meta_ads_destination_url?.trim() || undefined;
+  const googleCtaUrl =
+    detail.ctaLinks?.gbp?.trim() ||
+    detail.cta_links?.gbp?.trim() ||
+    detail.googleBusinessProfileShortLink?.trim() ||
+    detail.google_business_profile_short_link?.trim() ||
+    undefined;
+  // Only from the event's real start: the fallbacks above are placeholders, not facts.
+  const hasRealStart = Boolean(resolveEventStartDate(detail) && resolveEventStartTime(detail));
+  const eventEnd = hasRealStart ? resolveEventEndPrefill(detail, startDate, startTime) : null;
   const eventCategoryName = detail.categoryName?.trim() || detail.category?.name?.trim() || undefined;
   const eventCategorySlug = detail.categorySlug?.trim() || detail.category?.slug?.trim() || undefined;
 
@@ -134,6 +154,10 @@ export function mapManagementEventToEventCampaignPrefill(
         ...(facebookCtaUrl ? { facebook: facebookCtaUrl } : {}),
         ...(linkInBioUrl ? { instagram: linkInBioUrl } : {}),
       },
+      ...(eventEnd ?? {}),
+      managementEventId: detail.id,
+      googleCtaUrl,
+      takesBookings: Boolean(bookingUrl),
       facts: buildEventFactSheet({ ...detail, categoryName: eventCategoryName ?? null }),
       suggestedTone: toneForCategory(eventCategoryName ?? eventCategorySlug) ?? undefined,
       prompt: promptParts.join(" "),
@@ -193,6 +217,21 @@ function resolveEventStartTime(detail: ManagementEventDetail): string | null {
   }
 
   return null;
+}
+
+/**
+ * The end to pre-fill: the management app's own end time when it has one
+ * (HH:MM or HH:MM:SS), otherwise start plus its duration. Nothing is guessed
+ * when it holds neither.
+ */
+function resolveEventEndPrefill(
+  detail: ManagementEventDetail,
+  startDate: string,
+  startTime: string,
+): { endTime: string; endDate?: string } | null {
+  const explicit = detail.end_time?.trim().match(/^([01]\d|2[0-3]):([0-5]\d)(?::\d{2})?$/);
+  if (explicit) return { endTime: `${explicit[1]}:${explicit[2]}` };
+  return eventEndFromDuration({ startDate, startTime, durationMinutes: detail.duration_minutes });
 }
 
 function parseIsoDateToLocalDate(value: string | null | undefined): string | null {

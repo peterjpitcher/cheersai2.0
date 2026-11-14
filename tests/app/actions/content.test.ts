@@ -108,11 +108,11 @@ describe('createScheduledBatch', () => {
       supabase: supabaseMock.mock as never,
       accountId: 'acc-1',
       activeAccountId: 'acc-1',
-      brands: [{ accountId: 'acc-1', name: 'Test', timezone: 'Europe/London', features: { paidAds: false, tournaments: false, managementImport: false }, role: 'owner', joinedAt: null }],
+      brands: [{ accountId: 'acc-1', name: 'Test', timezone: 'Europe/London', features: { paidAds: false, tournaments: false, managementImport: false, googlePosts: false }, role: 'owner', joinedAt: null }],
       isSuperAdmin: false,
-    features: { paidAds: false, tournaments: false, managementImport: false },
+    features: { paidAds: false, tournaments: false, managementImport: false, googlePosts: false },
     role: 'owner',
-      user: { id: 'user-1', email: 'test@test.com', accountId: 'acc-1', activeAccountId: 'acc-1', businessName: 'Test', timezone: 'Europe/London', brands: [{ accountId: 'acc-1', name: 'Test', timezone: 'Europe/London', features: { paidAds: false, tournaments: false, managementImport: false }, role: 'owner', joinedAt: null }], isSuperAdmin: false } as never,
+      user: { id: 'user-1', email: 'test@test.com', accountId: 'acc-1', activeAccountId: 'acc-1', businessName: 'Test', timezone: 'Europe/London', brands: [{ accountId: 'acc-1', name: 'Test', timezone: 'Europe/London', features: { paidAds: false, tournaments: false, managementImport: false, googlePosts: false }, role: 'owner', joinedAt: null }], isSuperAdmin: false } as never,
     });
   });
 
@@ -1587,11 +1587,11 @@ describe('getCalendarItemsAction', () => {
       supabase: supabaseMock.mock as never,
       accountId: 'acc-1',
       activeAccountId: 'acc-1',
-      brands: [{ accountId: 'acc-1', name: 'Test', timezone: 'Europe/London', features: { paidAds: false, tournaments: false, managementImport: false }, role: 'owner', joinedAt: null }],
+      brands: [{ accountId: 'acc-1', name: 'Test', timezone: 'Europe/London', features: { paidAds: false, tournaments: false, managementImport: false, googlePosts: false }, role: 'owner', joinedAt: null }],
       isSuperAdmin: false,
-    features: { paidAds: false, tournaments: false, managementImport: false },
+    features: { paidAds: false, tournaments: false, managementImport: false, googlePosts: false },
     role: 'owner',
-      user: { id: 'user-1', email: 'test@test.com', accountId: 'acc-1', activeAccountId: 'acc-1', businessName: 'Test', timezone: 'Europe/London', brands: [{ accountId: 'acc-1', name: 'Test', timezone: 'Europe/London', features: { paidAds: false, tournaments: false, managementImport: false }, role: 'owner', joinedAt: null }], isSuperAdmin: false } as never,
+      user: { id: 'user-1', email: 'test@test.com', accountId: 'acc-1', activeAccountId: 'acc-1', businessName: 'Test', timezone: 'Europe/London', brands: [{ accountId: 'acc-1', name: 'Test', timezone: 'Europe/London', features: { paidAds: false, tournaments: false, managementImport: false, googlePosts: false }, role: 'owner', joinedAt: null }], isSuperAdmin: false } as never,
     });
   });
 
@@ -1807,11 +1807,11 @@ describe('getDraft', () => {
       supabase: supabaseMock.mock as never,
       accountId: 'acc-1',
       activeAccountId: 'acc-1',
-      brands: [{ accountId: 'acc-1', name: 'Test', timezone: 'Europe/London', features: { paidAds: false, tournaments: false, managementImport: false }, role: 'owner', joinedAt: null }],
+      brands: [{ accountId: 'acc-1', name: 'Test', timezone: 'Europe/London', features: { paidAds: false, tournaments: false, managementImport: false, googlePosts: false }, role: 'owner', joinedAt: null }],
       isSuperAdmin: false,
-    features: { paidAds: false, tournaments: false, managementImport: false },
+    features: { paidAds: false, tournaments: false, managementImport: false, googlePosts: false },
     role: 'owner',
-      user: { id: 'user-1', email: 'test@test.com', accountId: 'acc-1', activeAccountId: 'acc-1', businessName: 'Test', timezone: 'Europe/London', brands: [{ accountId: 'acc-1', name: 'Test', timezone: 'Europe/London', features: { paidAds: false, tournaments: false, managementImport: false }, role: 'owner', joinedAt: null }], isSuperAdmin: false } as never,
+      user: { id: 'user-1', email: 'test@test.com', accountId: 'acc-1', activeAccountId: 'acc-1', businessName: 'Test', timezone: 'Europe/London', brands: [{ accountId: 'acc-1', name: 'Test', timezone: 'Europe/London', features: { paidAds: false, tournaments: false, managementImport: false, googlePosts: false }, role: 'owner', joinedAt: null }], isSuperAdmin: false } as never,
     });
   });
 
@@ -1850,11 +1850,11 @@ describe('listDrafts', () => {
       supabase: supabaseMock.mock as never,
       accountId: 'acc-1',
       activeAccountId: 'acc-1',
-      brands: [{ accountId: 'acc-1', name: 'Test', timezone: 'Europe/London', features: { paidAds: false, tournaments: false, managementImport: false }, role: 'owner', joinedAt: null }],
+      brands: [{ accountId: 'acc-1', name: 'Test', timezone: 'Europe/London', features: { paidAds: false, tournaments: false, managementImport: false, googlePosts: false }, role: 'owner', joinedAt: null }],
       isSuperAdmin: false,
-    features: { paidAds: false, tournaments: false, managementImport: false },
+    features: { paidAds: false, tournaments: false, managementImport: false, googlePosts: false },
     role: 'owner',
-      user: { id: 'user-1', email: 'test@test.com', accountId: 'acc-1', activeAccountId: 'acc-1', businessName: 'Test', timezone: 'Europe/London', brands: [{ accountId: 'acc-1', name: 'Test', timezone: 'Europe/London', features: { paidAds: false, tournaments: false, managementImport: false }, role: 'owner', joinedAt: null }], isSuperAdmin: false } as never,
+      user: { id: 'user-1', email: 'test@test.com', accountId: 'acc-1', activeAccountId: 'acc-1', businessName: 'Test', timezone: 'Europe/London', brands: [{ accountId: 'acc-1', name: 'Test', timezone: 'Europe/London', features: { paidAds: false, tournaments: false, managementImport: false, googlePosts: false }, role: 'owner', joinedAt: null }], isSuperAdmin: false } as never,
     });
   });
 

@@ -8,6 +8,12 @@ export interface BrandFeatures {
   paidAds: boolean;
   tournaments: boolean;
   managementImport: boolean;
+  /**
+   * Google profile posting (accounts.google_posts_enabled). For the
+   * owner's own profiles only: never on for a brand that signed itself up
+   * (tasks/SPEC-gbp-posting-reintroduction.md, D10).
+   */
+  googlePosts: boolean;
 }
 
 /** Role within a brand (decision D4). */

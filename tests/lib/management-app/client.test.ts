@@ -203,7 +203,11 @@ describe("management app client", () => {
             facebook: "https://vip-club.uk/fb-open-mic",
             instagram: "https://vip-club.uk/bio-open-mic",
             meta_ads: "https://vip-club.uk/ma-open-mic",
+            google_business_profile: "https://vip-club.uk/gbp-open-mic",
           },
+          google_business_profile_short_link: "https://vip-club.uk/gbp-open-mic",
+          end_time: "23:00:00",
+          duration_minutes: 180,
           payment_mode: "cash_only",
           price_per_seat: 3,
           capacity: 60,
@@ -222,7 +226,11 @@ describe("management app client", () => {
       facebook: "https://l.the-anchor.pub/fb-open-mic",
       instagram: "https://l.the-anchor.pub/bio-open-mic",
       meta_ads: "https://l.the-anchor.pub/ma-open-mic",
+      gbp: "https://l.the-anchor.pub/gbp-open-mic",
     });
+    expect(result.google_business_profile_short_link).toBe("https://l.the-anchor.pub/gbp-open-mic");
+    expect(result.end_time).toBe("23:00:00");
+    expect(result.duration_minutes).toBe(180);
     expect(result.payment_mode).toBe("cash_only");
     expect(result.price_per_seat).toBe(3);
     expect(result.capacity).toBe(60);

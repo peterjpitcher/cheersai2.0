@@ -47,7 +47,7 @@ describe("management app connection data", () => {
     fromMock.mockReset();
 
     requireAuthContextMock.mockResolvedValue({
-      features: { paidAds: true, tournaments: true, managementImport: true },
+      features: { paidAds: true, tournaments: true, managementImport: true, googlePosts: false },
       accountId: "account-1",
     });
     createServiceSupabaseClientMock.mockReturnValue({
@@ -136,7 +136,7 @@ describe("management app connection data", () => {
 
   it("refuses to read or save the connection when the brand's import switch is off", async () => {
     requireAuthContextMock.mockResolvedValue({
-      features: { paidAds: true, tournaments: true, managementImport: false },
+      features: { paidAds: true, tournaments: true, managementImport: false, googlePosts: false },
       accountId: "account-1",
     });
     // Even with a stored, enabled connection row, nothing may be read.

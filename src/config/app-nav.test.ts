@@ -31,8 +31,8 @@ describe('MOBILE_NAV_ITEMS', () => {
   });
 });
 
-const ALL_ON = { paidAds: true, tournaments: true, managementImport: true };
-const ALL_OFF = { paidAds: false, tournaments: false, managementImport: false };
+const ALL_ON = { paidAds: true, tournaments: true, managementImport: true, googlePosts: false };
+const ALL_OFF = { paidAds: false, tournaments: false, managementImport: false, googlePosts: false };
 
 describe('getOverflowItems', () => {
   it('should return items from APP_NAV_ITEMS not in the mobile bottom bar', () => {
@@ -98,7 +98,7 @@ describe('isNavActive', () => {
 
 describe('visibleNavItems', () => {
   it('shows each gated item only when its own switch is on', () => {
-    const ids = visibleNavItems(APP_NAV_ITEMS, { paidAds: true, tournaments: false, managementImport: false }).map(
+    const ids = visibleNavItems(APP_NAV_ITEMS, { paidAds: true, tournaments: false, managementImport: false, googlePosts: false }).map(
       (item) => item.id,
     );
     expect(ids).toContain('campaigns');
