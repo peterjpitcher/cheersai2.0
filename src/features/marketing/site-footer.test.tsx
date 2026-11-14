@@ -69,4 +69,19 @@ describe('SiteFooter', () => {
     expect(html).toMatch(creditAfterCompanyDetails(feed.href));
     expect(html).not.toContain('rel="nofollow"');
   });
+
+  it('names cookies on the privacy link and keeps the other legal titles', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn<typeof fetch>(async () => {
+        throw new TypeError('fetch failed');
+      }),
+    );
+
+    const html = await renderAll(<SiteFooter guidesHref={null} />);
+
+    expect(html).toMatch(/<a [^>]*href="\/privacy"[^>]*>Privacy and cookies<\/a>/);
+    expect(html).toMatch(/<a [^>]*href="\/terms"[^>]*>Terms of Service<\/a>/);
+    expect(html).toMatch(/<a [^>]*href="\/data-processing"[^>]*>Data Processing Agreement<\/a>/);
+  });
 });

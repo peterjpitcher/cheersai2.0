@@ -31,6 +31,8 @@ npm run ops:<name>          # tsx scripts in scripts/ops/ (catalogue in docs/age
 
 CI (`.github/workflows/ci.yml`) runs typecheck, lint, the tests (test:ci and test:utc) and build as separate jobs, then `supabase db lint` on a from-scratch local database and the e2e smoke suite when credentials are configured.
 
+A local production build (`npm run build`, then `npx next start`) needs `NEXT_PUBLIC_TURNSTILE_SITE_KEY` and `TURNSTILE_SECRET_KEY`. For the public site standard check (previews sit behind Vercel sign-in, so it runs against a local build), put Cloudflare's published test keys (`1x00000000000000000000AA` and `1x0000000000000000000000000000000AA`) in the worktree's copy of `.env.local`, never in a committed file.
+
 ## Architecture
 
 ```

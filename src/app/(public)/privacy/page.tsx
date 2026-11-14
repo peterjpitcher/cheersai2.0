@@ -10,6 +10,7 @@ import {
   LegalTable,
 } from "@/features/legal/legal-page";
 import { COMPANY, LEGAL_DOCUMENTS } from "@/lib/legal/company";
+import { withHomeShareImage } from "@/lib/marketing/metadata";
 import { indexable } from "@/lib/signup/front-door";
 import { SUB_PROCESSOR_ROWS } from "@/lib/legal/sub-processors";
 
@@ -32,7 +33,7 @@ export const dynamic = "force-dynamic";
 
 /** Public, and search engines may index it (SPEC-homepage-and-guides §3). */
 export function generateMetadata(): Metadata {
-  return indexable(METADATA);
+  return indexable(withHomeShareImage(METADATA));
 }
 
 const { terms, dpa } = LEGAL_DOCUMENTS;

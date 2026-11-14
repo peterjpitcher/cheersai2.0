@@ -58,7 +58,14 @@ export function SiteFooter({ guidesHref }: SiteFooterProps): React.JSX.Element {
     { href: '/help', label: 'Help' },
     { href: LOGIN_PATH, label: 'Sign in' },
   ];
-  const legalLinks: FooterLink[] = [terms, privacy, dpa].map((doc) => ({ href: doc.path, label: doc.title }));
+  // The privacy notice's footer link names cookies (its section 9 covers them), so
+  // visitors and the site standard (STD_COOKIE_POLICY_MISSING) find the cookie policy.
+  // Only this link's text changes: the document keeps its title everywhere else.
+  const legalLinks: FooterLink[] = [
+    { href: terms.path, label: terms.title },
+    { href: privacy.path, label: 'Privacy and cookies' },
+    { href: dpa.path, label: dpa.title },
+  ];
 
   return (
     <footer className="bg-ink text-[var(--c-ink-4)]">
