@@ -124,4 +124,47 @@ describe('buildCampaignMetadata', () => {
     expect(metadata.dayOfWeek).toBe(3);
     expect(metadata.time).toBe('17:00');
   });
+
+  describe('Google event post fields', () => {
+    it('stores the resolved end, the event key, the Google link and the booking flag', () => {
+      const result = buildCampaignMetadata('event', {
+        eventName: 'Quiz Night',
+        eventDate: '2026-12-04',
+        eventTime: '19:00',
+        eventEndTime: '22:30',
+        managementEventId: 'evt-20',
+        googleCtaUrl: 'https://l.the-anchor.pub/gbp-quiz',
+        takesBookings: true,
+      }, 3);
+
+      expect(result).toMatchObject({
+        eventEnd: '2026-12-04T22:30:00.000+00:00',
+        eventEndProblem: null,
+        eventTitle: 'Quiz Night',
+        sourceEventKey: 'mgmt:evt-20',
+        googleCtaUrl: 'https://l.the-anchor.pub/gbp-quiz',
+        takesBookings: true,
+      });
+    });
+
+    it('rolls an overnight end to the next day', () => {
+      const result = buildCampaignMetadata('event', { eventDate: '2026-12-31', eventTime: '20:00', eventEndTime: '01:00' }, 1);
+      expect(result.eventEnd).toBe('2027-01-01T01:00:00.000+00:00');
+    });
+
+    it('leaves the end empty with the reason when no end time was given, changing nothing else', () => {
+      const result = buildCampaignMetadata('event', { eventName: 'Live Music', eventDate: '2026-07-01', eventTime: '20:00' }, 2);
+      expect(result).toMatchObject({
+        eventEnd: null,
+        eventEndProblem: 'missing_end_time',
+        sourceEventKey: null,
+        googleCtaUrl: null,
+        takesBookings: false,
+        startDate: '2026-07-01',
+        startTime: '20:00',
+        endDate: null,
+      });
+      expect(result.eventStart).toMatch(/^2026-07-01T20:00:00/);
+    });
+  });
 });

@@ -55,7 +55,7 @@ export async function getAdminOverview(): Promise<{ brands: AdminBrand[]; users:
   const db = createServiceSupabaseClient();
 
   const [accounts, snapshots, members, admins, subscriptions, heldJobs] = await Promise.all([
-    db.from('accounts').select('id, business_name, timezone, archived_at, booking_ingest_secret, paid_ads_enabled, tournaments_enabled, management_import_enabled, billing_override, offboarded_at, purge_after').order('business_name', { ascending: true }),
+    db.from('accounts').select('id, business_name, timezone, archived_at, booking_ingest_secret, paid_ads_enabled, tournaments_enabled, management_import_enabled, google_posts_enabled, billing_override, offboarded_at, purge_after').order('business_name', { ascending: true }),
     db.from('user_auth_snapshot').select('user_id, email').order('email', { ascending: true }),
     db.from('account_members').select('account_id, user_id'),
     db.from('app_admins').select('user_id'),
@@ -94,6 +94,7 @@ export async function getAdminOverview(): Promise<{ brands: AdminBrand[]; users:
       paid_ads_enabled: boolean | null;
       tournaments_enabled: boolean | null;
       management_import_enabled: boolean | null;
+      google_posts_enabled: boolean | null;
       billing_override: 'comped' | 'suspended' | null;
       offboarded_at: string | null;
       purge_after: string | null;
@@ -110,6 +111,7 @@ export async function getAdminOverview(): Promise<{ brands: AdminBrand[]; users:
       paidAds: a.paid_ads_enabled === true,
       tournaments: a.tournaments_enabled === true,
       managementImport: a.management_import_enabled === true,
+      googlePosts: a.google_posts_enabled === true,
     },
     billing: {
       override: a.billing_override,

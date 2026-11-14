@@ -5,7 +5,7 @@ vi.mock('@/lib/auth/server', () => ({ requireAuthContext: () => mockRequireAuthC
 
 const { FeatureUnavailableError, hasFeature, requireFeatureContext } = await import('@/lib/auth/features');
 
-const OFF = { paidAds: false, tournaments: false, managementImport: false };
+const OFF = { paidAds: false, tournaments: false, managementImport: false, googlePosts: false };
 
 beforeEach(() => {
   mockRequireAuthContext.mockReset();

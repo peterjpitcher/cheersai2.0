@@ -387,7 +387,7 @@ function BrandFeaturesCard({ brands }: { brands: AdminBrand[] }) {
     <div className={CARD} style={CARD_STYLE}>
       <h2 className='mb-1 text-sm font-semibold' style={{ color: 'var(--c-ink)' }}>Brand features</h2>
       <p className='mb-3 text-xs' style={{ color: 'var(--c-ink-3)' }}>
-        Paid ads, tournaments and the management app import are off for new brands. Switch them on per brand.
+        Paid ads, tournaments, the management app import and Google posting are off for new brands. Switch them on per brand. Google posting is for your own profiles only and does nothing until the Google connection is built.
       </p>
       <div className='overflow-x-auto'>
         <table className='w-full text-left'>

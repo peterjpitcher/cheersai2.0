@@ -270,6 +270,21 @@ describe('setBrandFeature', () => {
     );
   });
 
+  it('switches Google posting, the owner-only channel, and audits it', async () => {
+    const { setBrandFeature } = await import('./actions');
+    expect(await setBrandFeature(A_BRAND, 'googlePosts', true)).toEqual({ success: true });
+    expect(mockLogAdminEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ detail: { feature: 'googlePosts', enabled: true } }),
+    );
+  });
+
+  it('refuses Google posting from anyone but a super-admin', async () => {
+    mockRequireAuthContext.mockResolvedValue({ ...SUPER_ADMIN_CTX, isSuperAdmin: false, supabase: buildSupabase() });
+    const { setBrandFeature } = await import('./actions');
+    expect(await setBrandFeature(A_BRAND, 'googlePosts', true)).toEqual({ error: 'Forbidden.' });
+    expect(mockLogAdminEvent).not.toHaveBeenCalled();
+  });
+
   it('reports a failed update without auditing success', async () => {
     state.accountsInsert = { data: null, error: { message: 'db down' } };
     const { setBrandFeature } = await import('./actions');

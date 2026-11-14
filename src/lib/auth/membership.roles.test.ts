@@ -3,8 +3,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { loadBrands } from '@/lib/auth/membership';
 
 const accounts = [
-  { id: 'a', business_name: 'Alpha', timezone: 'Europe/London', paid_ads_enabled: false, tournaments_enabled: false, management_import_enabled: false },
-  { id: 'b', business_name: 'Bravo', timezone: 'Europe/London', paid_ads_enabled: false, tournaments_enabled: false, management_import_enabled: false },
+  { id: 'a', business_name: 'Alpha', timezone: 'Europe/London', paid_ads_enabled: false, tournaments_enabled: false, management_import_enabled: false, google_posts_enabled: false },
+  { id: 'b', business_name: 'Bravo', timezone: 'Europe/London', paid_ads_enabled: false, tournaments_enabled: false, management_import_enabled: false, google_posts_enabled: false },
 ];
 
 function service(memberships: Array<{ account_id: string; role: string }>) {

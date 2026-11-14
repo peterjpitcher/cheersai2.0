@@ -1,0 +1,157 @@
+-- Verification for the gbp_posts_and_switch migration
+-- (tasks/SPEC-gbp-posting-reintroduction.md v4, sections 1 and 2).
+-- Run AFTER applying the migration, against a fresh local rebuild or production. Each block
+-- raises an exception if an expectation is not met; a clean run = pass. Writes nothing lasting:
+-- the constraints are exercised on a temporary copy of the table, never on real rows.
+-- Usage: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/gbp_posts_verify.sql
+
+do $$
+declare
+  v_col record;
+  v_role text;
+  v_priv text;
+begin
+  -- 1. The switch: boolean, not null, default false, and off for every brand that has not been
+  --    switched on by hand (the migration itself turns nothing on).
+  select data_type, is_nullable, column_default into v_col
+    from information_schema.columns
+   where table_schema = 'public' and table_name = 'accounts' and column_name = 'google_posts_enabled';
+  if not found then raise exception 'accounts.google_posts_enabled is missing'; end if;
+  if v_col.data_type <> 'boolean' then raise exception 'accounts.google_posts_enabled is %, expected boolean', v_col.data_type; end if;
+  if v_col.is_nullable <> 'NO' then raise exception 'accounts.google_posts_enabled must be not null'; end if;
+  if v_col.column_default is distinct from 'false' then
+    raise exception 'accounts.google_posts_enabled default is %, expected false', v_col.column_default;
+  end if;
+
+  -- 2. The table exists with RLS on and no policies (service role only).
+  if to_regclass('public.gbp_posts') is null then raise exception 'public.gbp_posts is missing'; end if;
+  if not (select relrowsecurity from pg_class where oid = 'public.gbp_posts'::regclass) then
+    raise exception 'RLS is off on public.gbp_posts';
+  end if;
+  if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'gbp_posts') then
+    raise exception 'public.gbp_posts has an RLS policy; it is meant to be service role only';
+  end if;
+
+  -- 3. anon, authenticated and PUBLIC hold nothing on it; service_role holds everything it needs.
+  foreach v_role in array array['anon', 'authenticated'] loop
+    foreach v_priv in array array['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'TRUNCATE', 'REFERENCES', 'TRIGGER'] loop
+      if has_table_privilege(v_role, 'public.gbp_posts', v_priv) then
+        raise exception '% holds % on public.gbp_posts', v_role, v_priv;
+      end if;
+    end loop;
+  end loop;
+  if exists (
+    select 1 from information_schema.role_table_grants
+     where table_schema = 'public' and table_name = 'gbp_posts' and grantee = 'PUBLIC'
+  ) then
+    raise exception 'PUBLIC holds a privilege on public.gbp_posts';
+  end if;
+  foreach v_priv in array array['SELECT', 'INSERT', 'UPDATE', 'DELETE'] loop
+    if not has_table_privilege('service_role', 'public.gbp_posts', v_priv) then
+      raise exception 'service_role lacks % on public.gbp_posts', v_priv;
+    end if;
+  end loop;
+
+  -- 4. The indexes that carry the guarantees.
+  if not exists (
+    select 1 from pg_indexes
+     where schemaname = 'public' and tablename = 'gbp_posts' and indexname = 'gbp_posts_one_per_event'
+       and indexdef ilike '%unique%' and indexdef ilike '%source_event_key is not null%'
+  ) then
+    raise exception 'gbp_posts_one_per_event is missing or not a partial unique index';
+  end if;
+  if not exists (
+    select 1 from pg_indexes
+     where schemaname = 'public' and tablename = 'gbp_posts' and indexname = 'gbp_posts_content_item_key'
+       and indexdef ilike '%unique%'
+  ) then
+    raise exception 'gbp_posts_content_item_key is missing or not unique';
+  end if;
+
+  -- 5. Foreign keys: brand and content item cascade, publish job is kept as null.
+  if (
+    select count(*) from pg_constraint
+     where conrelid = 'public.gbp_posts'::regclass and contype = 'f'
+       and (
+         (confrelid = 'public.accounts'::regclass and confdeltype = 'c')
+         or (confrelid = 'public.content_items'::regclass and confdeltype = 'c')
+         or (confrelid = 'public.publish_jobs'::regclass and confdeltype = 'n')
+       )
+  ) <> 3 then
+    raise exception 'gbp_posts foreign keys are not as expected';
+  end if;
+end $$;
+
+-- 6. Exercise the CHECK constraints and the one-per-event rule on a temporary copy
+--    (LIKE copies defaults, CHECKs and indexes, not foreign keys).
+do $$
+declare
+  v_account uuid := gen_random_uuid();
+  v_parent text := 'accounts/123/locations/456';
+begin
+  -- ON COMMIT DROP: the copy goes when this block's transaction ends, with no DROP statement
+  -- (the Supabase connector asks for confirmation before any DROP, even of a temporary table).
+  create temp table gbp_posts_probe (like public.gbp_posts including defaults including constraints including indexes) on commit drop;
+
+  -- Defaults: a new row is not scheduled and has no checks.
+  insert into gbp_posts_probe (account_id, content_item_id, local_post_parent)
+  values (v_account, gen_random_uuid(), v_parent);
+  if (select delivery_state from gbp_posts_probe) <> 'not_scheduled' then
+    raise exception 'delivery_state default is not not_scheduled';
+  end if;
+  if (select check_attempts from gbp_posts_probe) <> 0 then raise exception 'check_attempts default is not 0'; end if;
+
+  -- Every delivery state is accepted; anything else is refused.
+  update gbp_posts_probe set delivery_state = 'claimed' where true;
+  update gbp_posts_probe set delivery_state = 'sent' where true;
+  update gbp_posts_probe set delivery_state = 'uncertain' where true;
+  update gbp_posts_probe set delivery_state = 'failed' where true;
+  begin
+    update gbp_posts_probe set delivery_state = 'published' where true;
+    raise exception 'delivery_state "published" was accepted';
+  exception when check_violation then null;
+  end;
+
+  -- The destination must be accounts/{a}/locations/{l}.
+  begin
+    insert into gbp_posts_probe (account_id, content_item_id, local_post_parent)
+    values (v_account, gen_random_uuid(), 'locations/456');
+    raise exception 'a bare location id was accepted as local_post_parent';
+  exception when check_violation then null;
+  end;
+
+  -- The event key must be mgmt:<id> or campaign:<id>.
+  begin
+    insert into gbp_posts_probe (account_id, content_item_id, local_post_parent, source_event_key)
+    values (v_account, gen_random_uuid(), v_parent, 'quiz night');
+    raise exception 'a free-text source_event_key was accepted';
+  exception when check_violation then null;
+  end;
+
+  -- One Google post per event per profile.
+  insert into gbp_posts_probe (account_id, content_item_id, local_post_parent, source_event_key)
+  values (v_account, gen_random_uuid(), v_parent, 'mgmt:evt-1');
+  begin
+    insert into gbp_posts_probe (account_id, content_item_id, local_post_parent, source_event_key)
+    values (v_account, gen_random_uuid(), v_parent, 'mgmt:evt-1');
+    raise exception 'a second Google post for the same event and profile was accepted';
+  exception when unique_violation then null;
+  end;
+
+  -- The same event on another profile, another brand, and any number of ordinary posts are fine.
+  insert into gbp_posts_probe (account_id, content_item_id, local_post_parent, source_event_key)
+  values
+    (v_account, gen_random_uuid(), 'accounts/123/locations/789', 'mgmt:evt-1'),
+    (gen_random_uuid(), gen_random_uuid(), v_parent, 'mgmt:evt-1'),
+    (v_account, gen_random_uuid(), v_parent, null),
+    (v_account, gen_random_uuid(), v_parent, null);
+
+  -- One tracked row per content item.
+  begin
+    insert into gbp_posts_probe (account_id, content_item_id, local_post_parent)
+    select account_id, content_item_id, local_post_parent from gbp_posts_probe limit 1;
+    raise exception 'a second row for the same content item was accepted';
+  exception when unique_violation then null;
+  end;
+
+end $$;

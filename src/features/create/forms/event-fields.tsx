@@ -134,6 +134,13 @@ export function EventFields({
         }
         if (fields.startDate) setValue('eventDate', fields.startDate, { shouldValidate: true });
         if (fields.startTime) setValue('eventTime', fields.startTime, { shouldValidate: true });
+        // The end, and what a Google event post needs. Always written, so a
+        // second import never leaves the first event's values behind.
+        setValue('eventEndTime', fields.endTime ?? '', { shouldValidate: true });
+        setValue('eventEndDate', fields.endDate ?? '', { shouldValidate: true });
+        setValue('managementEventId', fields.managementEventId, { shouldValidate: true });
+        setValue('googleCtaUrl', fields.googleCtaUrl, { shouldValidate: true });
+        setValue('takesBookings', fields.takesBookings, { shouldValidate: true });
         if (fields.ctaLinks && Object.keys(fields.ctaLinks).length > 0) {
           setValue('ctaLinks', fields.ctaLinks, { shouldValidate: true });
         }
@@ -328,6 +335,19 @@ export function EventFields({
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className="space-y-1.5">
+          <Label htmlFor="eventEndTime">End time (optional)</Label>
+          <Input
+            id="eventEndTime"
+            type="time"
+            {...register('eventEndTime')}
+            aria-invalid={!!errors.eventEndTime}
+          />
+          {errors.eventEndTime && (
+            <p className="text-sm text-destructive">{String(errors.eventEndTime.message)}</p>
+          )}
+        </div>
+
         <div className="space-y-1.5">
           <Label htmlFor="eventEndDate">End date (optional)</Label>
           <Input

@@ -10,6 +10,7 @@ export const FEATURE_LABELS: Record<BrandFeature, string> = {
   paidAds: 'Paid ads',
   tournaments: 'Tournaments',
   managementImport: 'Management app import',
+  googlePosts: 'Google posting',
 };
 
 export function hasFeature(holder: { features: BrandFeatures }, feature: BrandFeature): boolean {
