@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import PrivacyPolicyPage, { generateMetadata as privacyMetadata } from "@/app/(public)/privacy/page";
 import DataProcessingPage, { generateMetadata as dpaMetadata } from "@/app/data-processing/page";
 import TermsPage, { generateMetadata as termsMetadata } from "@/app/terms/page";
+import { homeMetadata } from "@/lib/marketing/metadata";
 
 const switchState = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/signup/switch", () => ({ getSelfServeSignupSwitch: () => switchState() }));
@@ -179,5 +180,18 @@ describe("legal page indexing (SPEC-homepage-and-guides §3)", () => {
       }
     }
     expect(switchState).not.toHaveBeenCalled();
+  });
+
+  it("carries the homepage's share image in Open Graph and Twitter (STD_OG_IMAGE_MISSING)", async () => {
+    const home = homeMetadata();
+    for (const generate of METADATA) {
+      const metadata = await generate();
+      expect(metadata.openGraph?.images).toEqual(home.openGraph?.images);
+      expect(metadata.twitter?.images).toEqual(home.twitter?.images);
+      expect(metadata.twitter).toMatchObject({ card: "summary_large_image", title: metadata.openGraph?.title });
+    }
+    expect([home.openGraph?.images].flat()).toEqual([
+      expect.objectContaining({ url: expect.stringMatching(/^https?:\/\/[^/]+\/og$/), width: 1200, height: 630 }),
+    ]);
   });
 });

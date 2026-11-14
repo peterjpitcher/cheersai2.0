@@ -51,6 +51,26 @@ export function homeMetadata(): Metadata {
   };
 }
 
+/**
+ * A page's metadata with the homepage's share image added to its Open Graph
+ * and Twitter cards. For the legal pages, which have no picture of their own;
+ * without one a shared link shows no image (site standard STD_OG_IMAGE_MISSING).
+ */
+export function withHomeShareImage(metadata: Metadata): Metadata {
+  const image = shareImage(HOME_IMAGE_PATH, HOME_SEO.imageAlt);
+  return {
+    ...metadata,
+    openGraph: { ...metadata.openGraph, images: [image] },
+    twitter: {
+      card: 'summary_large_image',
+      title: metadata.openGraph?.title ?? undefined,
+      description: metadata.openGraph?.description ?? undefined,
+      ...metadata.twitter,
+      images: [image],
+    },
+  };
+}
+
 export function guidesIndexMetadata(): Metadata {
   const url = absoluteUrl(GUIDES_PATH);
   // The same picture as the homepage, so the same words describe it.
