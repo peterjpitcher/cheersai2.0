@@ -1,4 +1,4 @@
--- Verification for the gbp_posts_and_switch migration
+-- Verification for the gbp_posts_and_switch and guard_google_posts_switch migrations
 -- (tasks/SPEC-gbp-posting-reintroduction.md v4, sections 1 and 2).
 -- Run AFTER applying the migration, against a fresh local rebuild or production. Each block
 -- raises an exception if an expectation is not met; a clean run = pass. Writes nothing lasting:
@@ -154,4 +154,78 @@ begin
   exception when unique_violation then null;
   end;
 
+end $$;
+
+-- 7. The switch is guarded (the guard_google_posts_switch migration): a user session may change
+--    accounts.google_posts_enabled only as a super-admin.
+do $$
+declare
+  v_fn record;
+begin
+  if not exists (
+    select 1 from pg_trigger
+     where tgrelid = 'public.accounts'::regclass
+       and tgname = 'accounts_guard_google_posts_enabled'
+       and not tgisinternal
+       and tgenabled = 'O'
+       and tgfoid = 'public.guard_google_posts_enabled()'::regprocedure
+       and pg_get_triggerdef(oid) ilike '%before update of google_posts_enabled%'
+  ) then
+    raise exception 'accounts_guard_google_posts_enabled is missing, disabled or not BEFORE UPDATE OF google_posts_enabled';
+  end if;
+
+  select prosecdef, proconfig into v_fn from pg_proc where oid = 'public.guard_google_posts_enabled()'::regprocedure;
+  -- SECURITY INVOKER, so current_user is the caller's role; search_path pinned.
+  if v_fn.prosecdef then raise exception 'guard_google_posts_enabled must be SECURITY INVOKER'; end if;
+  if v_fn.proconfig is null or not exists (select 1 from unnest(v_fn.proconfig) c where c like 'search_path=%') then
+    raise exception 'guard_google_posts_enabled has no pinned search_path';
+  end if;
+  if has_function_privilege('anon', 'public.guard_google_posts_enabled()', 'EXECUTE')
+     or has_function_privilege('authenticated', 'public.guard_google_posts_enabled()', 'EXECUTE') then
+    raise exception 'guard_google_posts_enabled is callable by anon or authenticated';
+  end if;
+end $$;
+
+-- 8. Exercise the guard. A user session on the real table is stopped by RLS before the trigger
+--    is reached unless real users exist, so the same function is attached to a scratch table and
+--    driven as each role. Everything in the inner block is undone by the exception that ends it,
+--    so nothing is left behind and no DROP is needed.
+do $$
+declare
+  v_refused boolean := false;
+  v_server_ok boolean := false;
+  v_other_column_ok boolean := false;
+begin
+  begin
+    create table public._gbp_guard_probe (id integer primary key, label text, google_posts_enabled boolean not null default false);
+    grant select, update on public._gbp_guard_probe to authenticated;
+    create trigger probe_guard before update of google_posts_enabled on public._gbp_guard_probe
+      for each row execute function public.guard_google_posts_enabled();
+    insert into public._gbp_guard_probe (id) values (1);
+
+    -- A signed-in user who is not a super-admin (no JWT here, so is_super_admin() is false).
+    set local role authenticated;
+    begin
+      update public._gbp_guard_probe set google_posts_enabled = true where id = 1;
+    exception when insufficient_privilege then
+      v_refused := true;
+    end;
+    -- The same user may still change other columns, and may "set" the switch to what it already is.
+    update public._gbp_guard_probe set label = 'renamed', google_posts_enabled = false where id = 1;
+    v_other_column_ok := (select label = 'renamed' from public._gbp_guard_probe where id = 1);
+    reset role;
+
+    -- Server code (not a user session) is unaffected.
+    update public._gbp_guard_probe set google_posts_enabled = true where id = 1;
+    v_server_ok := (select google_posts_enabled from public._gbp_guard_probe where id = 1);
+
+    raise exception 'undo_gbp_guard_probe';
+  exception when others then
+    if sqlerrm <> 'undo_gbp_guard_probe' then raise; end if;
+  end;
+
+  if not v_refused then raise exception 'a non-admin user session was allowed to switch Google posting on'; end if;
+  if not v_other_column_ok then raise exception 'the guard blocked an update that did not change the switch'; end if;
+  if not v_server_ok then raise exception 'server code was blocked from changing the switch'; end if;
+  if to_regclass('public._gbp_guard_probe') is not null then raise exception 'the guard probe table was left behind'; end if;
 end $$;

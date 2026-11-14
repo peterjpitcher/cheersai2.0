@@ -100,9 +100,9 @@ function describe(start: DateTime, end: DateTime): EventEndResult {
  *
  * 1. No start: not eligible.
  * 2. An end time with no end date (or an end date equal to the start date)
- *    ends on the start date; if that is at or before the start (an overnight
- *    event, or 00:00, which the management app uses for midnight) it ends the
- *    next day.
+ *    ends on the start date, unless it is at or before the start time (an
+ *    overnight event, or 00:00, which the management app uses for midnight):
+ *    then it ends the next day. The day is chosen first, then checked.
  * 3. A later end date needs an end time; an end date before the start is an error.
  * 4. No end time: not eligible. Nothing is guessed.
  */
@@ -121,17 +121,25 @@ export function resolveEventEnd(input: EventEndInput): EventEndResult {
   if (endDate && !DATE_PATTERN.test(endDate)) return { ok: false, reason: 'end_before_start' };
   if (endDate && endDate < startDate) return { ok: false, reason: 'end_before_start' };
 
+  // Which day the end falls on is decided from the wall clock BEFORE that day
+  // is checked for a clock-change gap. With no later end date, an end time at
+  // or before the start time (an overnight event, or 00:00, which the
+  // management app uses for midnight) belongs to the next day; checking it
+  // against the start day first would wrongly refuse 22:00 to 01:30 on the day
+  // the clocks went forward, when 01:30 the next morning is a real time.
   const sameDay = !endDate || endDate === startDate;
-  let end = londonWallTime(sameDay ? startDate : endDate, endTime);
-  if (!end.ok) return { ok: false, reason: end.reason === 'gap' ? 'end_in_clock_change_gap' : 'invalid_end_time' };
+  const rollsOver = sameDay && endTime <= startTime;
+  const resolvedEndDate = !sameDay
+    ? endDate
+    : rollsOver
+      ? DateTime.fromISO(startDate, { zone: DEFAULT_TIMEZONE }).plus({ days: 1 }).toFormat('yyyy-MM-dd')
+      : startDate;
 
-  if (end.value <= start.value) {
-    // A later end date that still lands before the start cannot happen (the
-    // dates were compared above), so this is the same-day case: roll to the next day.
-    const nextDay = start.value.plus({ days: 1 }).toFormat('yyyy-MM-dd');
-    end = londonWallTime(nextDay, endTime);
-    if (!end.ok) return { ok: false, reason: end.reason === 'gap' ? 'end_in_clock_change_gap' : 'invalid_end_time' };
-  }
+  const end = londonWallTime(resolvedEndDate, endTime);
+  if (!end.ok) return { ok: false, reason: end.reason === 'gap' ? 'end_in_clock_change_gap' : 'invalid_end_time' };
+  // Cannot happen after the checks above (a later day, or a later time the same
+  // day, is always a later instant), but an end before its start must never be stored.
+  if (end.value <= start.value) return { ok: false, reason: 'end_before_start' };
 
   return describe(start.value, end.value);
 }

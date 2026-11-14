@@ -109,6 +109,28 @@ describe('resolveEventEnd', () => {
       });
     });
 
+    it('rolls an overnight end to the next day before checking for the gap', () => {
+      // Starts the evening AFTER the clocks went forward: 01:30 the next morning is a real time.
+      const result = resolveEventEnd({ startDate: '2027-03-28', startTime: '22:00', endTime: '01:30' });
+      expect(result).toMatchObject({
+        ok: true,
+        endDate: '2027-03-29',
+        endTime: '01:30',
+        end: '2027-03-29T01:30:00.000+01:00',
+      });
+    });
+
+    it('still refuses an end that really falls in the gap, with or without an end date', () => {
+      expect(resolveEventEnd({ startDate: '2027-03-27', startTime: '22:00', endDate: '2027-03-28', endTime: '01:30' })).toEqual({
+        ok: false,
+        reason: 'end_in_clock_change_gap',
+      });
+      expect(resolveEventEnd({ startDate: '2027-03-28', startTime: '00:30', endTime: '01:30' })).toEqual({
+        ok: false,
+        reason: 'end_in_clock_change_gap',
+      });
+    });
+
     it('resolves an event that spans the change', () => {
       const result = resolveEventEnd({ startDate: '2027-03-27', startTime: '22:00', endTime: '03:00' });
       expect(result).toMatchObject({
