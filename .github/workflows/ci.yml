@@ -152,6 +152,9 @@ jobs:
       - name: Signed-in users cannot write to the accounts table
         # tasks/SPEC-accounts-member-writes-revoked.md: billing and feature switches are server-only.
         run: psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -f supabase/tests/accounts_member_writes_revoked_verify.sql
+      - name: Signed-in users cannot write to any public table
+        # tasks/SPEC-revoke-authenticated-table-writes.md: every table write goes through server code.
+        run: psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -f supabase/tests/authenticated_table_writes_revoked_verify.sql
       - name: Google posts table and switch are as specified
         # tasks/SPEC-gbp-posting-reintroduction.md: service role only, one post per event per profile.
         run: psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -f supabase/tests/gbp_posts_verify.sql
