@@ -119,6 +119,17 @@ describe("getGoogleAccessToken", () => {
     });
   });
 
+  it("refreshes a token with time left when a refresh is forced, and stores it", async () => {
+    await seedConnection({ expiresInMs: 30 * MINUTE });
+    fetchMock.mockResolvedValue(tokenResponse({ access_token: "forced-access", expires_in: 3600 }));
+
+    const result = await getGoogleAccessToken(db.client(), ACCOUNT, { forceRefresh: true });
+
+    expect(result).toMatchObject({ ok: true, accessToken: "forced-access", refreshed: true });
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(await stored("access")).toBe("forced-access");
+  });
+
   it("refreshes a token that is within five minutes of expiry", async () => {
     await seedConnection({ expiresInMs: 4 * MINUTE });
     fetchMock.mockResolvedValue(tokenResponse({ access_token: "fresh-access", expires_in: 3600 }));

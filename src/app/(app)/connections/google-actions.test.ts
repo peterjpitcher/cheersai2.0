@@ -634,7 +634,7 @@ describe("completeGoogleConnect", () => {
 // ---------------------------------------------------------------------------
 
 describe("chooseGoogleLocation", () => {
-  it("stores the location in the one format, the three metadata keys and both tokens", async () => {
+  it("stores the location in the one format, the metadata keys and both tokens", async () => {
     const reference = await reachPicker();
 
     const result = await chooseGoogleLocation({ choice: reference, locationId: ANCHOR });
@@ -652,7 +652,9 @@ describe("chooseGoogleLocation", () => {
       access_token: null,
       refresh_token: null,
     });
-    expect(Object.keys(row?.metadata as object).sort()).toEqual(["localPostParent", "locationTitle", "placeId"]);
+    expect(Object.keys(row?.metadata as object).sort()).toEqual(["connectedAt", "localPostParent", "locationTitle", "placeId"]);
+    // When this save connected it: Google versions are made automatically only for posts created after (D8).
+    expect(Date.now() - Date.parse(String((row?.metadata as { connectedAt?: string }).connectedAt))).toBeLessThan(60 * 1000);
     expect(new Date(String(row?.token_expires_at)).getTime()).toBeGreaterThan(Date.now() + 50 * 60 * 1000);
 
     const vault = db.rows("token_vault");
@@ -881,6 +883,8 @@ describe("chooseGoogleLocation", () => {
       platform_account_id: ANCHOR,
       metadata: { localPostParent: ANCHOR, locationTitle: "The Anchor", placeId: "ChIJ-anchor" },
     });
+    // A reconnect restarts the clock for automatic Google versions (D8).
+    expect((googleRow()?.metadata as { connectedAt?: string }).connectedAt).toEqual(expect.any(String));
     expect(await readGoogleVaultToken(db.client(), previous, "refresh")).toBe(REFRESH_TOKEN);
   });
 

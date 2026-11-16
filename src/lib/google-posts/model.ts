@@ -91,7 +91,57 @@ export const GOOGLE_VERSION_REASONS = {
   profile_not_found: "Google could not find the connected profile. Reconnect Google and choose the profile again.",
   still_failing: "Google kept refusing or timing out, so we stopped trying.",
   google_busy: "Google asked us to slow down. We will try again shortly.",
+  google_unavailable: "Google did not respond. We will try again shortly.",
+  google_refused: "Google refused this post.",
+  token_unavailable: "We could not get access to Google just now. We will try again shortly.",
   cannot_confirm: "We could not confirm whether Google received this post. Check the profile before sending it again.",
 } as const;
 
 export type GoogleVersionReason = keyof typeof GOOGLE_VERSION_REASONS;
+
+/** The plain words for a stored reason; an unknown value gets a general line, never the raw code. */
+export function googleReasonText(reason: string | null | undefined): string | null {
+  if (!reason) return null;
+  return reason in GOOGLE_VERSION_REASONS
+    ? GOOGLE_VERSION_REASONS[reason as GoogleVersionReason]
+    : "Something stopped this Google version. Check the details or try again.";
+}
+
+/** Google's moderation states (LocalPostState). */
+export type GoogleModerationState = "PROCESSING" | "LIVE" | "REJECTED";
+
+/** Notification categories for Google alerts. resource_type is always GOOGLE_ALERT_RESOURCE, resource_id the gbp_posts id. */
+export const GOOGLE_ALERT_CATEGORIES = {
+  failed: "google_post_failed",
+  rejected: "google_post_rejected",
+  processing: "google_post_processing",
+  unconfirmed: "google_post_unconfirmed",
+  reconnect: "google_reconnect_needed",
+} as const;
+export type GoogleAlertKind = keyof typeof GOOGLE_ALERT_CATEGORIES;
+export const GOOGLE_ALERT_RESOURCE = "gbp_post";
+
+/** What the next piece's planner shows. Browser-safe: no token, no signed URL, no Google error text beyond a sanitised line. */
+export interface GoogleVersionView {
+  id: string;
+  contentItemId: string;
+  state: GoogleVersionState;
+  holdReason: string | null;
+  /** One plain sentence on where the version is. */
+  statusLine: string;
+  summary: string;
+  topicType: GoogleTopicType;
+  eventTitle: string | null;
+  eventStart: string | null;
+  eventEnd: string | null;
+  button: { type: GoogleCtaType; url: string } | null;
+  /** Google's link to the post, once it has been sent. */
+  googleUrl: string | null;
+  googleState: string | null;
+  /** The last problem in plain words, or null. */
+  lastError: string | null;
+  canEdit: boolean;
+  canRelease: boolean;
+  canSkip: boolean;
+  canRetry: boolean;
+}

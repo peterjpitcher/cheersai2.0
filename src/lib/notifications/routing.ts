@@ -19,7 +19,12 @@ export type NotificationCategory =
   | 'connection_metadata_updated'
   | 'media_derivative_failed'
   | 'media_derivative_skipped'
-  | 'weekly_materialised';
+  | 'weekly_materialised'
+  | 'google_post_failed'
+  | 'google_post_rejected'
+  | 'google_post_processing'
+  | 'google_post_unconfirmed'
+  | 'google_reconnect_needed';
 
 type Urgency = 'urgent' | 'standard';
 
@@ -29,6 +34,11 @@ const URGENT_CATEGORIES: ReadonlySet<string> = new Set([
   'connection_expired',
   'connection_disconnected',
   'connection_needs_action',
+  // Google versions (src/lib/google-posts/alerts.ts): each needs a person.
+  'google_post_failed',
+  'google_post_rejected',
+  'google_post_unconfirmed',
+  'google_reconnect_needed',
 ]);
 
 const EMAIL_CATEGORIES: ReadonlySet<string> = new Set([

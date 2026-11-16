@@ -58,9 +58,18 @@ interface ConnectionRow {
   updated_at: string;
 }
 
+export interface GoogleAccessTokenOptions {
+  /**
+   * Ask Google for a new token even though the stored one has time left. Used
+   * once after Google answers 401 to a token we believed was valid.
+   */
+  forceRefresh?: boolean;
+}
+
 export async function getGoogleAccessToken(
   supabase: SupabaseClient,
   accountId: string,
+  options: GoogleAccessTokenOptions = {},
 ): Promise<GoogleAccessTokenResult> {
   const context: Record<string, unknown> = { accountId, provider: GOOGLE_PROVIDER };
 
@@ -84,9 +93,9 @@ export async function getGoogleAccessToken(
     return { ok: false, reason: "reconnect_needed" };
   }
 
-  // 1. The stored token, while it has more than the margin left.
+  // 1. The stored token, while it has more than the margin left (unless a refresh is forced).
   const expiresAtMs = connection.token_expires_at ? new Date(connection.token_expires_at).getTime() : Number.NaN;
-  if (connection.token_expires_at && Number.isFinite(expiresAtMs) && expiresAtMs - Date.now() > GOOGLE_REFRESH_MARGIN_MS) {
+  if (!options.forceRefresh && connection.token_expires_at && Number.isFinite(expiresAtMs) && expiresAtMs - Date.now() > GOOGLE_REFRESH_MARGIN_MS) {
     try {
       const stored = await readGoogleVaultToken(supabase, connection.id, "access");
       if (stored) {
