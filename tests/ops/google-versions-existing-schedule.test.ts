@@ -44,6 +44,11 @@ describe('the plan file', () => {
     expect(text).toContain('Would be created but held for a person: none');
   });
 
+  it('warns when the plan was cut short', () => {
+    expect(renderPlan(plan as never)).not.toContain('WARNING');
+    expect(renderPlan({ ...plan, truncated: true } as never)).toContain('more upcoming posts than one pass reads');
+  });
+
   it('refuses a file that is not a plan', () => {
     expect(parsePlan(plan)).toBe(plan);
     expect(() => parsePlan({ accountId: 'acc-1' })).toThrow(/not a plan/);

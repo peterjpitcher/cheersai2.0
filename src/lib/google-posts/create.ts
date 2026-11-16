@@ -44,8 +44,12 @@ import {
 } from "@/lib/google-posts/management-lookup";
 import type { GoogleVersionInsert } from "@/lib/google-posts/model";
 
-/** The most candidate posts read per brand per pass. */
-export const CANDIDATE_LIMIT = 200;
+/** Candidate posts read per page, in post-time order. */
+export const CANDIDATE_PAGE = 200;
+/** The most candidate posts read per brand per pass; a plan that reached it says so. */
+export const CANDIDATE_LIMIT = 2000;
+/** Ids per `in` filter, so a request URL stays short. */
+const IN_CHUNK = 100;
 
 const PARENT_COLUMNS = "id, account_id, campaign_id, platform, placement, status, scheduled_for, deleted_at, created_at";
 
@@ -70,6 +74,8 @@ export interface GoogleVersionPlan {
   skipped: PlanEntry[];
   /** Posts left for a later run (the management app call limit was reached). */
   deferred: PlanEntry[];
+  /** True when more upcoming posts exist than one pass reads (CANDIDATE_LIMIT): run it again later. */
+  truncated?: boolean;
 }
 
 export interface CreateOutcome {
@@ -88,10 +94,21 @@ function describeRow(row: GoogleVersionInsert): string {
   return `${kind}${button}${row.state === "held" ? `, held: ${row.hold_reason}` : ""}`;
 }
 
-async function selectRows<T>(query: PromiseLike<{ data: unknown; error: { message: string } | null }>, what: string): Promise<T[]> {
+type RowsQuery = PromiseLike<{ data: unknown; error: { message: string } | null }>;
+
+async function selectRows<T>(query: RowsQuery, what: string): Promise<T[]> {
   const { data, error } = await query;
   if (error) throw new Error(`${what} lookup failed: ${error.message}`);
   return (data ?? []) as T[];
+}
+
+/** The same lookup over a long id list, IN_CHUNK ids at a time. */
+async function selectRowsIn<T>(ids: string[], query: (chunk: string[]) => RowsQuery, what: string): Promise<T[]> {
+  const rows: T[] = [];
+  for (let start = 0; start < ids.length; start += IN_CHUNK) {
+    rows.push(...(await selectRows<T>(query(ids.slice(start, start + IN_CHUNK)), what)));
+  }
+  return rows;
 }
 
 /**
@@ -119,23 +136,40 @@ export async function planGoogleVersions(
 
   const earliest = new Date(now.getTime() - CREATE_GRACE_MS).toISOString();
 
-  let candidateQuery = db
-    .from("content_items")
-    .select(PARENT_COLUMNS)
-    .eq("account_id", brand.accountId)
-    .is("deleted_at", null)
-    .gte("scheduled_for", earliest);
-  if (scope === "new") {
-    candidateQuery = candidateQuery
-      .eq("platform", "facebook")
-      .eq("placement", "feed")
-      .in("status", ["scheduled", "queued"])
-      .gt("created_at", brand.connectedAt as string);
+  const candidatePage = (from: string) => {
+    let query = db
+      .from("content_items")
+      .select(PARENT_COLUMNS)
+      .eq("account_id", brand.accountId)
+      .is("deleted_at", null)
+      .gte("scheduled_for", from);
+    if (scope === "new") {
+      query = query
+        .eq("platform", "facebook")
+        .eq("placement", "feed")
+        .in("status", ["scheduled", "queued"])
+        .gt("created_at", brand.connectedAt as string);
+    }
+    return query.order("scheduled_for", { ascending: true }).order("id", { ascending: true }).limit(CANDIDATE_PAGE);
+  };
+
+  // Paged by post time, so posts that already have a version can never crowd out newer ones.
+  const candidates: ParentItem[] = [];
+  const seen = new Set<string>();
+  let from = earliest;
+  while (candidates.length < CANDIDATE_LIMIT) {
+    const page = await selectRows<ParentItem>(candidatePage(from), "content_items");
+    const unseen = page.filter((item) => !seen.has(item.id));
+    // A page holding only posts already read (a page of identical times) ends the pass.
+    if (!unseen.length) break;
+    for (const item of unseen) {
+      seen.add(item.id);
+      candidates.push(item);
+    }
+    if (page.length < CANDIDATE_PAGE) break;
+    from = page[page.length - 1].scheduled_for as string;
   }
-  const candidates = await selectRows<ParentItem>(
-    candidateQuery.order("scheduled_for", { ascending: true }).limit(CANDIDATE_LIMIT),
-    "content_items",
-  );
+  if (candidates.length >= CANDIDATE_LIMIT) plan.truncated = true;
   if (!candidates.length) return plan;
 
   const entry = (item: ParentItem, reason: string, row?: GoogleVersionInsert): PlanEntry => ({
@@ -156,8 +190,9 @@ export async function planGoogleVersions(
   if (!eligible.length) return plan;
 
   const ids = eligible.map((item) => item.id);
-  const existing = await selectRows<{ content_item_id: string }>(
-    db.from("gbp_posts").select("content_item_id").eq("account_id", brand.accountId).in("content_item_id", ids),
+  const existing = await selectRowsIn<{ content_item_id: string }>(
+    ids,
+    (chunk) => db.from("gbp_posts").select("content_item_id").eq("account_id", brand.accountId).in("content_item_id", chunk),
     "gbp_posts",
   );
   const hasVersion = new Set(existing.map((row) => row.content_item_id));
@@ -170,8 +205,9 @@ export async function planGoogleVersions(
 
   const campaignIds = [...new Set(fresh.map((item) => item.campaign_id).filter((id): id is string => Boolean(id)))];
   const campaigns = campaignIds.length
-    ? await selectRows<CampaignInfo & { account_id: string }>(
-        db.from("campaigns").select("id, account_id, campaign_type, name, metadata").eq("account_id", brand.accountId).in("id", campaignIds),
+    ? await selectRowsIn<CampaignInfo & { account_id: string }>(
+        campaignIds,
+        (chunk) => db.from("campaigns").select("id, account_id, campaign_type, name, metadata").eq("account_id", brand.accountId).in("id", chunk),
         "campaigns",
       )
     : [];
@@ -182,8 +218,9 @@ export async function planGoogleVersions(
   const firstPostByCampaign = new Map<string, string>();
   const campaignHasVersion = new Set<string>();
   if (eventCampaignIds.length) {
-    const siblings = await selectRows<ParentItem>(
-      db.from("content_items").select(PARENT_COLUMNS).eq("account_id", brand.accountId).in("campaign_id", eventCampaignIds),
+    const siblings = await selectRowsIn<ParentItem>(
+      eventCampaignIds,
+      (chunk) => db.from("content_items").select(PARENT_COLUMNS).eq("account_id", brand.accountId).in("campaign_id", chunk),
       "event posts",
     );
     const upcoming = siblings
@@ -194,8 +231,9 @@ export async function planGoogleVersions(
     }
     const siblingIds = siblings.map((item) => item.id);
     if (siblingIds.length) {
-      const versions = await selectRows<{ content_item_id: string }>(
-        db.from("gbp_posts").select("content_item_id").eq("account_id", brand.accountId).in("content_item_id", siblingIds),
+      const versions = await selectRowsIn<{ content_item_id: string }>(
+        siblingIds,
+        (chunk) => db.from("gbp_posts").select("content_item_id").eq("account_id", brand.accountId).in("content_item_id", chunk),
         "event versions",
       );
       const withVersion = new Set(versions.map((row) => row.content_item_id));
@@ -205,8 +243,9 @@ export async function planGoogleVersions(
     }
   }
 
-  const bodies = await selectRows<{ content_item_id: string; body: string | null }>(
-    db.from("content_variants").select("content_item_id, body").in("content_item_id", fresh.map((item) => item.id)),
+  const bodies = await selectRowsIn<{ content_item_id: string; body: string | null }>(
+    fresh.map((item) => item.id),
+    (chunk) => db.from("content_variants").select("content_item_id, body").in("content_item_id", chunk),
     "content_variants",
   );
   const bodyById = new Map(bodies.map((row) => [row.content_item_id, row.body]));
@@ -375,8 +414,9 @@ export async function createGoogleVersionsForExistingSchedule(
   if (!entries.length) return outcome;
 
   const now = resolved.now();
-  const parents = await selectRows<ParentItem>(
-    resolved.db.from("content_items").select(PARENT_COLUMNS).eq("account_id", accountId).in("id", entries.map((item) => item.contentItemId)),
+  const parents = await selectRowsIn<ParentItem>(
+    entries.map((item) => item.contentItemId),
+    (chunk) => resolved.db.from("content_items").select(PARENT_COLUMNS).eq("account_id", accountId).in("id", chunk),
     "content_items",
   );
   const parentById = new Map(parents.map((item) => [item.id, item]));

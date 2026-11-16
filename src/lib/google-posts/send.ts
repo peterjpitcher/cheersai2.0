@@ -78,6 +78,8 @@ const BACKOFF_CAP_MS = 30 * 60 * 1000;
 const LIST_PAGES = 3;
 const MIN_IMAGE_BYTES = 10 * 1024;
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+/** Ids per `in` filter, so a request URL stays short. */
+const IN_CHUNK = 100;
 
 export interface SendSummary {
   sent: number;
@@ -462,17 +464,22 @@ async function findDue(ctx: RunContext): Promise<DueVersion[]> {
   );
   if (!pending.length) return [];
 
+  // Read in chunks so a long pending list never makes an over-long request URL.
   const ids = pending.map((row) => row.content_item_id);
-  const { data: parents, error: parentError } = await db
-    .from("content_items")
-    .select("id, account_id, platform, placement, status, scheduled_for, deleted_at")
-    .eq("account_id", ctx.brand.accountId)
-    .in("id", ids);
-  if (parentError) {
-    ctx.summary.errors += 1;
-    return [];
+  const parents: ParentRow[] = [];
+  for (let start = 0; start < ids.length; start += IN_CHUNK) {
+    const { data, error: parentError } = await db
+      .from("content_items")
+      .select("id, account_id, platform, placement, status, scheduled_for, deleted_at")
+      .eq("account_id", ctx.brand.accountId)
+      .in("id", ids.slice(start, start + IN_CHUNK));
+    if (parentError) {
+      ctx.summary.errors += 1;
+      return [];
+    }
+    parents.push(...((data ?? []) as ParentRow[]));
   }
-  const parentById = new Map(((parents ?? []) as ParentRow[]).map((parent) => [parent.id, parent]));
+  const parentById = new Map(parents.map((parent) => [parent.id, parent]));
 
   const due: GoogleVersionRow[] = [];
   for (const row of pending) {

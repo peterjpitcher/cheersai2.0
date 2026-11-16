@@ -81,6 +81,9 @@ export function renderPlan(plan: GoogleVersionPlan): string {
   return [
     `Google versions for the existing schedule, brand ${plan.accountId}, location ${plan.localPostParent}`,
     `Planned at ${plan.generatedAt}. Nothing has been created.`,
+    ...(plan.truncated
+      ? ["WARNING: there are more upcoming posts than one pass reads; the latest ones are not in this plan. Apply it, then run the dry run again."]
+      : []),
     "",
     ...section("Would be created", plan.create),
     ...section("Would be created but held for a person", plan.held),

@@ -64,6 +64,20 @@ describe('automatic creation (decision D8)', () => {
     expect(versions()).toHaveLength(1);
   });
 
+  it('reaches posts beyond the first page once earlier posts have versions', async () => {
+    const ids: string[] = [];
+    for (let index = 0; index < 230; index += 1) {
+      const minute = String(index % 60).padStart(2, '0');
+      const hour = String(12 + Math.floor(index / 60)).padStart(2, '0');
+      ids.push(addPost(world, { scheduledFor: `2026-11-20T${hour}:${minute}:00.000Z` }));
+    }
+    const outcome = await createVersionsForNewContent(world.deps, await brand());
+    expect(outcome.created).toHaveLength(230);
+    expect(new Set(versions().map((row) => row.content_item_id))).toEqual(new Set(ids));
+    const again = await createVersionsForNewContent(world.deps, await brand());
+    expect(again.created).toEqual([]);
+  });
+
   it('only scopes its reads and writes to the brand', async () => {
     addPost(world);
     world.db.queries.length = 0;
