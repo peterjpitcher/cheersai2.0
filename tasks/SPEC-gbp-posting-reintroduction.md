@@ -1,6 +1,6 @@
 # SPEC: Google Business Profile posting as a third channel
 
-Status: draft v4, 14 November 2026. Replaces v3 (24 September 2026). No code written. Review history: `tasks/REVIEW-gbp-posting-reintroduction.md` (findings GBP-01 to GBP-14, all still addressed below).
+Status: draft v4, 14 November 2026. Replaces v3 (24 September 2026). PR1 (data and contracts) shipped in November 2026 (#233). PR2 (connection) built 16 November 2026, before Google's approval, so it fails closed at Google's quota wall and cannot be accepted until the quota is above zero (section 4, "Built in PR2"). Review history: `tasks/REVIEW-gbp-posting-reintroduction.md` (findings GBP-01 to GBP-14, all still addressed below).
 
 ## What changed since v3
 
@@ -36,6 +36,8 @@ D1 to D9 stand from v3 unless marked.
 
 Console facts below were last seen on 24 September 2026 and must be re-checked as step 1.
 
+Reapplied 16 November 2026: case ID 5-7355000042029, submitted from the owner login for The Anchor with the website exactly as on the profile; Google quoted seven to ten working days. Console re-checked 16 November 2026: OAuth client redirect URIs present for production and localhost, consent screen External and In production, Account Management and Business Information APIs enabled, quota still 0 requests per minute, Google My Business API not yet enabled.
+
 ### 0.1 Why Google refused, and what must be true before reapplying
 
 Google's reply (30 September 2026) and its prerequisites page give the same two rules:
@@ -68,7 +70,7 @@ Google's pages do not say the applying login must own the Cloud project, only th
    - `https://cheers.orangejelly.co.uk/api/oauth/gbp/callback` (last seen: added)
    - `http://localhost:3000/api/oauth/gbp/callback` for local work
 5. **Secrets.** Copy the client ID and secret into:
-   - Vercel, Production only: `GOOGLE_BUSINESS_CLIENT_ID`, `GOOGLE_BUSINESS_CLIENT_SECRET`
+   - Vercel: `GOOGLE_MY_BUSINESS_CLIENT_ID`, `GOOGLE_MY_BUSINESS_CLIENT_SECRET`. These are the names the code reads (`src/env.ts`); Vercel already holds both, in every environment, so no new names were introduced. The `GOOGLE_BUSINESS_*` names in earlier drafts are superseded.
    - Supabase edge function secrets for `publish-queue` (the worker refreshes tokens itself, so it needs both; v3 missed this)
 6. **Proof before PR2 is accepted:** one signed-in read of accounts and locations succeeds from production.
 
@@ -138,7 +140,26 @@ Google takes local wall time with no zone field, so the London wall time is sent
 - `notify-expiring-connections` (`route.ts:41`) must skip Google: its access tokens expire hourly by design.
 - Changing the location never retargets existing work: a job whose captured `local_post_parent` differs from the connection fails with "destination changed".
 - Disconnect reuses `disconnectProvider` (`actions.ts:332`): vault rows deleted, status `needs_action`, no new Google work.
-- Env vars, added to `src/env.ts` first, both optional at build time: `GOOGLE_BUSINESS_CLIENT_ID`, `GOOGLE_BUSINESS_CLIENT_SECRET`. Missing means the Google card says "Google posting is not set up".
+- Env vars, added to `src/env.ts` first, both optional at build time: `GOOGLE_MY_BUSINESS_CLIENT_ID`, `GOOGLE_MY_BUSINESS_CLIENT_SECRET` (the names Vercel already holds; the `GOOGLE_BUSINESS_*` names in earlier drafts are superseded). Missing means the Google card says "Google posting is not set up".
+
+#### Built in PR2 (16 November 2026), and what was decided that the lines above did not say
+
+Where it lives: `src/lib/connections/google-*.ts` (messages and constants, access rule, OAuth, listing, pending choice, save, token refresh, card data), `src/app/(app)/connections/google-actions.ts` (start, callback, choice), `src/app/(app)/connections/choose-location/page.tsx`, `src/features/connections/google-connection-card.tsx` and `location-chooser.tsx`. Nothing in PR2 publishes, and nothing in it can be exercised against real Google until the quota is above zero.
+
+- **Google is a connection-side provider only.** `Platform` (`src/types/content.ts`), `PLATFORMS`, `ProviderPlatform` and the Facebook and Instagram `Provider` type (`src/lib/connections/oauth.ts`) are NOT widened. Only connection-side types gained `gbp`: `ConnectionProvider` in `metadata.ts` and `readiness.ts`, the new `ConnectionHealthProvider` in `src/types/providers.ts`, and the disconnect schema. Widening `Platform` moves to the piece that first needs it (PR3 or PR5), with the wiring checklist. `PlatformCtaLinks` is not widened either.
+- **Google has its own actions, not a branch in the Facebook ones.** `initiateOAuthConnect` and `completeOAuthConnect` still refuse `gbp` at their schema. `initiateGoogleConnect`, `completeGoogleConnect` and `chooseGoogleLocation` are separate, so the Facebook flow is untouched. The callback route accepts `gbp` and hands it to `completeGoogleConnect`. `disconnectProvider` is shared.
+- **The switch is checked on the brand the flow belongs to.** Start and disconnect check the active brand. The callback and the choice check the brand recorded in the `oauth_states` row (looked up in the caller's brand list; a brand that is not there counts as off), because the owner may have changed brand during the sign-in. Disconnect is refused too when the switch is off: with it off Google does not exist for the brand, and offboarding already deletes every stored token.
+- **A stored Google row is hidden when the switch is off.** The Connections card, the sidebar health dots, the login health toast and the diagnostics table all leave it out. The location picker page answers "We could not find this choice" without naming Google.
+- **The picker always runs.** No automatic selection, including a single location and a reconnect to the stored location. Reconnecting is also how the location is changed ("Update connection" on the card).
+- **Pending choice.** One `oauth_states` row, provider `gbp`, `redirect_to = /connections/choose-location`, payload encrypted with the token vault and bound to the brand and the signed-in user, 10 minutes. It is written only after the accounts and locations have been listed, so a refusal at Google leaves nothing to delete. A choice refused because the switch went off or the client is not configured is discarded on the spot; an expired one has its payload dropped when it is next read.
+- **Failing closed at the quota wall.** Any failure to list stores no connection, no token and no pending row, and returns the owner to Connections with one of four plain messages: not approved (HTTP 429, status `RESOURCE_EXHAUSTED`, or a 403 whose reason or wording is about quota or a switched-off API), permission denied (any other 403, a 401, or a sign-in that did not grant the business scope), Google unavailable (5xx, timeout, unreadable reply), and a general "could not list" for anything else. Cancelling the sign-in has its own message. Google's own error text is never shown or logged: the log keeps the HTTP status, Google's status code and the reason code only. The Google grant itself is not revoked when a connect fails (that would be another Google call); the tokens are simply dropped.
+- **Listing limits.** Up to 5 pages of accounts (100) and 5 pages of locations per account (500). A list cut short by those limits, or an account whose locations could not be read while others could, shows what loaded with a notice that the list may be incomplete. If nothing loaded, or nothing was found while part of the list was refused, that is a failure, never "no locations".
+- **Location id.** The Business Information API names a location `locations/{id}` with no account, so the account it was listed under is joined on: `accounts/{accountId}/locations/{locationId}`. The same value is `platform_account_id` and `metadata.localPostParent`. A location that appears under two accounts is listed once for each, labelled with the account name.
+- **Saving.** A first connection inserts the row as `needs_action`, stores both tokens, then activates it; if the tokens cannot be stored the new row is removed. A reconnect writes the tokens first and touches the existing row last, in one update; if either step fails the tokens held before are put back (best effort, logged if it cannot), so the previous connection keeps working. `last_synced_at` is not set on connect: the card shows it as "Last published" for Facebook, and nothing has been published.
+- **No refresh token means the connect fails**, with a plain message. A sign-in without the business scope is refused before any listing.
+- **Token refresh helper** (`getGoogleAccessToken` in `src/lib/connections/google-token.ts`, for the app; the edge worker needs its own Deno copy in PR3). It returns the stored token while it has more than 5 minutes left, otherwise refreshes. The compare-and-set is on the connection's `updated_at`, in three steps: claim the row (only if `updated_at` is still what was read), store the token, then record the new expiry (only if nobody claimed the row since). The loser of a race stores nothing and returns the token Google just gave it, which is valid in its own right. Because the expiry is recorded after the token is stored, a reader never sees a fresh expiry beside a stale token. Results are typed: `not_connected`, `reconnect_needed` (Google answered `invalid_grant`, or no refresh token is stored: the row is marked `needs_action` once, and only if it has not changed since it was read, so a reconnect that landed meanwhile is not undone) and `try_again` (timeout, 5xx, 429, any other refusal such as a wrong client secret, a database or decryption failure: the row is left alone). The helper does not check the brand switch (it has no signed-in user); its caller must. The alert on `invalid_grant` belongs to PR3 or PR4, where the worker calls it.
+- **Readiness and health for `gbp`.** The access token's expiry is ignored entirely (no "expired", no 7-day "expiring" warning): ready and green with a stored refresh token, "Google needs to be reconnected" and red without one. `src/lib/publishing/preflight.ts` is unchanged in PR2: it only serves Facebook and Instagram until Google can be selected.
+- **Not touched in PR2, on purpose:** `supabase/functions/**`, the create wizard, the planner, AI copy, preflight, onboarding (`setup-progress.ts` and the checklist never mention Google; a test holds that), calendar fill, tournaments, analytics and link in bio. `tests/msw/handlers/gbp.ts` is left as it was: nothing in PR2 uses it (the new tests stub `fetch` directly); it is rewritten with the edge provider in PR3.
 
 ### 5. Create flow: Google never disturbs Meta
 
@@ -219,6 +240,7 @@ Mocked Google only; no live post without separate approval. `npm run ci:verify`.
 - Access: a brand with the switch off cannot start OAuth, complete a callback, select Google in create, or have a Google job sent; a self-serve brand never sees Google.
 - One post: concurrent submissions, repeated import, lost response after create and database failure after create each end with at most one confirmed post.
 - Meta untouched: three-platform wizard with Google not eligible, invalid Google media and Google enqueue failure; Meta scheduled exactly once and the screen says so.
+- PR2 tests (in place): switch off blocks start, callback, choice and disconnect; missing env; the consent URL; code exchange; the quota wall (429 and 403) saving nothing; two pages of accounts and of locations; no accounts; no locations; partial failure; forged location; expired choice; repeated callback; removed membership; missing refresh token; the stored id, metadata and tokens; vault failure on a first connect and on a reconnect; the refresh helper (fresh, expired, omitted refresh token, `invalid_grant`, timeout, concurrent); readiness and health; the expiring-connection cron; onboarding; the card hidden without the switch.
 - Tokens: expired access with valid refresh sends; revoked refresh gives one reconnect state; token endpoint timeout retries; concurrent refresh keeps the newest token; the expiring-connection email ignores Google.
 - Moderation: PROCESSING to LIVE, immediate and delayed REJECTED, 24-hour PROCESSING, read outage; one alert per incident.
 - Contract fixture: stored campaign metadata to the actual edge request body (BOOK, LEARN_MORE, Google link, no button when no link).
