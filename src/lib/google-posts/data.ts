@@ -1,6 +1,7 @@
 /**
- * Reading and changing one post's Google version, for the planner (the next
- * piece adds the page). Server only; service-role client, every query scoped
+ * Reading and changing one post's Google version, for the planner post page
+ * (src/lib/google-posts/post-section.ts reads it, the actions change it).
+ * Server only; service-role client, every query scoped
  * by account_id. The caller has already checked the signed-in user's brand
  * and its Google switch (src/app/(app)/planner/google-version-actions.ts).
  */
@@ -46,6 +47,7 @@ export function toGoogleVersionView(row: GoogleVersionRow): GoogleVersionView {
     holdReason: row.hold_reason,
     statusLine: statusLine(row),
     summary: row.summary,
+    summaryEdited: row.summary_edited_at !== null,
     topicType: row.topic_type,
     eventTitle: row.event_title,
     eventStart: row.event_start,
@@ -53,7 +55,8 @@ export function toGoogleVersionView(row: GoogleVersionRow): GoogleVersionView {
     button: row.cta_type && row.cta_url ? { type: row.cta_type, url: row.cta_url } : null,
     googleUrl: row.state === "sent" ? row.search_url : null,
     googleState: row.google_state,
-    lastError: row.state === "sent" || row.state === "pending" || row.state === "held" ? null : row.last_error,
+    // A sent post keeps the follow-up check's note (for example that it is no longer on Google).
+    lastError: row.state === "pending" || row.state === "held" ? null : row.last_error,
     canEdit: row.state === "pending" || row.state === "held",
     canRelease: row.state === "held",
     canSkip: row.state === "pending" || row.state === "held" || row.state === "failed",
@@ -154,11 +157,24 @@ export async function releaseGoogleVersion(
   const row = await readRow(db, accountId, contentItemId);
   if (!row) return { success: false, error: GOOGLE_VERSION_ACTION_MESSAGES.notFound };
   if (row.state !== "held") return { success: false, error: GOOGLE_VERSION_ACTION_MESSAGES.notHeld };
-  if (!row.summary.trim()) return { success: false, error: GOOGLE_VERSION_ACTION_MESSAGES.emptyWording };
+  // Unedited wording is what the page shows: worked out from the Facebook
+  // caption as it is now, not the copy stored when the version was made.
+  let summary = row.summary;
+  if (!row.summary_edited_at) {
+    const { data: variant, error } = await db
+      .from("content_variants")
+      .select("body")
+      .eq("content_item_id", row.content_item_id)
+      .maybeSingle();
+    if (error) return { success: false, error: GOOGLE_VERSION_ACTION_MESSAGES.saveFailed };
+    summary = deriveGoogleSummary((variant as { body: string | null } | null)?.body ?? null);
+  }
+  if (!summary.trim()) return { success: false, error: GOOGLE_VERSION_ACTION_MESSAGES.emptyWording };
   // Freezing the wording stops the send from holding it again for the same reason.
   return change(db, accountId, row, {
     state: "pending",
     hold_reason: null,
+    summary,
     summary_edited_at: row.summary_edited_at ?? new Date().toISOString(),
   });
 }

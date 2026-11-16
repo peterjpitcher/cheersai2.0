@@ -5,7 +5,7 @@ import { z } from "zod";
 
 import { requireAuthContext } from "@/lib/auth/server";
 import type { AuthContext } from "@/lib/auth/types";
-import { requireEntitledContext } from "@/lib/billing/entitlement-server";
+import { EntitlementError, requireEntitledContext } from "@/lib/billing/entitlement-server";
 import { activeBrandHasGooglePosts } from "@/lib/connections/google-access";
 import { checkGoogleBrand } from "@/lib/google-posts/brands";
 import {
@@ -21,8 +21,8 @@ import { createLogger } from "@/lib/logging";
 import { toLoggableError } from "@/lib/logging/to-error";
 
 /**
- * Planner actions for a post's Google version (decision D12). No page calls
- * them yet: the planner view is the next piece.
+ * Planner actions for a post's Google version (decision D12), called from the
+ * Google section of the post page (src/features/planner/google-version-section.tsx).
  *
  * Each follows the planner's own rules for the signed-in user's ACTIVE brand
  * (an owner or a member of it; editing needs the 'create' entitlement and
@@ -57,6 +57,18 @@ function done(result: GoogleVersionChange, contentId: string): ActionResult {
 }
 
 /** The post's Google version for the active brand, or null. */
+/** The plan check, with the plan's own reason when it refuses (for example a lapsed subscription). */
+async function entitled(
+  capability: Parameters<typeof requireEntitledContext>[0],
+): Promise<Awaited<ReturnType<typeof requireEntitledContext>> | { error: string }> {
+  try {
+    return await requireEntitledContext(capability);
+  } catch (error) {
+    if (error instanceof EntitlementError) return { error: error.message };
+    throw error;
+  }
+}
+
 export async function loadGoogleVersion(payload: unknown): Promise<{ version: GoogleVersionView | null; error?: string }> {
   const parsed = contentSchema.safeParse(payload);
   if (!parsed.success) return { version: null, error: "That post could not be found." };
@@ -73,7 +85,8 @@ export async function loadGoogleVersion(payload: unknown): Promise<{ version: Go
 export async function editGoogleVersionWording(payload: unknown): Promise<ActionResult> {
   const parsed = wordingSchema.safeParse(payload);
   if (!parsed.success) return { success: false, error: "That wording could not be saved." };
-  const ctx = await requireEntitledContext("create");
+  const ctx = await entitled("create");
+  if ("error" in ctx) return { success: false, error: ctx.error };
   if (!(await googleReady(ctx))) return { success: false, error: NOT_AVAILABLE };
   try {
     return done(await editWording(ctx.supabase, ctx.accountId, parsed.data.contentId, parsed.data.summary), parsed.data.contentId);
@@ -86,7 +99,8 @@ export async function editGoogleVersionWording(payload: unknown): Promise<Action
 export async function releaseGoogleVersion(payload: unknown): Promise<ActionResult> {
   const parsed = contentSchema.safeParse(payload);
   if (!parsed.success) return { success: false, error: "That post could not be found." };
-  const ctx = await requireEntitledContext("publish");
+  const ctx = await entitled("publish");
+  if ("error" in ctx) return { success: false, error: ctx.error };
   if (!(await googleReady(ctx))) return { success: false, error: NOT_AVAILABLE };
   try {
     return done(await release(ctx.supabase, ctx.accountId, parsed.data.contentId), parsed.data.contentId);
@@ -112,7 +126,8 @@ export async function skipGoogleVersion(payload: unknown): Promise<ActionResult>
 export async function retryGoogleVersion(payload: unknown): Promise<ActionResult> {
   const parsed = contentSchema.safeParse(payload);
   if (!parsed.success) return { success: false, error: "That post could not be found." };
-  const ctx = await requireEntitledContext("publish");
+  const ctx = await entitled("publish");
+  if ("error" in ctx) return { success: false, error: ctx.error };
   if (!(await googleReady(ctx))) return { success: false, error: NOT_AVAILABLE };
   try {
     return done(await retry(ctx.supabase, ctx.accountId, parsed.data.contentId), parsed.data.contentId);
