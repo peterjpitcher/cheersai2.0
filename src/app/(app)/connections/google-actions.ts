@@ -104,7 +104,12 @@ export async function completeGoogleConnect(
   code: string,
   stateParam: string,
 ): Promise<{ success: boolean; error?: string; locationChoice?: string }> {
-  const ctx = await requireOwnerContext();
+  // Signed in is enough to get this far: the owner check below is made against
+  // the brand that STARTED the sign-in (recorded in the state row), not the
+  // brand selected now. Someone who owns brand A and is only a member of brand
+  // B may switch to B while Google's screen is open; requiring an owner of the
+  // active brand here would refuse a connection they are entitled to finish.
+  const ctx = await requireAuthContext();
   const supabase = createServiceSupabaseClient();
 
   // 1. The state must exist, be unused and unexpired, and be a login state

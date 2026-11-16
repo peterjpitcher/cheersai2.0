@@ -1,6 +1,7 @@
 # SPEC: Google Business Profile posting as a third channel
 
 Status: draft v4, 14 November 2026. Replaces v3 (24 September 2026). PR1 (data and contracts) shipped in November 2026 (#233). PR2 (connection) built 16 November 2026, before Google's approval, so it fails closed at Google's quota wall and cannot be accepted until the quota is above zero (section 4, "Built in PR2"). Review history: `tasks/REVIEW-gbp-posting-reintroduction.md` (findings GBP-01 to GBP-14, all still addressed below).
+- After review (16 November 2026): the callback needs only a signed-in user and then checks ownership of the brand recorded in the state row, so an owner who switches brand during the sign-in can still finish. A reconnect verifies, after its last write, that the stored tokens are the ones it wrote; if another save for the same brand got in between, the connection is set to `needs_action` and the owner is asked to connect again (there is no transaction across the token vault and the connection row).
 
 ## What changed since v3
 

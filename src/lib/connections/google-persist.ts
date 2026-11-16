@@ -215,7 +215,52 @@ async function replaceConnection(
     return { success: false, error: CONNECTION_SAVE_MESSAGES.saveFailed };
   }
 
+  // Two location changes for the same brand can overlap (two tabs, two
+  // choices). There is no transaction across the vault and the row, so one
+  // save's tokens could end up beside the other's location. Check that the
+  // tokens now stored are the ones this save wrote; if they are not, another
+  // save got in between, and the connection is put out of use rather than left
+  // looking healthy with credentials that may belong to a different login.
+  const raced = await vaultDiffersFrom(supabase, connectionId, sealed);
+  if (raced) {
+    logger.warn("Google connection saved twice at once: marked for reconnection", context);
+    const { error: markError } = await supabase
+      .from("social_connections")
+      .update({ status: "needs_action" })
+      .eq("id", connectionId)
+      .eq("account_id", accountId);
+    if (markError) {
+      logger.error("could not mark a raced Google connection for reconnection", toLoggableError(markError), context);
+    }
+    return { success: false, error: GOOGLE_SAVE_RACED_MESSAGE };
+  }
+
   return { success: true };
+}
+
+/** Shown when two saves for the same brand overlapped. */
+export const GOOGLE_SAVE_RACED_MESSAGE =
+  "This Google connection was being changed in another window at the same time, so it was not saved. Please click Connect again.";
+
+/**
+ * True when the stored tokens are not the ones just written (or cannot be
+ * read, which is treated the same way: fail closed).
+ */
+async function vaultDiffersFrom(
+  supabase: SupabaseClient,
+  connectionId: string,
+  sealed: Record<TokenType, EncryptedPayload>,
+): Promise<boolean> {
+  const { data, error } = await supabase
+    .from("token_vault")
+    .select("token_type, ciphertext, iv")
+    .eq("social_connection_id", connectionId);
+  if (error) return true;
+  const rows = (data ?? []) as Array<Pick<VaultRow, "token_type" | "ciphertext" | "iv">>;
+  return (["access", "refresh"] as const).some((tokenType) => {
+    const row = rows.find((candidate) => candidate.token_type === tokenType);
+    return !row || row.ciphertext !== sealed[tokenType].ciphertext || row.iv !== sealed[tokenType].iv;
+  });
 }
 
 /** Upserts both tokens. Returns the error, or null when both are stored. */

@@ -363,6 +363,49 @@ describe("completeGoogleConnect", () => {
     expectNothingSaved();
   });
 
+  it("lets an owner of the starting brand finish, even after switching to a brand where they are only a member", async () => {
+    seedState();
+    google();
+    // Started for ACCOUNT, which they own; the brand selected now is one they only belong to.
+    mockRequireAuthContext.mockResolvedValue(
+      authContext({
+        accountId: OTHER_ACCOUNT,
+        role: "member",
+        brands: [
+          { accountId: ACCOUNT, role: "owner", googlePosts: true },
+          { accountId: OTHER_ACCOUNT, role: "member", googlePosts: false },
+        ],
+      }),
+    );
+
+    const result = await completeGoogleConnect(AUTH_CODE, "valid-state");
+
+    expect(result.success).toBe(true);
+    // The pending choice belongs to the brand that started the flow.
+    expect(choiceRows()).toHaveLength(1);
+    expect(choiceRows()[0]?.account_id).toBe(ACCOUNT);
+  });
+
+  it("refuses a member of the starting brand who owns only the brand selected now", async () => {
+    seedState();
+    mockRequireAuthContext.mockResolvedValue(
+      authContext({
+        accountId: OTHER_ACCOUNT,
+        role: "owner",
+        brands: [
+          { accountId: ACCOUNT, role: "member", googlePosts: true },
+          { accountId: OTHER_ACCOUNT, role: "owner", googlePosts: true },
+        ],
+      }),
+    );
+
+    const result = await completeGoogleConnect(AUTH_CODE, "valid-state");
+
+    expect(result.success).toBe(false);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expectNothingSaved();
+  });
+
   it("refuses when the OAuth client is not configured", async () => {
     seedState();
     serverEnv.GOOGLE_MY_BUSINESS_CLIENT_SECRET = "";
@@ -776,6 +819,43 @@ describe("chooseGoogleLocation", () => {
       expect(await readGoogleVaultToken(db.client(), previous, "refresh")).toBe("old-refresh");
       db.tables.oauth_states = [];
     }
+  });
+
+  it("puts the connection out of use when another save replaced the tokens at the same time", async () => {
+    const previous = "44444444-4444-4444-8444-444444444444";
+    db.seed("social_connections", [
+      {
+        id: previous,
+        account_id: ACCOUNT,
+        provider: "gbp",
+        status: "active",
+        platform_account_id: "accounts/111/locations/555",
+        metadata: { localPostParent: "accounts/111/locations/555", locationTitle: "Old location", placeId: "old-place" },
+      },
+    ]);
+    await writeGoogleVaultToken(db.client(), previous, "access", "old-access");
+    await writeGoogleVaultToken(db.client(), previous, "refresh", "old-refresh");
+    const reference = await reachPicker();
+
+    // A second save for the same brand lands its tokens just before this one updates the row.
+    let connectionCalls = 0;
+    mockFrom.mockImplementation((table: string) => {
+      if (table === "social_connections") {
+        connectionCalls += 1;
+        if (connectionCalls === 2) {
+          void writeGoogleVaultToken(db.client(), previous, "access", "other-save-access");
+          void writeGoogleVaultToken(db.client(), previous, "refresh", "other-save-refresh");
+        }
+      }
+      return db.client().from(table);
+    });
+
+    const result = await chooseGoogleLocation({ choice: reference, locationId: ANCHOR });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/another window/);
+    // Not left looking healthy with someone else's credentials beside this location.
+    expect(googleRow()).toMatchObject({ id: previous, status: "needs_action" });
   });
 
   it("moves an existing connection to the newly chosen location, on the same row", async () => {
