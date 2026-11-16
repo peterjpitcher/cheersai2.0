@@ -233,6 +233,21 @@ describe("<GoogleVersionSection />", () => {
     expect(buttonNames()).toEqual([]);
   });
 
+  it("does not show an old problem under a version a person skipped", () => {
+    renderReady(
+      makeVersion({
+        state: "skipped",
+        statusLine: "Someone chose not to send this to Google.",
+        lastError: "Google refused this post.",
+        canEdit: false,
+        canSkip: false,
+      }),
+    );
+
+    expect(screen.getByText("Someone chose not to send this to Google.")).toBeInTheDocument();
+    expect(screen.queryByText("Google refused this post.")).toBeNull();
+  });
+
   it.each([
     ["claimed", "Sending"],
     ["uncertain", "Could not confirm"],
@@ -259,7 +274,7 @@ describe("<GoogleVersionSection />", () => {
       />,
     );
 
-    expect(screen.getByText(/Google needs to be reconnected/)).toBeInTheDocument();
+    expect(screen.getByText(/Google is not connected, or needs reconnecting/)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Go to Connections/ })).toHaveAttribute("href", "/connections");
     expect(screen.queryByRole("textbox")).toBeNull();
     expect(buttonNames()).toEqual([]);

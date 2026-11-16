@@ -180,7 +180,12 @@ describe("planner post page Google section", () => {
   it("asks for the Google section of this post and shows nothing when it is hidden", async () => {
     await renderPage(makeDetail({ platform: "instagram" }));
 
-    expect(getGooglePostSection).toHaveBeenCalledWith({ id: CONTENT_ID, platform: "instagram", placement: "feed" });
+    expect(getGooglePostSection).toHaveBeenCalledWith({
+      id: CONTENT_ID,
+      platform: "instagram",
+      placement: "feed",
+      body: "Sunday roast is back this weekend.",
+    });
     expect(screen.queryByRole("region", { name: "Google" })).toBeNull();
   });
 

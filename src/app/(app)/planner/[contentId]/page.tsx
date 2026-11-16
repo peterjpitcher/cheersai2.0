@@ -91,6 +91,7 @@ export default async function PlannerContentPage({
     id: detail.id,
     platform: detail.platform,
     placement: detail.placement,
+    body: detail.body,
   });
   const ownerTimezone = ownerSettings.posting.timezone ?? DEFAULT_TIMEZONE;
   const ownerTimezoneLabel = ownerTimezone.replace(/_/g, " ");

@@ -16,6 +16,7 @@ import { activeBrandHasGooglePosts } from "@/lib/connections/google-access";
 import { checkGoogleBrand } from "@/lib/google-posts/brands";
 import { getGoogleVersionForContent } from "@/lib/google-posts/data";
 import type { GoogleVersionView } from "@/lib/google-posts/model";
+import { deriveGoogleSummary } from "@/lib/google-posts/summary";
 import { postCanHaveGoogleVersion } from "@/lib/google-posts/view-text";
 import { createLogger } from "@/lib/logging";
 import { toLoggableError } from "@/lib/logging/to-error";
@@ -35,6 +36,18 @@ export interface GoogleSectionPost {
   id: string;
   platform: string | null;
   placement: string | null;
+  /** The Facebook post's current wording. */
+  body: string;
+}
+
+/**
+ * A waiting version nobody has edited takes its wording from the Facebook post
+ * when it is sent (send.ts), so show what Google will get from the caption as
+ * it stands now, not the copy stored when the version was made.
+ */
+function withCurrentWording(version: GoogleVersionView | null, body: string): GoogleVersionView | null {
+  if (!version || version.state !== "pending" || version.summaryEdited) return version;
+  return { ...version, summary: deriveGoogleSummary(body) };
 }
 
 type SectionContext = Pick<AuthContext, "supabase" | "accountId"> & { features?: { googlePosts?: boolean } | null };
@@ -47,9 +60,10 @@ export async function readGooglePostSection(ctx: SectionContext, post: GoogleSec
       checkGoogleBrand(ctx.supabase, ctx.accountId),
       getGoogleVersionForContent(ctx.supabase, ctx.accountId, post.id),
     ]);
-    if (check.ok) return { kind: "ready", version };
+    const shown = withCurrentWording(version, post.body);
+    if (check.ok) return { kind: "ready", version: shown };
     if (check.reason === "switched_off") return { kind: "hidden" };
-    if (check.reason === "connection_missing") return { kind: "reconnect", version };
+    if (check.reason === "connection_missing") return { kind: "reconnect", version: shown };
     return { kind: "unavailable" };
   } catch (error) {
     logger.error("could not read the Google section", toLoggableError(error), { accountId: ctx.accountId });

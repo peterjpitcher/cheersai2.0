@@ -7,6 +7,7 @@ import { readGooglePostSection } from '@/lib/google-posts/post-section';
 import { ACCOUNT, addPost, createWorld, OTHER_ACCOUNT, PARENT, type World } from './world';
 
 let world: World;
+const BODY = 'Quiz night.';
 
 function context(googlePosts = true, accountId = ACCOUNT) {
   return { supabase: world.deps.db, accountId, features: { googlePosts } };
@@ -29,7 +30,7 @@ describe('the Google section of the post page', () => {
     addVersion(postId);
     world.db.queries.length = 0;
 
-    const section = await readGooglePostSection(context(false), { id: postId, platform: 'facebook', placement: 'feed' });
+    const section = await readGooglePostSection(context(false), { id: postId, platform: 'facebook', placement: 'feed', body: BODY });
 
     expect(section).toEqual({ kind: 'hidden' });
     expect(world.db.queries).toEqual([]);
@@ -42,7 +43,7 @@ describe('the Google section of the post page', () => {
     const postId = addPost(world, { platform, placement } as never);
     world.db.queries.length = 0;
 
-    const section = await readGooglePostSection(context(), { id: postId, platform, placement });
+    const section = await readGooglePostSection(context(), { id: postId, platform, placement, body: BODY });
 
     expect(section).toEqual({ kind: 'hidden' });
     expect(world.db.queries).toEqual([]);
@@ -52,7 +53,7 @@ describe('the Google section of the post page', () => {
     const postId = addPost(world);
     addVersion(postId, { summary_edited_at: null });
 
-    const section = await readGooglePostSection(context(), { id: postId, platform: 'facebook', placement: 'feed' });
+    const section = await readGooglePostSection(context(), { id: postId, platform: 'facebook', placement: 'feed', body: BODY });
 
     expect(section.kind).toBe('ready');
     if (section.kind !== 'ready') return;
@@ -66,10 +67,33 @@ describe('the Google section of the post page', () => {
     });
   });
 
+  it('shows a waiting, unedited version with the wording Google will get from the caption as it stands', async () => {
+    const postId = addPost(world);
+    addVersion(postId, { summary: 'Old caption.' });
+    const post = { id: postId, platform: 'facebook', placement: 'feed', body: 'New caption! Book at example.com/quiz #quiz' };
+
+    const section = await readGooglePostSection(context(), post);
+
+    expect(section.kind === 'ready' && section.version?.summary).toBe('New caption!');
+  });
+
+  it('keeps the stored wording once a person has edited it, or while it is held', async () => {
+    const edited = addPost(world);
+    addVersion(edited, { summary: 'Edited by hand.', summary_edited_at: '2026-11-15T10:00:00.000Z' });
+    const held = addPost(world);
+    addVersion(held, { state: 'held', hold_reason: 'alcohol_promotion', summary: 'Held wording.' });
+
+    const first = await readGooglePostSection(context(), { id: edited, platform: 'facebook', placement: 'feed', body: 'New caption.' });
+    const second = await readGooglePostSection(context(), { id: held, platform: 'facebook', placement: 'feed', body: 'New caption.' });
+
+    expect(first.kind === 'ready' && first.version?.summary).toBe('Edited by hand.');
+    expect(second.kind === 'ready' && second.version?.summary).toBe('Held wording.');
+  });
+
   it('shows the section with no version for a Facebook feed post that has none', async () => {
     const postId = addPost(world);
 
-    const section = await readGooglePostSection(context(), { id: postId, platform: 'facebook', placement: 'feed' });
+    const section = await readGooglePostSection(context(), { id: postId, platform: 'facebook', placement: 'feed', body: BODY });
 
     expect(section).toEqual({ kind: 'ready', version: null });
   });
@@ -78,7 +102,7 @@ describe('the Google section of the post page', () => {
     const postId = addPost(world, { account: OTHER_ACCOUNT });
     addVersion(postId, {}, OTHER_ACCOUNT);
 
-    const section = await readGooglePostSection(context(), { id: postId, platform: 'facebook', placement: 'feed' });
+    const section = await readGooglePostSection(context(), { id: postId, platform: 'facebook', placement: 'feed', body: BODY });
 
     expect(section).toEqual({ kind: 'ready', version: null });
   });
@@ -88,7 +112,7 @@ describe('the Google section of the post page', () => {
     addVersion(postId);
     world.db.tables.social_connections[0].status = 'needs_action';
 
-    const section = await readGooglePostSection(context(), { id: postId, platform: 'facebook', placement: 'feed' });
+    const section = await readGooglePostSection(context(), { id: postId, platform: 'facebook', placement: 'feed', body: BODY });
 
     expect(section.kind).toBe('reconnect');
     if (section.kind !== 'reconnect') return;
@@ -99,7 +123,7 @@ describe('the Google section of the post page', () => {
     const postId = addPost(world);
     world.db.tables.social_connections.length = 0;
 
-    const section = await readGooglePostSection(context(), { id: postId, platform: 'facebook', placement: 'feed' });
+    const section = await readGooglePostSection(context(), { id: postId, platform: 'facebook', placement: 'feed', body: BODY });
 
     expect(section).toEqual({ kind: 'reconnect', version: null });
   });
@@ -109,7 +133,7 @@ describe('the Google section of the post page', () => {
     addVersion(postId);
     world.db.tables.accounts.find((row) => row.id === ACCOUNT)!.google_posts_enabled = false;
 
-    const section = await readGooglePostSection(context(), { id: postId, platform: 'facebook', placement: 'feed' });
+    const section = await readGooglePostSection(context(), { id: postId, platform: 'facebook', placement: 'feed', body: BODY });
 
     expect(section).toEqual({ kind: 'hidden' });
   });
@@ -119,12 +143,12 @@ describe('the Google section of the post page', () => {
     addVersion(postId);
     world.db.fail('gbp_posts', 'select', 1);
 
-    expect(await readGooglePostSection(context(), { id: postId, platform: 'facebook', placement: 'feed' })).toEqual({
+    expect(await readGooglePostSection(context(), { id: postId, platform: 'facebook', placement: 'feed', body: BODY })).toEqual({
       kind: 'unavailable',
     });
 
     world.db.fail('accounts', 'select', 1);
-    expect(await readGooglePostSection(context(), { id: postId, platform: 'facebook', placement: 'feed' })).toEqual({
+    expect(await readGooglePostSection(context(), { id: postId, platform: 'facebook', placement: 'feed', body: BODY })).toEqual({
       kind: 'unavailable',
     });
   });

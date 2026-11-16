@@ -75,7 +75,7 @@ export function GoogleVersionSection({ section, timezone }: GoogleVersionSection
       {section.kind === "reconnect" && (
         <div className="flex flex-col gap-3 rounded-[var(--r-lg)] border border-[var(--c-line-2)] bg-[var(--c-paper-2)] p-4 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-[14px] text-[var(--c-ink-2)]">
-            Google needs to be reconnected before this post can go to Google, or be changed here.
+            Google is not connected, or needs reconnecting, so this post cannot go to Google or be changed here.
           </p>
           <Button variant="secondary" size="sm" asChild>
             <Link href="/connections" className="inline-flex shrink-0 items-center gap-1.5">
@@ -122,7 +122,9 @@ function GoogleVersionBody({ version, timezone, controls }: GoogleVersionBodyPro
   const canSave = editable && draft.trim().length > 0 && !overLimit && draft !== saved;
   const moderation = googleModerationLabel(version.googleState);
   const eventTimes = formatGoogleEventTimes(version.eventStart, version.eventEnd, timezone);
-  const showLastError = version.lastError !== null && version.lastError !== version.statusLine;
+  // A person's Skip keeps the last problem on the row; the status line says all that matters then.
+  const showLastError =
+    version.state !== "skipped" && version.lastError !== null && version.lastError !== version.statusLine;
 
   const run = (failTitle: string, action: () => Promise<ActionResult>, onSuccess: (result: ActionResult) => void) => {
     startTransition(async () => {
@@ -164,7 +166,7 @@ function GoogleVersionBody({ version, timezone, controls }: GoogleVersionBodyPro
 
   const handleRetry = () => {
     run("Could not try again", () => retryGoogleVersion({ contentId: version.contentItemId }), () => {
-      toast.success("Back in the queue for Google", { description: "It will be sent to Google again shortly." });
+      toast.success("Back in the queue for Google", { description: "It will be tried again on the next Google run." });
     });
   };
 
@@ -218,7 +220,7 @@ function GoogleVersionBody({ version, timezone, controls }: GoogleVersionBodyPro
         {editable && (
           <p className="text-[12px] text-[var(--c-ink-3)]">
             {version.summaryEdited
-              ? "Edited by hand, so it no longer follows the Facebook wording."
+              ? "Set by hand (edited or released), so it no longer follows the Facebook wording."
               : "Follows the Facebook wording (without links, hashtags, handles or phone numbers) until you edit it."}
             {overLimit && ` Google allows ${GOOGLE_SUMMARY_MAX_CHARS.toLocaleString("en-GB")} characters at most.`}
           </p>
