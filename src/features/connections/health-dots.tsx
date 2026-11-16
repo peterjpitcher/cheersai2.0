@@ -8,7 +8,7 @@
 
 'use client';
 
-import type { ConnectionHealth, ConnectionHealthSummary, ProviderPlatform } from '@/types/providers';
+import type { ConnectionHealth, ConnectionHealthProvider, ConnectionHealthSummary } from '@/types/providers';
 
 const HEALTH_COLORS: Record<ConnectionHealth, string> = {
   green: 'bg-emerald-500',
@@ -16,7 +16,14 @@ const HEALTH_COLORS: Record<ConnectionHealth, string> = {
   red: 'bg-red-500',
 };
 
-const PLATFORM_ORDER: ProviderPlatform[] = ['facebook', 'instagram'];
+// Google ('gbp') only ever has a summary for a brand with the googlePosts switch.
+const PLATFORM_ORDER: ConnectionHealthProvider[] = ['facebook', 'instagram', 'gbp'];
+
+const PLATFORM_NAMES: Record<ConnectionHealthProvider, string> = {
+  facebook: 'facebook',
+  instagram: 'instagram',
+  gbp: 'Google',
+};
 
 interface ConnectionHealthDotsProps {
   summaries: ConnectionHealthSummary[];
@@ -40,8 +47,8 @@ export function ConnectionHealthDots({ summaries }: ConnectionHealthDotsProps): 
           <span
             key={platform}
             className={`inline-block h-2 w-2 rounded-full ${HEALTH_COLORS[health]}`}
-            title={`${platform}: ${health}`}
-            aria-label={`${platform} connection ${health}`}
+            title={`${PLATFORM_NAMES[platform]}: ${health}`}
+            aria-label={`${PLATFORM_NAMES[platform]} connection ${health}`}
           />
         );
       })}

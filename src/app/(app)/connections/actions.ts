@@ -6,6 +6,8 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import { ownsBrand, requireOwnerContext } from "@/lib/auth/roles";
+import { activeBrandHasGooglePosts } from "@/lib/connections/google-access";
+import { GOOGLE_CONNECT_MESSAGES } from "@/lib/connections/google-messages";
 import { evaluateConnectionMetadata } from "@/lib/connections/metadata";
 import { CONNECT_MESSAGES } from "@/lib/connections/messages";
 import { buildOAuthRedirectUrl } from "@/lib/connections/oauth";
@@ -41,6 +43,14 @@ const logger = createLogger("connections");
 
 const providerSchema = z.enum(["facebook", "instagram"]);
 type Provider = z.infer<typeof providerSchema>;
+
+/**
+ * Disconnect also covers Google ("gbp"), a connection-side provider that is
+ * not a content platform. Connecting Google has its own actions
+ * (./google-actions.ts); everything else in this file is Facebook and
+ * Instagram only and refuses "gbp" at the schema.
+ */
+const disconnectProviderSchema = z.enum(["facebook", "instagram", "gbp"]);
 
 const metadataKeyMap: Record<Provider, string> = {
   facebook: "pageId",
@@ -328,12 +338,20 @@ export async function completeOAuthConnect(
  * plaintext copy go (as in offboardBrand and revokeMetaUserData). The row
  * itself stays, keeping its metadata and history for a reconnect.
  * 'disconnected' is not an allowed status (social_connections_status_check).
+ *
+ * Google follows the same path, and only for a brand with the googlePosts
+ * switch (decision D10): for any other brand Google does not exist here.
  */
 export async function disconnectProvider(
   providerInput: string,
 ): Promise<{ success: boolean; error?: string }> {
-  const provider = providerSchema.parse(providerInput);
-  const { accountId } = await requireOwnerContext();
+  const provider = disconnectProviderSchema.parse(providerInput);
+  const ctx = await requireOwnerContext();
+  const { accountId } = ctx;
+  if (provider === "gbp" && !activeBrandHasGooglePosts(ctx)) {
+    logger.warn("Google disconnect refused: the brand does not have Google posting", { accountId });
+    return { success: false, error: GOOGLE_CONNECT_MESSAGES.notAvailable };
+  }
   const supabase = createServiceSupabaseClient();
 
   const result = await clearProviderTokens(supabase, accountId, provider);

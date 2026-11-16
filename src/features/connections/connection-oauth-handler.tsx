@@ -6,6 +6,11 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useToast } from "@/components/providers/toast-provider";
 import { CONNECT_MESSAGES } from "@/lib/connections/messages";
 
+/** The provider as the toast names it. Google's key ("gbp") is never shown. */
+function providerName(provider: string): string {
+  return provider === "gbp" ? "Google" : provider;
+}
+
 export function ConnectionOAuthHandler() {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -23,7 +28,7 @@ export function ConnectionOAuthHandler() {
     if (oauthStatus === "success" && provider) {
       startTransition(async () => {
         // A Page choice can add a note, for example that Instagram moved with Facebook.
-        toast.success(`Connected ${provider} successfully`, message ? { description: message } : undefined);
+        toast.success(`Connected ${providerName(provider)} successfully`, message ? { description: message } : undefined);
         router.replace("/connections");
       });
       return;
@@ -31,7 +36,7 @@ export function ConnectionOAuthHandler() {
 
     if (errorParam === "oauth_failed" || oauthStatus === "error") {
       const title = provider
-        ? `Could not connect ${provider}`
+        ? `Could not connect ${providerName(provider)}`
         : "Could not finish connection";
       toast.error(title, {
         description: message ?? CONNECT_MESSAGES.cancelled,

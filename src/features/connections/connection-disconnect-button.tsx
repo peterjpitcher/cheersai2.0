@@ -6,12 +6,13 @@ import { disconnectProvider } from "@/app/(app)/connections/actions";
 import { useToast } from "@/components/providers/toast-provider";
 
 interface ConnectionDisconnectButtonProps {
-  provider: "facebook" | "instagram";
+  provider: "facebook" | "instagram" | "gbp";
 }
 
 const PLATFORM_NAMES = {
   facebook: "Facebook",
   instagram: "Instagram",
+  gbp: "Google",
 } as const;
 
 const TRY_AGAIN = "Please try again.";

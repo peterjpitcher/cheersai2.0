@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+
 import Link from "next/link";
 
 import { ChangePageButton } from "@/features/connections/change-page-button";
@@ -48,9 +50,14 @@ interface ConnectionCardsProps {
   canDisconnect: boolean;
   /** Owners only (decision D4): Change Page runs the Page chooser. */
   canChangePage?: boolean;
+  /**
+   * An extra card at the end of the grid: the Google card, which renders
+   * nothing unless the brand has Google posting switched on.
+   */
+  children?: ReactNode;
 }
 
-export async function ConnectionCards({ canDisconnect, canChangePage = false }: ConnectionCardsProps) {
+export async function ConnectionCards({ canDisconnect, canChangePage = false, children }: ConnectionCardsProps) {
   const connections = await listConnectionSummaries();
   // Facebook is the anchor: while it is connected, Instagram uses its Page and
   // the Page is changed from the Facebook card only.
@@ -168,6 +175,7 @@ export async function ConnectionCards({ canDisconnect, canChangePage = false }: 
           </article>
         );
       })}
+      {children}
     </div>
   );
 }

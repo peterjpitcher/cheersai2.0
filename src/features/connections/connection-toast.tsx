@@ -18,6 +18,7 @@ interface ConnectionHealthToastProps {
 const PLATFORM_LABELS: Record<string, string> = {
   facebook: 'Facebook',
   instagram: 'Instagram',
+  gbp: 'Google',
 };
 
 const SESSION_KEY = 'cheersai_connection_toast_shown';

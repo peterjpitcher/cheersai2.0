@@ -4,9 +4,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { InMemoryConnectionsDb } from "../../../../../../tests/helpers/in-memory-connections-db";
 
-const { completeOAuthConnectMock, createServiceSupabaseClientMock } = vi.hoisted(() => ({
+const { completeOAuthConnectMock, completeGoogleConnectMock, createServiceSupabaseClientMock } = vi.hoisted(() => ({
   completeOAuthConnectMock: vi.fn(),
+  completeGoogleConnectMock: vi.fn(),
   createServiceSupabaseClientMock: vi.fn(),
+}));
+
+vi.mock("@/app/(app)/connections/google-actions", () => ({
+  completeGoogleConnect: completeGoogleConnectMock,
 }));
 
 vi.mock("@/app/(app)/connections/actions", () => ({
@@ -54,6 +59,7 @@ describe("GET /api/oauth/[provider]/callback", () => {
     db.seed("accounts", [{ id: ACCOUNT }]);
     db.seed("oauth_states", [
       { state: "state-1", provider: "facebook", account_id: ACCOUNT },
+      { state: "google-state", provider: "gbp", account_id: ACCOUNT },
       // A pending Page choice: same table, carries an encrypted payload.
       {
         state: CHOICE_REFERENCE,
@@ -194,5 +200,82 @@ describe("GET /api/oauth/[provider]/callback", () => {
 
     expect(stateRow(CHOICE_REFERENCE)).toEqual(before);
     expect(stateRow(CHOICE_REFERENCE)).toMatchObject({ used_at: null, error: null });
+  });
+  describe("Google (provider gbp)", () => {
+    const callback = (query: string) =>
+      GET(new NextRequest(`https://app.test/api/oauth/gbp/callback?${query}`), {
+        params: Promise.resolve({ provider: "gbp" }),
+      });
+
+    it("always goes on to the location picker, with only the choice reference in the address", async () => {
+      const reference = "G".repeat(43);
+      completeGoogleConnectMock.mockResolvedValueOnce({ success: true, locationChoice: reference });
+
+      const response = await callback("code=code-1&state=google-state");
+
+      expect(completeGoogleConnectMock).toHaveBeenCalledWith("code-1", "google-state");
+      expect(completeOAuthConnectMock).not.toHaveBeenCalled();
+      const location = new URL(response.headers.get("location") ?? "");
+      expect(location.origin).toBe("https://app.test");
+      expect(location.pathname).toBe("/connections/choose-location");
+      expect([...location.searchParams.keys()]).toEqual(["choice"]);
+      expect(location.searchParams.get("choice")).toBe(reference);
+    });
+
+    it("never reports success without a location choice", async () => {
+      completeGoogleConnectMock.mockResolvedValueOnce({ success: true });
+
+      const response = await callback("code=code-1&state=google-state");
+
+      const location = new URL(response.headers.get("location") ?? "");
+      expect(location.pathname).toBe("/connections");
+      expect(location.searchParams.get("oauth")).toBe("error");
+    });
+
+    it("sends the owner back to Connections with the plain message when Google refuses the listing", async () => {
+      const message =
+        "Google has not approved API access for this app yet, so your profile could not be listed. Nothing was saved.";
+      completeGoogleConnectMock.mockResolvedValueOnce({ success: false, error: message });
+
+      const response = await callback("code=code-1&state=google-state");
+
+      const location = new URL(response.headers.get("location") ?? "");
+      expect(location.pathname).toBe("/connections");
+      expect(location.searchParams.get("oauth")).toBe("error");
+      expect(location.searchParams.get("provider")).toBe("gbp");
+      expect(location.searchParams.get("message")).toBe(message);
+    });
+
+    it("says the Google sign-in was cancelled, and marks the state failed, when the owner cancels", async () => {
+      const response = await callback("error=access_denied&state=google-state");
+
+      const location = new URL(response.headers.get("location") ?? "");
+      expect(completeGoogleConnectMock).not.toHaveBeenCalled();
+      expect(stateRow("google-state")).toMatchObject({ error: "access_denied" });
+      expect(stateRow("google-state")?.used_at).not.toBeNull();
+      expect(location.searchParams.get("message")).toBe(
+        "The Google sign-in was cancelled or did not finish. Nothing was saved. Please click Connect again.",
+      );
+    });
+
+    it("redirects with plain words, and never the thrown text, when the connect step throws", async () => {
+      const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+      completeGoogleConnectMock.mockRejectedValueOnce(new Error("connect ECONNRESET 10.0.0.1"));
+
+      const response = await callback("code=code-1&state=google-state");
+
+      const location = new URL(response.headers.get("location") ?? "");
+      expect(location.pathname).toBe("/connections");
+      expect(location.searchParams.get("message")).toBe("We could not finish connecting. Please click Connect again.");
+      consoleError.mockRestore();
+    });
+
+    it("sends a signed-out owner to sign in", async () => {
+      completeGoogleConnectMock.mockImplementationOnce(async () => redirect("/auth/login"));
+
+      const outcome = await redirectOf(() => callback("code=code-1&state=google-state"));
+
+      expect(outcome).toEqual({ path: "/auth/login", status: 307 });
+    });
   });
 });

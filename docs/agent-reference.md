@@ -125,7 +125,7 @@ Route that exists but is not in `vercel.json`: `/api/cron/publish` (a 410 tombst
 | `ENABLE_CONNECTION_DIAGNOSTICS` | Verbose integration logging |
 | `FOOD_OPTIMISATION_ENABLED`, `FOOD_AUTO_MATERIALISE_ENABLED`, `NEXT_PUBLIC_ENABLE_FOOD_BOOKING` | Feature flags, default off |
 
-Read directly from `process.env` outside `src/env.ts` (debug and test switches): `BANNER_OVERLAY_DISABLED`, `BANNER_RENDER_URL`, `ENABLE_MEDIA_ATTACHMENTS_TABLE`, `TOURNAMENT_DEBUG`, `DEBUG_CONTENT_GENERATION`, `CHEERSAI_ACCOUNT_ID`, `E2E_TEST_EMAIL`, `E2E_TEST_PASSWORD`, `E2E_AUTH_COOKIE`, `BASE_URL`, `SKIP_ENV_VALIDATION`. Listed in `.env.example` but read by nothing: `INTERNAL_RENDER_SECRET`, `INTERNAL_RENDER_URL`, `VERCEL_OIDC_TOKEN` (populated by `vercel env pull`). Removed with GBP: `GOOGLE_MY_BUSINESS_CLIENT_ID`, `GOOGLE_MY_BUSINESS_CLIENT_SECRET`.
+Read directly from `process.env` outside `src/env.ts` (debug and test switches): `BANNER_OVERLAY_DISABLED`, `BANNER_RENDER_URL`, `ENABLE_MEDIA_ATTACHMENTS_TABLE`, `TOURNAMENT_DEBUG`, `DEBUG_CONTENT_GENERATION`, `CHEERSAI_ACCOUNT_ID`, `E2E_TEST_EMAIL`, `E2E_TEST_PASSWORD`, `E2E_AUTH_COOKIE`, `BASE_URL`, `SKIP_ENV_VALIDATION`. Listed in `.env.example` but read by nothing: `INTERNAL_RENDER_SECRET`, `INTERNAL_RENDER_URL`, `VERCEL_OIDC_TOKEN` (populated by `vercel env pull`). `GOOGLE_MY_BUSINESS_CLIENT_ID` and `GOOGLE_MY_BUSINESS_CLIENT_SECRET` were removed with GBP in June 2026 and are read again from `src/env.ts` since November 2026 (optional; the Google connection, `tasks/SPEC-gbp-posting-reintroduction.md`).
 
 ## 7. Operational scripts
 

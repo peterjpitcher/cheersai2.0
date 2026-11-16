@@ -94,6 +94,9 @@ async function notifyExpiringConnections(): Promise<{
   const nowMs = now.getTime();
   const windowEndMs = new Date(windowEnd).getTime();
   const connectionsInWindow = expiringConnections.filter((c) => {
+    // Google access tokens expire every hour by design and are renewed from a
+    // refresh token, so an expiry there is never something to warn about.
+    if (c.provider === "gbp") return false;
     const effective = c.token_expires_at ?? c.expires_at;
     if (!effective) return false;
     const ms = new Date(effective).getTime();

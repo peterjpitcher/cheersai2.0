@@ -1,4 +1,5 @@
-export type ConnectionProvider = "facebook" | "instagram";
+/** Connection-side providers; Google ("gbp") is not a content platform (see ./metadata.ts). */
+export type ConnectionProvider = "facebook" | "instagram" | "gbp";
 
 export type ConnectionStatus = "active" | "expiring" | "needs_action";
 
@@ -12,6 +13,7 @@ export interface ConnectionReadinessIssue {
     | "token_expired"
     | "token_expiring"
     | "token_expiry_unknown"
+    | "refresh_token_missing"
     | "metadata_missing";
   severity: ConnectionIssueSeverity;
   message: string;
@@ -23,6 +25,12 @@ export interface ConnectionReadinessInput {
   metadataComplete: boolean;
   hasAccessToken: boolean;
   expiresAt: string | null | undefined;
+  /**
+   * Google only: a refresh token is stored. Google access tokens last an hour
+   * and are renewed with it, so with one stored an expired access token is
+   * healthy and without one the connection cannot carry on.
+   */
+  hasRefreshToken?: boolean;
   connected?: boolean;
   now?: number;
 }
@@ -42,6 +50,7 @@ const NEVER_EXPIRING_PROVIDERS: ConnectionProvider[] = ["facebook", "instagram"]
 const PROVIDER_LABELS: Record<ConnectionProvider, string> = {
   facebook: "Facebook",
   instagram: "Instagram",
+  gbp: "Google",
 };
 
 export function hasTokenValue(token: string | null | undefined): boolean {
@@ -54,6 +63,7 @@ export function deriveConnectionReadiness({
   metadataComplete,
   hasAccessToken,
   expiresAt,
+  hasRefreshToken = false,
   connected = true,
   now = Date.now(),
 }: ConnectionReadinessInput): ConnectionReadiness {
@@ -92,7 +102,17 @@ export function deriveConnectionReadiness({
     });
   }
 
-  if (connected && expiresAt) {
+  if (provider === "gbp") {
+    // The access token's expiry says nothing about a Google connection: it is
+    // an hour at most and renewed from the refresh token. No expiry warnings.
+    if (connected && hasAccessToken && !hasRefreshToken) {
+      issues.push({
+        code: "refresh_token_missing",
+        severity: "error",
+        message: `${PROVIDER_LABELS[provider]} needs to be reconnected.`,
+      });
+    }
+  } else if (connected && expiresAt) {
     const expiry = new Date(expiresAt);
     if (!Number.isNaN(expiry.getTime())) {
       const timeUntilExpiry = expiry.getTime() - now;
