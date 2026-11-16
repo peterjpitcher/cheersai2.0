@@ -1,9 +1,10 @@
 import { requireAuthContext } from "@/lib/auth/server";
+import { activeBrandHasGooglePosts } from "@/lib/connections/google-access";
 import { tryCreateServiceSupabaseClient } from "@/lib/supabase/service";
 import { isSchemaMissingError } from "@/lib/supabase/errors";
 
 export interface ConnectionDiagnostic {
-  provider: "facebook" | "instagram";
+  provider: "facebook" | "instagram" | "gbp";
   status: "active" | "expiring" | "needs_action";
   displayName: string | null;
   accessTokenPreview: string | null;
@@ -15,7 +16,7 @@ export interface ConnectionDiagnostic {
 }
 
 type ConnectionRow = {
-  provider: "facebook" | "instagram";
+  provider: "facebook" | "instagram" | "gbp";
   status: string | null;
   display_name: string | null;
   access_token: string | null;
@@ -27,7 +28,8 @@ type ConnectionRow = {
 };
 
 export async function listConnectionDiagnostics(): Promise<ConnectionDiagnostic[]> {
-  const { accountId } = await requireAuthContext();
+  const ctx = await requireAuthContext();
+  const { accountId } = ctx;
   const supabase = tryCreateServiceSupabaseClient();
 
   if (!supabase) {
@@ -51,7 +53,10 @@ export async function listConnectionDiagnostics(): Promise<ConnectionDiagnostic[
       throw error;
     }
 
-    return (data ?? []).map((row) => ({
+    // A stored Google row is shown only to brands with the googlePosts switch (decision D10).
+    const rows = (data ?? []).filter((row) => row.provider !== "gbp" || activeBrandHasGooglePosts(ctx));
+
+    return rows.map((row) => ({
       provider: row.provider,
       status: normaliseStatus(row.status),
       displayName: row.display_name,

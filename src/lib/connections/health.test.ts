@@ -53,4 +53,29 @@ describe('deriveConnectionHealth', () => {
     const justPast7Days = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000 + 60000).toISOString();
     expect(deriveConnectionHealth('active', justPast7Days, 'instagram')).toBe('green');
   });
+
+  describe('Google (gbp): the hourly access token is renewed from the refresh token', () => {
+    const anHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+    const inTenMinutes = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+
+    it('is green with an expired access token and a stored refresh token', () => {
+      expect(deriveConnectionHealth('active', anHourAgo, 'gbp', { hasRefreshToken: true })).toBe('green');
+    });
+
+    it('is green, not amber, while the access token is inside the 7 day warning window', () => {
+      expect(deriveConnectionHealth('active', inTenMinutes, 'gbp', { hasRefreshToken: true })).toBe('green');
+      expect(deriveConnectionHealth('active', null, 'gbp', { hasRefreshToken: true })).toBe('green');
+    });
+
+    it('is red without a refresh token, and red when it needs action', () => {
+      expect(deriveConnectionHealth('active', inTenMinutes, 'gbp')).toBe('red');
+      expect(deriveConnectionHealth('active', inTenMinutes, 'gbp', { hasRefreshToken: false })).toBe('red');
+      expect(deriveConnectionHealth('needs_action', inTenMinutes, 'gbp', { hasRefreshToken: true })).toBe('red');
+    });
+
+    it('leaves Facebook and Instagram exactly as they were when the option is passed', () => {
+      expect(deriveConnectionHealth('active', anHourAgo, 'facebook', { hasRefreshToken: true })).toBe('red');
+      expect(deriveConnectionHealth('active', inTenMinutes, 'instagram', { hasRefreshToken: true })).toBe('amber');
+    });
+  });
 });

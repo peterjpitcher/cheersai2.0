@@ -1,4 +1,8 @@
-export type ConnectionProvider = "facebook" | "instagram";
+/**
+ * Connection-side providers. Google ("gbp") is a connection only: it is not in
+ * the content `Platform` type, so nothing outside Connections sees it yet.
+ */
+export type ConnectionProvider = "facebook" | "instagram" | "gbp";
 
 export interface ConnectionMetadataResult {
   complete: boolean;
@@ -8,6 +12,7 @@ export interface ConnectionMetadataResult {
 const REQUIRED_KEYS: Record<ConnectionProvider, Array<{ key: string; label: string }>> = {
   facebook: [{ key: "pageId", label: "Facebook Page ID" }],
   instagram: [{ key: "igBusinessId", label: "Instagram Business Account ID" }],
+  gbp: [{ key: "localPostParent", label: "Google location" }],
 };
 
 export function evaluateConnectionMetadata(

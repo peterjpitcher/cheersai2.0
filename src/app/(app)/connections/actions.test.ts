@@ -884,6 +884,84 @@ describe('disconnectProvider', () => {
   });
 });
 
+describe('disconnectProvider for Google (googlePosts switch, decision D10)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    failures = {};
+    rejectedWrites = [];
+    memDb = {
+      social_connections: [
+        connection('fb-1', 'acc-1', 'facebook'),
+        { ...connection('g-1', 'acc-1', 'gbp'), metadata: { localPostParent: 'accounts/1/locations/2' } },
+        connection('g-other', 'acc-2', 'gbp'),
+      ],
+      token_vault: [
+        vaultRow('v-fb-access', 'fb-1', 'access'),
+        vaultRow('v-g-access', 'g-1', 'access'),
+        vaultRow('v-g-refresh', 'g-1', 'refresh'),
+        vaultRow('v-other-refresh', 'g-other', 'refresh'),
+      ],
+    };
+    mockFrom.mockImplementation((table: string) => memQuery(table));
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+  });
+
+  const row = (id: string) => memDb.social_connections.find((r) => r.id === id);
+  const vaultIds = () => memDb.token_vault.map((r) => r.id);
+  const withGoogle = (googlePosts: boolean) => ({
+    ...authContext({ accountId: 'acc-1' }),
+    features: { paidAds: false, tournaments: false, managementImport: false, googlePosts },
+  });
+
+  it('deletes both Google tokens and marks the connection needs_action, keeping the location', async () => {
+    mockRequireAuthContext.mockResolvedValue(withGoogle(true));
+
+    const result = await disconnectProvider('gbp');
+
+    expect(result).toEqual({ success: true });
+    expect(rejectedWrites).toEqual([]);
+    expect(row('g-1')).toMatchObject({
+      status: 'needs_action',
+      token_expires_at: null,
+      metadata: { localPostParent: 'accounts/1/locations/2' },
+    });
+    expect(vaultIds()).toEqual(['v-fb-access', 'v-other-refresh']);
+    // Facebook, and another brand's Google, are untouched.
+    expect(row('fb-1')).toMatchObject({ status: 'active' });
+    expect(row('g-other')).toMatchObject({ status: 'active' });
+  });
+
+  it('refuses, before touching the database, for a brand without the switch', async () => {
+    mockRequireAuthContext.mockResolvedValue(withGoogle(false));
+    mockFrom.mockClear();
+
+    const result = await disconnectProvider('gbp');
+
+    expect(result).toEqual({ success: false, error: 'Google posting is not switched on for this brand.' });
+    expect(mockFrom).not.toHaveBeenCalled();
+    expect(vaultIds()).toHaveLength(4);
+    expect(row('g-1')).toMatchObject({ status: 'active' });
+  });
+
+  it('refuses when the brand has no feature switches at all', async () => {
+    mockRequireAuthContext.mockResolvedValue(authContext({ accountId: 'acc-1' }));
+
+    expect(await disconnectProvider('gbp')).toEqual({
+      success: false,
+      error: 'Google posting is not switched on for this brand.',
+    });
+  });
+
+  it('keeps Google out of the Facebook and Instagram connect actions', async () => {
+    mockRequireAuthContext.mockResolvedValue(withGoogle(true));
+    mockFrom.mockClear();
+
+    await expect(initiateOAuthConnect('gbp')).rejects.toThrow();
+    await expect(completeOAuthConnect('gbp', 'code', 'state')).rejects.toThrow();
+    expect(mockFrom).not.toHaveBeenCalled();
+  });
+});
+
 describe('owner-only connections (decision D4)', () => {
   it('refuses members before touching the database', async () => {
     mockRequireAuthContext.mockResolvedValue(authContext({ role: 'member' }));

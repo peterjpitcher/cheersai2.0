@@ -6,6 +6,7 @@ import { isOwner } from "@/lib/auth/roles";
 import { requireAuthContext } from "@/lib/auth/server";
 import { ConnectionCards } from "@/features/connections/connection-cards";
 import { ConnectionDiagnostics } from "@/features/connections/connection-diagnostics";
+import { GoogleConnectionCard } from "@/features/connections/google-connection-card";
 import { ConnectionOAuthHandler } from "@/features/connections/connection-oauth-handler";
 import { AdAccountSetup } from "@/features/campaigns/AdAccountSetup";
 import { MetaConversionSetup } from "@/features/campaigns/MetaConversionSetup";
@@ -41,7 +42,10 @@ export default async function ConnectionsPage() {
             <h3 className="text-lg font-semibold" style={{ color: "var(--c-ink)" }}>Connected accounts</h3>
             <p className="text-sm" style={{ color: "var(--c-ink-3)" }}>Status, tokens, and reconnect controls for each provider.</p>
           </div>
-          <ConnectionCards canDisconnect={isOwner(ctx)} canChangePage={isOwner(ctx)} />
+          <ConnectionCards canDisconnect={isOwner(ctx)} canChangePage={isOwner(ctx)}>
+            {/* Brands with the googlePosts switch only (decision D10); renders nothing otherwise. */}
+            {features.googlePosts ? <GoogleConnectionCard canManage={isOwner(ctx)} /> : null}
+          </ConnectionCards>
         </section>
 
         {adAccountStatus ? (

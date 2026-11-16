@@ -27,8 +27,15 @@ export interface ValidationResult {
 
 export type ConnectionHealth = 'green' | 'amber' | 'red';
 
+/**
+ * Providers a brand can hold a connection to. Google ("gbp") is a connection
+ * only: it is deliberately not a ProviderPlatform, so the publishing pipeline
+ * and provider adapters do not see it.
+ */
+export type ConnectionHealthProvider = ProviderPlatform | 'gbp';
+
 export interface ConnectionHealthSummary {
-  provider: ProviderPlatform;
+  provider: ConnectionHealthProvider;
   health: ConnectionHealth;
   accountName: string | null;
   lastSyncedAt: string | null;

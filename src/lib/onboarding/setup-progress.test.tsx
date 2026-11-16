@@ -43,6 +43,15 @@ describe('getSetupProgress', () => {
     expect(progress).toMatchObject({ profile: true, facebook: true, instagram: false, show: true });
   });
 
+  it('never counts or asks for a Google connection', async () => {
+    const progress = await getSetupProgress(
+      service({ posted: 0, profile: null, connections: [{ provider: 'gbp', status: 'active' }] }) as never,
+      'b',
+    );
+    expect(progress).toEqual({ profile: false, facebook: false, instagram: false, firstPost: false, show: true });
+    expect(Object.keys(progress).some((key) => /google|gbp/i.test(key))).toBe(false);
+  });
+
   it('disappears once anything has been published (so established brands never see it)', async () => {
     const progress = await getSetupProgress(service({ posted: 12, profile: null, connections: [] }) as never, 'b');
     expect(progress).toMatchObject({ firstPost: true, show: false });
@@ -51,6 +60,12 @@ describe('getSetupProgress', () => {
 
 describe('SetupChecklist', () => {
   const todo: SetupProgress = { profile: true, facebook: false, instagram: false, firstPost: false, show: true };
+
+  it('does not mention Google to anyone', () => {
+    for (const isOwner of [true, false]) {
+      expect(renderToStaticMarkup(<SetupChecklist progress={todo} isOwner={isOwner} />)).not.toMatch(/google/i);
+    }
+  });
 
   it('links owners to each remaining step and counts progress', () => {
     const html = renderToStaticMarkup(<SetupChecklist progress={todo} isOwner />);

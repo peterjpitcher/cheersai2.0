@@ -38,11 +38,11 @@ afterEach(() => {
 });
 
 /** A connection whose token expires just under `days` days from now. */
-function useDb(days: number) {
+function useDb(days: number, provider = 'facebook') {
   const connection = {
     id: CONNECTION_ID,
     account_id: ACCOUNT_ID,
-    provider: 'facebook',
+    provider,
     token_expires_at: new Date(Date.now() + days * DAY_MS - 60_000).toISOString(),
     expires_at: null,
   };
@@ -161,4 +161,18 @@ describe('notify-expiring-connections', () => {
     expect(body).toEqual({ processed: 1, notified: 1, emailed: 0, skipped: 0, errors: 1 });
     expect(table.rows).toHaveLength(1);
   });
+
+  it.each([3, 1 / 24])(
+    'ignores a Google connection whose access token expires in %s days: it is renewed hourly by design',
+    async (days) => {
+      useDb(days, 'gbp');
+
+      const { status, body } = await run();
+
+      expect(status).toBe(200);
+      expect(body).toEqual({ processed: 0, notified: 0, emailed: 0, skipped: 0, errors: 0 });
+      expect(table.rows).toHaveLength(0);
+      expect(sendEmail).not.toHaveBeenCalled();
+    },
+  );
 });

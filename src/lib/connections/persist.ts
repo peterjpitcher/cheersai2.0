@@ -193,7 +193,7 @@ export async function saveProviderConnection(
 export async function clearProviderTokens(
   supabase: SupabaseClient,
   accountId: string,
-  provider: Provider,
+  provider: Provider | "gbp",
 ): Promise<SaveResult> {
   const failure = { success: false, error: CONNECTION_SAVE_MESSAGES.disconnectFailed };
 
