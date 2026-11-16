@@ -1,6 +1,7 @@
 # SPEC: Google Business Profile posting as a third channel
 
 Status: draft v4, 14 November 2026. Replaces v3 (24 September 2026). PR1 (data and contracts) shipped in November 2026 (#233). PR2 (connection) built 16 November 2026, before Google's approval, so it fails closed at Google's quota wall and cannot be accepted until the quota is above zero (section 4, "Built in PR2"). Review history: `tasks/REVIEW-gbp-posting-reintroduction.md` (findings GBP-01 to GBP-14, all still addressed below).
+- 16 November 2026 (D12): Google versions are attached to Facebook feed posts and sent by their own cron. Sections 2, 5, 6, 7 and 8, the wiring checklist and Delivery are rewritten to describe what is built. The publish worker, the queue, the handler, preflight and the `Platform` types are untouched. Built and tested against mocked Google only; the migration is written but not applied.
 - After review (16 November 2026): the callback needs only a signed-in user and then checks ownership of the brand recorded in the state row, so an owner who switches brand during the sign-in can still finish. A reconnect verifies, after its last write, that the stored tokens are the ones it wrote; if another save for the same brand got in between, the connection is set to `needs_action` and the owner is asked to connect again (there is no transaction across the token vault and the connection row).
 
 ## What changed since v3
@@ -28,10 +29,11 @@ D1 to D9 stand from v3 unless marked.
 - D5. One Google event post per event, on the event's first scheduled post date.
 - D6. `BOOK` button when the event takes bookings, otherwise `LEARN_MORE`; both to the event's Google tracked link.
 - D7. Manually entered events get Google event posts too: the event form gains an end time field.
-- D8 (replaced by Peter, 14 November 2026). Once the build is finished, one deliberate pass creates a Google version of every post already scheduled (PR6 below). Turning the switch on still never creates Google work by itself.
+- D8 (replaced by Peter, 14 November 2026). Once the build is finished, one deliberate pass creates a Google version of every post already scheduled (PR5 below). Turning the switch on still never creates Google work by itself. As built (16 November 2026): "already scheduled" means created before the Google connection was made. The connection save now records `metadata.connectedAt` (every first connection and reconnect); the cron only gives versions to Facebook feed posts created after it, and a connection without it gets nothing automatically. Everything older goes through the dry-run-first ops script.
 - D9. Changes and cancellations after a Google post is out are corrected by hand in Google; CheersAI shows a link to the post.
 - D10 (new, 14 November 2026). Own profiles only. A brand can post to Google only when the super-admin has switched it on; customers who sign up themselves never see Google anywhere in the app. The Anchor is the only brand to be switched on for now.
 - D11 (Peter, 14 November 2026). The Google login for the access application and the connection is `thepitchersummers@gmail.com`.
+- D12 (Peter, 16 November 2026). The Google version is attached to each Facebook feed post (same time, same picture) and is not a separate planner item; this keeps the live Facebook and Instagram worker untouched. A Google version is one `gbp_posts` row pointing at the Facebook feed `content_items` row. It is never a `content_items` row and never a `publish_jobs` row, and it is created, sent and checked by its own cron (`/api/cron/google-posts`), never by the publish scheduler or the edge worker.
 
 ## Phase 0: Google access (owner: Peter, outside the code)
 
@@ -77,7 +79,7 @@ Google's pages do not say the applying login must own the Cloud project, only th
 
 ## Scope
 
-In: a Google connection per enabled brand; `EVENT` and `STANDARD` posts from the create wizard and the planner composer, sent by the live edge worker; Google's moderation state tracked to LIVE or REJECTED with alerts; Google copy rules; a per-brand admin switch, default off. London-time locations only. Feed posts only.
+In: a Google connection per enabled brand; `EVENT` and `STANDARD` Google versions attached to Facebook feed posts (D12), sent by their own cron; Google's moderation state tracked to LIVE or REJECTED with alerts; Google copy rules; a per-brand admin switch, default off. London-time locations only. Feed posts only.
 
 Out: stories (Google has no equivalent; a story is never sent to Google), reviews, metrics and post results, Q&A, OFFER and product posts, video, multiple photos, Google's own scheduling and recurrence, calendar fill, tournament posts, link in bio, paid ads, automatic completion of the management checklist. Those features keep iterating Facebook and Instagram only.
 
@@ -91,30 +93,20 @@ Out: stories (Google has no equivalent; a story is never sent to Google), review
 - Google's API policy allows automated use on listings you own or manage, so no consent record is needed. If a brand Peter does not own or manage is ever to be switched on, stop and re-read Google's policy first.
 - Keep `src/content/claims.ts:21` and `tests/lib/anchor-coupling.test.ts`, which stop marketing copy claiming Google posting: it is not sold.
 
-### 2. Data: one tracked row per Google post
+### 2. Data: one row per Google version (D12)
 
-New table `gbp_posts`, `account_id`-scoped:
+`gbp_posts` (PR1, `20261114211618_gbp_posts_and_switch.sql`) gains the columns the attached model needs in one additive migration, `supabase/migrations/20261116120000_gbp_posts_attached_versions.sql` (written 16 November 2026, not applied):
 
-- `id`, `account_id`, `content_item_id` (unique), `publish_job_id`
-- `source_event_key` (`mgmt:<management event id>` for imported events, `campaign:<campaign id>` for manual events, null for STANDARD) and `local_post_parent` (the destination, captured when the job is created)
-- `google_post_name`, `search_url` (the link Google returns, shown in the planner for D9), `google_state` (`PROCESSING`, `LIVE`, `REJECTED`, other), `delivery_state` (`not_scheduled`, `claimed`, `sent`, `uncertain`, `failed`)
-- `last_checked_at`, `next_check_at`, `check_attempts`, `last_error` (sanitised)
-- Unique partial index on `(account_id, source_event_key, local_post_parent)` where `source_event_key is not null`: the guarantee behind D5.
-
-Send sequence in the worker:
-1. Claim: insert the row as `claimed`. A unique violation means another attempt owns it: stop.
-2. Create the post at Google.
-3. Record `google_post_name`, `search_url`, `delivery_state = sent` and `google_state`.
-4. Response lost, timeout or 5xx after the request left: `delivery_state = uncertain`. Never re-create blindly. List the location's `localPosts` and match on event title and start (EVENT) or summary prefix and create time (STANDARD). A match is adopted; no match allows one create; still unclear raises an alert.
-
-`publish_jobs.status = succeeded` for Google means Google accepted it, never that it is public. The planner reads `gbp_posts.google_state` for Google labels.
-
-Migration rules (all newer than v3):
-- PR1: one additive migration, `supabase/migrations/*_gbp_posts_and_switch.sql`, with `gbp_posts` and `accounts.google_posts_enabled`. The app selects the new column on every sign-in, so the migration is applied before the deploy and the column is never dropped while the code reads it.
-- PR3: `gbp_disabled` added to `publish_jobs_resolution_kind_check`, when the worker first uses it (the constraint is dropped and re-created with the extra value in one transaction; no data changes). The `DROP CONSTRAINT` will trigger the connector's destructive-SQL confirmation, so it is named in that approval packet. Moved out of PR1 on 14 November 2026: nothing writes the value until then.
-- Written against production's shape, with its own grants stated. `gbp_posts` is service role only, like `team_invitations`: RLS on with no policies, everything revoked from `public`, `anon` and `authenticated`. Every read goes through server code with the service-role client scoped by `account_id` (this replaces v4's first draft, which gave `authenticated` a read policy nothing needed).
-- `supabase/tests/gbp_posts_verify.sql` checks the column, the grants, the constraints and the one-per-event index; CI runs it on a from-scratch database.
-- Applied through `prod-migrate` before the merge, then the file renamed to the version production recorded.
+- `state`: `pending` (waiting for its post's time), `held` (needs a person, with `hold_reason`), `claimed` (a send is in flight), `sent`, `uncertain` (the answer was lost), `failed`, `skipped`. Default `pending`.
+- `hold_reason`: why it is held, failed or skipped, as a short code (`alcohol_promotion`, `no_wording`, `parent_removed`, `too_late`, `destination_changed`, `reconnect_needed` and so on; the plain wording for each is in `src/lib/google-posts/model.ts`).
+- What is sent: `topic_type` (`STANDARD` or `EVENT`), `summary` (at most 1,500 code points), `cta_type` (`BOOK`, `LEARN_MORE` or none) with `cta_url` (https only), and for an event `event_title`, `event_start`, `event_end` (instants; London wall time is worked out at send).
+- Sending: `attempts`, `next_attempt_at` (backoff), `claimed_at`, `sent_at`, `resend_count` (0 or 1: the one re-send an uncertain send may have), `summary_edited_at` (set once a person edits or releases the wording; until then it follows the Facebook post).
+- CHECKs, each added only if missing: the state and type lists, the button pair, complete event fields with the end after the start, a reason on every held row, `claimed_at` on claimed and uncertain rows, a Google name and `sent_at` on sent rows, the summary length, attempts at least 0, `resend_count` 0 or 1.
+- A partial index `gbp_posts_live_states` on `(account_id, state, next_attempt_at)` for the cron's pending, claimed and uncertain reads.
+- `delivery_state` and its CHECK are left in place and marked superseded in a comment: replacing the CHECK is a destructive change that was not approved, and nothing reads the column now.
+- Kept from PR1: `content_item_id` unique (one version per post), the one-per-event partial unique index on `(account_id, source_event_key, local_post_parent)`, `local_post_parent` captured at creation, service role only (RLS on, no policies, grants restated).
+- `supabase/tests/gbp_posts_verify.sql` gains blocks for the new columns, CHECKs and index, and a probe that tries each CHECK inside a rolled-back transaction.
+- Applied through `prod-migrate` before the merge, then the file renamed to the version production records.
 
 ### 3. Event data, source to Google
 
@@ -162,44 +154,55 @@ Where it lives: `src/lib/connections/google-*.ts` (messages and constants, acces
 - **Readiness and health for `gbp`.** The access token's expiry is ignored entirely (no "expired", no 7-day "expiring" warning): ready and green with a stored refresh token, "Google needs to be reconnected" and red without one. `src/lib/publishing/preflight.ts` is unchanged in PR2: it only serves Facebook and Instagram until Google can be selected.
 - **Not touched in PR2, on purpose:** `supabase/functions/**`, the create wizard, the planner, AI copy, preflight, onboarding (`setup-progress.ts` and the checklist never mention Google; a test holds that), calendar fill, tournaments, analytics and link in bio. `tests/msw/handlers/gbp.ts` is left as it was: nothing in PR2 uses it (the new tests stub `fetch` directly); it is rewritten with the edge provider in PR3.
 
-### 5. Create flow: Google never disturbs Meta
+### 5. Creating Google versions (D8, D5, D12)
 
-- `createScheduledBatch` (`src/app/actions/content.ts:647`, work in `src/lib/content/schedule-batch.ts`) rolls the whole batch back when any enqueue fails (lines 608 to 631). Change: Facebook and Instagram behave exactly as today; Google items are validated first and enqueued last, and a Google failure leaves that item visible as "needs attention" with the reason, without rolling back Meta. `content_items.status` has no such value (live CHECK: draft, scheduled, queued, publishing, posted, failed), so the item stays `draft` with no publish job, and its `gbp_posts` row holds `delivery_state = not_scheduled` and the reason; the planner shows the label from that row.
-- The result screen states partial success plainly ("Facebook and Instagram scheduled. Google not scheduled: <reason>"). Fixing a Google item re-queues only that item.
-- Events: one Google item per event (the first slot), whatever the cadence. Other content: one Google item per scheduled feed slot.
-- Story placements never create a Google item (`schedule-batch.ts:110`).
-- Brands with the switch off, and old drafts, stay Meta-only.
+Nothing in the create wizard, calendar fill, tournaments or the composer changes. The cron (`src/lib/google-posts/create.ts`) looks at each enabled brand's Facebook feed posts and attaches versions:
+
+- Candidates: the brand's `content_items` with platform `facebook`, placement `feed`, status `scheduled` or `queued`, not trashed, created after `connectedAt`, at most 200 a run, with no version yet. Stories, Instagram, drafts and posts more than 5 minutes in the past never get one.
+- Events (campaign type `event`): only the earliest upcoming Facebook feed post of the event gets a version, and none at all once any post of the event has one (D5). The event details come from the campaign metadata (`eventStart`, `eventEnd`, `eventTitle`, `googleCtaUrl`, `takesBookings`, `sourceEventKey`). When the metadata has no end, the brand has management import on and a working management connection, the management app is asked: by the stored event id, otherwise by listing that date and keeping only an event whose name (trimmed, any case), date and start time all match exactly. Zero or several matches, or any management error, means "not matched".
+- An event with a start and an end (stored or matched) becomes `EVENT` with `BOOK` when it takes bookings, otherwise `LEARN_MORE`, both only when there is an https Google link; no link means no button. An event without a known end becomes `STANDARD`, still keyed to the event so it stays one per event. An event already over gets nothing.
+- `source_event_key`: the stored key, else `mgmt:<id>` for a matched management event, else `campaign:<campaign id>`.
+- Other posts become `STANDARD`, with `LEARN_MORE` only when the campaign holds a `googleCtaUrl`.
+- Management calls: at most 10 a run, one second apart, and only in the first 15 seconds of the run; an event that could not be looked up in time is left for the next run, not guessed.
+- The insert relies on the database: a unique violation (another run got there first) counts as "already has one", never an error.
+
+The existing schedule (D8): `npm run ops:google-versions-existing-schedule -- --account <id>` is a dry run that writes `temp/google-versions-existing-schedule/<time>/plan.json` and prints what would be created, held, skipped and left for later. `-- --apply --plan <file> --asked "<words>"` creates exactly the versions in that plan (it re-checks the switch, the connection, the location and that each post is unchanged), records the approval words, and writes `applied-<time>.json` beside the plan. A second apply creates nothing.
 
 ### 6. Copy
 
-- `AiGenerationResponseSchema` (`src/lib/ai/schemas.ts:14-25`) has two fixed keys. Google becomes an optional third key, requested only when the brand is enabled and Google is selected. `PlatformCopy` (`src/types/content.ts:50`), `toPlatformCopy`, `src/lib/ai/prompts.ts`, `write-copy.ts:19-21` (limit 1,500), `content-rules.ts`, `postprocess.ts` and `src/lib/publishing/copy-rules.ts:11,21` gain the Google rules.
-- Rules: 1,500 characters; no phone numbers, emails, social handles or hashtags; no invented times or booking facts. They apply to manual edits as well as AI output.
-- Google restricts posts promoting regulated products. Drinks price offers and alcohol-led promotions are flagged at preflight for a person to review the Google version and are not auto-sent; ordinary events (quiz, music bingo, live sport) pass.
-- The Google version is approved by a person like the other platforms.
+No AI call and no change to the AI schemas, prompts or copy rules for Facebook and Instagram. The Google wording is derived from the Facebook post's copy (`content_variants.body`) by `src/lib/google-posts/summary.ts`:
 
-### 7. Publishing runtime
+- Links, email addresses, phone numbers, hashtags and @ handles are removed, along with the lead-in that pointed at them ("Call us on", "Book here:", "Follow"), and the spacing and punctuation are tidied.
+- The result is cut to 1,500 code points, at the last sentence end if one falls in the last 40 per cent, otherwise at a word boundary.
+- Nothing left means the version is `held` with `no_wording`.
+- A small detector holds alcohol price promotions (a price, "2 for 1", "half price" or "happy hour" wording next to a drink word, in one sentence) as `held` with `alcohol_promotion`; ordinary events pass. A held version is never sent until a person releases it.
+- The wording is worked out again at send time from the current Facebook copy, until a person edits or releases it (`summary_edited_at`); after that it is frozen. A person's own wording goes through the same rules.
 
-- One supported runtime: the Supabase edge worker (`supabase/functions/publish-queue/worker.ts`), which production uses while `publish_jobs` has no `platform` column. Platform comes from `content_items.platform`.
-- Worker changes: `SUPPORTED_PUBLISH_PLATFORMS` (line 154), the `publishByPlatform` switch (1118), a new `providers/gbp.ts`, a Google branch in `loadConnection` (1353) for refresh, and a Google error classifier beside the Meta-only one in `handleFailure` (1840). The dead `gbp` case in `metadata.ts:47` is rewritten to the single stored id format.
-- Guard: `src/lib/publishing/queue.ts:13` accepts Google only in legacy-bridge mode; `src/lib/publishing/handler.ts:23` keeps refusing it. A later schema switch cannot silently move Google to an unsupported path.
-- Shared request-building fixtures run under Vitest against the edge provider code, so the tested body is the sent body.
-- Before each create: re-check the brand switch and the destination.
-- Media: one image, signed at attempt time, bytes checked (JPG or PNG, 10 KB to 5 MB, at least 250 by 250). PR3 measures Google's fetch timing on the first live post and lengthens the signed URL if needed.
-- Errors: 400 hard fail with Google's message; 401 one refresh then `needs_action`; 403 and 404 hard fail and alert; 429 and 5xx before acceptance retry with backoff and jitter; timeout after send is `uncertain` (section 2); event already ended stops retrying.
-- User-facing messages: `src/lib/publishing/failure-messages.ts:71` gains Google entries, and line 299 stops treating `gbp` as a retired platform.
-- Deploy the function by name with `/opt/homebrew/bin/supabase`, never deploy-all. The caller check is unaffected.
+### 7. Sending (`src/lib/google-posts/send.ts`)
 
-### 8. Moderation checks and alerts
+The cron at `src/app/api/cron/google-posts/route.ts` runs every minute (`vercel.json`), authenticates with `verifyCronAuth`, has a 60-second maximum and starts no new work after 50 seconds. For each brand with the switch on AND an active `gbp` connection, it creates, then sends, then checks, each step catching its own failure so one brand cannot stop another. With no such brand it reads two tables and calls nothing else. The publish scheduler, the edge worker, `queue.ts`, `handler.ts` and `preflight.ts` are untouched.
 
-- Checks run from the minute scheduler as a bounded batch (at most 10 due rows, 5-second budget, Google failures caught) so Meta dispatch is never delayed.
-- Cadence after send: 2, 10 and 30 minutes, then hourly to 24 hours.
-- `LIVE`: stop. `REJECTED`: one alert (content, reason, links), no automatic retry. Still `PROCESSING` after 24 hours: one alert, then daily checks until the event ends. Reads failing for 6 hours: one "cannot confirm" alert.
-- Alerts are selected from unresolved rows, not a time window, so a missed run catches up.
-- Planner: Google badge and dot (`components/ui/platform-badge.tsx:12`, `platform-dot.tsx:6`), label from `google_state`, link to the Google post, and a short list on the publishing status card (uncertain, long PROCESSING, REJECTED, connection needing action).
+- Due: `pending`, any backoff passed, and the Facebook post's current time has passed. The version follows its post: moved later, it waits; trashed or gone, `skipped`; back to draft, `skipped`; failed or posted on Facebook, still sent (Google is independent). More than 24 hours late, or an event already over: `skipped`.
+- Up to 5 sends per brand per run, oldest post time first.
+- Before the claim, read fresh: the switch (off: `skipped`), the connection (gone: `failed`, no alert), the destination (a different location: `failed` with "destination changed", never retargeted), the wording (may move it to `held`), the token, and the image. The claim is a compare-and-set from `pending` to `claimed` made immediately before the request, so a failure before sending never becomes `uncertain`, and of two racing runs only one sends.
+- Request: `POST https://mybusiness.googleapis.com/v4/{parent}/localPosts` with `languageCode` `en-GB`, `summary`, `topicType`, `callToAction` (only with an https link), `event` (title and a London-wall-time schedule with seconds and nanos 0) and one `PHOTO`. Timeout 15 seconds.
+- Image: the first media id of the Facebook feed post's variant, the stored asset itself (never a story rendition and never the date strip the Facebook worker draws), JPG or PNG, 10 KB to 5 MB where the size is stored, signed for an hour. A video or unsuitable file means the words go without a picture; a signing failure is tried again. Google's 250 by 250 minimum cannot be checked (no dimensions are stored).
+- Answers: success records the post name, link and state, `sent`, with the first check in 2 minutes; 400 `failed` with Google's words (links and long tokens removed, at most 300 characters) and an alert; 401 one forced token refresh and one more try, a second 401 `failed` with a reconnect alert; 403 and 404 `failed` with an alert; 429 and 5xx (and a refused connection) back to `pending` with backoff of about 1, 2, 4 and 8 minutes (jitter of 20 per cent, at most 30 minutes), `failed` with an alert after 5 tries; a timeout or lost answer `uncertain`.
+- Uncertain: never re-sent blindly. From 10 minutes after the claim the location's posts are listed (3 pages); a post with the same event title and start (EVENT) or the same opening words created after the claim (STANDARD) is adopted. With no match, exactly one more send is allowed (`resend_count`). Still unclear after that: one "cannot confirm" alert, checked again hourly. A claim older than 5 minutes (a crashed run) becomes `uncertain` the same way.
+- Tokens: `getGoogleAccessToken` with one token per brand per run; it gained a `forceRefresh` option for the 401 path. `reconnect_needed` fails with a reconnect alert; `try_again` backs off.
+- Logs keep counts, ids and codes only: no token, signed URL or post text.
+
+### 8. Moderation checks and alerts (`src/lib/google-posts/moderation.ts`, `alerts.ts`)
+
+- Each run reads at most 10 sent versions per brand whose check is due, with `GET .../v4/{name}` (10-second timeout).
+- Cadence after send: 2, 10 and 30 minutes, then hourly to 24 hours, then daily until the event ends (EVENT) or for 7 days (STANDARD).
+- `LIVE`: stop. `REJECTED`: stop and one alert, no automatic retry. Still `PROCESSING` after 24 hours: one alert, then daily checks. A 404 (removed on Google by hand, D9): stop. A failed read is tried again within 10 to 60 minutes; no good read for 6 hours: one "cannot confirm" alert.
+- Alerts go through the shared `insertNotification` (category `google_post_failed`, `google_post_rejected`, `google_post_processing`, `google_post_unconfirmed` or `google_reconnect_needed`, resource `gbp_post` and the version id). All but "processing" are urgent. One alert per incident: before raising one, an alert of the same kind for the same version since the incident began is looked for, with no time window. `notify-failures` reads publish jobs only and cannot see Google problems, so these alerts are the only ones.
+- Planner actions (`src/app/(app)/planner/google-version-actions.ts`, logic in `src/lib/google-posts/data.ts`): load, edit the wording (needs the `create` entitlement; pending or held only), release a held version (`publish`), skip (pending, held or failed) and retry a failed one (`publish`, attempts reset). Each checks the switch in the session and, read fresh, the switch and an active connection, fails closed, and writes through the service-role client scoped by the active brand, as a compare-and-set on the state it read. No page calls them yet: the planner view (badge, label, link, buttons) is the next piece.
 
 ### 9. Switch-off and rollback
 
-- Switch off: Google hidden everywhere; the worker resolves due Google jobs as `gbp_disabled` and sends nothing. They are not replayed if the switch goes back on (simpler than v3's park and release, and safe for a single owner).
+- Switch off: Google hidden everywhere; the cron skips the brand entirely, and a version found due while the switch is off at send time is `skipped` with `switched_off`. Skipped versions are not replayed if the switch goes back on (simpler than v3's park and release, and safe for a single owner). `gbp_disabled` and the `publish_jobs_resolution_kind_check` change are no longer needed: Google never has a publish job.
 - Rollback cannot remove posts already on Google, an accepted in-flight create or the OAuth grant. Posts are removed by hand in Business Profile; `gbp_posts` keeps the links.
 - The migration is additive; rollback leaves the table and column in place.
 
@@ -209,30 +212,39 @@ Only routing identifiers, post state and the location title. Google's policy lim
 
 ## Platform wiring checklist
 
-Adding `gbp` to `Platform` (`src/types/content.ts:13`), `ProviderPlatform` (`src/types/providers.ts:6`) and `PLATFORMS` (`src/lib/constants.ts:29`) breaks or silently changes every list below. Each is either extended or deliberately left as Facebook and Instagram, with a comment.
+Under D12 no platform union is widened, so almost all of the old checklist falls away. `Platform` (`src/types/content.ts`), `PLATFORMS` (`src/lib/constants.ts`), `ProviderPlatform` (`src/types/providers.ts`) and the Facebook and Instagram `Provider` type stay Facebook and Instagram only, and so does everything that iterates them (the wizard, calendar fill, tournaments, analytics, link in bio, onboarding, scheduling spread and conflicts, rate limits, preflight, `compose-body.ts`, the AI schemas).
 
-Extend:
-- Connections: `src/lib/connections/{oauth.ts:40, metadata.ts:1,8, readiness.ts:1,40,42, diagnostics.ts:6,18, data.ts:12,31,47, persist.ts:62, health.ts:21}`, `src/app/(app)/connections/actions.ts:42,45,50`, `src/features/connections/connection-cards.tsx:22-40,57`, `health-dots:19`
-- Create and copy: `src/features/create/schemas/content-schemas.ts:83,140`, `src/lib/create/schema.ts:6`, wizard steps (`brief-step.tsx:52`, `create-wizard.tsx:119,368`, `generate-step.tsx:92,107`, `streaming-preview.tsx:13`, `media-step.tsx:91`, `schedule-calendar.tsx:31,78`), `src/app/actions/content.ts:70,401,566`, `src/lib/ai/*` (section 6), `src/lib/publishing/compose-body.ts:47-68`
-- Planner: `src/app/(app)/planner/actions.ts:92,276,1205`, `src/lib/planner/data.ts:124-789`, `features/planner/{calendar-cell,planner-agenda,planner-calendar,status-filters,planner-content-composer,utils,activity-feed}`
-- Publishing: section 7, plus `src/lib/publishing/preflight.ts:9,26,31`, `src/lib/providers/rate-limits.ts:11`
-- Scheduling: `src/lib/scheduling/spread.ts:15,33`, `conflicts.ts:32` (a Google post must not count as a clash with Meta slots)
+What did change outside `src/lib/google-posts/`:
+- `src/lib/connections/google-token.ts`: a `forceRefresh` option for the 401 path.
+- `src/lib/connections/google-persist.ts`: the connection metadata records `connectedAt` (D8).
+- `src/lib/notifications/routing.ts`: the five Google alert categories, four of them urgent.
+- `vercel.json`, `package.json` (the ops script) and `docs/agent-reference.md` (the cron and the script).
 
-Leave as Facebook and Instagram only: `src/types/tournament.ts:14` and tournament code, `src/lib/content/calendar-fill*.ts`, `rewrite-event-posts.ts`, `booking-line-backfill.ts`, `src/lib/analytics/*` and post results, `src/lib/link-in-bio/*`, `src/lib/onboarding/setup-progress.ts:14,48` and `setup-checklist.tsx:32` (a new customer must not be asked to connect Google), `proximity-label.ts` and `banner-label.ts`, settings signatures and location ids.
-
-Tidy in the same work: `tests/msw/handlers/gbp.ts` (rewrite to the new contract), stale `gbp_*` fixtures in `tests/lib/settings/data.test.ts:83-133`, and the CLAUDE.md lines saying GBP was removed.
+Still to do, in the planner piece: the Google badge and label on the post page, the action buttons, and showing the Google categories in the notifications feed. Tidy later: `tests/msw/handlers/gbp.ts` (unused, still the old contract), the stale `gbp_*` fixtures in `tests/lib/settings/data.test.ts`, and the CLAUDE.md lines saying GBP was removed.
 
 ## Delivery (independently deployable PRs)
 
-1. **PR1, data and contracts.** Migration (section 2); admin switch (off); management mapping; event end time field and resolver with tests. The only visible changes are the optional end time field on the event form and the new switch on the admin page. The `Platform` type is not widened here: widening it with nothing using it only adds risk, so it moves to PR2 with the wiring checklist.
-2. **PR2, connection.** OAuth, picker, refresh-aware readiness and health, disconnect. Accepted by connecting The Anchor on production with posting still impossible (worker unchanged).
-3. **PR3, publishing.** Edge provider (EVENT and STANDARD), claim and reconcile, error classes, media, copy rules, runtime guard. Edge secrets set, function deployed by name.
-4. **PR4, moderation.** Checks, alerts, planner labels and link. Must ship before the switch is turned on.
-5. **PR5, create and planner.** Google option in the wizard and composer, partial-success batch, one Google item per event.
-6. **PR6, existing schedule (D8).** A one-off, dry-run-first ops script that creates a Google version of each feed post already scheduled for an enabled brand: one per event (D5), stories skipped, anything that cannot be matched or has no end time listed, not guessed. Run only with Peter's approval of the dry-run list; a second run changes nothing.
-7. **Go-live.** Switch on for The Anchor with Peter's explicit approval; one real EVENT and one STANDARD post reach LIVE; image, times, button and link checked on the profile. Deployment id and worker version recorded.
+1. **PR1, data and contracts.** Shipped (#233): `gbp_posts`, the admin switch, the management mapping, the event end time field and resolver.
+2. **PR2, connection.** Shipped (#236): OAuth, the location picker, refresh-aware readiness and health, disconnect.
+3. **PR3, Google versions (D12).** Built 16 November 2026, branch `feat/gbp-publishing`: the migration in section 2 (applied before the merge), the copy rules, creation for new posts, sending with claim and reconcile, moderation checks and alerts, the planner actions (not yet on a page), and the D8 ops script. Nothing it does reaches Google until access is approved, and nothing runs for a brand until its switch is on and Google is connected.
+4. **PR4, planner view.** The Google version on the post page and the planner (badge, state, link, edit, release, skip, retry), and the Google alerts in the notifications feed. Must ship before the switch is turned on.
+5. **PR5, existing schedule (D8).** No code: run the ops script's dry run for The Anchor, show Peter the list, and apply that plan only with his approval.
+6. **Go-live.** Switch on for The Anchor with Peter's explicit approval; one real EVENT and one STANDARD post reach LIVE; image, times, button and link checked on the profile. Deployment id recorded.
 
 Under D1 as amended, each piece ships when built. Nothing after the sign-in can be exercised against Google until it approves; every piece says so in its PR.
+
+### Defaults taken in PR3 (16 November 2026)
+
+- The cron runs every minute, separate from the publish scheduler; 60-second maximum, no new work after 50 seconds; management calls only in the first 15 seconds, at most 10 a run, one second apart.
+- At most 200 candidate posts read and 5 versions sent per brand per run; 10 moderation reads per brand per run.
+- A post more than 5 minutes in the past when first seen gets no version; a version more than 24 hours late is skipped.
+- For an event, the earliest upcoming Facebook feed post gets the version, and no other post of that event ever does, even if that version is later skipped.
+- 5xx answers are retried like 429 (up to 5 tries). Google may have created the post before answering 5xx, so this carries a small risk of a duplicate.
+- An image that cannot be signed is tried again; an unsuitable image (video, GIF, under 10 KB or over 5 MB) means the words go without a picture.
+- A connection that is no longer active fails the version without an alert (the connection card already shows it).
+- A 404 on a moderation read stops the checks: the post was removed on Google by hand.
+- Google's error text is kept on the version, sanitised (links become "[link]", long tokens removed, at most 300 characters).
+- The ops script's apply takes the dry run's plan file, so it creates exactly what was approved.
 
 ## Tests (required)
 
@@ -244,6 +256,7 @@ Mocked Google only; no live post without separate approval. `npm run ci:verify`.
 - PR2 tests (in place): switch off blocks start, callback, choice and disconnect; missing env; the consent URL; code exchange; the quota wall (429 and 403) saving nothing; two pages of accounts and of locations; no accounts; no locations; partial failure; forged location; expired choice; repeated callback; removed membership; missing refresh token; the stored id, metadata and tokens; vault failure on a first connect and on a reconnect; the refresh helper (fresh, expired, omitted refresh token, `invalid_grant`, timeout, concurrent); readiness and health; the expiring-connection cron; onboarding; the card hidden without the switch.
 - Tokens: expired access with valid refresh sends; revoked refresh gives one reconnect state; token endpoint timeout retries; concurrent refresh keeps the newest token; the expiring-connection email ignores Google.
 - Moderation: PROCESSING to LIVE, immediate and delayed REJECTED, 24-hour PROCESSING, read outage; one alert per incident.
+- PR3 tests (in place, `tests/lib/google-posts/`, `tests/ops/google-versions-existing-schedule.test.ts`): the copy rules and the alcohol detector both ways; building for each case; D8 (old posts get nothing automatically; dry run, apply, second apply); one per event under concurrent creation; management match, ambiguous, missing, failure, cap and pacing; the exact request body in London and UTC including both clock changes; every sending case in section 7; reconcile adopt, re-send once and still unclear; moderation; the cron and route; the four actions with permission and state refusals; no token, signed URL or post text in any log. They run against an in-memory database that enforces every `gbp_posts` CHECK, the unique indexes and foreign keys.
 - Contract fixture: stored campaign metadata to the actual edge request body (BOOK, LEARN_MORE, Google link, no button when no link).
 - Dates: overnight end, `00:00` end, explicit end beats duration, zero or missing duration, multi-day without end time, 25 October 2026 and 28 March 2027; London and UTC.
 - Connection: forged location, expired picker, removed membership, repeated callback, vault failure, location change with queued jobs, second page of accounts and locations.

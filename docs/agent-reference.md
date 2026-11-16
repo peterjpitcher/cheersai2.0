@@ -82,7 +82,8 @@ Vercel Cron (`vercel.json`; Vercel evaluates schedules in UTC), all authenticate
 | Route | Schedule | Purpose |
 |---|---|---|
 | `/api/cron/publish-scheduler` | every minute | promote due `publish_jobs` to `queued` and dispatch to QStash |
-| `/api/cron/notify-failures` | hourly at :30 | alert on publish failures |
+| `/api/cron/google-posts` | every minute | Google versions of Facebook feed posts, for brands with the Google switch and an active Google connection only: create them for new posts, send the due ones, check Google's moderation state, raise Google alerts (`tasks/SPEC-gbp-posting-reintroduction.md` D12). Separate from `publish-scheduler`; does nothing outside the database while no brand qualifies |
+| `/api/cron/notify-failures` | hourly at :30 | alert on publish failures (reads `publish_jobs` only, so never Google versions) |
 | `/api/cron/retry-capi-conversions` | hourly at :20 | retry booking-conversion sends |
 | `/api/cron/purge-trash` | 03:15 daily | purge soft-deleted content |
 | `/api/cron/data-retention` | 03:45 daily | enforce the data retention periods (`public.run_data_retention`), then email the operator any offboarded brand past its purge date (`docs/runbooks/data-retention.md`) |
@@ -144,6 +145,7 @@ All run with `tsx` against whatever Supabase the environment points at. Read the
 | `ops:add-weekday-challengers` | `scripts/ops/add-weekday-challenger-ads.ts` | Adds one "walk in" challenger ad to each of The Anchor's four Weekday food campaigns. Read only by default (`--dry-run`, `--status`); `--apply` creates the ads paused, `--activate` switches them on, `--pause` is the rollback. Each writing mode needs the owner's yes at the time (`tasks/SPEC-weekday-food-optimisation.md` section 7) |
 | `ops:regenerate-rugby-posts` | `scripts/ops/regenerate-rugby-posts.ts` | Rebuilds a rugby tournament's unpublished posts after the rugby template changes (`--tournament <id>`). Read only by default; `--apply` deletes the unpublished posts and regenerates them through the normal path, never touching published ones. Run it after each template version bump (`tasks/SPEC-rugby-match-posts.md`) |
 | `ops:rewrite-event-posts` | `scripts/ops/rewrite-event-posts.ts` | Rewrites the copy of scheduled event posts with the current copy engine (`tasks/SPEC-event-copy-engine.md` B8). A plan run (`--account <id>`, optional `--campaign <id>`) changes no post and writes a before-and-after report and a plan file under `temp/`; `--apply --plan <file>` writes exactly that plan after the owner approves it, only to posts unchanged since; `--rollback --plan <file>` restores the old text |
+| `ops:google-versions-existing-schedule` | `scripts/ops/google-versions-existing-schedule.ts` | The deliberate pass that gives posts already scheduled before Google was connected their Google version (decision D8). Dry run by default (`--account <id>`): lists what would be created, held and skipped and why, writes a plan file under `temp/`, creates nothing. `--apply --plan <file> --asked "<owner's words>"` creates exactly that plan, only for posts unchanged since; a second run creates nothing |
 | `ops:invoke` | `scripts/ops/invoke-function.ts` | Invokes a Supabase edge function by name (`publish-queue` is the only one) |
 | `ops:seed-world-cup` | `scripts/ops/seed-world-cup-2026.ts` | Seeds the World Cup 2026 tournament fixtures |
 | (none) | `scripts/ops/cleanup-banner-storage.ts`, `diagnose-publishing.ts`, `remove-slot-language.ts` | Storage cleanup, stuck-job diagnosis, copy clean-up |

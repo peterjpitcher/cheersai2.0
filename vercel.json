@@ -9,6 +9,10 @@
       "schedule": "* * * * *"
     },
     {
+      "path": "/api/cron/google-posts",
+      "schedule": "* * * * *"
+    },
+    {
       "path": "/api/cron/purge-trash",
       "schedule": "15 3 * * *"
     },
