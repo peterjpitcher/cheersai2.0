@@ -24,6 +24,7 @@
     "ops:backfill-link-in-bio-url": "tsx scripts/ops/backfill-link-in-bio-url.ts",
     "ops:backfill-opt-in-overlays": "tsx scripts/ops/backfill-opt-in-overlays.ts",
     "ops:bootstrap-super-admin": "tsx scripts/ops/bootstrap-super-admin.ts",
+    "ops:google-versions-existing-schedule": "tsx scripts/ops/google-versions-existing-schedule.ts",
     "ops:invoke": "tsx scripts/ops/invoke-function.ts",
     "ops:link-auth-user": "tsx scripts/ops/link-auth-user.ts",
     "ops:regenerate-rugby-posts": "tsx scripts/ops/regenerate-rugby-posts.ts",

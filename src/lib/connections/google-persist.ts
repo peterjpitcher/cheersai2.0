@@ -42,12 +42,22 @@ interface VaultRow {
   key_version: number;
 }
 
-/** The only three keys stored about the location (spec section 10: routing ids and the title). */
-export function buildGoogleConnectionMetadata(location: GoogleLocationCandidate): Record<string, string | null> {
+/**
+ * What is stored about the location (spec section 10: routing ids and the
+ * title), plus when this save connected it. `connectedAt` is rewritten on
+ * every save, first connection or reconnect: Google versions are created
+ * automatically only for Facebook posts created after it (decision D8), so
+ * posts made while Google was disconnected wait for the deliberate pass.
+ */
+export function buildGoogleConnectionMetadata(
+  location: GoogleLocationCandidate,
+  connectedAt: string = new Date().toISOString(),
+): Record<string, string | null> {
   return {
     localPostParent: location.id,
     locationTitle: location.title,
     placeId: location.placeId,
+    connectedAt,
   };
 }
 
