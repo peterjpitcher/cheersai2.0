@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState, useTransition, type FormEvent } from "react";
+import { useEffect, useRef, useState, useTransition, type FormEvent, type ReactElement } from "react";
 
 import { chooseGoogleLocation } from "@/app/(app)/connections/google-actions";
 import type { GoogleLocationChooserState } from "@/lib/connections/google-choice-view";
@@ -27,7 +27,7 @@ const GENERIC_ERROR = "We could not finish this. Please start again from the Con
  * addresses and the random choice reference only; the Google tokens never
  * leave the server.
  */
-export function LocationChooser({ state }: LocationChooserProps) {
+export function LocationChooser({ state }: LocationChooserProps): ReactElement {
   const router = useRouter();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [outcome, setOutcome] = useState<Outcome>({ phase: "idle" });

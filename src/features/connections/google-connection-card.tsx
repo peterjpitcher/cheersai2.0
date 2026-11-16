@@ -1,3 +1,5 @@
+import type { ReactElement } from "react";
+
 import { ConnectionDisconnectButton } from "@/features/connections/connection-disconnect-button";
 import { ConnectionOAuthButton } from "@/features/connections/connection-oauth-button";
 import { getGoogleConnectionSummary } from "@/lib/connections/google-data";
@@ -24,7 +26,7 @@ interface GoogleConnectionCardProps {
  * without Google posting switched on: the summary is null for it, whatever
  * is stored. Connecting only links a location; nothing is posted to Google yet.
  */
-export async function GoogleConnectionCard({ canManage }: GoogleConnectionCardProps) {
+export async function GoogleConnectionCard({ canManage }: GoogleConnectionCardProps): Promise<ReactElement | null> {
   const summary = await getGoogleConnectionSummary();
   if (!summary) {
     return null;

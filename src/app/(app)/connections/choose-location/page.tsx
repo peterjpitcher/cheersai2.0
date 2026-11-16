@@ -1,3 +1,5 @@
+import type { ReactElement } from "react";
+
 import type { Metadata } from "next";
 
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -35,7 +37,7 @@ interface ChooseLocationProps {
  * addresses only. A brand without Google posting switched on (decision D10)
  * is told only that the choice could not be found.
  */
-export default async function ChooseLocation({ searchParams }: ChooseLocationProps) {
+export default async function ChooseLocation({ searchParams }: ChooseLocationProps): Promise<ReactElement> {
   const ctx = await requireAuthContext();
   const params = await searchParams;
   const token = typeof params.choice === "string" ? params.choice : "";
