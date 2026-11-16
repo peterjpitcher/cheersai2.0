@@ -62,6 +62,12 @@ const serverEnv = {
   ALERTS_SECRET: readOptionalEnv("ALERTS_SECRET"),
   CRON_SECRET: readOptionalEnv("CRON_SECRET"),
   FACEBOOK_APP_SECRET: readOptionalEnv("FACEBOOK_APP_SECRET"),
+  // Google posting (tasks/SPEC-gbp-posting-reintroduction.md): the OAuth client
+  // of Cloud project cheersai-469418. Optional at build time: when either is
+  // missing the Google card says "Google posting is not set up" and the connect
+  // action refuses. Only brands with the googlePosts switch ever reach them.
+  GOOGLE_MY_BUSINESS_CLIENT_ID: readOptionalEnv("GOOGLE_MY_BUSINESS_CLIENT_ID"),
+  GOOGLE_MY_BUSINESS_CLIENT_SECRET: readOptionalEnv("GOOGLE_MY_BUSINESS_CLIENT_SECRET"),
   INSTAGRAM_APP_ID: readOptionalEnv("INSTAGRAM_APP_ID"),
   INSTAGRAM_APP_SECRET: readOptionalEnv("INSTAGRAM_APP_SECRET"),
   INSTAGRAM_VERIFY_TOKEN: readOptionalEnv("INSTAGRAM_VERIFY_TOKEN"),
