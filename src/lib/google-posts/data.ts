@@ -55,7 +55,8 @@ export function toGoogleVersionView(row: GoogleVersionRow): GoogleVersionView {
     button: row.cta_type && row.cta_url ? { type: row.cta_type, url: row.cta_url } : null,
     googleUrl: row.state === "sent" ? row.search_url : null,
     googleState: row.google_state,
-    lastError: row.state === "sent" || row.state === "pending" || row.state === "held" ? null : row.last_error,
+    // A sent post keeps the follow-up check's note (for example that it is no longer on Google).
+    lastError: row.state === "pending" || row.state === "held" ? null : row.last_error,
     canEdit: row.state === "pending" || row.state === "held",
     canRelease: row.state === "held",
     canSkip: row.state === "pending" || row.state === "held" || row.state === "failed",
@@ -156,11 +157,24 @@ export async function releaseGoogleVersion(
   const row = await readRow(db, accountId, contentItemId);
   if (!row) return { success: false, error: GOOGLE_VERSION_ACTION_MESSAGES.notFound };
   if (row.state !== "held") return { success: false, error: GOOGLE_VERSION_ACTION_MESSAGES.notHeld };
-  if (!row.summary.trim()) return { success: false, error: GOOGLE_VERSION_ACTION_MESSAGES.emptyWording };
+  // Unedited wording is what the page shows: worked out from the Facebook
+  // caption as it is now, not the copy stored when the version was made.
+  let summary = row.summary;
+  if (!row.summary_edited_at) {
+    const { data: variant, error } = await db
+      .from("content_variants")
+      .select("body")
+      .eq("content_item_id", row.content_item_id)
+      .maybeSingle();
+    if (error) return { success: false, error: GOOGLE_VERSION_ACTION_MESSAGES.saveFailed };
+    summary = deriveGoogleSummary((variant as { body: string | null } | null)?.body ?? null);
+  }
+  if (!summary.trim()) return { success: false, error: GOOGLE_VERSION_ACTION_MESSAGES.emptyWording };
   // Freezing the wording stops the send from holding it again for the same reason.
   return change(db, accountId, row, {
     state: "pending",
     hold_reason: null,
+    summary,
     summary_edited_at: row.summary_edited_at ?? new Date().toISOString(),
   });
 }

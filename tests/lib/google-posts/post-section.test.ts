@@ -77,7 +77,7 @@ describe('the Google section of the post page', () => {
     expect(section.kind === 'ready' && section.version?.summary).toBe('New caption!');
   });
 
-  it('keeps the stored wording once a person has edited it, or while it is held', async () => {
+  it('keeps edited wording, and shows a held version the wording release would send', async () => {
     const edited = addPost(world);
     addVersion(edited, { summary: 'Edited by hand.', summary_edited_at: '2026-11-15T10:00:00.000Z' });
     const held = addPost(world);
@@ -87,7 +87,7 @@ describe('the Google section of the post page', () => {
     const second = await readGooglePostSection(context(), { id: held, platform: 'facebook', placement: 'feed', body: 'New caption.' });
 
     expect(first.kind === 'ready' && first.version?.summary).toBe('Edited by hand.');
-    expect(second.kind === 'ready' && second.version?.summary).toBe('Held wording.');
+    expect(second.kind === 'ready' && second.version?.summary).toBe('New caption.');
   });
 
   it('shows the section with no version for a Facebook feed post that has none', async () => {

@@ -8,12 +8,19 @@ let world: World;
 let googlePosts = true;
 let entitled = true;
 
-const auth = vi.hoisted(() => ({ requireAuthContext: vi.fn(), requireEntitledContext: vi.fn() }));
+const auth = vi.hoisted(() => ({
+  requireAuthContext: vi.fn(),
+  requireEntitledContext: vi.fn(),
+  EntitlementError: class EntitlementError extends Error {},
+}));
 const revalidatePath = vi.hoisted(() => vi.fn());
 
 vi.mock('next/cache', () => ({ revalidatePath }));
 vi.mock('@/lib/auth/server', () => ({ requireAuthContext: auth.requireAuthContext }));
-vi.mock('@/lib/billing/entitlement-server', () => ({ requireEntitledContext: auth.requireEntitledContext }));
+vi.mock('@/lib/billing/entitlement-server', () => ({
+  requireEntitledContext: auth.requireEntitledContext,
+  EntitlementError: auth.EntitlementError,
+}));
 
 import {
   editGoogleVersionWording,
@@ -53,7 +60,7 @@ beforeEach(() => {
   vi.spyOn(console, 'error').mockImplementation(() => {});
   auth.requireAuthContext.mockImplementation(async () => context());
   auth.requireEntitledContext.mockImplementation(async () => {
-    if (!entitled) throw new Error('Your plan does not allow this.');
+    if (!entitled) throw new auth.EntitlementError('This brand is on hold because its subscription has lapsed.');
     return context();
   });
 });
@@ -91,6 +98,13 @@ describe('Google version actions', () => {
     const postId = addVersion('pending');
     expect(await editGoogleVersionWording({ contentId: postId, summary: 'Pints for £4 all night.' })).toMatchObject({ success: true });
     expect(row(postId)).toMatchObject({ state: 'held', hold_reason: 'alcohol_promotion' });
+  });
+
+  it('releases an unedited held version with the Facebook wording as it is now', async () => {
+    const postId = addVersion('held', { summary: 'Old words.' });
+    world.db.tables.content_variants.find((variant) => variant.content_item_id === postId)!.body = 'New words for Google. #quiz';
+    expect(await releaseGoogleVersion({ contentId: postId })).toMatchObject({ success: true });
+    expect(row(postId)).toMatchObject({ state: 'pending', summary: 'New words for Google.' });
   });
 
   it('refuses to edit a version already sent, or to leave no wording', async () => {
@@ -140,9 +154,9 @@ describe('Google version actions', () => {
   it('needs the plan to allow publishing to release or retry', async () => {
     const postId = addVersion('failed');
     entitled = false;
-    await expect(retryGoogleVersion({ contentId: postId })).rejects.toThrow(/plan/);
+    expect(await retryGoogleVersion({ contentId: postId })).toEqual({ success: false, error: 'This brand is on hold because its subscription has lapsed.' });
     expect(auth.requireEntitledContext).toHaveBeenCalledWith('publish');
-    await expect(editGoogleVersionWording({ contentId: postId, summary: 'x words' })).rejects.toThrow(/plan/);
+    expect(await editGoogleVersionWording({ contentId: postId, summary: 'x words' })).toMatchObject({ success: false, error: expect.stringMatching(/lapsed/) });
     expect(auth.requireEntitledContext).toHaveBeenCalledWith('create');
     expect(row(postId).state).toBe('failed');
   });

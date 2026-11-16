@@ -46,7 +46,8 @@ export interface GoogleSectionPost {
  * it stands now, not the copy stored when the version was made.
  */
 function withCurrentWording(version: GoogleVersionView | null, body: string): GoogleVersionView | null {
-  if (!version || version.state !== "pending" || version.summaryEdited) return version;
+  // Release uses the same current wording for a held version nobody has edited.
+  if (!version || (version.state !== "pending" && version.state !== "held") || version.summaryEdited) return version;
   return { ...version, summary: deriveGoogleSummary(body) };
 }
 
