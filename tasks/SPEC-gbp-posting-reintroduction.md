@@ -20,7 +20,7 @@ Success measure: each eligible approved post gets one correct, visible (LIVE) Go
 
 D1 to D9 stand from v3 unless marked.
 
-- D1 (amended by Peter, 14 November 2026). Nothing that calls Google is built until Google has approved API access for the Cloud project (quota above zero). PR1, which never calls Google, is built and shipped now.
+- D1 (amended by Peter, 14 and 16 November 2026). The original rule was that nothing that calls Google is built until Google has approved API access (quota above zero). On 14 November PR1, which never calls Google, was shipped. On 16 November, with a new access request submitted, Peter asked for the connection and publishing to be built now ("Yes, build it") so they are ready when Google approves. Until then they are tested against mocked Google only and fail closed at Google's refusal.
 - D2. Event posts (`EVENT`) and ordinary posts (`STANDARD`) are both in the first release.
 - D3. Direct Google API only; no aggregator.
 - D4. Event end comes from the management app: explicit end time wins, otherwise start plus duration.
@@ -72,7 +72,7 @@ Google's pages do not say the applying login must own the Cloud project, only th
 5. **Secrets.** Copy the client ID and secret into:
    - Vercel: `GOOGLE_MY_BUSINESS_CLIENT_ID`, `GOOGLE_MY_BUSINESS_CLIENT_SECRET`. These are the names the code reads (`src/env.ts`); Vercel already holds both, in every environment, so no new names were introduced. The `GOOGLE_BUSINESS_*` names in earlier drafts are superseded.
    - Supabase edge function secrets for `publish-queue` (the worker refreshes tokens itself, so it needs both; v3 missed this)
-6. **Proof before PR2 is accepted:** one signed-in read of accounts and locations succeeds from production.
+6. **Proof once approved:** one signed-in read of accounts and locations succeeds from production. Until then the connect flow is expected to stop at the listing with the "not approved yet" message and save nothing.
 
 ## Scope
 
@@ -231,7 +231,7 @@ Tidy in the same work: `tests/msw/handlers/gbp.ts` (rewrite to the new contract)
 6. **PR6, existing schedule (D8).** A one-off, dry-run-first ops script that creates a Google version of each feed post already scheduled for an enabled brand: one per event (D5), stories skipped, anything that cannot be matched or has no end time listed, not guessed. Run only with Peter's approval of the dry-run list; a second run changes nothing.
 7. **Go-live.** Switch on for The Anchor with Peter's explicit approval; one real EVENT and one STANDARD post reach LIVE; image, times, button and link checked on the profile. Deployment id and worker version recorded.
 
-Under D1, PR1 ships now; PR2 onwards waits for Google's approval.
+Under D1 as amended, each piece ships when built. Nothing after the sign-in can be exercised against Google until it approves; every piece says so in its PR.
 
 ## Tests (required)
 
