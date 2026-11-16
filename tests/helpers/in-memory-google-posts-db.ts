@@ -6,7 +6,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
  * In-memory stand-in for the Supabase query builder, for Google versions
  * (src/lib/google-posts). It enforces what production would: NOT NULL
  * columns, unknown columns, every CHECK in
- * supabase/migrations/20261116120000_gbp_posts_attached_versions.sql and
+ * supabase/migrations/20261116111647_gbp_posts_attached_versions.sql and
  * 20261114211618_gbp_posts_and_switch.sql (including the cross-column ones),
  * the unique indexes (including the partial one-per-event index) and foreign
  * keys. A write production would refuse is refused here with the same

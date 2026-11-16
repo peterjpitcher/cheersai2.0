@@ -642,8 +642,20 @@ async function sendOne(ctx: RunContext, due: DueVersion): Promise<SendOutcome> {
     await retryLater(ctx, claimedRow, "claimed", "google_busy", attempts, claimedAt);
     return "stop_brand";
   }
-  if (status >= 500) {
+  if (status === 503) {
+    // Unavailable: Google did not take the request, so it is safe to send again later.
     await retryLater(ctx, claimedRow, "claimed", "google_unavailable", attempts, claimedAt);
+    return "done";
+  }
+  if (status >= 500) {
+    // Any other server error may have created the post anyway. It is treated
+    // like a lost answer: Google is checked first and it is re-sent at most once.
+    const done = await transition(ctx, claimedRow, "claimed", {
+      state: "uncertain",
+      next_attempt_at: iso(after + RECONCILE_GRACE_MS),
+      last_error: GOOGLE_VERSION_REASONS.cannot_confirm,
+    });
+    if (done) ctx.summary.uncertain += 1;
     return "done";
   }
   if (status === 403) {

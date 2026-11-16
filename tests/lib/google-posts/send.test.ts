@@ -416,6 +416,18 @@ describe("Google's answers", () => {
     expect(alerts()).toHaveLength(1);
   });
 
+  it('treats a 500 as uncertain, so a post Google may have made is never doubled', async () => {
+    const versionId = await due();
+    world.setGoogle(() => googleError(500, 'internal', 'INTERNAL'));
+    const summary = await send();
+    expect(summary.uncertain).toBe(1);
+    expect(version(versionId)).toMatchObject({ state: 'uncertain', attempts: 1 });
+
+    world.clock.set('2026-11-16T12:05:00.000Z');
+    await send();
+    expect(creates()).toHaveLength(1);
+  });
+
   it('treats a lost answer as uncertain and never sends it again blindly', async () => {
     const versionId = await due();
     world.setGoogle(() => {
