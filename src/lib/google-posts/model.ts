@@ -121,7 +121,7 @@ export const GOOGLE_ALERT_CATEGORIES = {
 export type GoogleAlertKind = keyof typeof GOOGLE_ALERT_CATEGORIES;
 export const GOOGLE_ALERT_RESOURCE = "gbp_post";
 
-/** What the next piece's planner shows. Browser-safe: no token, no signed URL, no Google error text beyond a sanitised line. */
+/** What the planner post page shows. Browser-safe: no token, no signed URL, no Google error text beyond a sanitised line. */
 export interface GoogleVersionView {
   id: string;
   contentItemId: string;
@@ -130,6 +130,8 @@ export interface GoogleVersionView {
   /** One plain sentence on where the version is. */
   statusLine: string;
   summary: string;
+  /** A person has edited (or released) the wording, so it no longer follows the Facebook post. */
+  summaryEdited: boolean;
   topicType: GoogleTopicType;
   eventTitle: string | null;
   eventStart: string | null;

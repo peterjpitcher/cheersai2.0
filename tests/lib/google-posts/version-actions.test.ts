@@ -62,14 +62,18 @@ describe('Google version actions', () => {
   it('loads the version for the active brand only', async () => {
     const own = addVersion('pending');
     const other = addVersion('pending', {}, OTHER_ACCOUNT);
-    expect((await loadGoogleVersion({ contentId: own })).version).toMatchObject({ state: 'pending', summary: 'Quiz night.' });
+    expect((await loadGoogleVersion({ contentId: own })).version).toMatchObject({
+      state: 'pending',
+      summary: 'Quiz night.',
+      summaryEdited: false,
+    });
     expect((await loadGoogleVersion({ contentId: other })).version).toBeNull();
   });
 
   it('edits the wording through the copy rules and stops it following Facebook', async () => {
     const postId = addVersion('held', { hold_reason: 'no_wording', summary: '' });
     const result = await editGoogleVersionWording({ contentId: postId, summary: 'Quiz tonight! Call 01234 567890 #quiz' });
-    expect(result).toMatchObject({ success: true });
+    expect(result).toMatchObject({ success: true, version: { summary: 'Quiz tonight!', summaryEdited: true } });
     expect(row(postId)).toMatchObject({ state: 'pending', hold_reason: null, summary: 'Quiz tonight!' });
     expect(row(postId).summary_edited_at).not.toBeNull();
     expect(revalidatePath).toHaveBeenCalledWith(`/planner/${postId}`);

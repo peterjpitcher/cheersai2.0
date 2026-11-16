@@ -1,6 +1,7 @@
 /**
- * Reading and changing one post's Google version, for the planner (the next
- * piece adds the page). Server only; service-role client, every query scoped
+ * Reading and changing one post's Google version, for the planner post page
+ * (src/lib/google-posts/post-section.ts reads it, the actions change it).
+ * Server only; service-role client, every query scoped
  * by account_id. The caller has already checked the signed-in user's brand
  * and its Google switch (src/app/(app)/planner/google-version-actions.ts).
  */
@@ -46,6 +47,7 @@ export function toGoogleVersionView(row: GoogleVersionRow): GoogleVersionView {
     holdReason: row.hold_reason,
     statusLine: statusLine(row),
     summary: row.summary,
+    summaryEdited: row.summary_edited_at !== null,
     topicType: row.topic_type,
     eventTitle: row.event_title,
     eventStart: row.event_start,
