@@ -8,8 +8,15 @@ import type { PlannerContentDetail } from "@/lib/planner/data";
 const CONTENT_ID = "0b6f5f4e-1c2d-4a3b-9e8f-7a6b5c4d3e2f";
 
 const getPlannerContentDetail = vi.hoisted(() => vi.fn());
+const getGooglePostSection = vi.hoisted(() => vi.fn());
 
 vi.mock("@/lib/planner/data", () => ({ getPlannerContentDetail }));
+vi.mock("@/lib/google-posts/post-section", () => ({ getGooglePostSection }));
+vi.mock("@/features/planner/google-version-section", () => ({
+  GoogleVersionSection: ({ section }: { section: { kind: string } }) => (
+    <section aria-label="Google">Google section: {section.kind}</section>
+  ),
+}));
 vi.mock("@/lib/library/data", () => ({ listMediaAssets: vi.fn().mockResolvedValue([]) }));
 vi.mock("@/lib/settings/data", () => ({
   getOwnerSettings: vi.fn().mockResolvedValue({ posting: { timezone: "Europe/London" } }),
@@ -68,8 +75,9 @@ function makeDetail(overrides: Partial<PlannerContentDetail> = {}): PlannerConte
   };
 }
 
-async function renderPage(detail: PlannerContentDetail) {
+async function renderPage(detail: PlannerContentDetail, googleSection: unknown = { kind: "hidden" }) {
   getPlannerContentDetail.mockResolvedValue(detail);
+  getGooglePostSection.mockResolvedValue(googleSection);
   const { default: PlannerContentPage } = await import("./page");
   render(await PlannerContentPage({ params: Promise.resolve({ contentId: CONTENT_ID }) }));
 }
@@ -165,5 +173,20 @@ describe("planner post page failure text", () => {
     await renderPage(makeDetail({ status: "scheduled", lastError: hold }));
 
     expect(screen.getByText(hold)).toBeInTheDocument();
+  });
+});
+
+describe("planner post page Google section", () => {
+  it("asks for the Google section of this post and shows nothing when it is hidden", async () => {
+    await renderPage(makeDetail({ platform: "instagram" }));
+
+    expect(getGooglePostSection).toHaveBeenCalledWith({ id: CONTENT_ID, platform: "instagram", placement: "feed" });
+    expect(screen.queryByRole("region", { name: "Google" })).toBeNull();
+  });
+
+  it.each(["ready", "reconnect", "unavailable"])("shows the Google section when it is %s", async (kind) => {
+    await renderPage(makeDetail(), { kind, version: null });
+
+    expect(screen.getByRole("region", { name: "Google" })).toHaveTextContent(`Google section: ${kind}`);
   });
 });

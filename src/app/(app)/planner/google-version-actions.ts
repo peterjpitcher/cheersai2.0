@@ -21,8 +21,8 @@ import { createLogger } from "@/lib/logging";
 import { toLoggableError } from "@/lib/logging/to-error";
 
 /**
- * Planner actions for a post's Google version (decision D12). No page calls
- * them yet: the planner view is the next piece.
+ * Planner actions for a post's Google version (decision D12), called from the
+ * Google section of the post page (src/features/planner/google-version-section.tsx).
  *
  * Each follows the planner's own rules for the signed-in user's ACTIVE brand
  * (an owner or a member of it; editing needs the 'create' entitlement and

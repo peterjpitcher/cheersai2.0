@@ -9,12 +9,14 @@ import {
 } from "lucide-react";
 
 import { BelongsToCard } from "@/features/planner/belongs-to-card";
+import { GoogleVersionSection } from "@/features/planner/google-version-section";
 import { PlannerContentScheduleForm } from "@/features/planner/content-schedule-form";
 import { PlannerContentComposer } from "@/features/planner/planner-content-composer";
 import { PlannerMediaSwapButton } from "@/features/planner/planner-media-swap-button";
 import { CancelPostButton, PublishNowButton } from "@/features/planner/planner-post-actions";
 import { formatPlatformLabel } from "@/features/planner/utils";
 import { getPlannerContentDetail } from "@/lib/planner/data";
+import { getGooglePostSection } from "@/lib/google-posts/post-section";
 import { listMediaAssets } from "@/lib/library/data";
 import { getOwnerSettings } from "@/lib/settings/data";
 import { canTransition } from "@/lib/publishing/state-machine";
@@ -83,6 +85,13 @@ export default async function PlannerContentPage({
 
   const mediaLibrary = await listMediaAssets({ excludeTags: ["Tournament"] });
   const ownerSettings = await getOwnerSettings();
+  // Hidden (and nothing Google read) unless the brand's Google switch is on and
+  // this is a Facebook feed post.
+  const googleSection = await getGooglePostSection({
+    id: detail.id,
+    platform: detail.platform,
+    placement: detail.placement,
+  });
   const ownerTimezone = ownerSettings.posting.timezone ?? DEFAULT_TIMEZONE;
   const ownerTimezoneLabel = ownerTimezone.replace(/_/g, " ");
 
@@ -437,6 +446,11 @@ export default async function PlannerContentPage({
         {/* Belongs-to card */}
         <BelongsToCard campaignName={detail.campaign?.name} />
       </div>
+
+      {/* ---- Google version (decision D12) ---- */}
+      {googleSection.kind !== "hidden" && (
+        <GoogleVersionSection section={googleSection} timezone={ownerTimezone} />
+      )}
 
       {/* ---- Footer actions ---- */}
       {/* Each card above saves its own edits (caption, schedule, media, banner),
