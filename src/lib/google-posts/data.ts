@@ -133,8 +133,12 @@ export async function editGoogleVersionWording(
   if (!summary) return { success: false, error: GOOGLE_VERSION_ACTION_MESSAGES.emptyWording };
 
   const patch: Record<string, unknown> = { summary, summary_edited_at: new Date().toISOString() };
-  if (row.state === "held" && row.hold_reason === "no_wording") {
-    const hold = holdForWording(summary);
+  const hold = holdForWording(summary);
+  if (row.state === "pending" && hold) {
+    // Saving is not releasing: wording that needs a person's check is held,
+    // because the send no longer checks wording once it has been edited.
+    Object.assign(patch, { state: "held", hold_reason: hold });
+  } else if (row.state === "held" && row.hold_reason === "no_wording") {
     if (hold) patch.hold_reason = hold;
     else Object.assign(patch, { state: "pending", hold_reason: null });
   }

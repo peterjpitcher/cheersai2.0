@@ -147,7 +147,10 @@ export async function planGoogleVersions(
       query = query
         .eq("platform", "facebook")
         .eq("placement", "feed")
-        .in("status", ["scheduled", "queued"])
+        // A post the publisher reached before this cron ran is still eligible
+        // (inside the grace window), so cron order never decides whether a
+        // Google version exists. "posted" is the live worker's word, "published" the Next.js one.
+        .in("status", ["scheduled", "queued", "publishing", "published", "posted"])
         .gt("created_at", brand.connectedAt as string);
     }
     return query.order("scheduled_for", { ascending: true }).order("id", { ascending: true }).limit(CANDIDATE_PAGE);

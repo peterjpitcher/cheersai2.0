@@ -416,6 +416,59 @@ describe("Google's answers", () => {
     expect(alerts()).toHaveLength(1);
   });
 
+  it('never overwrites wording a person saved after the run read the version', async () => {
+    const { versionId } = await prepare();
+    googleAccepts();
+    world.clock.set('2026-11-16T12:01:00.000Z');
+    const current = await brand();
+    const db = world.deps.db;
+    const from = db.from.bind(db);
+    let edited = false;
+    vi.spyOn(db, 'from').mockImplementation(((table: string) => {
+      if (table === 'accounts' && !edited) {
+        // A person's edit lands between the run reading the version and claiming it.
+        edited = true;
+        Object.assign(version(versionId), {
+          summary: 'Edited by a person.',
+          summary_edited_at: '2026-11-16T12:00:59.000Z',
+          updated_at: '2026-11-16T12:00:59.000Z',
+        });
+      }
+      return from(table);
+    }) as typeof db.from);
+
+    await send(current);
+    expect(creates()).toEqual([]);
+    expect(version(versionId)).toMatchObject({ state: 'pending', summary: 'Edited by a person.' });
+
+    await send();
+    expect(creates()).toHaveLength(1);
+    expect(version(versionId)).toMatchObject({ state: 'sent', summary: 'Edited by a person.' });
+  });
+
+  it('reaches a due version behind a full page of future ones', async () => {
+    const future: string[] = [];
+    for (let index = 0; index < 501; index += 1) {
+      future.push(addPost(world, { scheduledFor: '2026-12-20T12:00:00.000Z' }));
+    }
+    world.db.seed(
+      'gbp_posts',
+      future.map((postId, index) => ({
+        account_id: ACCOUNT,
+        content_item_id: postId,
+        local_post_parent: PARENT,
+        state: 'pending',
+        summary: 'Later.',
+        created_at: new Date(Date.parse('2026-11-16T09:00:00.000Z') + index).toISOString(),
+      })),
+    );
+    const { versionId } = await prepare();
+    googleAccepts();
+    world.clock.set('2026-11-16T12:01:00.000Z');
+    await send();
+    expect(version(versionId)).toMatchObject({ state: 'sent' });
+  });
+
   it('treats a 500 as uncertain, so a post Google may have made is never doubled', async () => {
     const versionId = await due();
     world.setGoogle(() => googleError(500, 'internal', 'INTERNAL'));

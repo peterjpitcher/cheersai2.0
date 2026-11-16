@@ -54,8 +54,10 @@ const logger = createLogger("google-posts");
 
 /** Versions sent per brand per run. */
 export const SEND_BATCH = 5;
-/** Pending versions read per brand per run, before working out which are due. */
+/** Pending versions read per page, before working out which are due. */
 export const PENDING_SCAN_LIMIT = 500;
+/** Pages of pending versions read per brand per run (at most 5,000 rows). */
+export const PENDING_SCAN_PAGES = 10;
 /** Sends tried (429, 5xx, a token or image outage) before giving up as failed. */
 export const MAX_SEND_ATTEMPTS = 5;
 /** Later than this after the post's time (a cron outage), a version is skipped. */
@@ -148,14 +150,18 @@ async function transition(
   row: Pick<GoogleVersionRow, "id">,
   from: GoogleVersionState,
   patch: Record<string, unknown>,
+  { unchangedSince }: { unchangedSince?: string } = {},
 ): Promise<boolean> {
-  const { data, error } = await ctx.deps.db
+  let query = ctx.deps.db
     .from("gbp_posts")
     .update({ ...patch, updated_at: iso(ctx.deps.now().getTime()) })
     .eq("id", row.id)
     .eq("account_id", ctx.brand.accountId)
-    .eq("state", from)
-    .select("id");
+    .eq("state", from);
+  // The claim also requires the row to be exactly as read, so a person's edit
+  // saved meanwhile is never overwritten by the wording this run worked out.
+  if (unchangedSince) query = query.eq("updated_at", unchangedSince);
+  const { data, error } = await query.select("id");
   if (error) {
     ctx.summary.errors += 1;
     logger.error("could not update a Google version", new Error(error.message), {
@@ -447,45 +453,59 @@ interface DueVersion {
 async function findDue(ctx: RunContext): Promise<DueVersion[]> {
   const { db } = ctx.deps;
   const now = ctx.deps.now().getTime();
-  const { data, error } = await db
-    .from("gbp_posts")
-    .select(GOOGLE_VERSION_COLUMNS)
-    .eq("account_id", ctx.brand.accountId)
-    .eq("state", "pending")
-    .order("created_at", { ascending: true })
-    .limit(PENDING_SCAN_LIMIT);
-  if (error) {
-    ctx.summary.errors += 1;
-    return [];
-  }
-  // Due-ness lives on the parent, so nothing is cut short before the parents are read.
-  const pending = ((data ?? []) as GoogleVersionRow[]).filter(
-    (row) => !row.next_attempt_at || Date.parse(row.next_attempt_at) <= now,
-  );
-  if (!pending.length) return [];
+  const parentById = new Map<string, ParentRow>();
+  const due: GoogleVersionRow[] = [];
 
-  // Read in chunks so a long pending list never makes an over-long request URL.
-  const ids = pending.map((row) => row.content_item_id);
-  const parents: ParentRow[] = [];
-  for (let start = 0; start < ids.length; start += IN_CHUNK) {
-    const { data, error: parentError } = await db
-      .from("content_items")
-      .select("id, account_id, platform, placement, status, scheduled_for, deleted_at")
+  // Paged by creation time, so many future versions created earlier can never
+  // hide a later-created one that is due now. Keyset paging with a seen set,
+  // as a page can end inside a run of identical times.
+  const seen = new Set<string>();
+  let from: string | null = null;
+  for (let page = 0; page < PENDING_SCAN_PAGES; page += 1) {
+    let query = db
+      .from("gbp_posts")
+      .select(GOOGLE_VERSION_COLUMNS)
       .eq("account_id", ctx.brand.accountId)
-      .in("id", ids.slice(start, start + IN_CHUNK));
-    if (parentError) {
+      .eq("state", "pending");
+    if (from) query = query.gte("created_at", from);
+    const { data, error } = await query
+      .order("created_at", { ascending: true })
+      .order("id", { ascending: true })
+      .limit(PENDING_SCAN_LIMIT);
+    if (error) {
       ctx.summary.errors += 1;
       return [];
     }
-    parents.push(...((data ?? []) as ParentRow[]));
-  }
-  const parentById = new Map(parents.map((parent) => [parent.id, parent]));
+    const rows = (data ?? []) as GoogleVersionRow[];
+    const unseen = rows.filter((row) => !seen.has(row.id));
+    if (!unseen.length) break;
+    for (const row of unseen) seen.add(row.id);
 
-  const due: GoogleVersionRow[] = [];
-  for (const row of pending) {
-    const decision = decideFromParent(row, parentById.get(row.content_item_id) ?? null, now);
-    if (decision.due) due.push(row);
-    else if (decision.skip) await skip(ctx, row, decision.skip);
+    // Due-ness lives on the parent, so nothing is cut short before the parents are read.
+    const pending = unseen.filter((row) => !row.next_attempt_at || Date.parse(row.next_attempt_at) <= now);
+    // Read in chunks so a long pending list never makes an over-long request URL.
+    const ids = pending.map((row) => row.content_item_id);
+    for (let start = 0; start < ids.length; start += IN_CHUNK) {
+      const { data: parentData, error: parentError } = await db
+        .from("content_items")
+        .select("id, account_id, platform, placement, status, scheduled_for, deleted_at")
+        .eq("account_id", ctx.brand.accountId)
+        .in("id", ids.slice(start, start + IN_CHUNK));
+      if (parentError) {
+        ctx.summary.errors += 1;
+        return [];
+      }
+      for (const parent of (parentData ?? []) as ParentRow[]) parentById.set(parent.id, parent);
+    }
+
+    for (const row of pending) {
+      const decision = decideFromParent(row, parentById.get(row.content_item_id) ?? null, now);
+      if (decision.due) due.push(row);
+      else if (decision.skip) await skip(ctx, row, decision.skip);
+    }
+
+    if (rows.length < PENDING_SCAN_LIMIT) break;
+    from = rows[rows.length - 1].created_at;
   }
   if (!due.length) return [];
 
@@ -584,7 +604,15 @@ async function sendOne(ctx: RunContext, due: DueVersion): Promise<SendOutcome> {
   // The claim, immediately before the request. Zero rows: another run owns it.
   const attempts = row.attempts + 1;
   const claimedAt = iso(ctx.deps.now().getTime());
-  const claimed = await transition(ctx, row, "pending", { state: "claimed", claimed_at: claimedAt, attempts, summary });
+  const claimed = await transition(
+    ctx,
+    row,
+    "pending",
+    { state: "claimed", claimed_at: claimedAt, attempts, summary },
+    { unchangedSince: row.updated_at },
+  );
+  // Zero rows: another run owns it, or a person changed it since it was read
+  // (the next run reads it afresh).
   if (!claimed) return "done";
   const claimedRow: GoogleVersionRow = { ...row, state: "claimed", claimed_at: claimedAt, attempts, summary };
 

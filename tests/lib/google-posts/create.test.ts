@@ -56,6 +56,14 @@ describe('automatic creation (decision D8)', () => {
     expect(versions()).toEqual([]);
   });
 
+  it('still creates one for a post the publisher reached before this run', async () => {
+    const soon = new Date(world.clock.now().getTime() - 60 * 1000).toISOString();
+    const posted = addPost(world, { status: 'posted', scheduledFor: soon });
+    const publishing = addPost(world, { status: 'publishing', scheduledFor: soon });
+    const outcome = await createVersionsForNewContent(world.deps, await brand());
+    expect(outcome.created.sort()).toEqual([posted, publishing].sort());
+  });
+
   it('a second run creates nothing more', async () => {
     addPost(world);
     await createVersionsForNewContent(world.deps, await brand());

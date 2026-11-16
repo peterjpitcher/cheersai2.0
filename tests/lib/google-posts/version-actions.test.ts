@@ -83,6 +83,12 @@ describe('Google version actions', () => {
     expect(row(postId)).toMatchObject({ state: 'pending', hold_reason: null });
   });
 
+  it('holds a pending version whose edited wording is an alcohol promotion', async () => {
+    const postId = addVersion('pending');
+    expect(await editGoogleVersionWording({ contentId: postId, summary: 'Pints for £4 all night.' })).toMatchObject({ success: true });
+    expect(row(postId)).toMatchObject({ state: 'held', hold_reason: 'alcohol_promotion' });
+  });
+
   it('refuses to edit a version already sent, or to leave no wording', async () => {
     const sent = addVersion('sent', { google_post_name: `${PARENT}/localPosts/1`, sent_at: '2026-11-16T09:00:00.000Z', claimed_at: '2026-11-16T09:00:00.000Z' });
     expect(await editGoogleVersionWording({ contentId: sent, summary: 'New words' })).toEqual({
