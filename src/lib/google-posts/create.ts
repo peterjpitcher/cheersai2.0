@@ -14,10 +14,12 @@
  *   creates nothing) and createGoogleVersionsForExistingSchedule (creates
  *   exactly what that dry run listed; a second run creates nothing).
  *
- * One Google post per event (D5): the earliest upcoming Facebook feed post of
- * an event campaign decides. If any post of the campaign already has a Google
- * version, no other post gets one, and the database's partial unique index is
- * the final guarantee: a unique violation means "already has one".
+ * Events (D13, Peter, 26 November 2026): every Facebook feed post of an event
+ * campaign gets a Google post. The earliest upcoming one, when the campaign
+ * has no event-keyed Google post yet, is the event's own post (an EVENT post
+ * where the details allow); every other post is a STANDARD reminder. The
+ * database's partial unique index is the final guarantee of one event-keyed
+ * post per event: a unique violation means "already has one".
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -217,32 +219,36 @@ export async function planGoogleVersions(
   const campaignById = new Map(campaigns.map((campaign) => [campaign.id, campaign]));
   const eventCampaignIds = campaigns.filter((campaign) => campaign.campaign_type === "event").map((campaign) => campaign.id);
 
-  // The earliest upcoming Facebook feed post of each event campaign, and whether any post of it already has a version.
+  // The earliest upcoming Facebook feed post of each event campaign, and
+  // whether the campaign already has its event-keyed Google post.
   const firstPostByCampaign = new Map<string, string>();
-  const campaignHasVersion = new Set<string>();
+  const campaignHasEventPost = new Set<string>();
   if (eventCampaignIds.length) {
     const siblings = await selectRowsIn<ParentItem>(
       eventCampaignIds,
       (chunk) => db.from("content_items").select(PARENT_COLUMNS).eq("account_id", brand.accountId).in("campaign_id", chunk),
       "event posts",
     );
+    const siblingIds = siblings.map((item) => item.id);
+    const versions = siblingIds.length
+      ? await selectRowsIn<{ content_item_id: string; source_event_key: string | null }>(
+          siblingIds,
+          (chunk) =>
+            db.from("gbp_posts").select("content_item_id, source_event_key").eq("account_id", brand.accountId).in("content_item_id", chunk),
+          "event versions",
+        )
+      : [];
+    const keyedPost = new Set(versions.filter((row) => row.source_event_key).map((row) => row.content_item_id));
+    const withVersion = new Set(versions.map((row) => row.content_item_id));
+    for (const item of siblings) {
+      if (item.campaign_id && keyedPost.has(item.id)) campaignHasEventPost.add(item.campaign_id);
+    }
+    // The event's own post is the earliest upcoming post that has no version yet.
     const upcoming = siblings
-      .filter((item) => !parentIneligibility(item, now))
+      .filter((item) => !parentIneligibility(item, now) && !withVersion.has(item.id))
       .sort((a, b) => Date.parse(a.scheduled_for as string) - Date.parse(b.scheduled_for as string) || a.id.localeCompare(b.id));
     for (const item of upcoming) {
       if (item.campaign_id && !firstPostByCampaign.has(item.campaign_id)) firstPostByCampaign.set(item.campaign_id, item.id);
-    }
-    const siblingIds = siblings.map((item) => item.id);
-    if (siblingIds.length) {
-      const versions = await selectRowsIn<{ content_item_id: string }>(
-        siblingIds,
-        (chunk) => db.from("gbp_posts").select("content_item_id").eq("account_id", brand.accountId).in("content_item_id", chunk),
-        "event versions",
-      );
-      const withVersion = new Set(versions.map((row) => row.content_item_id));
-      for (const item of siblings) {
-        if (item.campaign_id && withVersion.has(item.id)) campaignHasVersion.add(item.campaign_id);
-      }
     }
   }
 
@@ -255,6 +261,29 @@ export async function planGoogleVersions(
 
   const eventLookup = lookup ?? brandLookup(deps, brand.accountId);
 
+  // One management lookup per event campaign per pass, shared by all its posts.
+  const resolved = new Map<string, ResolvedEvent | "deferred">();
+  const resolveEvent = async (campaign: CampaignInfo): Promise<ResolvedEvent | "deferred"> => {
+    const cached = resolved.get(campaign.id);
+    if (cached) return cached;
+    let event: ResolvedEvent | "deferred";
+    if (campaignEventIsComplete(campaign)) {
+      event = eventFromCampaign(campaign);
+    } else {
+      const known = eventFromCampaign(campaign);
+      const result = await eventLookup.find({
+        managementEventId: known.managementEventId,
+        name: known.title,
+        date: known.startDate,
+        time: known.startTime,
+      });
+      event = result.status === "deferred" ? "deferred" : mergeMatchedEvent(campaign, result.status === "matched" ? result.event : null);
+    }
+    // A deferred lookup is asked again on the next post; an answer is kept.
+    if (event !== "deferred") resolved.set(campaign.id, event);
+    return event;
+  };
+
   for (const item of fresh) {
     const campaign = item.campaign_id ? (campaignById.get(item.campaign_id) ?? null) : null;
     const isEvent = campaign?.campaign_type === "event";
@@ -262,31 +291,13 @@ export async function planGoogleVersions(
     let isFirstEventPost = false;
 
     if (isEvent && campaign) {
-      if (campaignHasVersion.has(campaign.id)) {
-        plan.skipped.push(entry(item, "its event already has a Google post"));
+      isFirstEventPost = !campaignHasEventPost.has(campaign.id) && firstPostByCampaign.get(campaign.id) === item.id;
+      const found = await resolveEvent(campaign);
+      if (found === "deferred") {
+        plan.deferred.push(entry(item, "waiting for the management app call limit"));
         continue;
       }
-      isFirstEventPost = firstPostByCampaign.get(campaign.id) === item.id;
-      if (!isFirstEventPost) {
-        plan.skipped.push(entry(item, INELIGIBLE_TEXT.not_first_event_post));
-        continue;
-      }
-      if (campaignEventIsComplete(campaign)) {
-        event = eventFromCampaign(campaign);
-      } else {
-        const known = eventFromCampaign(campaign);
-        const result = await eventLookup.find({
-          managementEventId: known.managementEventId,
-          name: known.title,
-          date: known.startDate,
-          time: known.startTime,
-        });
-        if (result.status === "deferred") {
-          plan.deferred.push(entry(item, "waiting for the management app call limit"));
-          continue;
-        }
-        event = mergeMatchedEvent(campaign, result.status === "matched" ? result.event : null);
-      }
+      event = found;
     }
 
     const built = buildGoogleVersion({
@@ -302,8 +313,8 @@ export async function planGoogleVersions(
       plan.skipped.push(entry(item, INELIGIBLE_TEXT[built.reason]));
       continue;
     }
-    // Two posts of one event can never both be planned.
-    if (isEvent && campaign) campaignHasVersion.add(campaign.id);
+    // Only one post of an event can be planned as the event's own post.
+    if (isEvent && campaign && built.row.source_event_key) campaignHasEventPost.add(campaign.id);
     (built.row.state === "held" ? plan.held : plan.create).push(entry(item, describeRow(built.row), built.row));
   }
 

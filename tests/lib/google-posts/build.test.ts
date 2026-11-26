@@ -119,10 +119,26 @@ describe('buildGoogleVersion: events', () => {
     expect(none.ok && none.row).toMatchObject({ cta_type: null, cta_url: null, topic_type: 'EVENT' });
   });
 
-  it('gives a later post of the same event nothing', () => {
-    expect(buildGoogleVersion(input({ campaign: eventCampaign(stored), isFirstEventPost: false }))).toEqual({
+  it('makes a later post of the same event a standard reminder with the event button and no event key', () => {
+    const result = buildGoogleVersion(input({ campaign: eventCampaign(stored), isFirstEventPost: false }));
+    expect(result.ok && result.row).toMatchObject({
+      topic_type: 'STANDARD',
+      source_event_key: null,
+      cta_type: 'BOOK',
+      cta_url: 'https://l.example.com/quiz-g',
+      event_title: null,
+      event_start: null,
+      state: 'pending',
+    });
+    // The event's end is kept so the sender can refuse a reminder after the event.
+    expect(result.ok && result.row.event_end).toBe(new Date(stored.eventEnd).toISOString());
+  });
+
+  it('gives a later post nothing once the event has finished', () => {
+    const over = { ...stored, eventStart: '2026-11-01T19:00:00.000Z', eventEnd: '2026-11-01T22:00:00.000Z' };
+    expect(buildGoogleVersion(input({ campaign: eventCampaign(over), isFirstEventPost: false }))).toEqual({
       ok: false,
-      reason: 'not_first_event_post',
+      reason: 'event_over',
     });
   });
 

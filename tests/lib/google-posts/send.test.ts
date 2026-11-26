@@ -258,6 +258,22 @@ describe('the Facebook post decides', () => {
     expect(version(versionId)).toMatchObject({ state: 'skipped', hold_reason: 'event_over' });
   });
 
+  it('skips a standard reminder of an event once the event is over', async () => {
+    const campaignId = addCampaign(world, {
+      metadata: { eventStart: '2026-11-16T19:00:00.000Z', eventEnd: '2026-11-16T22:00:00.000Z', eventTitle: 'Music Bingo' },
+    });
+    // An earlier post takes the event's own Google post, so the one under test is a reminder.
+    addPost(world, { campaignId, scheduledFor: '2026-11-16T11:00:00.000Z' });
+    const { versionId } = await prepare({ campaignId });
+    expect(version(versionId)).toMatchObject({ topic_type: 'STANDARD', source_event_key: null, event_end: '2026-11-16T22:00:00.000Z' });
+    // Nothing is sent before the event ends in this test; the clock jumps past it (a cron outage).
+    world.db.tables.gbp_posts.filter((row) => row.id !== versionId).forEach((row) => { row.state = 'skipped'; row.hold_reason = 'skipped_by_person'; });
+    world.clock.set('2026-11-16T22:30:00.000Z');
+    await send();
+    expect(creates()).toEqual([]);
+    expect(version(versionId)).toMatchObject({ state: 'skipped', hold_reason: 'event_over' });
+  });
+
   it('follows the Facebook wording until a person edits it, and holds it if it becomes an alcohol promotion', async () => {
     const { postId, versionId } = await prepare();
     world.db.tables.content_variants.find((row) => row.content_item_id === postId)!.body = '£3 pints all night for the quiz!';

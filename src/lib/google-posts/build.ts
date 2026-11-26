@@ -9,17 +9,21 @@
  * - Only a Facebook FEED post that is approved (not a draft), not trashed and
  *   scheduled no more than a few minutes in the past. Never a story, never an
  *   Instagram item.
- * - Event campaigns: one Google post per event (D5). Only the earliest
- *   upcoming Facebook feed post of the campaign gets one; the caller decides
- *   which that is. source_event_key is the campaign's stored key, else
- *   mgmt:<id> for a matched management event, else campaign:<campaign id>.
- *   The partial unique index on (account_id, source_event_key,
- *   local_post_parent) is the real guarantee.
- * - With a start and an end, and the end still ahead: an EVENT post, the title
- *   cut at a word boundary to 58 characters, a BOOK button when the event
- *   takes bookings, otherwise LEARN_MORE (D6), and only with an https Google
- *   link. With no end: a STANDARD post (still one per event), so the event is
- *   still announced. An event that has already ended gets nothing.
+ * - Event campaigns (D13, Peter, 26 November 2026): every Facebook feed post
+ *   of the campaign gets a Google post. The earliest upcoming one is THE
+ *   event's Google post (the caller decides which that is); the later ones
+ *   are reminders, sent as STANDARD posts with the same button and no
+ *   source_event_key. source_event_key on the event's own post is the
+ *   campaign's stored key, else mgmt:<id> for a matched management event,
+ *   else campaign:<campaign id>, and the partial unique index on
+ *   (account_id, source_event_key, local_post_parent) guarantees one such
+ *   post per event.
+ * - The event's own post, with a start and an end and the end still ahead: an
+ *   EVENT post, the title cut at a word boundary to 58 characters, a BOOK
+ *   button when the event takes bookings, otherwise LEARN_MORE (D6), and only
+ *   with an https Google link. With no end: a STANDARD post, so the event is
+ *   still announced. An event that has already ended gets nothing, reminders
+ *   included.
  * - Other posts: STANDARD, with a LEARN_MORE button only when the campaign
  *   holds a googleCtaUrl.
  * - The wording is derived from the Facebook copy (./summary.ts); wording that
@@ -75,7 +79,6 @@ export type IneligibleReason =
   | "trashed"
   | "not_scheduled"
   | "in_the_past"
-  | "not_first_event_post"
   | "event_over"
   | "invalid_destination";
 
@@ -86,7 +89,6 @@ export const INELIGIBLE_TEXT: Record<IneligibleReason, string> = {
   trashed: "in the bin",
   not_scheduled: "has no scheduled time",
   in_the_past: "its time has passed",
-  not_first_event_post: "a later post of an event that already has its Google post",
   event_over: "the event has finished",
   invalid_destination: "the Google location is not valid",
 };
@@ -181,7 +183,11 @@ export interface BuildInput {
   campaign: CampaignInfo | null;
   localPostParent: string;
   now: Date;
-  /** For an event campaign: whether this post is the earliest upcoming Facebook feed post of the campaign. */
+  /**
+   * For an event campaign: true when this post is the event's own Google post
+   * (the earliest upcoming Facebook feed post of a campaign that has none
+   * yet); false for a later post, which becomes a STANDARD reminder.
+   */
   isFirstEventPost: boolean;
   /** For an event campaign: the details resolved from the campaign and, if needed, the management app. */
   event: ResolvedEvent | null;
@@ -222,14 +228,8 @@ export function buildGoogleVersion(input: BuildInput): BuildResult {
     };
   }
 
-  if (!input.isFirstEventPost) return { ok: false, reason: "not_first_event_post" };
-
   const fromCampaign = eventFromCampaign(campaign);
   const event = input.event ?? fromCampaign;
-  const sourceEventKey =
-    fromCampaign.storedKey ??
-    (event.managementEventId ? `mgmt:${event.managementEventId}` : null) ??
-    `campaign:${campaign.id}`;
 
   const ctaUrl = httpsOrNull(event.googleCtaUrl);
   const ctaType: GoogleCtaType | null = ctaUrl ? (event.takesBookings ? "BOOK" : "LEARN_MORE") : null;
@@ -237,6 +237,31 @@ export function buildGoogleVersion(input: BuildInput): BuildResult {
   const start = event.start ? DateTime.fromISO(event.start) : null;
   const end = event.end ? DateTime.fromISO(event.end) : null;
   if (end?.isValid && end.toMillis() <= now.getTime()) return { ok: false, reason: "event_over" };
+
+  // A later post of the event: a reminder, sent as a standard post with the
+  // event's button. No event key, so the one-per-event index never sees it.
+  // It keeps the event's end (and nothing else of the event), so the sender
+  // can still refuse to send it once the event has finished.
+  if (!input.isFirstEventPost) {
+    return {
+      ok: true,
+      row: {
+        ...base,
+        source_event_key: null,
+        topic_type: "STANDARD",
+        cta_type: ctaType,
+        cta_url: ctaUrl,
+        event_title: null,
+        event_start: null,
+        event_end: end?.isValid ? (end.toUTC().toISO() ?? null) : null,
+      },
+    };
+  }
+
+  const sourceEventKey =
+    fromCampaign.storedKey ??
+    (event.managementEventId ? `mgmt:${event.managementEventId}` : null) ??
+    `campaign:${campaign.id}`;
 
   const title = event.title ? cutTitle(event.title) : "";
   const canBeEvent = Boolean(start?.isValid && end?.isValid && end.toMillis() > (start?.toMillis() ?? 0) && title);
