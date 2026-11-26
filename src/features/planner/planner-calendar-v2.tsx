@@ -1,6 +1,7 @@
 'use client';
 
 import { startTransition, useCallback, useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { DateTime } from 'luxon';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 
@@ -11,6 +12,7 @@ import type { ContentItem, ContentStatus, Platform } from '@/types/content';
 import { CalendarCell, type CalendarDisplayItem } from '@/features/planner/calendar-cell';
 import { StatusFilters } from '@/features/planner/status-filters';
 import { PostDrawer } from '@/features/planner/post-drawer';
+import { googlePostHrefForTile } from '@/lib/google-posts/tile';
 import { Button } from '@/components/ui/button';
 
 /** Weekday headers (Monday-first per ISO) */
@@ -20,6 +22,8 @@ const TOTAL_DAYS = 42; // 6 weeks x 7 days
 
 export interface PlannerCalendarProps {
   items: ContentItem[];
+  /** Google posts as tiles (src/lib/google-posts/tile.ts). Shown beside the content items, never conflict-checked. */
+  googleItems?: ContentItem[];
   materialisedSlots: MaterialisedSlot[];
   month?: string; // yyyy-MM format
   showImages: boolean;
@@ -37,12 +41,14 @@ export interface PlannerCalendarProps {
  */
 export function PlannerCalendar({
   items,
+  googleItems,
   materialisedSlots,
   month,
   showImages,
   initialStatus,
   onMonthChange,
 }: PlannerCalendarProps): React.JSX.Element {
+  const router = useRouter();
   const now = useMemo(() => DateTime.now().setZone(DEFAULT_TIMEZONE), []);
 
   const referenceMonth = useMemo(() => {
@@ -83,20 +89,27 @@ export function PlannerCalendar({
   }, []);
 
   const handleItemClick = useCallback((id: string) => {
+    // A Google post has its own page; the drawer only reads content items.
+    const googleHref = googlePostHrefForTile(id);
+    if (googleHref) {
+      router.push(googleHref);
+      return;
+    }
     setDrawerContentId(id);
     setDrawerOpen(true);
-  }, []);
+  }, [router]);
 
   // Merge and filter items
   const allDisplayItems = useMemo<CalendarDisplayItem[]>(() => {
-    const merged: CalendarDisplayItem[] = [...items, ...materialisedSlots];
+    const merged: CalendarDisplayItem[] = [...items, ...(googleItems ?? []), ...materialisedSlots];
 
     return merged.filter((item) => {
       // Status filter
       if (statusFilter.length > 0 && !statusFilter.includes(item.status)) {
         return false;
       }
-      // Platform filter (only for ContentItem with bodyDraft)
+      // Platform filter (only for ContentItem with bodyDraft). The filter offers
+      // Facebook and Instagram only, so a Google tile is hidden while it is on.
       if (platformFilter.length > 0 && 'bodyDraft' in item) {
         const draft = item.bodyDraft as Record<string, unknown> | null;
         const platforms = Array.isArray(draft?.platforms) ? (draft.platforms as string[]) : [];
@@ -106,7 +119,7 @@ export function PlannerCalendar({
       }
       return true;
     });
-  }, [items, materialisedSlots, statusFilter, platformFilter]);
+  }, [items, googleItems, materialisedSlots, statusFilter, platformFilter]);
 
   // Run conflict detection on all content items
   const conflicts = useMemo(() => detectConflicts(items), [items]);

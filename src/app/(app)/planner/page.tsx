@@ -5,6 +5,7 @@ import { DateTime } from 'luxon';
 import { DEFAULT_TIMEZONE } from '@/lib/constants';
 import { getContentForCalendar, getContentByAccount } from '@/lib/content/queries';
 import { resolveThumbnails } from '@/lib/media/resolve-thumbnails';
+import { loadGoogleTiles } from '@/lib/google-posts/planner-tiles';
 import { materialiseRecurring } from '@/lib/scheduling/materialise';
 import { PlannerSkeleton } from '@/features/planner/planner-skeleton';
 import { requireAuthContext } from '@/lib/auth/server';
@@ -224,6 +225,17 @@ async function PlannerCalendarLoader({
     item.thumbnailUrl = thumbnails.get(item.id) ?? null;
   }
 
+  // Google posts as their own tiles (hidden, and nothing Google read, unless
+  // the brand's Google switch is on). A failed read shows the planner without them.
+  const googleItems = await loadGoogleTiles(await requireAuthContext(), {
+    calendarItems,
+    startIso: startDate,
+    endIso: endDate,
+    thumbnails,
+    resolveMissingThumbnails: (ids) =>
+      resolveThumbnails(ids, { accountId, placementByContentId: new Map(ids.map((id) => [id, 'feed' as const])) }),
+  });
+
   // Filter to weekly_recurring items for materialisation
   const recurring = recurringItems.filter(
     (item) => item.contentType === 'weekly_recurring',
@@ -245,6 +257,7 @@ async function PlannerCalendarLoader({
   return (
     <PlannerShell
       items={calendarItems}
+      googleItems={googleItems}
       materialisedSlots={materialisedSlots}
       month={month}
       initialView={view === 'list' ? 'list' : 'cal'}

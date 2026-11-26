@@ -11,6 +11,7 @@ import { checkGoogleBrand } from "@/lib/google-posts/brands";
 import {
   editGoogleVersionWording as editWording,
   getGoogleVersionForContent,
+  moveGoogleVersion as move,
   releaseGoogleVersion as release,
   retryGoogleVersion as retry,
   skipGoogleVersion as skip,
@@ -39,6 +40,8 @@ const FAILED = "We could not change the Google version. Please try again.";
 
 const contentSchema = z.object({ contentId: z.string().uuid() });
 const wordingSchema = z.object({ contentId: z.string().uuid(), summary: z.string().max(10_000) });
+/** An instant (ISO, with an offset), or null to follow the Facebook post's time again. */
+const moveSchema = z.object({ contentId: z.string().uuid(), scheduledFor: z.string().datetime({ offset: true }).nullable() });
 
 type ActionResult = { success?: boolean; error?: string; version?: GoogleVersionView };
 
@@ -52,6 +55,7 @@ async function googleReady(ctx: AuthContext): Promise<boolean> {
 function done(result: GoogleVersionChange, contentId: string): ActionResult {
   if (!result.success) return { success: false, error: result.error };
   revalidatePath(`/planner/${contentId}`);
+  revalidatePath(`/planner/google/${result.version.id}`);
   revalidatePath("/planner");
   return { success: true, version: result.version };
 }
@@ -133,6 +137,22 @@ export async function retryGoogleVersion(payload: unknown): Promise<ActionResult
     return done(await retry(ctx.supabase, ctx.accountId, parsed.data.contentId), parsed.data.contentId);
   } catch (error) {
     logger.error("could not retry a Google version", toLoggableError(error), { accountId: ctx.accountId });
+    return { success: false, error: FAILED };
+  }
+}
+
+/** Moves a Google post to its own time, or (with null) back to its Facebook post's time. Needs 'publish', as rescheduling a post does. */
+export async function moveGoogleVersion(payload: unknown): Promise<ActionResult> {
+  const parsed = moveSchema.safeParse(payload);
+  if (!parsed.success) return { success: false, error: "That time could not be read. Choose a date and time." };
+  const ctx = await entitled("publish");
+  if ("error" in ctx) return { success: false, error: ctx.error };
+  if (!(await googleReady(ctx))) return { success: false, error: NOT_AVAILABLE };
+  try {
+    const when = parsed.data.scheduledFor ? new Date(parsed.data.scheduledFor) : null;
+    return done(await move(ctx.supabase, ctx.accountId, parsed.data.contentId, when), parsed.data.contentId);
+  } catch (error) {
+    logger.error("could not move a Google version", toLoggableError(error), { accountId: ctx.accountId });
     return { success: false, error: FAILED };
   }
 }

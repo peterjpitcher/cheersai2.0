@@ -19,7 +19,8 @@ import { deriveGoogleSummary, holdForWording } from "@/lib/google-posts/summary"
 function statusLine(row: GoogleVersionRow): string {
   switch (row.state) {
     case "pending":
-      return row.attempts > 0 ? "Waiting to try Google again." : "Will go to Google at the same time as the Facebook post.";
+      if (row.attempts > 0) return "Waiting to try Google again.";
+      return row.scheduled_for ? "Will go to Google at its own time." : "Will go to Google at the same time as the Facebook post.";
     case "held":
       return googleReasonText(row.hold_reason) ?? "Waiting for someone to check it before it goes to Google.";
     case "claimed":
@@ -53,6 +54,8 @@ export function toGoogleVersionView(row: GoogleVersionRow): GoogleVersionView {
     eventStart: row.event_start,
     eventEnd: row.event_end,
     button: row.cta_type && row.cta_url ? { type: row.cta_type, url: row.cta_url } : null,
+    ownTime: row.scheduled_for,
+    canMove: row.state === "pending" || row.state === "held",
     googleUrl: row.state === "sent" ? row.search_url : null,
     googleState: row.google_state,
     // A sent post keeps the follow-up check's note (for example that it is no longer on Google).
@@ -93,6 +96,9 @@ export const GOOGLE_VERSION_ACTION_MESSAGES = {
   notHeld: "This Google version is not waiting for anyone.",
   notSkippable: "This Google version can no longer be skipped.",
   notFailed: "Only a Google version that failed can be tried again.",
+  notMovable: "The time can only be changed before the Google post is sent.",
+  timePast: "Choose a time in the future.",
+  afterEvent: "Choose a time before the event finishes.",
   emptyWording: "Write some wording for Google first (hashtags, handles, links and phone numbers are removed).",
   changed: "This Google version changed while you were looking at it. Refresh and try again.",
   saveFailed: "We could not save that change. Please try again.",
@@ -192,7 +198,7 @@ export async function skipGoogleVersion(
   return change(db, accountId, row, { state: "skipped", hold_reason: "skipped_by_person", next_attempt_at: null });
 }
 
-/** A failed version back in the queue, with its attempts reset. It still follows its post's time. */
+/** A failed version back in the queue, with its attempts reset. Its time is unchanged. */
 export async function retryGoogleVersion(
   db: SupabaseClient,
   accountId: string,
@@ -208,4 +214,109 @@ export async function retryGoogleVersion(
     next_attempt_at: null,
     last_error: null,
   });
+}
+
+/**
+ * A person moves a Google post to its own time (D16), or, with null, puts it
+ * back on its Facebook post's time. Only before it is sent; never into the
+ * past, and never past the end of its event (the sender would refuse it).
+ */
+export async function moveGoogleVersion(
+  db: SupabaseClient,
+  accountId: string,
+  contentItemId: string,
+  when: Date | null,
+  now: Date = new Date(),
+): Promise<GoogleVersionChange> {
+  const row = await readRow(db, accountId, contentItemId);
+  if (!row) return { success: false, error: GOOGLE_VERSION_ACTION_MESSAGES.notFound };
+  if (row.state !== "pending" && row.state !== "held") return { success: false, error: GOOGLE_VERSION_ACTION_MESSAGES.notMovable };
+  if (when) {
+    if (Number.isNaN(when.getTime()) || when.getTime() <= now.getTime()) {
+      return { success: false, error: GOOGLE_VERSION_ACTION_MESSAGES.timePast };
+    }
+    if (row.event_end && when.getTime() >= Date.parse(row.event_end)) {
+      return { success: false, error: GOOGLE_VERSION_ACTION_MESSAGES.afterEvent };
+    }
+  }
+  // A backoff belongs to the old time: a moved post starts clean.
+  return change(db, accountId, row, { scheduled_for: when ? when.toISOString() : null, next_attempt_at: null });
+}
+
+/** One Google post of the brand by its own id, or null. For the Google post page. */
+export async function getGoogleVersionById(
+  db: SupabaseClient,
+  accountId: string,
+  versionId: string,
+): Promise<GoogleVersionView | null> {
+  const { data, error } = await db
+    .from("gbp_posts")
+    .select(GOOGLE_VERSION_COLUMNS)
+    .eq("account_id", accountId)
+    .eq("id", versionId)
+    .maybeSingle<GoogleVersionRow>();
+  if (error) throw new Error(`Google post lookup failed: ${error.message}`);
+  return data ? toGoogleVersionView(data) : null;
+}
+
+/** What a planner tile needs to know about one Google post. */
+export interface GooglePostTile {
+  id: string;
+  contentItemId: string;
+  state: GoogleVersionRow["state"];
+  /** Its own time (ISO), or null while it follows its Facebook post's time. */
+  ownTime: string | null;
+  /** When Google accepted it, for a tile that has gone out. */
+  sentAt: string | null;
+  eventTitle: string | null;
+}
+
+/** The most Google posts read for one planner view. */
+export const GOOGLE_TILE_LIMIT = 500;
+
+/**
+ * The brand's Google posts for the planner: every one that has not been
+ * skipped and that either has its own time inside the range or was made from
+ * one of the given Facebook posts (the ones the calendar already shows).
+ */
+export async function listGooglePostTiles(
+  db: SupabaseClient,
+  accountId: string,
+  { parentIds, startIso, endIso }: { parentIds: string[]; startIso: string; endIso: string },
+): Promise<GooglePostTile[]> {
+  const columns = "id, content_item_id, state, scheduled_for, sent_at, event_title";
+  type TileRow = { id: string; content_item_id: string; state: GoogleVersionRow["state"]; scheduled_for: string | null; sent_at: string | null; event_title: string | null };
+  const rows = new Map<string, TileRow>();
+
+  const own = await db
+    .from("gbp_posts")
+    .select(columns)
+    .eq("account_id", accountId)
+    .neq("state", "skipped")
+    .gte("scheduled_for", startIso)
+    .lte("scheduled_for", endIso)
+    .limit(GOOGLE_TILE_LIMIT);
+  if (own.error) throw new Error(`Google posts lookup failed: ${own.error.message}`);
+  for (const row of (own.data ?? []) as TileRow[]) rows.set(row.id, row);
+
+  // In chunks, so a busy calendar never makes an over-long request URL.
+  for (let start = 0; start < parentIds.length; start += 100) {
+    const byParent = await db
+      .from("gbp_posts")
+      .select(columns)
+      .eq("account_id", accountId)
+      .neq("state", "skipped")
+      .in("content_item_id", parentIds.slice(start, start + 100));
+    if (byParent.error) throw new Error(`Google posts lookup failed: ${byParent.error.message}`);
+    for (const row of (byParent.data ?? []) as TileRow[]) rows.set(row.id, row);
+  }
+
+  return [...rows.values()].map((row) => ({
+    id: row.id,
+    contentItemId: row.content_item_id,
+    state: row.state,
+    ownTime: row.scheduled_for,
+    sentAt: row.sent_at,
+    eventTitle: row.event_title,
+  }));
 }

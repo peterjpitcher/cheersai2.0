@@ -1,20 +1,23 @@
 'use client';
 
-import { Facebook, Globe, Instagram } from 'lucide-react';
+import { Facebook, Globe, Instagram, Store } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-export type PlatformKey = 'fb' | 'ig' | 'facebook' | 'instagram';
+export type PlatformKey = 'fb' | 'ig' | 'facebook' | 'instagram' | 'google';
 
 /** Normalise production keys to design tokens; null for unknown/missing platforms. */
-function toDesignKey(key: PlatformKey | null | undefined): 'fb' | 'ig' | null {
+function toDesignKey(key: PlatformKey | null | undefined): 'fb' | 'ig' | 'google' | null {
   if (key === 'facebook' || key === 'fb') return 'fb';
   if (key === 'instagram' || key === 'ig') return 'ig';
+  if (key === 'google') return 'google';
   return null;
 }
 
-const platformIcons: Record<'fb' | 'ig', typeof Facebook> = {
+// Google posts go to the venue's Google profile, shown as a shopfront.
+const platformIcons: Record<'fb' | 'ig' | 'google', typeof Facebook> = {
   fb: Facebook,
   ig: Instagram,
+  google: Store,
 };
 
 interface PlatformDotProps {

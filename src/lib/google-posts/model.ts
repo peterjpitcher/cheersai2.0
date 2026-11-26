@@ -2,9 +2,11 @@
  * Google versions: the shape of a public.gbp_posts row and the words used for
  * its states (tasks/SPEC-gbp-posting-reintroduction.md, decision D12).
  *
- * A Google version is ATTACHED to one Facebook feed post. It is never a
- * content item and never a publish job, so nothing here touches the content
- * `Platform` type or the Facebook and Instagram publish worker.
+ * A Google post is made from one Facebook feed post, which gives it its image
+ * and its default time; from there it has its own planner tile, page and time
+ * (tasks/SPEC-gbp-separate-posts.md). It is never a content item and never a
+ * publish job, so nothing here touches the content `Platform` type or the
+ * Facebook and Instagram publish worker.
  *
  * Pure and browser-safe: no env, no database.
  */
@@ -47,13 +49,15 @@ export interface GoogleVersionRow {
   sent_at: string | null;
   summary_edited_at: string | null;
   resend_count: number;
+  /** The Google post's own time; null means it goes out at its Facebook post's time (D16). */
+  scheduled_for: string | null;
   created_at: string;
   updated_at: string;
 }
 
 /** Every column the sender, the checks and the read API need. */
 export const GOOGLE_VERSION_COLUMNS =
-  "id, account_id, content_item_id, source_event_key, local_post_parent, google_post_name, search_url, google_state, last_checked_at, next_check_at, check_attempts, last_error, state, hold_reason, topic_type, summary, cta_type, cta_url, event_title, event_start, event_end, attempts, next_attempt_at, claimed_at, sent_at, summary_edited_at, resend_count, created_at, updated_at";
+  "id, account_id, content_item_id, source_event_key, local_post_parent, google_post_name, search_url, google_state, last_checked_at, next_check_at, check_attempts, last_error, state, hold_reason, topic_type, summary, cta_type, cta_url, event_title, event_start, event_end, attempts, next_attempt_at, claimed_at, sent_at, summary_edited_at, resend_count, scheduled_for, created_at, updated_at";
 
 /** The fields written when a version is created. Matches the migration's NOT NULLs and CHECKs. */
 export interface GoogleVersionInsert {
@@ -137,6 +141,10 @@ export interface GoogleVersionView {
   eventStart: string | null;
   eventEnd: string | null;
   button: { type: GoogleCtaType; url: string } | null;
+  /** The Google post's own time (ISO), or null while it follows its Facebook post's time. */
+  ownTime: string | null;
+  /** Its time can still be changed. */
+  canMove: boolean;
   /** Google's link to the post, once it has been sent. */
   googleUrl: string | null;
   googleState: string | null;

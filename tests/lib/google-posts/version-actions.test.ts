@@ -25,6 +25,7 @@ vi.mock('@/lib/billing/entitlement-server', () => ({
 import {
   editGoogleVersionWording,
   loadGoogleVersion,
+  moveGoogleVersion,
   releaseGoogleVersion,
   retryGoogleVersion,
   skipGoogleVersion,
@@ -159,6 +160,59 @@ describe('Google version actions', () => {
     expect(await editGoogleVersionWording({ contentId: postId, summary: 'x words' })).toMatchObject({ success: false, error: expect.stringMatching(/lapsed/) });
     expect(auth.requireEntitledContext).toHaveBeenCalledWith('create');
     expect(row(postId).state).toBe('failed');
+  });
+
+  it('gives a waiting Google post its own time, and puts it back on the Facebook time', async () => {
+    const postId = addVersion('pending', { next_attempt_at: '2026-11-16T10:30:00.000Z' });
+    const moved = await moveGoogleVersion({ contentId: postId, scheduledFor: '2099-06-01T11:30:00.000+01:00' });
+    expect(moved).toMatchObject({ success: true, version: { ownTime: '2099-06-01T10:30:00.000Z', canMove: true } });
+    // The instant is stored in UTC, and an old backoff does not follow it to the new time.
+    expect(row(postId)).toMatchObject({ scheduled_for: '2099-06-01T10:30:00.000Z', next_attempt_at: null, state: 'pending' });
+    expect(revalidatePath).toHaveBeenCalledWith(`/planner/google/${row(postId).id}`);
+
+    const back = await moveGoogleVersion({ contentId: postId, scheduledFor: null });
+    expect(back).toMatchObject({ success: true, version: { ownTime: null } });
+    expect(row(postId).scheduled_for).toBeNull();
+  });
+
+  it('refuses a time in the past, a time after the event, and a post already sent', async () => {
+    const postId = addVersion('pending', { event_end: '2099-06-01T21:00:00.000Z' });
+    expect(await moveGoogleVersion({ contentId: postId, scheduledFor: '2000-01-01T10:00:00.000Z' })).toEqual({
+      success: false,
+      error: GOOGLE_VERSION_ACTION_MESSAGES.timePast,
+    });
+    expect(await moveGoogleVersion({ contentId: postId, scheduledFor: '2099-06-01T21:00:00.000Z' })).toEqual({
+      success: false,
+      error: GOOGLE_VERSION_ACTION_MESSAGES.afterEvent,
+    });
+    expect(row(postId).scheduled_for ?? null).toBeNull();
+
+    const sent = addVersion('sent', { google_post_name: 'accounts/111/locations/999/localPosts/1', sent_at: '2026-11-16T09:00:00.000Z' });
+    expect(await moveGoogleVersion({ contentId: sent, scheduledFor: '2099-06-01T10:00:00.000Z' })).toEqual({
+      success: false,
+      error: GOOGLE_VERSION_ACTION_MESSAGES.notMovable,
+    });
+  });
+
+  it('moving needs the plan to allow publishing, the switch on, and a real time; another brand\'s post is not found', async () => {
+    const postId = addVersion('pending');
+    expect((await moveGoogleVersion({ contentId: postId, scheduledFor: 'tomorrow at ten' })).success).toBe(false);
+    expect((await moveGoogleVersion({ contentId: postId, scheduledFor: '2099-06-01T10:00:00' })).success).toBe(false);
+
+    entitled = false;
+    expect(await moveGoogleVersion({ contentId: postId, scheduledFor: '2099-06-01T10:00:00.000Z' })).toMatchObject({ success: false });
+    entitled = true;
+    googlePosts = false;
+    expect(await moveGoogleVersion({ contentId: postId, scheduledFor: '2099-06-01T10:00:00.000Z' })).toMatchObject({ success: false });
+    googlePosts = true;
+
+    const other = addVersion('pending', {}, OTHER_ACCOUNT);
+    expect(await moveGoogleVersion({ contentId: other, scheduledFor: '2099-06-01T10:00:00.000Z' })).toEqual({
+      success: false,
+      error: GOOGLE_VERSION_ACTION_MESSAGES.notFound,
+    });
+    expect(row(postId).scheduled_for ?? null).toBeNull();
+    expect(row(other).scheduled_for ?? null).toBeNull();
   });
 
   it('refuses a malformed request before reading anything', async () => {

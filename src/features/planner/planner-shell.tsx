@@ -27,6 +27,8 @@ const VIEW_OPTIONS = [
 
 export interface PlannerShellProps {
   items: ContentItem[];
+  /** Google posts as tiles, shown beside the content items. */
+  googleItems?: ContentItem[];
   materialisedSlots: MaterialisedSlot[];
   month?: string;
   initialView: 'cal' | 'list';
@@ -47,6 +49,7 @@ export interface PlannerShellProps {
  */
 export function PlannerShell({
   items,
+  googleItems,
   materialisedSlots,
   month,
   initialView,
@@ -232,6 +235,7 @@ export function PlannerShell({
         {view === 'cal' ? (
           <PlannerCalendar
             items={items}
+            googleItems={googleItems}
             materialisedSlots={materialisedSlots}
             month={displayedMonth}
             showImages={showImages}
@@ -241,6 +245,7 @@ export function PlannerShell({
         ) : (
           <PlannerAgenda
             items={items}
+            googleItems={googleItems}
             materialisedSlots={materialisedSlots}
             month={displayedMonth}
           />

@@ -32,6 +32,11 @@ export interface ContentItem {
   thumbnailUrl: string | null;
   placement: 'feed' | 'story' | null;
   platform?: Platform | null;
+  /**
+   * Set only on a planner tile that stands for a Google post (not a content
+   * item): the gbp_posts id. See src/lib/google-posts/tile.ts.
+   */
+  googlePostId?: string | null;
   createdAt: Date;
   updatedAt: Date;
 }

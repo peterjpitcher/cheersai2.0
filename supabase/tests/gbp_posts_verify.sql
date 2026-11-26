@@ -249,7 +249,9 @@ declare
     array['claimed_at', 'timestamp with time zone', 'YES', null],
     array['sent_at', 'timestamp with time zone', 'YES', null],
     array['summary_edited_at', 'timestamp with time zone', 'YES', null],
-    array['resend_count', 'integer', 'NO', '0']
+    array['resend_count', 'integer', 'NO', '0'],
+    -- The Google post's own time (the gbp_posts_own_time migration, decision D16).
+    array['scheduled_for', 'timestamp with time zone', 'YES', null]
   ];
   v_row text[];
   v_col record;

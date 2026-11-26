@@ -46,6 +46,7 @@
   /* ── Platform tokens ── */
   --c-fb: #1B4DB1;    --c-fb-bg: #DDE7F5;
   --c-ig: #B72A6B;    --c-ig-bg: #F8DEEA;
+  --c-google: #1E7A46; --c-google-bg: #DDF1E4;
 
   /* Backward-compatible platform aliases */
   --platform-fb: #1B4DB1;    --platform-fb-bg: #DDE7F5;

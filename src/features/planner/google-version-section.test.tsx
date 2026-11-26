@@ -45,6 +45,8 @@ function makeVersion(overrides: Partial<GoogleVersionView> = {}): GoogleVersionV
     eventStart: null,
     eventEnd: null,
     button: { type: "LEARN_MORE", url: "https://example.com/quiz" },
+    ownTime: null,
+    canMove: true,
     googleUrl: null,
     googleState: null,
     lastError: null,

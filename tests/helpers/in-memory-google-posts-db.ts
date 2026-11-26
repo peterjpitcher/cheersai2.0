@@ -223,6 +223,7 @@ export const GOOGLE_POSTS_SCHEMA: Record<string, TableSpec> = {
       sent_at: {},
       summary_edited_at: {},
       resend_count: { notNull: true, default: () => 0 },
+      scheduled_for: {},
     },
     primaryKey: ['id'],
     unique: [
