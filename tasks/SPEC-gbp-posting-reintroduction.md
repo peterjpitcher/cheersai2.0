@@ -41,6 +41,10 @@ Console facts below were last seen on 24 September 2026 and must be re-checked a
 
 Reapplied 16 November 2026: case ID 5-7355000042029, submitted from the owner login for The Anchor with the website exactly as on the profile; Google quoted seven to ten working days. Console re-checked 16 November 2026: OAuth client redirect URIs present for production and localhost, consent screen External and In production, Account Management and Business Information APIs enabled, quota still 0 requests per minute, Google My Business API not yet enabled.
 
+**Approved 17 November 2026.** Google's reply on the case above: the project "has been approved to use the Google Business Profile API" with a default quota of 300 queries per minute. Switched on 26 November 2026 at Peter's request ("Yes, switch on"): the Google My Business API (v4) was enabled in the Cloud console (quota then showed 60 create requests a minute and 100 a day; the two listing APIs showed 300 requests a minute); the consent screen was In production and External, with the production redirect URI present; Peter connected Google for The Anchor at 10:39 UTC; the first four Google versions were created from the existing schedule with his approval ("Yes, create all four"); and the first, a STANDARD post, was sent at 11:00:06 UTC and seen on The Anchor's profile with its image two minutes later. The console's consent screen page shows a "Your app requires verification" banner; sign-in worked regardless.
+
+**Decision D12 partly reversed, 26 November 2026.** Peter asked for Google posts to be "separate like the facebook and instagram ones": every scheduled Facebook feed post gets one, each has its own planner tile, time and Google wording. That work is specified in `tasks/SPEC-gbp-separate-posts.md` (D13 to D17), which replaces D5 (one Google post per event) and the "attached, follows the Facebook post" parts of D12 below as its pieces ship.
+
 ### 0.1 Why Google refused, and what must be true before reapplying
 
 Google's reply (30 September 2026) and its prerequisites page give the same two rules:

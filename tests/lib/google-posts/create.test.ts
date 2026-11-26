@@ -101,7 +101,7 @@ describe('automatic creation (decision D8)', () => {
   });
 });
 
-describe('one Google post per event (D5)', () => {
+describe('event campaigns: one event post, then standard reminders (D13)', () => {
   const stored = {
     eventStart: '2026-11-21T20:00:00.000Z',
     eventEnd: '2026-11-21T23:00:00.000Z',
@@ -110,7 +110,7 @@ describe('one Google post per event (D5)', () => {
     takesBookings: true,
   };
 
-  it('gives only the earliest upcoming Facebook feed post a version', async () => {
+  it('makes the earliest upcoming Facebook feed post the event post and each later one a standard reminder', async () => {
     const campaignId = addCampaign(world, { metadata: stored, name: 'Music Bingo' });
     const later = addPost(world, { campaignId, scheduledFor: '2026-11-20T18:00:00.000Z' });
     const first = addPost(world, { campaignId, scheduledFor: '2026-11-18T18:00:00.000Z' });
@@ -118,30 +118,42 @@ describe('one Google post per event (D5)', () => {
 
     await createVersionsForNewContent(world.deps, await brand());
 
-    expect(versions()).toHaveLength(1);
-    expect(versions()[0]).toMatchObject({
-      content_item_id: first,
+    expect(versions()).toHaveLength(2);
+    expect(versions().find((row) => row.content_item_id === first)).toMatchObject({
       topic_type: 'EVENT',
       event_title: 'Music Bingo',
       cta_type: 'BOOK',
       source_event_key: `campaign:${campaignId}`,
     });
-    expect(versions().some((row) => row.content_item_id === later)).toBe(false);
+    // The later post is a reminder: a standard post, same button, no event key. The story gets nothing.
+    expect(versions().find((row) => row.content_item_id === later)).toMatchObject({
+      topic_type: 'STANDARD',
+      event_title: null,
+      cta_type: 'BOOK',
+      cta_url: 'https://l.example.com/bingo',
+      source_event_key: null,
+    });
     expect(world.management.list).not.toHaveBeenCalled();
   });
 
-  it('gives a later post nothing once any post of the event has a version', async () => {
+  it('gives a post added later a standard reminder, never a second event post', async () => {
     const campaignId = addCampaign(world, { metadata: stored });
     const first = addPost(world, { campaignId, scheduledFor: '2026-11-18T18:00:00.000Z' });
     await createVersionsForNewContent(world.deps, await brand());
-    // The first post's version is skipped later; a newly added post must still not get one.
+    // The first post's version is skipped later; a newly added post is a reminder, not a second event post.
     world.db.tables.gbp_posts[0].state = 'skipped';
     world.db.tables.gbp_posts[0].hold_reason = 'parent_removed';
     world.db.tables.content_items.find((row) => row.id === first)!.deleted_at = '2026-11-16T09:00:00.000Z';
-    addPost(world, { campaignId, scheduledFor: '2026-11-19T18:00:00.000Z' });
+    const added = addPost(world, { campaignId, scheduledFor: '2026-11-19T18:00:00.000Z' });
 
     await createVersionsForNewContent(world.deps, await brand());
-    expect(versions()).toHaveLength(1);
+    expect(versions()).toHaveLength(2);
+    expect(versions().filter((row) => row.source_event_key)).toHaveLength(1);
+    expect(versions().find((row) => row.content_item_id === added)).toMatchObject({ topic_type: 'STANDARD', source_event_key: null });
+
+    // A third pass creates nothing more.
+    await createVersionsForNewContent(world.deps, await brand());
+    expect(versions()).toHaveLength(2);
   });
 
   it('treats a unique violation from a racing run as "already has one", never an error', async () => {
@@ -235,6 +247,31 @@ describe('event details from the management app', () => {
       cta_type: 'BOOK',
       cta_url: 'https://l.example.com/cash-bingo-g',
     });
+  });
+
+  it('looks the event up once and gives its later posts the same button as reminders', async () => {
+    enableManagement();
+    world.management.list.mockResolvedValue([{ id: 'evt-42', name: 'Cash Bingo', date: '2026-11-21', time: '20:00' }]);
+    world.management.detail.mockResolvedValue(detail);
+    const campaignId = addCampaign(world, { metadata: legacy, name: 'Cash Bingo' });
+    const first = addPost(world, { campaignId, scheduledFor: '2026-11-18T18:00:00.000Z' });
+    const second = addPost(world, { campaignId, scheduledFor: '2026-11-19T18:00:00.000Z' });
+    const third = addPost(world, { campaignId, scheduledFor: '2026-11-20T18:00:00.000Z' });
+
+    await createVersionsForNewContent(world.deps, await brand());
+
+    expect(world.management.list).toHaveBeenCalledTimes(1);
+    expect(world.management.detail).toHaveBeenCalledTimes(1);
+    expect(versions()).toHaveLength(3);
+    expect(versions().find((row) => row.content_item_id === first)).toMatchObject({ topic_type: 'EVENT', source_event_key: 'mgmt:evt-42' });
+    for (const reminder of [second, third]) {
+      expect(versions().find((row) => row.content_item_id === reminder)).toMatchObject({
+        topic_type: 'STANDARD',
+        source_event_key: null,
+        cta_type: 'BOOK',
+        cta_url: 'https://l.example.com/cash-bingo-g',
+      });
+    }
   });
 
   it.each([
