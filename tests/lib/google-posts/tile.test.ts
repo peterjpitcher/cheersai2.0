@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   googlePostHrefForTile,
+  googlePostIdForTile,
   googleStateToContentStatus,
   googleTileId,
   isGoogleTile,
@@ -43,6 +44,10 @@ describe('Google planner tiles', () => {
     expect(googlePostHrefForTile(googleTileId(GOOGLE_ID))).toBe(`/planner/google/${GOOGLE_ID}`);
     expect(googlePostHrefForTile(GOOGLE_ID)).toBeNull();
     expect(googlePostHrefForTile('post-1')).toBeNull();
+    // The drawer is opened with the Google post's own id.
+    expect(googlePostIdForTile(googleTileId(GOOGLE_ID))).toBe(GOOGLE_ID);
+    expect(googlePostIdForTile(GOOGLE_ID)).toBeNull();
+    expect(googlePostIdForTile('google:')).toBeNull();
   });
 
   it.each([

@@ -18,6 +18,7 @@ import {
   type GoogleVersionChange,
 } from "@/lib/google-posts/data";
 import type { GoogleVersionView } from "@/lib/google-posts/model";
+import { readGooglePostDetail, type GooglePostDetail } from "@/lib/google-posts/post-detail";
 import { createLogger } from "@/lib/logging";
 import { toLoggableError } from "@/lib/logging/to-error";
 
@@ -39,6 +40,7 @@ const NOT_AVAILABLE = "Google posting is not switched on, or Google is not conne
 const FAILED = "We could not change the Google version. Please try again.";
 
 const contentSchema = z.object({ contentId: z.string().uuid() });
+const googlePostSchema = z.object({ id: z.string().uuid() });
 const wordingSchema = z.object({ contentId: z.string().uuid(), summary: z.string().max(10_000) });
 /** An instant (ISO, with an offset), or null to follow the Facebook post's time again. */
 const moveSchema = z.object({ contentId: z.string().uuid(), scheduledFor: z.string().datetime({ offset: true }).nullable() });
@@ -154,5 +156,22 @@ export async function moveGoogleVersion(payload: unknown): Promise<ActionResult>
   } catch (error) {
     logger.error("could not move a Google version", toLoggableError(error), { accountId: ctx.accountId });
     return { success: false, error: FAILED };
+  }
+}
+
+/**
+ * One Google post for the planner drawer: the same detail its own page shows.
+ * Read for the signed-in user's active brand only; null when it is not theirs,
+ * does not exist, or the brand's Google switch is off.
+ */
+export async function loadGooglePostDetail(payload: unknown): Promise<{ detail: GooglePostDetail | null; error?: string }> {
+  const parsed = googlePostSchema.safeParse(payload);
+  if (!parsed.success) return { detail: null, error: "That Google post could not be found." };
+  const ctx = await requireAuthContext();
+  try {
+    return { detail: await readGooglePostDetail(ctx, parsed.data.id) };
+  } catch (error) {
+    logger.error("could not read a Google post", toLoggableError(error), { accountId: ctx.accountId });
+    return { detail: null, error: "We could not load this Google post. Please try again." };
   }
 }

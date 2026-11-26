@@ -37,20 +37,28 @@ type VisibleSection = Exclude<GooglePostSection, { kind: "hidden" }>;
 interface GoogleVersionSectionProps {
   section: VisibleSection;
   timezone: string;
+  /** Called after a change is saved, so a caller holding its own copy (the planner drawer) can re-read it. */
+  onChanged?: () => void;
+  /** Inside the planner drawer: no card of its own and the details in one column. */
+  compact?: boolean;
 }
 
 type ActionResult = { success?: boolean; error?: string; version?: GoogleVersionView };
 
 const TRY_AGAIN = "Please try again.";
 
-export function GoogleVersionSection({ section, timezone }: GoogleVersionSectionProps): React.JSX.Element {
+export function GoogleVersionSection({ section, timezone, onChanged, compact = false }: GoogleVersionSectionProps): React.JSX.Element {
   const version = section.kind === "ready" || section.kind === "reconnect" ? section.version : null;
   const chip = version ? googleStateChip(version) : null;
 
   return (
     <section
       aria-labelledby="google-version-heading"
-      className="mx-auto flex w-full max-w-[1200px] flex-col gap-4 rounded-[var(--r-xl)] border border-[var(--c-line)] bg-[var(--c-card)] p-[18px] sm:p-6"
+      className={
+        compact
+          ? "flex w-full flex-col gap-4"
+          : "mx-auto flex w-full max-w-[1200px] flex-col gap-4 rounded-[var(--r-xl)] border border-[var(--c-line)] bg-[var(--c-card)] p-[18px] sm:p-6"
+      }
     >
       <div className="flex flex-wrap items-center gap-2.5">
         <h2 id="google-version-heading" className="eyebrow text-[var(--c-ink-3)]">
@@ -96,6 +104,8 @@ export function GoogleVersionSection({ section, timezone }: GoogleVersionSection
           version={version}
           timezone={timezone}
           controls={section.kind === "ready"}
+          onChanged={onChanged}
+          compact={compact}
         />
       )}
     </section>
@@ -107,9 +117,11 @@ interface GoogleVersionBodyProps {
   timezone: string;
   /** False while Google needs reconnecting: the details show, the buttons do not. */
   controls: boolean;
+  onChanged?: () => void;
+  compact: boolean;
 }
 
-function GoogleVersionBody({ version, timezone, controls }: GoogleVersionBodyProps): React.JSX.Element {
+function GoogleVersionBody({ version, timezone, controls, onChanged, compact }: GoogleVersionBodyProps): React.JSX.Element {
   const router = useRouter();
   const toast = useToast();
   const [isPending, startTransition] = useTransition();
@@ -136,6 +148,7 @@ function GoogleVersionBody({ version, timezone, controls }: GoogleVersionBodyPro
           return;
         }
         onSuccess(result);
+        onChanged?.();
         router.refresh();
       } catch {
         // A thrown server action reaches the browser as technical text: never show it.
@@ -238,7 +251,7 @@ function GoogleVersionBody({ version, timezone, controls }: GoogleVersionBodyPro
         )}
       </div>
 
-      <dl className="grid grid-cols-1 gap-3 text-[13px] sm:grid-cols-2 lg:grid-cols-4">
+      <dl className={compact ? "grid grid-cols-1 gap-3 text-[13px]" : "grid grid-cols-1 gap-3 text-[13px] sm:grid-cols-2 lg:grid-cols-4"}>
         <div className="flex flex-col gap-0.5">
           <dt className="eyebrow text-[var(--c-ink-3)]">Type</dt>
           <dd className="text-[var(--c-ink)]">
