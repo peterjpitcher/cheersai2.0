@@ -9,7 +9,8 @@
  * the version always follows the parent. At send time the parent decides:
  * trashed, missing or back to draft: skipped; moved later: left pending;
  * failed on Facebook or posted: sent anyway (Google is independent). More than
- * 24 hours late (a cron outage) or an EVENT whose end has passed: skipped.
+ * 24 hours late (a cron outage) or an event whose end has passed (the EVENT
+ * post and its standard reminders alike): skipped.
  *
  * Every check (parent, switch, connection, destination, wording, token, image)
  * runs BEFORE the claim, and the claim is made immediately before the request,
@@ -296,7 +297,8 @@ export function decideFromParent(row: GoogleVersionRow, parent: ParentRow | null
   const scheduled = Date.parse(parent.scheduled_for);
   if (scheduled > nowMs) return { due: false, skip: null };
   if (nowMs - scheduled > LATE_LIMIT_MS) return { due: false, skip: "too_late" };
-  if (row.topic_type === "EVENT" && row.event_end && Date.parse(row.event_end) <= nowMs) return { due: false, skip: "event_over" };
+  // An EVENT post, or a standard reminder of an event (which keeps the event's end), is never sent after the event.
+  if (row.event_end && Date.parse(row.event_end) <= nowMs) return { due: false, skip: "event_over" };
   return { due: true };
 }
 

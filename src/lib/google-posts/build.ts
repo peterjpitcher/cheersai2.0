@@ -240,6 +240,8 @@ export function buildGoogleVersion(input: BuildInput): BuildResult {
 
   // A later post of the event: a reminder, sent as a standard post with the
   // event's button. No event key, so the one-per-event index never sees it.
+  // It keeps the event's end (and nothing else of the event), so the sender
+  // can still refuse to send it once the event has finished.
   if (!input.isFirstEventPost) {
     return {
       ok: true,
@@ -251,7 +253,7 @@ export function buildGoogleVersion(input: BuildInput): BuildResult {
         cta_url: ctaUrl,
         event_title: null,
         event_start: null,
-        event_end: null,
+        event_end: end?.isValid ? (end.toUTC().toISO() ?? null) : null,
       },
     };
   }

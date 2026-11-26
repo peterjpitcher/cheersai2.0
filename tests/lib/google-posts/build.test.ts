@@ -128,9 +128,10 @@ describe('buildGoogleVersion: events', () => {
       cta_url: 'https://l.example.com/quiz-g',
       event_title: null,
       event_start: null,
-      event_end: null,
       state: 'pending',
     });
+    // The event's end is kept so the sender can refuse a reminder after the event.
+    expect(result.ok && result.row.event_end).toBe(new Date(stored.eventEnd).toISOString());
   });
 
   it('gives a later post nothing once the event has finished', () => {

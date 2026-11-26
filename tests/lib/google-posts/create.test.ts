@@ -129,6 +129,8 @@ describe('event campaigns: one event post, then standard reminders (D13)', () =>
     expect(versions().find((row) => row.content_item_id === later)).toMatchObject({
       topic_type: 'STANDARD',
       event_title: null,
+      event_start: null,
+      event_end: '2026-11-21T23:00:00.000Z',
       cta_type: 'BOOK',
       cta_url: 'https://l.example.com/bingo',
       source_event_key: null,
