@@ -5,6 +5,7 @@ Owner approval: 17 October 2026, on `tasks/REVIEW-social-calendar-2026-10-17.md`
 ## Decisions
 
 ### Order rule
+- Replaced on 26 November 2026 by `tasks/SPEC-next-event-only.md`: the window now opens the day after the event before it, whatever its type. The lines below are the rule as it was.
 - An event's promotion window opens at 00:00 London on the day after the last event of the same type.
 - "Type" is the events system's category (slug). A themed one-off in that category counts. A cancelled event counts as the last of its type.
 - Events typed by hand in the wizard have no category, so the rule cannot apply to them.

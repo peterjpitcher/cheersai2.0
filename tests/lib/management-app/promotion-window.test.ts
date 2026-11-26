@@ -21,34 +21,37 @@ const events: WindowEvent[] = [
 ];
 
 describe('promotionWindowFrom', () => {
-  it('opens the day after the last event of the same type', () => {
+  it('opens the day after the event before it, whatever its type', () => {
+    // Next event only (26 November 2026): music bingo on 11 December waits for
+    // the cash bingo on 18 November, not just for the last music bingo.
     expect(promotionWindowFrom(events, { eventId: 'mb-dec', eventDate: '2026-12-11', categorySlug: 'music-bingo', categoryName: 'Music Bingo' })).toEqual({
-      opensOn: '2026-11-14',
-      afterEvent: 'Sequins & Showstoppers',
-      afterDate: '2026-11-13',
-      category: 'Music Bingo',
+      opensOn: '2026-11-19',
+      afterEvent: 'Snowball Showdown',
+      afterDate: '2026-11-18',
+      category: 'Cash Bingo',
     });
   });
 
-  it('ignores other types, the event itself and later events', () => {
-    const window = promotionWindowFrom(events, { eventId: 'mb-nov', eventDate: '2026-11-13', categorySlug: 'music-bingo' });
+  it('ignores the event itself, events on the same day and later events', () => {
+    const sameDay: WindowEvent = { id: 'quiz-nov', name: 'Quiz', date: '2026-11-13', categorySlug: 'quiz' };
+    const window = promotionWindowFrom([...events, sameDay], { eventId: 'mb-nov', eventDate: '2026-11-13', categorySlug: 'music-bingo' });
     expect(window?.afterEvent).toBe('Monster Mash');
     expect(window?.opensOn).toBe('2026-10-17');
   });
 
-  it('matches on the category name when there is no slug', () => {
-    expect(promotionWindowFrom(events, { eventDate: '2026-12-16', categoryName: 'cash bingo' })?.opensOn).toBe('2026-11-19');
+  it('applies to an event with no category', () => {
+    expect(promotionWindowFrom(events, { eventDate: '2026-12-16' })?.opensOn).toBe('2026-11-19');
   });
 
-  it('counts a cancelled event as the last of its type', () => {
+  it('counts a cancelled event as the event before', () => {
     // Detention Disco was cancelled; it still closes the window for the next one.
     expect(promotionWindowFrom(events, { eventDate: '2026-10-16', categorySlug: 'music-bingo' })?.afterEvent).toBe('Detention Disco');
   });
 
-  it('cannot apply without a category, a valid date, or an earlier event', () => {
-    expect(promotionWindowFrom(events, { eventDate: '2026-12-11' })).toBeNull();
+  it('cannot apply without a valid date or an earlier event', () => {
     expect(promotionWindowFrom(events, { eventDate: 'soon', categorySlug: 'music-bingo' })).toBeNull();
-    expect(promotionWindowFrom(events, { eventDate: '2026-11-20', categorySlug: 'tasting-nights' })).toBeNull();
+    expect(promotionWindowFrom(events, { eventDate: '2026-09-11', categorySlug: 'music-bingo' })).toBeNull();
+    expect(promotionWindowFrom([{ id: 'x', name: 'No date', date: null }], { eventDate: '2026-12-11' })).toBeNull();
   });
 
   it('opens on the right London day across the October clock change', () => {
@@ -72,7 +75,7 @@ describe('the window in use', () => {
 
   it('tells the owner why, in plain words', () => {
     expect(promotionWindowMessage('Sleigh My Name', window)).toBe(
-      'Sleigh My Name can be promoted from Saturday 14th November, after the last Music Bingo (Sequins & Showstoppers) on Friday 13th November.',
+      'Sleigh My Name can be promoted from Saturday 14th November, after Sequins & Showstoppers on Friday 13th November.',
     );
   });
 });
@@ -86,14 +89,17 @@ describe('loadPromotionWindow', () => {
     const window = await loadPromotionWindow(config, { eventId: 'mb-dec', eventDate: '2026-12-11', categorySlug: 'music-bingo' });
 
     expect(listManagementEvents).toHaveBeenCalledWith(config, { fromDate: '2026-08-13', toDate: '2026-12-10', limit: 100 });
-    expect(window?.opensOn).toBe('2026-11-14');
+    expect(window?.opensOn).toBe('2026-11-19');
   });
 
-  it('does not call the events system for an event with no category', async () => {
+  it('looks up an event with no category too, and none with a date that is not a date', async () => {
     listManagementEvents.mockClear();
+    listManagementEvents.mockResolvedValueOnce(events);
     const { loadPromotionWindow } = await import('@/lib/management-app/promotion-window-loader');
-    expect(await loadPromotionWindow({ baseUrl: 'https://management.example', apiKey: 'test' }, { eventDate: '2026-12-11' })).toBeNull();
-    expect(listManagementEvents).not.toHaveBeenCalled();
+    const config = { baseUrl: 'https://management.example', apiKey: 'test' };
+    expect((await loadPromotionWindow(config, { eventDate: '2026-12-11' }))?.opensOn).toBe('2026-11-19');
+    expect(await loadPromotionWindow(config, { eventDate: 'soon' })).toBeNull();
+    expect(listManagementEvents).toHaveBeenCalledTimes(1);
   });
 });
 

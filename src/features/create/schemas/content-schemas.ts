@@ -181,8 +181,8 @@ export const eventBriefSchema = baseContentSchema.extend({
    */
   facts: eventFactSheetSchema.optional(),
   /**
-   * When posts may start: the day after the last event of the same type in the
-   * events system (tasks/SPEC-social-calendar-fill.md). Set on import.
+   * When posts may start: the day after the event before this one in the
+   * events system (tasks/SPEC-next-event-only.md). Set on import.
    */
   promotionWindow: z
     .object({

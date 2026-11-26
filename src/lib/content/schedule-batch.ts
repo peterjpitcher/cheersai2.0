@@ -199,7 +199,7 @@ export function validateScheduleBatch({
   }
 
   // The event-order rule (tasks/SPEC-social-calendar-fill.md): no post before
-  // the last event of the same type has finished. Checked before any write.
+  // the event before this one has finished. Checked before any write.
   const parsedBrief = briefValidation.data;
   if (parsedBrief.contentType === 'event' && parsedBrief.promotionWindow) {
     const window = parsedBrief.promotionWindow;

@@ -4,20 +4,20 @@ import { DEFAULT_TIMEZONE } from '@/lib/constants';
 import { formatEventDateLong } from '@/lib/utils/date';
 
 /**
- * When an event's promotion may start (tasks/SPEC-social-calendar-fill.md): the
- * day after the last event of the same type, so two nights of one series (the
- * monthly quiz, cash bingo or music bingo) are never promoted at the same time.
- * The type is the events system's category; a themed one-off in that category
- * counts, and so does a cancelled event. Pure, so the wizard can use it too.
+ * When an event's promotion may start (tasks/SPEC-next-event-only.md): the day
+ * after the event before it, whatever its type, so the posts point at one
+ * event at a time: the next one. It replaces the 17 October 2026 rule, which
+ * only held back two nights of one series (same category). A cancelled event
+ * still counts as the event before. Pure, so the wizard can use it too.
  */
 export interface PromotionWindow {
   /** London date (YYYY-MM-DD) from which posts may go out. */
   opensOn: string;
-  /** The last event of the same type, which has to finish first. */
+  /** The event before this one, which has to finish first. */
   afterEvent: string;
   /** Its London date (YYYY-MM-DD). */
   afterDate: string;
-  /** The type, as the events system names it (for example "Music Bingo"). */
+  /** The earlier event's type, as the events system names it (for example "Music Bingo"); kept for posts stored under the old rule. */
   category: string;
 }
 
@@ -37,19 +37,16 @@ export interface WindowTarget {
   categoryName?: string | null;
 }
 
-const normalise = (value: string | null | undefined): string => value?.trim().toLowerCase() ?? '';
-
-/** The window for one event, from the events before it; null when the rule cannot apply. */
+/** The window for one event, from the events before it; null when there is no earlier event. */
 export function promotionWindowFrom(events: WindowEvent[], target: WindowTarget): PromotionWindow | null {
-  const slug = normalise(target.categorySlug);
-  const name = normalise(target.categoryName);
-  if ((!slug && !name) || !/^\d{4}-\d{2}-\d{2}$/.test(target.eventDate)) return null;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(target.eventDate)) return null;
 
-  const sameType = (event: WindowEvent): boolean =>
-    slug ? normalise(event.categorySlug) === slug : normalise(event.categoryName) === name;
+  // Any earlier event counts, not only one of the same type. Both dates are
+  // YYYY-MM-DD London dates, so comparing the strings compares the days; an
+  // event on the same day does not hold this one back.
   const earlier = events.filter(
     (event): event is WindowEvent & { date: string } =>
-      event.id !== target.eventId && typeof event.date === 'string' && event.date < target.eventDate && sameType(event),
+      event.id !== target.eventId && typeof event.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(event.date) && event.date < target.eventDate,
   );
   if (!earlier.length) return null;
 
@@ -58,9 +55,9 @@ export function promotionWindowFrom(events: WindowEvent[], target: WindowTarget)
   if (!opensOn) return null;
   return {
     opensOn,
-    afterEvent: last.name?.trim() || 'the last one',
+    afterEvent: last.name?.trim() || 'the event before it',
     afterDate: last.date,
-    category: target.categoryName?.trim() || last.categoryName?.trim() || 'event of its type',
+    category: last.categoryName?.trim() || 'event',
   };
 }
 
@@ -71,7 +68,7 @@ export function beforePromotionWindow(londonDate: string, window: PromotionWindo
 
 /** The reason a date before the window is refused, in the owner's words. */
 export function promotionWindowMessage(eventName: string, window: PromotionWindow): string {
-  return `${eventName} can be promoted from ${formatEventDateLong(window.opensOn)}, after the last ${window.category} (${window.afterEvent}) on ${formatEventDateLong(window.afterDate)}.`;
+  return `${eventName} can be promoted from ${formatEventDateLong(window.opensOn)}, after ${window.afterEvent} on ${formatEventDateLong(window.afterDate)}.`;
 }
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;

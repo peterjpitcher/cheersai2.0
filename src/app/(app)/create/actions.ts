@@ -216,10 +216,10 @@ export async function getManagementEventPrefill(
     });
 
     const mapped = mapManagementEventToEventCampaignPrefill(detail);
-    // Posts may start only after the last event of the same type has finished
-    // (tasks/SPEC-social-calendar-fill.md). The rule fails closed: an event
+    // Posts may start only after the event before this one has finished
+    // (tasks/SPEC-next-event-only.md). The rule fails closed: an event
     // whose window cannot be looked up is not imported, because importing it
-    // without one would let its posts start before the last event of its type.
+    // without one would let its posts start before the event ahead of it is over.
     let promotionWindow: PromotionWindow | null = null;
     try {
       promotionWindow = await loadPromotionWindow(config, {

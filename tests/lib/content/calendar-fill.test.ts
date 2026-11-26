@@ -188,24 +188,21 @@ describe('decideCalendar: empty days', () => {
     expect(decision.venue.map((entry) => [entry.slot.date, entry.subject])).toEqual([['2026-11-27', 'roast']]);
   });
 
-  it('builds up the soonest event that is open for promotion and has had no post in the two days before', () => {
+  it('builds up the next event when it has had no post in the two days before, and never the event after it', () => {
+    // Next event only: on 29 November the quiz on 2 December is the only event
+    // open for promotion; Sleigh on 11 December opens the day after the quiz.
     const events = [
       ...quizEvents,
-      // The last tasting night is on the 29th, so the next one cannot be promoted that day.
-      event('t-1', 'Autumn Tasting', '2026-11-29', 'Tasting'),
-      event('t-2', 'Winter Tasting', '2026-11-30', 'Tasting'),
       event('mb-nov', 'Sequins', '2026-11-13', 'Music Bingo'),
       event('mb-dec', 'Sleigh', '2026-12-11', 'Music Bingo'),
     ];
-    const posts = [
-      ...slot('2026-11-20 11:00', { campaignId: 'c-autumn', eventName: 'Autumn Tasting', eventDate: '2026-11-29' }),
-      ...slot('2026-11-25 11:00', { campaignId: 'c-tasting', eventName: 'Winter Tasting', eventDate: '2026-11-30' }),
-      ...trivia('2026-11-28 07:00'),
-      ...slot('2026-11-22 11:00', { campaignId: 'c-sleigh', eventName: 'Sleigh', eventDate: '2026-12-11' }),
-    ];
-    const decision = decide({ from: '2026-11-29', to: '2026-11-29', posts, events });
+    const sleigh = slot('2026-11-22 11:00', { campaignId: 'c-sleigh', eventName: 'Sleigh', eventDate: '2026-12-11' });
 
-    expect(decision.buildUps.map((entry) => entry.event.name)).toEqual(['Sleigh']);
+    const rested = decide({ from: '2026-11-29', to: '2026-11-29', posts: [...trivia('2026-11-25 11:00'), ...sleigh], events });
+    expect(rested.buildUps.map((entry) => entry.event.name)).toEqual(['Tinsel & Trivia']);
+
+    const justPosted = decide({ from: '2026-11-29', to: '2026-11-29', posts: [...trivia('2026-11-28 07:00'), ...sleigh], events });
+    expect(justPosted.buildUps).toEqual([]);
   });
 
   it('counts a published post as filling its day, and its photo as used', () => {
@@ -254,24 +251,26 @@ describe('decideCalendar: new campaigns', () => {
     const posts = [
       ...slot('2026-11-13 07:00', { campaignId: 'c-sequins', eventName: 'Sequins', eventDate: '2026-11-13' }),
       ...slot('2026-11-20 07:00', { campaignId: 'c-tipples', eventName: 'Tinsel & Tipples', eventDate: '2026-11-20' }),
+      // A busy day inside the window, so the weekly post due then has to move.
+      ...slot('2026-11-27 07:00', { campaignId: 'c-other', eventName: 'Sequins', eventDate: '2026-11-13' }),
     ];
     const decision = decide({ from: '2026-11-14', to: '2026-12-02', posts, events });
 
     expect(decision.newCampaigns).toHaveLength(1);
     const campaign = decision.newCampaigns[0];
     expect(campaign.event.name).toBe('Sleigh My Name');
-    expect(campaign.window?.opensOn).toBe('2026-11-14');
+    expect(campaign.window?.opensOn).toBe('2026-11-21');
     const cadence = campaign.slots.filter((entry) => entry.kind !== 'build_up');
     expect(cadence.map((entry) => [entry.date, londonTime(entry.scheduledAt), entry.label])).toEqual([
-      ['2026-11-19', '11:00', '3 weeks to go'],
-      ['2026-11-27', '11:00', '2 weeks to go'],
+      // "3 weeks to go" would be 20 November, before the window opens on the 21st, so it is dropped.
+      ['2026-11-26', '11:00', '2 weeks to go'],
       ['2026-12-04', '11:00', 'A week to go'],
       ['2026-12-09', '11:00', '2 days to go'],
       ['2026-12-10', '11:00', '1 day to go'],
       ['2026-12-11', '07:00', 'Event day'],
     ]);
-    expect(cadence[0].note).toBe('Moved from Fri 20 Nov, which already has a post.');
-    expect(campaign.slots.every((entry) => entry.date >= '2026-11-14')).toBe(true);
+    expect(cadence[0].note).toBe('Moved from Fri 27 Nov, which already has a post.');
+    expect(campaign.slots.every((entry) => entry.date >= '2026-11-21')).toBe(true);
   });
 
   it('adds no campaign when none of its posts would fall in the period', () => {
@@ -299,7 +298,7 @@ describe('decideCalendar: new campaigns', () => {
       posts: slot('2026-11-10 11:00', { campaignId: 'c-sleigh', eventName: 'Sleigh My Name', eventDate: '2026-12-11' }),
     });
 
-    expect(decision.ruleBreaks).toEqual([{ campaignName: 'Sleigh My Name', date: '2026-11-10', opensOn: '2026-11-14', afterEvent: 'Sequins' }]);
+    expect(decision.ruleBreaks).toEqual([{ campaignName: 'Sleigh My Name', date: '2026-11-10', opensOn: '2026-11-21', afterEvent: 'Tinsel & Tipples' }]);
   });
 });
 

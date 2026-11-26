@@ -42,7 +42,7 @@ interface EventPrefillResult {
     facts?: EventFactSheet;
     /** A starting tone for this kind of event, when the category suggests one. */
     suggestedTone?: CopyTone;
-    /** When posts may start: after the last event of the same type (set by the import action). */
+    /** When posts may start: after the event before this one (set by the import action). */
     promotionWindow?: PromotionWindow;
   };
   sourceLabel: string;

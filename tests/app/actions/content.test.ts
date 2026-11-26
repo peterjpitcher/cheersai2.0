@@ -670,7 +670,7 @@ describe('createScheduledBatch', () => {
     });
 
     expect(result).toEqual({
-      error: 'Sleigh My Name can be promoted from Saturday 14th November, after the last Music Bingo (Sequins & Showstoppers) on Friday 13th November.',
+      error: 'Sleigh My Name can be promoted from Saturday 14th November, after Sequins & Showstoppers on Friday 13th November.',
     });
     expect(supabaseMock.calls.some((call) => call.method === 'insert')).toBe(false);
     expect(enqueueAndDispatch).not.toHaveBeenCalled();
