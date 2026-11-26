@@ -44,6 +44,12 @@ describe('checking an AI draft of Google wording', () => {
     ['a price that is not in the Facebook post', GOOD.replace('£3', '£5'), 'new_number'],
     ['a time that is not in the Facebook post', GOOD.replace('7pm', '8pm'), 'new_number'],
     ['a time written another way', GOOD.replace('6:30pm', '18:30'), 'new_number'],
+    // A number that is in the Facebook post, but as something else: 7 is a time there, never a price.
+    ['a price made from a number that is only a time in the Facebook post', GOOD.replace('£3', '£7'), 'new_number'],
+    ['a time moved from evening to morning', GOOD.replace('7pm', '7am'), 'new_number'],
+    ['a time that has lost its am or pm', GOOD.replace('from 7pm to 9:30pm', 'from 7 to 9:30pm'), 'new_number'],
+    ['a price that has lost its pound sign into a time', GOOD.replace('6:30pm', '3pm'), 'new_number'],
+    ['a percentage that is not in the Facebook post', `${GOOD} Save 3% when you book.`, 'new_number'],
     ['a day that is not in the Facebook post', GOOD.replace('Wednesday', 'Thursday'), 'new_date_word'],
     ['a month that is not in the Facebook post', GOOD.replace('December', 'January'), 'new_date_word'],
     ['"tonight" when the Facebook post does not say it', `${GOOD} Join us tonight.`, 'new_date_word'],
@@ -67,6 +73,11 @@ describe('checking an AI draft of Google wording', () => {
       ok: false,
       reason: 'new_number',
     });
+  });
+
+  it('reads a price or a time the same however it is spaced or capitalised', () => {
+    const spaced = input({ facebookCopy: FACEBOOK.replace('7pm to 9:30pm', '7 PM to 9:30 PM').replace('£3', '£ 3') });
+    expect(checkGoogleWording(GOOD, spaced).ok).toBe(true);
   });
 
   it('does not treat the ordinary word "may" as a month', () => {

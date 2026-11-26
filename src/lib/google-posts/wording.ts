@@ -9,8 +9,9 @@
  * longer re-derives it from the Facebook post.
  *
  * The AI may only re-say what the Facebook copy says. checkGoogleWording()
- * refuses a draft that contains a number, a price, a time, a day, a month or
- * the word "free" that is not in the Facebook copy or the event details, a
+ * refuses a draft that contains a number, a price, a time (each compared whole,
+ * with its currency sign or am/pm), a day, a month or the word "free" that is
+ * not in the Facebook copy or the event details, a
  * banned phrase, or wording the copy rules would hold (a drinks price offer).
  * A refused draft is tried again on a later run; after MAX_WORDING_ATTEMPTS
  * refusals the post goes back to following the Facebook wording
@@ -119,9 +120,20 @@ const CALENDAR_WORDS = [
   "today", "tonight", "tomorrow", "weekend", "midnight", "noon", "midday",
 ] as const;
 
-/** Every run of digits (with a decimal or clock part), so "£5", "7pm", "6:30pm" and "11th" give 5, 7, 6:30 and 11. */
+/**
+ * Every number in the text WITH what makes it a price or a time: a currency
+ * sign in front, and "am", "pm", "p" or "%" behind. So "£5", "7pm", "6:30pm",
+ * "11th" and "20%" give "£5", "7pm", "6:30pm", "11" and "20%". A draft's
+ * tokens must each match one of the source's exactly, so "£7" is not excused
+ * by a "7pm" in the source, and "7am" is not excused by "7pm".
+ */
 function numberTokens(text: string): string[] {
-  return (text.match(/\d+(?:[.:]\d+)?/g) ?? []).map((token) => token.replace(/^0+(?=\d)/, ""));
+  const tokens: string[] = [];
+  for (const match of text.toLowerCase().matchAll(/([£$€])?\s?(\d+(?:[.:]\d+)?)\s?(am|pm|p\b|%)?/g)) {
+    const [, currency = "", digits, unit = ""] = match;
+    tokens.push(`${currency}${digits.replace(/^0+(?=\d)/, "")}${unit}`);
+  }
+  return tokens;
 }
 
 function wordSet(text: string): Set<string> {
