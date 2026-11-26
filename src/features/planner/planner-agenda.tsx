@@ -1,7 +1,6 @@
 'use client';
 
 import { useCallback, useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { DateTime } from 'luxon';
 import { ChevronRight } from 'lucide-react';
 
@@ -11,7 +10,8 @@ import type { ContentItem, ContentStatus, Platform } from '@/types/content';
 import type { CalendarDisplayItem } from '@/features/planner/calendar-cell';
 import { getDisplayTitle } from '@/lib/content/display-helpers';
 import { PostDrawer } from '@/features/planner/post-drawer';
-import { googlePostHrefForTile, isGoogleTile, placeGoogleTiles, type ChannelKey } from '@/lib/google-posts/tile';
+import { GooglePostDrawer } from '@/features/planner/google-post-drawer';
+import { googlePostIdForTile, isGoogleTile, placeGoogleTiles, type ChannelKey } from '@/lib/google-posts/tile';
 import { PlatformDot } from '@/components/ui/platform-dot';
 import { Status, type DesignStatus } from '@/components/ui/status';
 import { Button } from '@/components/ui/button';
@@ -106,7 +106,6 @@ export function PlannerAgenda({
   statusFilter = [],
   platformFilter = [],
 }: PlannerAgendaProps): React.JSX.Element {
-  const router = useRouter();
   const now = useMemo(() => DateTime.now().setZone(DEFAULT_TIMEZONE), []);
 
   const referenceMonth = useMemo(() => {
@@ -128,16 +127,20 @@ export function PlannerAgenda({
   const [drawerContentId, setDrawerContentId] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
 
+  // A Google post has its own drawer; the post drawer only reads content items.
+  const [googleDrawerId, setGoogleDrawerId] = useState<string | null>(null);
+  const [googleDrawerOpen, setGoogleDrawerOpen] = useState(false);
+
   const handleItemClick = useCallback((id: string) => {
-    // A Google post has its own page; the drawer only reads content items.
-    const googleHref = googlePostHrefForTile(id);
-    if (googleHref) {
-      router.push(googleHref);
+    const googlePostId = googlePostIdForTile(id);
+    if (googlePostId) {
+      setGoogleDrawerId(googlePostId);
+      setGoogleDrawerOpen(true);
       return;
     }
     setDrawerContentId(id);
     setDrawerOpen(true);
-  }, [router]);
+  }, []);
 
   // Merge, filter, and group items by day
   const dayGroups = useMemo<DayGroup[]>(() => {
@@ -404,6 +407,9 @@ export function PlannerAgenda({
         open={drawerOpen}
         onOpenChange={setDrawerOpen}
       />
+
+      {/* Google post drawer: the same click as a Facebook or Instagram tile */}
+      <GooglePostDrawer googlePostId={googleDrawerId} open={googleDrawerOpen} onOpenChange={setGoogleDrawerOpen} />
     </div>
   );
 }

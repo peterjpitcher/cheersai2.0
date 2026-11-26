@@ -1,7 +1,6 @@
 'use client';
 
 import { startTransition, useCallback, useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { DateTime } from 'luxon';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 
@@ -12,7 +11,8 @@ import type { ContentItem, ContentStatus, Platform } from '@/types/content';
 import { CalendarCell, type CalendarDisplayItem } from '@/features/planner/calendar-cell';
 import { StatusFilters } from '@/features/planner/status-filters';
 import { PostDrawer } from '@/features/planner/post-drawer';
-import { googlePostHrefForTile, placeGoogleTiles } from '@/lib/google-posts/tile';
+import { GooglePostDrawer } from '@/features/planner/google-post-drawer';
+import { googlePostIdForTile, placeGoogleTiles } from '@/lib/google-posts/tile';
 import { Button } from '@/components/ui/button';
 
 /** Weekday headers (Monday-first per ISO) */
@@ -48,7 +48,6 @@ export function PlannerCalendar({
   initialStatus,
   onMonthChange,
 }: PlannerCalendarProps): React.JSX.Element {
-  const router = useRouter();
   const now = useMemo(() => DateTime.now().setZone(DEFAULT_TIMEZONE), []);
 
   const referenceMonth = useMemo(() => {
@@ -88,16 +87,20 @@ export function PlannerCalendar({
     });
   }, []);
 
+  // A Google post has its own drawer; the post drawer only reads content items.
+  const [googleDrawerId, setGoogleDrawerId] = useState<string | null>(null);
+  const [googleDrawerOpen, setGoogleDrawerOpen] = useState(false);
+
   const handleItemClick = useCallback((id: string) => {
-    // A Google post has its own page; the drawer only reads content items.
-    const googleHref = googlePostHrefForTile(id);
-    if (googleHref) {
-      router.push(googleHref);
+    const googlePostId = googlePostIdForTile(id);
+    if (googlePostId) {
+      setGoogleDrawerId(googlePostId);
+      setGoogleDrawerOpen(true);
       return;
     }
     setDrawerContentId(id);
     setDrawerOpen(true);
-  }, [router]);
+  }, []);
 
   // Merge and filter items
   const allDisplayItems = useMemo<CalendarDisplayItem[]>(() => {
@@ -302,6 +305,9 @@ export function PlannerCalendar({
         open={drawerOpen}
         onOpenChange={setDrawerOpen}
       />
+
+      {/* Google post drawer: the same click as a Facebook or Instagram tile */}
+      <GooglePostDrawer googlePostId={googleDrawerId} open={googleDrawerOpen} onOpenChange={setGoogleDrawerOpen} />
     </div>
   );
 }

@@ -29,6 +29,8 @@ interface GoogleTimeFormProps {
   canMove: boolean;
   timezone: string;
   timezoneLabel: string;
+  /** Called after the time is saved, so a caller holding its own copy (the planner drawer) can re-read it. */
+  onChanged?: () => void;
 }
 
 export function GoogleTimeForm({
@@ -38,6 +40,7 @@ export function GoogleTimeForm({
   canMove,
   timezone,
   timezoneLabel,
+  onChanged,
 }: GoogleTimeFormProps): React.JSX.Element {
   const router = useRouter();
   const toast = useToast();
@@ -62,6 +65,7 @@ export function GoogleTimeForm({
           return;
         }
         toast.success(done);
+        onChanged?.();
         router.refresh();
       } catch {
         setError("Please try again.");

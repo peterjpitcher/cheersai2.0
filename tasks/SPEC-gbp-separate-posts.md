@@ -37,6 +37,16 @@ Known limit, told to Peter: a Google post still takes its image from the Faceboo
 - Planner: a Google tile per Google post in the calendar and the agenda (`src/lib/google-posts/tile.ts`, `planner-tiles.ts`), with the Facebook post's thumbnail, and a page at `/planner/google/[id]` with the picture, the time form and the existing Google section (wording, state, link, edit, release, skip, retry). A skipped Google post has no tile. The Facebook and Instagram platform filter hides Google tiles while it is on. A reminder also keeps the event's end so it is never sent after the event (review finding on PR #240).
 - Rollback: revert the application; the column can stay.
 
+### Piece 4: a Google tile opens a drawer (no schema change)
+
+Peter, 26 November 2026: "When I click on a Facebook or Instagram post in the UI, it pops a draw, but when I click on a GBP post, it takes me to another page", then "Yes, use the drawer". Piece 2 sent a Google tile to its own page only because the post drawer reads content items.
+
+- `src/features/planner/google-post-drawer.tsx`: the same sheet as the post drawer, opened from the calendar and the agenda, showing the picture, when it goes out (with the time form), the Google section (wording, state, buttons) and links to the Facebook post and to the full page.
+- One reader for both the drawer and the page, `src/lib/google-posts/post-detail.ts`, behind the `loadGooglePostDetail` action, so they can never show different things. It reads for the active brand only and returns nothing for another brand's post or with the switch off.
+- The Google section and the time form take `onChanged`, so the drawer re-reads the post after a change; the section has a `compact` layout for the drawer's width.
+- The page `/planner/google/[id]` stays, one link away.
+- Rollback: revert the commit; tiles go back to opening the page.
+
 ### Piece 3: wording written for Google (one migration)
 
 Migration applied to production on 26 November 2026 as `20261126113907_gbp_posts_google_wording` (11 rows left `awaiting_ai`, 4 marked `facebook`). Trialled the same day on four of the real reminder posts, read only: every draft passed the checks in 2 to 4 seconds.

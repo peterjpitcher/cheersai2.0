@@ -4,8 +4,9 @@
  * A Google post is shown as its own tile beside the Facebook and Instagram
  * ones. It is not a content item, so the tile is a ContentItem-shaped object
  * carrying `googlePostId`, and the content `Platform` type stays Facebook and
- * Instagram only. Clicking it opens the Google post's own page, never the
- * post drawer (which reads content items).
+ * Instagram only. Clicking it opens the Google post drawer
+ * (src/features/planner/google-post-drawer.tsx), never the post drawer, which
+ * reads content items.
  *
  * Pure and browser-safe.
  */
@@ -20,6 +21,12 @@ const GOOGLE_TILE_PREFIX = 'google:';
 /** The id a Google tile is clicked with, so it can never be mistaken for a content item's id. */
 export function googleTileId(googlePostId: string): string {
   return `${GOOGLE_TILE_PREFIX}${googlePostId}`;
+}
+
+/** The Google post's id for a tile id made by googleTileId, or null for any other id. */
+export function googlePostIdForTile(tileId: string): string | null {
+  if (!tileId.startsWith(GOOGLE_TILE_PREFIX)) return null;
+  return tileId.slice(GOOGLE_TILE_PREFIX.length) || null;
 }
 
 /** The Google post's page for a tile id made by googleTileId, or null for any other id. */

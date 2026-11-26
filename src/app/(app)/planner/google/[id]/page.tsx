@@ -9,12 +9,7 @@ import { MediaFrameImage } from "@/components/media/media-frame";
 import { PlatformDot } from "@/components/ui/platform-dot";
 import { Button } from "@/components/ui/button";
 import { requireAuthContext } from "@/lib/auth/server";
-import { activeBrandHasGooglePosts } from "@/lib/connections/google-access";
-import { DEFAULT_TIMEZONE } from "@/lib/constants";
-import { getGoogleVersionById } from "@/lib/google-posts/data";
-import { readGooglePostSection, type GooglePostSection } from "@/lib/google-posts/post-section";
-import { getPlannerContentDetail } from "@/lib/planner/data";
-import { getOwnerSettings } from "@/lib/settings/data";
+import { readGooglePostDetail } from "@/lib/google-posts/post-detail";
 
 /**
  * A Google post's own page (tasks/SPEC-gbp-separate-posts.md, decisions D14
@@ -29,42 +24,18 @@ import { getOwnerSettings } from "@/lib/settings/data";
 
 export const dynamic = "force-dynamic";
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
 export default async function GooglePostPage({
   params,
 }: { params: Promise<{ id: string }> }): Promise<React.JSX.Element> {
   const { id } = await params;
-  if (!UUID.test(id)) notFound();
-
   const ctx = await requireAuthContext();
-  if (!activeBrandHasGooglePosts(ctx)) notFound();
+  const detail = await readGooglePostDetail(ctx, id);
+  if (!detail) notFound();
 
-  const version = await getGoogleVersionById(ctx.supabase, ctx.accountId, id);
-  if (!version) notFound();
-
-  // The Facebook post it was made from: its picture, its time and its wording.
-  // It can be missing (binned), in which case the Google post is shown alone.
-  const parent = await getPlannerContentDetail(version.contentItemId);
-  const ownerSettings = await getOwnerSettings();
-  const timezone = ownerSettings.posting.timezone ?? DEFAULT_TIMEZONE;
-  const timezoneLabel = timezone.replace(/_/g, " ");
-
-  // With the Facebook post to hand, the section shows the wording Google will
-  // get as it stands now; without it, what is stored.
-  const section: GooglePostSection = parent
-    ? await readGooglePostSection(ctx, {
-        id: parent.id,
-        platform: parent.platform,
-        placement: parent.placement,
-        body: parent.body,
-      })
-    : { kind: "ready", version };
-
-  const currentTime = version.ownTime ?? parent?.scheduledFor ?? null;
+  const { version, section, title, currentTime, imageUrl, parentId, timezone, timezoneLabel } = detail;
   const when = currentTime ? DateTime.fromISO(currentTime, { zone: "utc" }).setZone(timezone) : null;
-  const image = parent?.media.find((media) => media.mediaType === "image") ?? null;
-  const title = version.eventTitle ?? parent?.campaign?.name ?? "Google post";
+  const image = imageUrl ? { url: imageUrl } : null;
+  const parent = parentId ? { id: parentId } : null;
 
   return (
     <div className="flex h-full flex-col gap-6 font-sans text-[var(--c-ink)]">
@@ -145,7 +116,7 @@ export default async function GooglePostPage({
         </div>
       </section>
 
-      {section.kind !== "hidden" && <GoogleVersionSection section={section} timezone={timezone} />}
+      <GoogleVersionSection section={section} timezone={timezone} />
     </div>
   );
 }

@@ -13,6 +13,10 @@ vi.mock("@/features/planner/post-drawer", () => ({
     open ? <div data-testid="drawer">{contentId}</div> : null,
 }));
 vi.mock("next/navigation", () => ({ useRouter: () => router }));
+vi.mock("@/features/planner/google-post-drawer", () => ({
+  GooglePostDrawer: ({ googlePostId, open }: { googlePostId: string | null; open: boolean }) =>
+    open ? <div data-testid="google-drawer">{googlePostId}</div> : null,
+}));
 
 describe("<PlannerCalendar />", () => {
   afterEach(() => {
@@ -43,7 +47,7 @@ describe("<PlannerCalendar />", () => {
     expect(onMonthChange).toHaveBeenCalledWith("2026-06");
   });
 
-  it("shows a Google post as its own tile and opens its page, never the post drawer", () => {
+  it("shows a Google post as its own tile and opens it in the Google drawer, as a Facebook tile opens the post drawer", () => {
     const googleId = "5b0d2d0e-3a1c-4c58-9f0a-2f6a3a0f3c11";
     const tile = toGoogleTile({
       id: googleId,
@@ -59,9 +63,12 @@ describe("<PlannerCalendar />", () => {
 
     // The channel badge names Google, so the tile is told apart from the Facebook and Instagram ones.
     expect(screen.getByLabelText("Channel: Google")).toBeInTheDocument();
+    expect(screen.queryByTestId("google-drawer")).not.toBeInTheDocument();
     fireEvent.click(screen.getAllByText("Quiz Night")[0]);
 
-    expect(router.push).toHaveBeenCalledWith(`/planner/google/${googleId}`);
+    // Same click, same kind of drawer: no navigation, and never the content drawer (it cannot read a Google post).
+    expect(screen.getByTestId("google-drawer")).toHaveTextContent(googleId);
+    expect(router.push).not.toHaveBeenCalled();
     expect(screen.queryByTestId("drawer")).not.toBeInTheDocument();
   });
 
