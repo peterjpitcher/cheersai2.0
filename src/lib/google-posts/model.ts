@@ -17,6 +17,24 @@ export type GoogleVersionState = (typeof GOOGLE_VERSION_STATES)[number];
 export type GoogleTopicType = "STANDARD" | "EVENT";
 export type GoogleCtaType = "BOOK" | "LEARN_MORE";
 
+/**
+ * Where a Google post's wording comes from (D15):
+ * - awaiting_ai: derived from the Facebook post for now; the google-wording cron will write it for Google
+ * - ai: written for Google by the AI, and frozen
+ * - facebook: follows the Facebook post's wording and is never rewritten
+ * - person: edited or released by a person, and frozen
+ */
+export type GoogleWordingSource = "awaiting_ai" | "ai" | "facebook" | "person";
+
+/**
+ * True when the wording no longer follows the Facebook post: a person edited
+ * or released it, or the AI wrote it for Google. The sender, the post page
+ * and release all use this, so they can never disagree.
+ */
+export function wordingIsFrozen(row: { summary_edited_at: string | null; wording_source?: string | null }): boolean {
+  return row.summary_edited_at !== null || row.wording_source === "ai";
+}
+
 /** Why a version is waiting for a person. */
 export type GoogleHoldReason = "alcohol_promotion" | "no_wording";
 
@@ -51,13 +69,17 @@ export interface GoogleVersionRow {
   resend_count: number;
   /** The Google post's own time; null means it goes out at its Facebook post's time (D16). */
   scheduled_for: string | null;
+  /** Where the wording comes from (D15). See GoogleWordingSource. */
+  wording_source: GoogleWordingSource;
+  /** AI drafts tried for this post. */
+  wording_attempts: number;
   created_at: string;
   updated_at: string;
 }
 
 /** Every column the sender, the checks and the read API need. */
 export const GOOGLE_VERSION_COLUMNS =
-  "id, account_id, content_item_id, source_event_key, local_post_parent, google_post_name, search_url, google_state, last_checked_at, next_check_at, check_attempts, last_error, state, hold_reason, topic_type, summary, cta_type, cta_url, event_title, event_start, event_end, attempts, next_attempt_at, claimed_at, sent_at, summary_edited_at, resend_count, scheduled_for, created_at, updated_at";
+  "id, account_id, content_item_id, source_event_key, local_post_parent, google_post_name, search_url, google_state, last_checked_at, next_check_at, check_attempts, last_error, state, hold_reason, topic_type, summary, cta_type, cta_url, event_title, event_start, event_end, attempts, next_attempt_at, claimed_at, sent_at, summary_edited_at, resend_count, scheduled_for, wording_source, wording_attempts, created_at, updated_at";
 
 /** The fields written when a version is created. Matches the migration's NOT NULLs and CHECKs. */
 export interface GoogleVersionInsert {
@@ -134,8 +156,10 @@ export interface GoogleVersionView {
   /** One plain sentence on where the version is. */
   statusLine: string;
   summary: string;
-  /** A person has edited (or released) the wording, so it no longer follows the Facebook post. */
+  /** The wording is frozen (a person edited or released it, or the AI wrote it for Google), so it no longer follows the Facebook post. */
   summaryEdited: boolean;
+  /** Who the wording is by, for the line under it. */
+  wordingSource: GoogleWordingSource;
   topicType: GoogleTopicType;
   eventTitle: string | null;
   eventStart: string | null;

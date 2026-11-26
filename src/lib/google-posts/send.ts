@@ -48,6 +48,7 @@ import {
   type GoogleVersionReason,
   type GoogleVersionRow,
   type GoogleVersionState,
+  wordingIsFrozen,
 } from "@/lib/google-posts/model";
 import { deriveGoogleSummary, holdForWording } from "@/lib/google-posts/summary";
 import { createLogger } from "@/lib/logging";
@@ -582,9 +583,10 @@ async function sendOne(ctx: RunContext, due: DueVersion): Promise<SendOutcome> {
     return "done";
   }
 
-  // The wording follows the Facebook post until a person edits or releases it.
+  // The wording follows the Facebook post until a person edits or releases it,
+  // or the AI has written it for Google (D15).
   let summary = row.summary;
-  if (!row.summary_edited_at) {
+  if (!wordingIsFrozen(row)) {
     summary = deriveGoogleSummary(due.body);
     const hold = holdForWording(summary);
     if (hold) {

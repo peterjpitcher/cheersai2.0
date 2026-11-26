@@ -82,6 +82,7 @@ Vercel Cron (`vercel.json`; Vercel evaluates schedules in UTC), all authenticate
 | Route | Schedule | Purpose |
 |---|---|---|
 | `/api/cron/publish-scheduler` | every minute | promote due `publish_jobs` to `queued` and dispatch to QStash |
+| `/api/cron/google-wording` | every 2 minutes | Writes Google wording with the AI for Google posts still waiting for it (`wording_source` `awaiting_ai`), two a run, checked against the Facebook copy so no fact is added; falls back to the Facebook wording after three refused drafts (`tasks/SPEC-gbp-separate-posts.md` D15). Calls nothing outside the database when nothing is waiting |
 | `/api/cron/google-posts` | every minute | Google versions of Facebook feed posts, for brands with the Google switch and an active Google connection only: create them for new posts, send the due ones, check Google's moderation state, raise Google alerts (`tasks/SPEC-gbp-posting-reintroduction.md` D12). Separate from `publish-scheduler`; does nothing outside the database while no brand qualifies |
 | `/api/cron/notify-failures` | hourly at :30 | alert on publish failures (reads `publish_jobs` only, so never Google versions) |
 | `/api/cron/retry-capi-conversions` | hourly at :20 | retry booking-conversion sends |

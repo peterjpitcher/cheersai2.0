@@ -11,6 +11,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   GOOGLE_VERSION_COLUMNS,
   googleReasonText,
+  wordingIsFrozen,
   type GoogleVersionRow,
   type GoogleVersionView,
 } from "@/lib/google-posts/model";
@@ -48,7 +49,11 @@ export function toGoogleVersionView(row: GoogleVersionRow): GoogleVersionView {
     holdReason: row.hold_reason,
     statusLine: statusLine(row),
     summary: row.summary,
-    summaryEdited: row.summary_edited_at !== null,
+    summaryEdited: wordingIsFrozen(row),
+    // AI wording stays credited to the AI when a person releases it unchanged.
+    // A row a person froze before the column existed still reads as theirs.
+    wordingSource:
+      row.wording_source === "ai" ? "ai" : row.summary_edited_at !== null ? "person" : (row.wording_source ?? "facebook"),
     topicType: row.topic_type,
     eventTitle: row.event_title,
     eventStart: row.event_start,
@@ -141,7 +146,7 @@ export async function editGoogleVersionWording(
   const summary = deriveGoogleSummary(wording);
   if (!summary) return { success: false, error: GOOGLE_VERSION_ACTION_MESSAGES.emptyWording };
 
-  const patch: Record<string, unknown> = { summary, summary_edited_at: new Date().toISOString() };
+  const patch: Record<string, unknown> = { summary, summary_edited_at: new Date().toISOString(), wording_source: "person" };
   const hold = holdForWording(summary);
   if (row.state === "pending" && hold) {
     // Saving is not releasing: wording that needs a person's check is held,
@@ -166,7 +171,7 @@ export async function releaseGoogleVersion(
   // Unedited wording is what the page shows: worked out from the Facebook
   // caption as it is now, not the copy stored when the version was made.
   let summary = row.summary;
-  if (!row.summary_edited_at) {
+  if (!wordingIsFrozen(row)) {
     const { data: variant, error } = await db
       .from("content_variants")
       .select("body")
@@ -182,6 +187,8 @@ export async function releaseGoogleVersion(
     hold_reason: null,
     summary,
     summary_edited_at: row.summary_edited_at ?? new Date().toISOString(),
+    // Wording the AI wrote stays credited to it; anything else is now the person's.
+    wording_source: row.wording_source === "ai" ? "ai" : "person",
   });
 }
 

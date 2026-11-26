@@ -251,7 +251,10 @@ declare
     array['summary_edited_at', 'timestamp with time zone', 'YES', null],
     array['resend_count', 'integer', 'NO', '0'],
     -- The Google post's own time (the gbp_posts_own_time migration, decision D16).
-    array['scheduled_for', 'timestamp with time zone', 'YES', null]
+    array['scheduled_for', 'timestamp with time zone', 'YES', null],
+    -- Wording written for Google (the gbp_posts_google_wording migration, decision D15).
+    array['wording_source', 'text', 'NO', '''awaiting_ai''::text'],
+    array['wording_attempts', 'integer', 'NO', '0']
   ];
   v_row text[];
   v_col record;
@@ -287,7 +290,7 @@ begin
     'gbp_posts_state_check', 'gbp_posts_topic_type_check', 'gbp_posts_cta_type_check', 'gbp_posts_cta_pair_check',
     'gbp_posts_event_fields_check', 'gbp_posts_held_reason_check', 'gbp_posts_claimed_at_check',
     'gbp_posts_sent_fields_check', 'gbp_posts_summary_length_check', 'gbp_posts_attempts_check',
-    'gbp_posts_resend_count_check'
+    'gbp_posts_resend_count_check', 'gbp_posts_wording_source_check', 'gbp_posts_wording_attempts_check'
   ] loop
     if not exists (
       select 1 from pg_constraint

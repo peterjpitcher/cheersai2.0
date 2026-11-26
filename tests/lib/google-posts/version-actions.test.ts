@@ -84,6 +84,7 @@ describe('Google version actions', () => {
     expect(result).toMatchObject({ success: true, version: { summary: 'Quiz tonight!', summaryEdited: true } });
     expect(row(postId)).toMatchObject({ state: 'pending', hold_reason: null, summary: 'Quiz tonight!' });
     expect(row(postId).summary_edited_at).not.toBeNull();
+    expect(row(postId).wording_source).toBe('person');
     expect(revalidatePath).toHaveBeenCalledWith(`/planner/${postId}`);
   });
 
@@ -213,6 +214,24 @@ describe('Google version actions', () => {
     });
     expect(row(postId).scheduled_for ?? null).toBeNull();
     expect(row(other).scheduled_for ?? null).toBeNull();
+  });
+
+  it('shows AI wording as frozen and credited to the AI, and a person\'s edit takes it over', async () => {
+    const postId = addVersion('pending', { summary: 'Written for Google.', wording_source: 'ai' });
+    expect((await loadGoogleVersion({ contentId: postId })).version).toMatchObject({
+      summary: 'Written for Google.',
+      summaryEdited: true,
+      wordingSource: 'ai',
+    });
+    const edited = await editGoogleVersionWording({ contentId: postId, summary: 'My own words for Google.' });
+    expect(edited).toMatchObject({ success: true, version: { wordingSource: 'person', summaryEdited: true } });
+    expect(row(postId).wording_source).toBe('person');
+  });
+
+  it('releases a held post with its AI wording as it stands, never re-derived from Facebook', async () => {
+    const postId = addVersion('held', { summary: 'Written for Google.', wording_source: 'ai' });
+    const released = await releaseGoogleVersion({ contentId: postId });
+    expect(released).toMatchObject({ success: true, version: { state: 'pending', summary: 'Written for Google.', wordingSource: 'ai' } });
   });
 
   it('refuses a malformed request before reading anything', async () => {

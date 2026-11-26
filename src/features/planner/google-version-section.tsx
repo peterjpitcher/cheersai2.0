@@ -219,9 +219,13 @@ function GoogleVersionBody({ version, timezone, controls }: GoogleVersionBodyPro
         )}
         {editable && (
           <p className="text-[12px] text-[var(--c-ink-3)]">
-            {version.summaryEdited
-              ? "Set by hand (edited or released), so it no longer follows the Facebook wording."
-              : "Follows the Facebook wording (without links, hashtags, handles or phone numbers) until you edit it."}
+            {version.wordingSource === "ai"
+              ? "Written for Google by the AI from the Facebook post. It no longer follows the Facebook wording; edit it here if you want to change it."
+              : version.summaryEdited
+                ? "Set by hand (edited or released), so it no longer follows the Facebook wording."
+                : version.wordingSource === "awaiting_ai"
+                  ? "Follows the Facebook wording (without links, hashtags, handles or phone numbers) for now. Wording written for Google will replace it shortly, unless you edit it first."
+                  : "Follows the Facebook wording (without links, hashtags, handles or phone numbers) until you edit it."}
             {overLimit && ` Google allows ${GOOGLE_SUMMARY_MAX_CHARS.toLocaleString("en-GB")} characters at most.`}
           </p>
         )}

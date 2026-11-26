@@ -86,3 +86,34 @@ export function toGoogleTile(input: GoogleTileInput): ContentItem & { googlePost
     updatedAt: input.when,
   };
 }
+
+/**
+ * Puts each Google tile straight after the Facebook feed post that goes out
+ * at the same moment (the post it was made from, unless a person has moved
+ * it), so the pair sit together and the Google tile is not the one pushed
+ * under "more". Everything else keeps its order. A Google tile with no such
+ * neighbour stays where it was.
+ */
+export function placeGoogleTiles<T>(items: T[]): T[] {
+  const google = items.filter(isGoogleTile);
+  if (!google.length) return items;
+  const placed = new Set<unknown>();
+  const result: T[] = [];
+  for (const item of items) {
+    if (isGoogleTile(item)) continue;
+    result.push(item);
+    const candidate = item as { platform?: unknown; placement?: unknown; scheduledAt?: unknown };
+    if (candidate.platform !== 'facebook' || (candidate.placement ?? 'feed') !== 'feed' || !(candidate.scheduledAt instanceof Date)) continue;
+    const time = candidate.scheduledAt.getTime();
+    const match = google.find((tile) => {
+      const when = (tile as { scheduledAt?: unknown }).scheduledAt;
+      return !placed.has(tile) && when instanceof Date && when.getTime() === time;
+    });
+    if (match) {
+      placed.add(match);
+      result.push(match as T);
+    }
+  }
+  for (const tile of google) if (!placed.has(tile)) result.push(tile as T);
+  return result;
+}

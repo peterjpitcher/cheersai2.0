@@ -5,6 +5,7 @@ import {
   googleStateToContentStatus,
   googleTileId,
   isGoogleTile,
+  placeGoogleTiles,
   toGoogleTile,
 } from '@/lib/google-posts/tile';
 
@@ -54,5 +55,26 @@ describe('Google planner tiles', () => {
     ['something-new', 'scheduled'],
   ])('shows a %s Google post as %s', (state, status) => {
     expect(googleStateToContentStatus(state)).toBe(status);
+  });
+
+  it('sits each Google tile straight after its Facebook feed post, and leaves everything else in order', () => {
+    const at = (iso: string) => new Date(iso);
+    const post = (id: string, platform: string, placement: string, iso: string) => ({ id, platform, placement, scheduledAt: at(iso) });
+    const google = (id: string, iso: string) =>
+      toGoogleTile({ id, accountId: 'acc-1', state: 'pending', when: at(iso), title: null, campaignName: null, thumbnailUrl: null });
+
+    const fbFeed = post('fb-feed', 'facebook', 'feed', '2026-11-27T11:00:00.000Z');
+    const igFeed = post('ig-feed', 'instagram', 'feed', '2026-11-27T11:00:00.000Z');
+    const fbStory = post('fb-story', 'facebook', 'story', '2026-11-27T11:00:00.000Z');
+    const igStory = post('ig-story', 'instagram', 'story', '2026-11-27T11:00:00.000Z');
+    const paired = google('g-1', '2026-11-27T11:00:00.000Z');
+    const moved = google('g-2', '2026-11-28T09:00:00.000Z');
+
+    const placed = placeGoogleTiles<{ id: string }>([fbFeed, igFeed, fbStory, igStory, paired, moved]);
+    expect(placed.map((item) => item.id)).toEqual(['fb-feed', 'google:g-1', 'ig-feed', 'fb-story', 'ig-story', 'google:g-2']);
+
+    // Nothing Google: the same array back, untouched.
+    const plain = [fbFeed, igFeed];
+    expect(placeGoogleTiles(plain)).toBe(plain);
   });
 });

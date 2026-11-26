@@ -11,7 +11,7 @@ import type { ContentItem, ContentStatus, Platform } from '@/types/content';
 import type { CalendarDisplayItem } from '@/features/planner/calendar-cell';
 import { getDisplayTitle } from '@/lib/content/display-helpers';
 import { PostDrawer } from '@/features/planner/post-drawer';
-import { googlePostHrefForTile, isGoogleTile, type ChannelKey } from '@/lib/google-posts/tile';
+import { googlePostHrefForTile, isGoogleTile, placeGoogleTiles, type ChannelKey } from '@/lib/google-posts/tile';
 import { PlatformDot } from '@/components/ui/platform-dot';
 import { Status, type DesignStatus } from '@/components/ui/status';
 import { Button } from '@/components/ui/button';
@@ -141,7 +141,7 @@ export function PlannerAgenda({
 
   // Merge, filter, and group items by day
   const dayGroups = useMemo<DayGroup[]>(() => {
-    const merged: CalendarDisplayItem[] = [...items, ...(googleItems ?? []), ...materialisedSlots];
+    const merged: CalendarDisplayItem[] = placeGoogleTiles<CalendarDisplayItem>([...items, ...(googleItems ?? []), ...materialisedSlots]);
 
     // Apply filters
     const filtered = merged.filter((item) => {
