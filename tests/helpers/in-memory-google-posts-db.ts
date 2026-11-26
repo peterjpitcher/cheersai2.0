@@ -64,6 +64,8 @@ const GBP_POSTS_CHECKS: TableSpec['checks'] = [
   { name: 'gbp_posts_summary_length_check', test: (r) => Array.from(String(r.summary)).length <= 1500 },
   { name: 'gbp_posts_attempts_check', test: (r) => Number(r.attempts) >= 0 },
   { name: 'gbp_posts_resend_count_check', test: (r) => Number(r.resend_count) >= 0 && Number(r.resend_count) <= 1 },
+  { name: 'gbp_posts_wording_source_check', test: (r) => ['awaiting_ai', 'ai', 'facebook', 'person'].includes(String(r.wording_source)) },
+  { name: 'gbp_posts_wording_attempts_check', test: (r) => Number(r.wording_attempts) >= 0 },
 ];
 
 export const GOOGLE_POSTS_SCHEMA: Record<string, TableSpec> = {
@@ -71,6 +73,7 @@ export const GOOGLE_POSTS_SCHEMA: Record<string, TableSpec> = {
     columns: {
       id: { notNull: true },
       business_name: {},
+      display_name: {},
       google_posts_enabled: { notNull: true, default: () => false },
       management_import_enabled: { notNull: true, default: () => false },
     },
@@ -224,6 +227,8 @@ export const GOOGLE_POSTS_SCHEMA: Record<string, TableSpec> = {
       summary_edited_at: {},
       resend_count: { notNull: true, default: () => 0 },
       scheduled_for: {},
+      wording_source: { notNull: true, default: () => 'awaiting_ai' },
+      wording_attempts: { notNull: true, default: () => 0 },
     },
     primaryKey: ['id'],
     unique: [

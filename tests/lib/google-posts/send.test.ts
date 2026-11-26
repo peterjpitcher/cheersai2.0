@@ -333,6 +333,21 @@ describe('the Facebook post decides', () => {
     await send();
     expect(creates()[0].body).toMatchObject({ summary: 'Our own words for Google.' });
   });
+
+  it('keeps wording the AI wrote for Google, and still follows Facebook while that is only awaited (D15)', async () => {
+    const written = await prepare();
+    Object.assign(version(written.versionId), { summary: 'Written for Google by the AI.', wording_source: 'ai' });
+    world.db.tables.content_variants.find((row) => row.content_item_id === written.postId)!.body = 'Changed on Facebook.';
+    const awaited = await prepare();
+    expect(version(awaited.versionId).wording_source).toBe('awaiting_ai');
+    world.db.tables.content_variants.find((row) => row.content_item_id === awaited.postId)!.body = 'Changed on Facebook too.';
+
+    world.clock.set('2026-11-16T12:01:00.000Z');
+    await send();
+    const summaries = creates().map((request) => (request.body as { summary: string }).summary);
+    expect(summaries).toContain('Written for Google by the AI.');
+    expect(summaries).toContain('Changed on Facebook too.');
+  });
 });
 
 describe('the brand and its connection, checked again at send time', () => {

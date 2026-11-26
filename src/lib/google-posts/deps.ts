@@ -7,6 +7,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { GoogleAccessTokenOptions, GoogleAccessTokenResult } from "@/lib/connections/google-token";
 import type { ManagementEventClient } from "@/lib/google-posts/management-lookup";
+import type { GoogleWordingWriter } from "@/lib/google-posts/wording";
 
 export interface GooglePostsDeps {
   /** Service-role client. Every query is scoped by account_id. */
@@ -24,14 +25,17 @@ export interface GooglePostsDeps {
   ) => Promise<GoogleAccessTokenResult>;
   /** The management app, for event details at creation time. Null: never called. */
   management: ManagementEventClient | null;
+  /** Writes one AI draft of Google wording (D15). Absent: no wording is written. */
+  writeWording?: GoogleWordingWriter;
 }
 
 /** The real dependencies, imported lazily so this file stays cheap to import in tests. */
 export async function defaultGooglePostsDeps(): Promise<GooglePostsDeps> {
-  const [{ createServiceSupabaseClient }, { getGoogleAccessToken }, management] = await Promise.all([
+  const [{ createServiceSupabaseClient }, { getGoogleAccessToken }, management, { writeGoogleWordingWithAi }] = await Promise.all([
     import("@/lib/supabase/service"),
     import("@/lib/connections/google-token"),
     import("@/lib/management-app/client"),
+    import("@/lib/google-posts/wording-ai"),
   ]);
   return {
     db: createServiceSupabaseClient(),
@@ -44,5 +48,6 @@ export async function defaultGooglePostsDeps(): Promise<GooglePostsDeps> {
       list: (config, options) => management.listManagementEvents(config, options),
       detail: (config, eventId) => management.getManagementEventDetail(config, eventId),
     },
+    writeWording: writeGoogleWordingWithAi,
   };
 }

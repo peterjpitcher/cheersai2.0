@@ -12,7 +12,7 @@ import type { ContentItem, ContentStatus, Platform } from '@/types/content';
 import { CalendarCell, type CalendarDisplayItem } from '@/features/planner/calendar-cell';
 import { StatusFilters } from '@/features/planner/status-filters';
 import { PostDrawer } from '@/features/planner/post-drawer';
-import { googlePostHrefForTile } from '@/lib/google-posts/tile';
+import { googlePostHrefForTile, placeGoogleTiles } from '@/lib/google-posts/tile';
 import { Button } from '@/components/ui/button';
 
 /** Weekday headers (Monday-first per ISO) */
@@ -101,7 +101,7 @@ export function PlannerCalendar({
 
   // Merge and filter items
   const allDisplayItems = useMemo<CalendarDisplayItem[]>(() => {
-    const merged: CalendarDisplayItem[] = [...items, ...(googleItems ?? []), ...materialisedSlots];
+    const merged: CalendarDisplayItem[] = placeGoogleTiles<CalendarDisplayItem>([...items, ...(googleItems ?? []), ...materialisedSlots]);
 
     return merged.filter((item) => {
       // Status filter

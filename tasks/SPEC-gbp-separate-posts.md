@@ -30,20 +30,25 @@ Known limit, told to Peter: a Google post still takes its image from the Faceboo
 - Existing schedule: after the deploy, the ops script's dry run for The Anchor is expected to list about 11 more posts (15 Facebook feed posts, 4 already done). The apply quotes Peter's words above.
 - Rollback: revert the commit. Rows already created stay and send as planned; to stop them, skip them on the post page or switch Google posting off for the brand.
 
-### Piece 2: own tile, page and time (one additive migration)
+### Piece 2: own tile, page and time (one additive migration). Shipped 26 November 2026, PR #241, deployment dpl_8WKMtPKfn3LwtHK2rGcgorMQvLFd; tile, page and moving a post checked live
 
 - `gbp_posts.scheduled_for timestamptz null`: the Google post's own time. Null means "the Facebook post's time", so nothing changes until a person moves it. Applied to production on 26 November 2026 as `20261126112119_gbp_posts_own_time` (additive; 15 existing rows untouched).
 - The sender uses the Google post's own time, when set, for when it is due, for the 24 hour late limit and for "moved later".
 - Planner: a Google tile per Google post in the calendar and the agenda (`src/lib/google-posts/tile.ts`, `planner-tiles.ts`), with the Facebook post's thumbnail, and a page at `/planner/google/[id]` with the picture, the time form and the existing Google section (wording, state, link, edit, release, skip, retry). A skipped Google post has no tile. The Facebook and Instagram platform filter hides Google tiles while it is on. A reminder also keeps the event's end so it is never sent after the event (review finding on PR #240).
 - Rollback: revert the application; the column can stay.
 
-### Piece 3: wording written for Google
+### Piece 3: wording written for Google (one migration)
 
-- At creation, the AI writes a Google wording from the Facebook copy and the event facts: the key detail in the first line, the place named, no hashtags, links or contact details. The result goes through the existing copy rules (`summary.ts`) and the drinks price hold.
-- Guard against invented facts: every number, price, time and date in the AI's wording must appear in the Facebook copy or the event details; if not, or if the AI call fails, the derived wording is used and it is tried again on a later pass.
-- The wording is frozen once written (today the sender re-derives it from the Facebook copy unless `summary_edited_at` is set), and the page says who wrote it.
-- Never applied to the four versions of 26 November 2026 (D17) or to wording a person edited.
-- Rollback: revert the application; rows keep the wording they have.
+Migration applied to production on 26 November 2026 as `20261126113907_gbp_posts_google_wording` (11 rows left `awaiting_ai`, 4 marked `facebook`). Trialled the same day on four of the real reminder posts, read only: every draft passed the checks in 2 to 4 seconds.
+
+- `gbp_posts.wording_source` (`awaiting_ai`, `ai`, `facebook`, `person`; default `awaiting_ai`) and `gbp_posts.wording_attempts`. A new Google post starts with wording derived from the Facebook post and `awaiting_ai`.
+- A separate cron, `/api/cron/google-wording`, every 2 minutes (`src/lib/google-posts/wording.ts`, the OpenAI call in `wording-ai.ts`). It is apart from the sending cron because one draft can take most of a minute and must never delay a send. Two posts a run, the copy model the rest of the app uses, recorded in the AI usage log as post copy.
+- The prompt asks for the key detail first, the place named, plain British English, no hashtags, links or contact details, and no fact that is not in the Facebook post.
+- Guard against invented facts (`checkGoogleWording`): every number (so every price, time and date), every day and month name, "today", "tonight", "tomorrow" and the word "free" in the draft must appear in the Facebook copy or the event details given to the AI; no banned phrase; nothing the copy rules would hold as a drinks price offer. A refused draft is tried again; after three refusals the post goes back to `facebook` and follows the Facebook wording. A call that fails outright (an outage, a timeout) is asked again and never counts towards giving up.
+- AI wording is frozen: the sender, the post page and release all use `wordingIsFrozen` (a person's edit, or `ai`). A person's edit always wins, including one saved while the AI was writing (compare-and-set on the row as read).
+- Never touched: held posts, sent posts, anything a person edited, and (D17) the four Google posts created before 11:00 UTC on 26 November 2026, which the migration marks `facebook`. The 11 reminder posts created at 11:14 UTC that day get Google wording.
+- Also in this change: a Google tile now sits straight after its Facebook post in the planner (`placeGoogleTiles`), so it is not the tile hidden under "more".
+- Rollback: revert the application; rows keep the wording they have. To stop new AI wording without a deploy, switch Google posting off for the brand.
 
 ## Tests
 

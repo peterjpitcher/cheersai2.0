@@ -40,6 +40,7 @@ function makeVersion(overrides: Partial<GoogleVersionView> = {}): GoogleVersionV
     statusLine: "Will go to Google at the same time as the Facebook post.",
     summary: "Quiz night this Thursday from 8pm.",
     summaryEdited: false,
+    wordingSource: "facebook",
     topicType: "STANDARD",
     eventTitle: null,
     eventStart: null,
