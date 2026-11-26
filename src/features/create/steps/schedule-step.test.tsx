@@ -230,7 +230,7 @@ describe("<ScheduleStep /> event timing", () => {
     ]);
   });
 
-  it("suggests nothing before the last event of the same type has finished, and says when posts can start", async () => {
+  it("suggests nothing before the event ahead of it has finished, and says when posts can start", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-10-12T08:00:00.000Z"));
     const brief = {
@@ -243,7 +243,7 @@ describe("<ScheduleStep /> event timing", () => {
 
     expect(suggestedSlots()).toEqual(["1 day to go · 11:00", "Event day · 07:00"]);
     expect(
-      screen.getByText(/can start on Saturday 24th October, after the last Quiz Night \(Spooky Quiz\) on Friday 23rd October\./),
+      screen.getByText(/can start on Saturday 24th October, after Spooky Quiz on Friday 23rd October\./),
     ).toBeInTheDocument();
   });
 

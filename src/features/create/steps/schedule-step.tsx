@@ -87,7 +87,7 @@ export function ScheduleStep({
   const [calendarWarning, setCalendarWarning] = useState<string | null>(null);
   // Why the last date the owner picked was refused (the event-order rule).
   const [slotNotice, setSlotNotice] = useState<string | null>(null);
-  // Posts may start only after the last event of the same type has finished.
+  // Posts may start only after the event before this one has finished.
   const promotionWindow = contentBrief.contentType === 'event' ? contentBrief.promotionWindow : undefined;
   const eventLabel = contentBrief.contentType === 'event' ? contentBrief.eventName : contentBrief.title;
   const earlySlotCount = selectedSlots.filter((slot) => beforePromotionWindow(slot.date, promotionWindow)).length;
@@ -386,7 +386,7 @@ export function ScheduleStep({
         <>
           {promotionWindow && (
             <p className="text-sm text-muted-foreground">
-              Posts for {eventLabel} can start on {formatEventDateLong(promotionWindow.opensOn)}, after the last {promotionWindow.category} ({promotionWindow.afterEvent}) on {formatEventDateLong(promotionWindow.afterDate)}.
+              Posts for {eventLabel} can start on {formatEventDateLong(promotionWindow.opensOn)}, after {promotionWindow.afterEvent} on {formatEventDateLong(promotionWindow.afterDate)}.
             </p>
           )}
           {(slotNotice || earlySlotCount > 0) && (

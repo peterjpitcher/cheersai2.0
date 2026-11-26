@@ -163,6 +163,8 @@ describe("create actions: management imports", () => {
       enabled: true,
     });
     getManagementEventDetailMock.mockResolvedValue({ id: "evt-9", name: "Trivia Thursday" });
+    // The window is looked up for every event now, with or without a category; no event comes before this one.
+    listManagementEventsMock.mockResolvedValue([]);
     mapManagementEventToPrefillMock.mockReturnValue({
       fields: {
         name: "Trivia Thursday",
@@ -199,7 +201,7 @@ describe("create actions: management imports", () => {
     });
   });
 
-  it("attaches the promotion window from the last event of the same type", async () => {
+  it("attaches the promotion window from the event before it", async () => {
     getManagementConnectionConfigMock.mockResolvedValue({
       baseUrl: "https://management.example.com",
       apiKey: "valid-key",

@@ -114,7 +114,7 @@ describe('orderNotice', () => {
     expect(notice.title).toBe(
       'Christmas Jackpot Cash Bingo: 2 scheduled posts go out before Thursday 19th November, when its promotion may start. Move or delete them in the planner.',
     );
-    expect(notice.body).toContain('after the last Cash Bingo (Snowball Showdown Cash Bingo)');
+    expect(notice.body).toContain('after Snowball Showdown Cash Bingo');
     expect(notice.body).toContain('Posts too early: Tuesday 17th November, Wednesday 18th November.');
   });
 

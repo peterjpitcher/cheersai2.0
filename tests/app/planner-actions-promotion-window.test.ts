@@ -104,7 +104,7 @@ describe("updatePlannerContentSchedule and the event-order rule", () => {
 
     expect(result).toEqual({
       error:
-        "Christmas Jackpot Cash Bingo can be promoted from Thursday 19th November, after the last Cash Bingo (Snowball Showdown) on Wednesday 18th November.",
+        "Christmas Jackpot Cash Bingo can be promoted from Thursday 19th November, after Snowball Showdown on Wednesday 18th November.",
     });
     expect(updates).toEqual([]);
     expect(readinessMock).not.toHaveBeenCalled();

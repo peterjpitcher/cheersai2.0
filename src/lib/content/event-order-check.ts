@@ -1,7 +1,7 @@
 /**
  * The daily check of the event-order rule (tasks/SPEC-daily-event-order-check.md).
  *
- * An event's posts may start only after the last event of the same type has finished. The
+ * An event's posts may start only after the event before it has finished. The
  * wizard, the planner and the calendar tool hold to that when a post is created or moved; this
  * check catches a post that starts breaking it later, because an event moved in the events
  * system. It tells the owner in the app and changes nothing.

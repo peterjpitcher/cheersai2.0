@@ -3,6 +3,7 @@
 Owner approval: 23 October 2026 ("8 yes", relayed by the chief of staff session), plan A of `tasks/REVIEW-social-calendar-2026-10-17.md` ("a check flags any scheduled post that breaks the rule, for example after an event moves").
 
 ## Problem
+- Since 26 November 2026 the rule this check enforces is `tasks/SPEC-next-event-only.md` (after the event before it, whatever its type); the check itself is unchanged.
 - The event-order rule: an event's posts may start only after the last event of the same type has finished, so two nights of one series are never promoted at once.
 - The wizard, the planner and the calendar tool enforce it when a post is created or moved (#202). Nothing checks again later, so a post that was fine can start breaking the rule when the events system changes: an earlier event of the same type moves later, or this event moves.
 

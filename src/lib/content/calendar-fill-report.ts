@@ -98,7 +98,7 @@ export function renderCalendarReport(plan: CalendarPlan): string {
   }
 
   lines.push('', '## Checks', '');
-  lines.push('- Every new event post falls inside its promotion window (after the last event of its type), and the wording of every new post was checked against its date and time.');
+  lines.push('- Every new event post falls inside its promotion window (after the event before it), and the wording of every new post was checked against its date and time.');
   lines.push(plan.ruleBreaks.length
     ? `- **Existing posts before their window:** ${plan.ruleBreaks.map((entry) => `${entry.campaignName} on ${formatDay(entry.date)} (opens ${formatDay(entry.opensOn)}, after ${entry.afterEvent})`).join('; ')}. These are not changed by this plan.`
     : '- No existing post goes out before its promotion window.');
