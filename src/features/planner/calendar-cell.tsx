@@ -12,6 +12,7 @@ import type { MaterialisedSlot } from '@/lib/scheduling/materialise';
 import type { Conflict } from '@/lib/scheduling/conflicts';
 import { DEFAULT_TIMEZONE } from '@/lib/constants';
 import { getDisplayTitle } from '@/lib/content/display-helpers';
+import { isGoogleTile, type ChannelKey } from '@/lib/google-posts/tile';
 
 /** Unified display item that can be either a ContentItem or a MaterialisedSlot */
 export type CalendarDisplayItem = ContentItem | MaterialisedSlot;
@@ -22,6 +23,12 @@ function isMaterialised(item: CalendarDisplayItem): item is MaterialisedSlot {
 
 function getItemId(item: CalendarDisplayItem): string {
   return isMaterialised(item) ? item.sourceId : item.id;
+}
+
+function getItemChannels(item: CalendarDisplayItem): ChannelKey[] {
+  // A Google post's tile (see src/lib/google-posts/tile.ts) is not a content item and has no platform.
+  if (isGoogleTile(item)) return ['google'];
+  return getItemPlatforms(item);
 }
 
 function getItemTitle(item: CalendarDisplayItem): string {
@@ -87,17 +94,19 @@ export function toDesignStatus(status: string): DesignStatus {
 }
 
 /** Map full platform name to PlatformDot key */
-function toPlatformKey(p: Platform): 'fb' | 'ig' {
+function toPlatformKey(p: ChannelKey): 'fb' | 'ig' | 'google' {
   if (p === 'facebook') return 'fb';
+  if (p === 'google') return 'google';
   return 'ig';
 }
 
-function formatPlatformLabel(platform: Platform): string {
+function formatPlatformLabel(platform: ChannelKey): string {
   if (platform === 'facebook') return 'Facebook';
+  if (platform === 'google') return 'Google';
   return 'Instagram';
 }
 
-function formatChannelTitle(platforms: Platform[]): string {
+function formatChannelTitle(platforms: ChannelKey[]): string {
   return platforms.map(formatPlatformLabel).join(', ');
 }
 
@@ -105,7 +114,7 @@ function ChannelIcon({
   platforms,
   variant = 'inline',
 }: {
-  platforms: Platform[];
+  platforms: ChannelKey[];
   variant?: 'overlay' | 'inline';
 }) {
   const primary = platforms[0];
@@ -236,7 +245,7 @@ export function CalendarCell({
           const id = getItemId(item);
           const title = getItemTitle(item);
           const time = getItemTime(item);
-          const platforms = getItemPlatforms(item);
+          const platforms = getItemChannels(item);
           const thumbnailUrl = getItemThumbnail(item);
           const placement = getItemPlacement(item);
           const isFailed = item.status === 'failed';
@@ -294,7 +303,7 @@ interface MediaOnTileProps {
   id: string;
   title: string;
   time: DateTime | null;
-  platforms: Platform[];
+  platforms: ChannelKey[];
   thumbnailUrl: string | null;
   placement: MediaPlacement;
   isFailed: boolean;
@@ -384,7 +393,7 @@ interface MediaOffTileProps {
   id: string;
   title: string;
   time: DateTime | null;
-  platforms: Platform[];
+  platforms: ChannelKey[];
   status: DesignStatus;
   isFailed: boolean;
   onItemClick: (id: string) => void;

@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { DateTime } from 'luxon';
 import { ChevronRight } from 'lucide-react';
 
@@ -10,6 +11,7 @@ import type { ContentItem, ContentStatus, Platform } from '@/types/content';
 import type { CalendarDisplayItem } from '@/features/planner/calendar-cell';
 import { getDisplayTitle } from '@/lib/content/display-helpers';
 import { PostDrawer } from '@/features/planner/post-drawer';
+import { googlePostHrefForTile, isGoogleTile, type ChannelKey } from '@/lib/google-posts/tile';
 import { PlatformDot } from '@/components/ui/platform-dot';
 import { Status, type DesignStatus } from '@/components/ui/status';
 import { Button } from '@/components/ui/button';
@@ -37,13 +39,16 @@ export function toDesignStatus(status: ContentStatus): DesignStatus {
 }
 
 /** Map full platform name to PlatformDot key */
-function toPlatformKey(p: Platform): 'fb' | 'ig' {
+function toPlatformKey(p: ChannelKey): 'fb' | 'ig' | 'google' {
   if (p === 'facebook') return 'fb';
+  if (p === 'google') return 'google';
   return 'ig';
 }
 
-function getItemPlatforms(item: CalendarDisplayItem): Platform[] {
+function getItemPlatforms(item: CalendarDisplayItem): ChannelKey[] {
   if ('sourceId' in item && item.contentType === 'weekly_recurring') return [];
+  // A Google post's row (see src/lib/google-posts/tile.ts) is not a content item.
+  if (isGoogleTile(item)) return ['google'];
   const ci = item as ContentItem;
   const draft = ci.bodyDraft as Record<string, unknown> | null;
   const platforms = draft?.platforms;
@@ -72,7 +77,7 @@ interface DayGroup {
     id: string;
     title: string;
     time: DateTime | null;
-    platforms: Platform[];
+    platforms: ChannelKey[];
     caption: string | null;
     designStatus: DesignStatus;
   }>;
@@ -80,6 +85,8 @@ interface DayGroup {
 
 export interface PlannerAgendaProps {
   items: ContentItem[];
+  /** Google posts as rows, shown beside the content items. */
+  googleItems?: ContentItem[];
   materialisedSlots: MaterialisedSlot[];
   month?: string;
   statusFilter?: ContentStatus[];
@@ -93,11 +100,13 @@ export interface PlannerAgendaProps {
  */
 export function PlannerAgenda({
   items,
+  googleItems,
   materialisedSlots,
   month,
   statusFilter = [],
   platformFilter = [],
 }: PlannerAgendaProps): React.JSX.Element {
+  const router = useRouter();
   const now = useMemo(() => DateTime.now().setZone(DEFAULT_TIMEZONE), []);
 
   const referenceMonth = useMemo(() => {
@@ -120,13 +129,19 @@ export function PlannerAgenda({
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   const handleItemClick = useCallback((id: string) => {
+    // A Google post has its own page; the drawer only reads content items.
+    const googleHref = googlePostHrefForTile(id);
+    if (googleHref) {
+      router.push(googleHref);
+      return;
+    }
     setDrawerContentId(id);
     setDrawerOpen(true);
-  }, []);
+  }, [router]);
 
   // Merge, filter, and group items by day
   const dayGroups = useMemo<DayGroup[]>(() => {
-    const merged: CalendarDisplayItem[] = [...items, ...materialisedSlots];
+    const merged: CalendarDisplayItem[] = [...items, ...(googleItems ?? []), ...materialisedSlots];
 
     // Apply filters
     const filtered = merged.filter((item) => {
@@ -195,7 +210,7 @@ export function PlannerAgenda({
     }
 
     return Array.from(groups.values());
-  }, [items, materialisedSlots, statusFilter, platformFilter, calendarStart, calendarEnd, now]);
+  }, [items, googleItems, materialisedSlots, statusFilter, platformFilter, calendarStart, calendarEnd, now]);
 
   if (dayGroups.length === 0) {
     return (

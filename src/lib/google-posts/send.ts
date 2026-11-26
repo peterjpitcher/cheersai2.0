@@ -5,9 +5,10 @@
  * so a Google problem can never delay Facebook or Instagram.
  *
  * A version is due when it is `pending`, its next_attempt_at (a backoff) is
- * empty or past, and its Facebook post's CURRENT scheduled time has passed:
- * the version always follows the parent. At send time the parent decides:
- * trashed, missing or back to draft: skipped; moved later: left pending;
+ * empty or past, and its time has passed: its own time once a person has
+ * moved it (D16), otherwise its Facebook post's CURRENT scheduled time. At
+ * send time the parent still decides whether it may go at all:
+ * trashed, missing or back to draft: skipped; not yet its time: left pending;
  * failed on Facebook or posted: sent anyway (Google is independent). More than
  * 24 hours late (a cron outage) or an event whose end has passed (the EVENT
  * post and its standard reminders alike): skipped.
@@ -290,11 +291,25 @@ async function feedImage(ctx: RunContext, mediaIds: string[] | null): Promise<Im
 
 type ParentDecision = { due: true } | { due: false; skip: GoogleVersionReason | null };
 
+/**
+ * When a Google post is meant to go out: its own time once a person has moved
+ * it (D16), otherwise its Facebook post's current time. Null when neither is usable.
+ */
+export function effectiveTimeMs(row: Pick<GoogleVersionRow, "scheduled_for">, parent: Pick<ParentRow, "scheduled_for"> | null): number | null {
+  const value = row.scheduled_for ?? parent?.scheduled_for ?? null;
+  if (!value) return null;
+  const ms = Date.parse(value);
+  return Number.isNaN(ms) ? null : ms;
+}
+
 /** What the parent's current state means for a pending version. */
 export function decideFromParent(row: GoogleVersionRow, parent: ParentRow | null, nowMs: number): ParentDecision {
+  // The image and the post's standing still come from the Facebook post, so a
+  // binned or un-approved one stops the Google post even when it has its own time.
   if (!parent || parent.deleted_at) return { due: false, skip: "parent_removed" };
   if (parent.status === "draft" || !parent.scheduled_for) return { due: false, skip: "parent_draft" };
-  const scheduled = Date.parse(parent.scheduled_for);
+  const scheduled = effectiveTimeMs(row, parent);
+  if (scheduled === null) return { due: false, skip: "parent_draft" };
   if (scheduled > nowMs) return { due: false, skip: null };
   if (nowMs - scheduled > LATE_LIMIT_MS) return { due: false, skip: "too_late" };
   // An EVENT post, or a standard reminder of an event (which keeps the event's end), is never sent after the event.
@@ -512,7 +527,11 @@ async function findDue(ctx: RunContext): Promise<DueVersion[]> {
   if (!due.length) return [];
 
   const chosen = due
-    .sort((a, b) => Date.parse(parentById.get(a.content_item_id)?.scheduled_for ?? "") - Date.parse(parentById.get(b.content_item_id)?.scheduled_for ?? ""))
+    .sort(
+      (a, b) =>
+        (effectiveTimeMs(a, parentById.get(a.content_item_id) ?? null) ?? 0) -
+        (effectiveTimeMs(b, parentById.get(b.content_item_id) ?? null) ?? 0),
+    )
     .slice(0, SEND_BATCH);
   const { data: variants, error: variantError } = await db
     .from("content_variants")

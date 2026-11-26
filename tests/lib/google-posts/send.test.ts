@@ -258,6 +258,48 @@ describe('the Facebook post decides', () => {
     expect(version(versionId)).toMatchObject({ state: 'skipped', hold_reason: 'event_over' });
   });
 
+  it('goes at its own time once a person has moved it, whatever the Facebook post\'s time (D16)', async () => {
+    const { postId, versionId } = await prepare();
+    // Moved a day later than the Facebook post: not sent at the Facebook time.
+    version(versionId).scheduled_for = '2026-11-17T09:00:00.000Z';
+    world.clock.set('2026-11-16T12:01:00.000Z');
+    await send();
+    expect(creates()).toEqual([]);
+    expect(version(versionId).state).toBe('pending');
+
+    // The Facebook post moving later no longer matters; its own time decides.
+    post(postId).scheduled_for = '2026-11-20T12:00:00.000Z';
+    world.clock.set('2026-11-17T09:01:00.000Z');
+    await send();
+    expect(creates()).toHaveLength(1);
+    expect(version(versionId).state).toBe('sent');
+  });
+
+  it('can go before its Facebook post, and counts lateness from its own time', async () => {
+    const early = await prepare();
+    version(early.versionId).scheduled_for = '2026-11-16T10:30:00.000Z';
+    world.clock.set('2026-11-16T10:31:00.000Z');
+    await send();
+    expect(version(early.versionId).state).toBe('sent');
+
+    // More than 24 hours after its own time: skipped, though the Facebook post's time is recent.
+    const late = await prepare({ scheduledFor: '2026-11-20T12:00:00.000Z' });
+    version(late.versionId).scheduled_for = '2026-11-18T12:00:00.000Z';
+    world.clock.set('2026-11-20T12:01:00.000Z');
+    await send();
+    expect(version(late.versionId)).toMatchObject({ state: 'skipped', hold_reason: 'too_late' });
+  });
+
+  it('is still stopped by a binned Facebook post when it has its own time', async () => {
+    const { postId, versionId } = await prepare();
+    version(versionId).scheduled_for = '2026-11-16T11:00:00.000Z';
+    post(postId).deleted_at = '2026-11-16T10:45:00.000Z';
+    world.clock.set('2026-11-16T11:01:00.000Z');
+    await send();
+    expect(creates()).toEqual([]);
+    expect(version(versionId)).toMatchObject({ state: 'skipped', hold_reason: 'parent_removed' });
+  });
+
   it('skips a standard reminder of an event once the event is over', async () => {
     const campaignId = addCampaign(world, {
       metadata: { eventStart: '2026-11-16T19:00:00.000Z', eventEnd: '2026-11-16T22:00:00.000Z', eventTitle: 'Music Bingo' },

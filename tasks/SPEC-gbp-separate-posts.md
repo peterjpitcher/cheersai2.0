@@ -22,7 +22,7 @@ Known limit, told to Peter: a Google post still takes its image from the Faceboo
 
 ## Pieces (each ships on its own)
 
-### Piece 1: every scheduled post gets a Google post (no schema change)
+### Piece 1: every scheduled post gets a Google post (no schema change). Shipped 26 November 2026, PR #240, deployment dpl_HkxYztR3TcTHqqJ6W36EwteHVh5S; 11 reminder posts created for The Anchor's existing schedule the same day
 
 - `src/lib/google-posts/build.ts`: a later post of an event campaign builds a STANDARD row with the event's button (BOOK or LEARN_MORE and its https link), no `source_event_key` and no event fields. An event that has finished still gets nothing.
 - `src/lib/google-posts/create.ts`: the event's own post is the earliest upcoming Facebook feed post with no Google post yet, and only while the campaign has no event-keyed row. Every other post of the campaign is a reminder. One management lookup per campaign per pass, shared by its posts.
@@ -32,9 +32,9 @@ Known limit, told to Peter: a Google post still takes its image from the Faceboo
 
 ### Piece 2: own tile, page and time (one additive migration)
 
-- `gbp_posts.scheduled_for timestamptz null`: the Google post's own time. Null means "the Facebook post's time", so nothing changes until a person moves it.
+- `gbp_posts.scheduled_for timestamptz null`: the Google post's own time. Null means "the Facebook post's time", so nothing changes until a person moves it. Applied to production on 26 November 2026 as `20261126112119_gbp_posts_own_time` (additive; 15 existing rows untouched).
 - The sender uses the Google post's own time, when set, for when it is due, for the 24 hour late limit and for "moved later".
-- Planner: a Google tile per Google post, showing the image that will be sent (the Facebook post's first `media_ids` image), and a page at `/planner/google/[id]` with the wording, state, link, and the edit, move, release, skip and retry actions.
+- Planner: a Google tile per Google post in the calendar and the agenda (`src/lib/google-posts/tile.ts`, `planner-tiles.ts`), with the Facebook post's thumbnail, and a page at `/planner/google/[id]` with the picture, the time form and the existing Google section (wording, state, link, edit, release, skip, retry). A skipped Google post has no tile. The Facebook and Instagram platform filter hides Google tiles while it is on. A reminder also keeps the event's end so it is never sent after the event (review finding on PR #240).
 - Rollback: revert the application; the column can stay.
 
 ### Piece 3: wording written for Google
