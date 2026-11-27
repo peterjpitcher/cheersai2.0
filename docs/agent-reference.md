@@ -29,7 +29,7 @@ Historical planning residue: `.planning/` (GSD phases, archived 2026-07-03), `do
 | Background and infra | `@upstash/qstash` 2, `@axiomhq/js` 1, `p-limit` 7 |
 | External services | `openai` 6.38, `resend` 6.6, `stripe` 22.6 (API version pinned to `2026-08-26.dahlia` in `src/lib/billing/stripe.ts`) |
 | Dates | `luxon` 3.7 (`@types/luxon`) |
-| Images | `sharp` 0.34 (declared in `serverExternalPackages`), `satori` 0.26, `text-to-svg` 3 |
+| Images | `sharp` 0.35 (declared in `serverExternalPackages`), `satori` 0.26, `text-to-svg` 3 |
 | Testing | `vitest` 4 with `@vitest/coverage-v8`, `@testing-library/react` 16, `@testing-library/jest-dom` 6, `jsdom` 29, `msw` 2, `@playwright/test` 1.60, `autocannon` 8 (`perf:load-test`) |
 
 Runtime: Node 24.x (`engines`), npm with `package-lock.json`, deployed on Vercel in `lhr1`, Supabase PostgreSQL with RLS on every table. Path alias `@/*` maps to `./src/*` in both `tsconfig.json` and `vitest.config.ts`. `next.config.ts` also wires `securityHeaders` (`src/lib/security/headers.ts`) and `legacyHostRedirects` (`src/lib/routing/legacy-host-redirects.ts`) and allows `**.supabase.co` as an image host.
